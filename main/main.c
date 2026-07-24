@@ -30,6 +30,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
+#include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 
@@ -333,6 +334,7 @@ static esp_netif_t *s_sta_netif = NULL;
 static esp_ip4_addr_t s_ip = {0};
 static bool s_got_ip = false;
 static bool s_wifi_credentials_configured = false;
+static bool s_wifi_transport_ready = false;
 static char connected_wifi_ssid[33] = "";
 
 
@@ -640,26 +642,15 @@ static bool save_wifi_credentials_to_nvs(const char *ssid, const char *pass)
 }
 
 
-static void wifi_init_sta(void)
+static void wifi_prepare_transport(void)
 {
-    ESP_LOGI(TAG, "wifi_init_sta ENTER");
+    if (s_wifi_transport_ready) {
+        return;
+    }
 
     bool have_saved_wifi = load_wifi_credentials_from_nvs();
     s_wifi_credentials_configured = have_saved_wifi;
     moonraker_config_load();
-
-    /*
-     * wifi_init_sta() runs on the main task while LVGL renders on CPU 1.
-     * Updating this label without the display mutex can corrupt LVGL's
-     * invalid-area list and leave the main task spinning in lv_inv_area.
-     */
-    if (bsp_display_lock(0)) {
-        ui_shell_set_active_printer_name(
-            moonraker_config_active_profile_name());
-        bsp_display_unlock();
-    } else {
-        ESP_LOGE(TAG, "Failed to lock display for active printer label");
-    }
 
     s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(s_wifi_event_group ? ESP_OK : ESP_FAIL);
@@ -677,9 +668,33 @@ static void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
 
+    s_wifi_transport_ready = true;
+    ESP_LOGI(TAG, "ESP-Hosted transport ready before display startup");
+}
+
+
+static void wifi_init_sta(void)
+{
+    ESP_LOGI(TAG, "wifi_init_sta ENTER");
+
+    wifi_prepare_transport();
+
+    /*
+     * wifi_init_sta() runs on the main task while LVGL renders on CPU 1.
+     * Updating this label without the display mutex can corrupt LVGL's
+     * invalid-area list and leave the main task spinning in lv_inv_area.
+     */
+    if (bsp_display_lock(0)) {
+        ui_shell_set_active_printer_name(
+            moonraker_config_active_profile_name());
+        bsp_display_unlock();
+    } else {
+        ESP_LOGE(TAG, "Failed to lock display for active printer label");
+    }
+
     wifi_config_t wifi_config = { 0 };
 
-    if (have_saved_wifi) {
+    if (s_wifi_credentials_configured) {
         strlcpy((char *)wifi_config.sta.ssid, saved_wifi_ssid, sizeof(wifi_config.sta.ssid));
         strlcpy((char *)wifi_config.sta.password, saved_wifi_password, sizeof(wifi_config.sta.password));
         snprintf(wifi_status, sizeof(wifi_status), "Network: using saved WiFi %.24s", saved_wifi_ssid);
@@ -694,7 +709,7 @@ static void wifi_init_sta(void)
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
-    if (have_saved_wifi) {
+    if (s_wifi_credentials_configured) {
         ESP_ERROR_CHECK(
             esp_wifi_set_config(
                 WIFI_IF_STA,
@@ -703,7 +718,7 @@ static void wifi_init_sta(void)
 
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    if (!have_saved_wifi) {
+    if (!s_wifi_credentials_configured) {
         ESP_LOGW(
             TAG,
             "No saved WiFi credentials; use Network page to provision");
@@ -3866,6 +3881,15 @@ void app_main(void)
      * before any UI or transport path can take a state snapshot.
      */
     moonraker_module_init();
+
+    /*
+     * ESP-Hosted resets and initializes the C6 transport. Keep the panel
+     * backlight dark until that disruptive one-time operation is complete.
+     */
+    gpio_reset_pin(BSP_LCD_BACKLIGHT);
+    gpio_set_direction(BSP_LCD_BACKLIGHT, GPIO_MODE_OUTPUT);
+    gpio_set_level(BSP_LCD_BACKLIGHT, 0);
+    wifi_prepare_transport();
 
     s_moonraker_objects = heap_caps_calloc(
         1,

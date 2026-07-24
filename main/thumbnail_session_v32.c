@@ -20,6 +20,8 @@ static char s_selected_thumbnail_path[192] = "";
 #define METADATA_BODY_SIZE 8192
 static char *s_metadata_body = NULL;
 static char s_metadata_info[1024] = "";
+static double s_metadata_object_height = 0.0;
+static double s_metadata_layer_height = 0.0;
 
 static bool ensure_metadata_body(void)
 {
@@ -155,6 +157,9 @@ bool thumbnail_session_v32_build_metadata(
         return false;
     }
 
+    s_metadata_object_height = 0.0;
+    s_metadata_layer_height = 0.0;
+
     char encoded[220];
     url_encode_filename(file, encoded, sizeof(encoded));
 
@@ -201,6 +206,30 @@ bool thumbnail_session_v32_build_metadata(
         return false;
     }
 
+    json_find_number_after_key(
+        s_metadata_body,
+        "\"object_height\"",
+        &s_metadata_object_height);
+    json_find_number_after_key(
+        s_metadata_body,
+        "\"layer_height\"",
+        &s_metadata_layer_height);
+
+    return true;
+}
+
+bool thumbnail_session_v32_get_layer_metadata(
+    double *object_height,
+    double *layer_height)
+{
+    if (!object_height || !layer_height ||
+        s_metadata_object_height <= 0.0 ||
+        s_metadata_layer_height <= 0.0) {
+        return false;
+    }
+
+    *object_height = s_metadata_object_height;
+    *layer_height = s_metadata_layer_height;
     return true;
 }
 

@@ -31,6 +31,10 @@ bool thumbnail_session_v32_build_metadata(
     char *out,
     size_t out_size);
 
+bool thumbnail_session_v32_get_layer_metadata(
+    double *object_height,
+    double *layer_height);
+
 void thumbnail_session_v32_clear_png_buffer(void);
 void thumbnail_session_v32_free_thumbnail(void);
 void thumbnail_session_v32_install_png_buffer(

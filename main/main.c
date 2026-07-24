@@ -2933,13 +2933,22 @@ static void printer_build_metadata_text(
     char *out,
     size_t out_size)
 {
-    thumbnail_session_v32_build_metadata(
+    printer_meta_object_height = 0.0;
+    printer_meta_layer_height = 0.0;
+
+    bool metadata_ok = thumbnail_session_v32_build_metadata(
         moonraker_config_host(),
         moonraker_config_port(),
         MOONRAKER_API_KEY,
         file,
         out,
         out_size);
+
+    if (metadata_ok) {
+        (void)thumbnail_session_v32_get_layer_metadata(
+            &printer_meta_object_height,
+            &printer_meta_layer_height);
+    }
 }
 
 static void printer_thumb_set_label(const char *txt)

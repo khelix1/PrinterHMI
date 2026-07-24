@@ -1,0 +1,12 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/esp_websocket_client: "^1.7.0"
+  espressif/esp_wifi_remote: "*"
+  espressif/esp_hosted: "*"
+  espressif/esp_lcd_jd9165:
+    override_path: "../components/espressif__esp_lcd_jd9165"
+  espressif/esp_lvgl_port:
+    override_path: "../components/espressif__esp_lvgl_port"
+  lvgl/lvgl:
+    version: "9.2.*"
+    public: true

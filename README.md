@@ -1,0 +1,107 @@
+# PrinterHMI
+
+PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
+Klipper/Moonraker print cell. The v4.0.0 firmware targets the ESP32-P4 based
+JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
+coprocessor through Espressif's hosted Wi-Fi stack.
+
+The current release supports up to four Moonraker printer profiles, live
+printer and drybox status, file browsing with thumbnails and metadata,
+telemetry, print controls, exclude-object control, persistent display and
+timezone settings, runtime themes, and OTA firmware updates.
+
+## Status
+
+- Firmware version: `4.0.0`
+- Target: `esp32p4`
+- Known-good ESP-IDF: `5.4.4`
+- LVGL: `9.2.2` as locked by `dependencies.lock`
+- Display: JD9165, 1024 x 600, MIPI-DSI
+- Touch: GT911 over I2C
+- Network: ESP32-C6 through `esp_wifi_remote`/`esp_hosted`
+- Release state: active development
+
+See [Known Issues](docs/KNOWN_ISSUES.md) before distributing firmware or
+publishing repository history.
+
+## Operator features
+
+- Dashboard with active-printer identity, print status and cached preview
+- Printer controls for motion, temperatures, fan, speed, flow and print state
+- Moonraker exclude-object selection and confirmation
+- Files page with search, row thumbnails, long-press preview and metadata
+- Multi-printer profile selection for as many as four Moonraker instances
+- Drybox status and PLA/PETG/hold program controls
+- Combined temperature and humidity telemetry
+- Network configuration and Moonraker discovery/probing
+- Classic, Operator and Dark Glass runtime themes
+- Accent, density, high-contrast, large-text, reduced-transparency and
+  reduced-motion appearance settings
+- Persistent brightness, display sleep and timezone configuration
+- OTA download, progress display, dual-slot boot and rollback cancellation
+
+## Repository map
+
+| Path | Purpose |
+| --- | --- |
+| `main/` | Application, UI, controllers, Moonraker transport and assets |
+| `components/` | Board support component used by this hardware |
+| `common_components/` | Project-local BSP extensions |
+| `partitions.csv` | Dual-OTA flash layout |
+| `sdkconfig.defaults` | Reproducible project configuration defaults |
+| `sdkconfig` | Known-good resolved ESP-IDF configuration |
+| `dependencies.lock` | Resolved component versions |
+| `docs/` | Current authoritative documentation |
+| `docs/history/` | Historical v3.x plans, reviews and refactor records |
+
+## Quick start
+
+Install ESP-IDF 5.4.4, then:
+
+```bash
+source "$IDF_PATH/export.sh"
+git clone https://github.com/khelix1/PrinterHMI_v3_2.git PrinterHMI_v3_2
+cd PrinterHMI_v3_2
+idf.py set-target esp32p4
+idf.py build
+idf.py -p /dev/ttyUSB0 flash monitor
+```
+
+Use the serial device appropriate for the workstation. Do not commit local
+network credentials or API keys.
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Build instructions](docs/BUILDING.md)
+- [Hardware](docs/HARDWARE.md)
+- [Configuration and persistence](docs/CONFIGURATION.md)
+- [Flashing and OTA](docs/FLASHING_AND_OTA.md)
+- [Testing](docs/TESTING.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Git workflow](docs/GIT_WORKFLOW.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+
+## Development policy
+
+Keep `main.c` as the application coordinator. Page modules own page layout and
+page-local interaction; service modules own transport, persistence, parsing
+and background work. Every functional change should be built, installed on the
+target, exercised, and committed only after the device test passes.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch and review workflow.
+
+## License
+
+PrinterHMI's original source code and documentation are licensed under the
+[Apache License 2.0](LICENSE).
+
+Vendored and third-party components retain the licenses and copyright notices
+found in their respective directories. The PrinterHMI name and logo are not
+granted as trademarks by the Apache License.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+and [SECURITY.md](SECURITY.md) before participating.

@@ -1,0 +1,49 @@
+build/
+managed_components/
+.vscode/
+*.bin
+*.elf
+*.map
+*.log
+sdkconfig.old
+sdkconfig.ota_working
+test*
+_archive/
+snapshots/
+
+# BEGIN PRINTERHMI GENERATED IGNORES
+# ESP-IDF generated output
+/build/
+/managed_components/
+sdkconfig.old
+compile_commands.json
+
+# Local tools and caches
+.cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+*~
+
+# Historical freezes and mechanical backups
+/archive/
+*.tar.gz
+*.zip
+*.bak
+*.bak*
+*.backup_*
+*.backup*
+*.before_*
+*.before*
+*.freeze_*
+*.pre_*
+
+# Local secrets must never be published
+.env
+.env.*
+!.env.example
+secrets.*
+credentials.*
+# END PRINTERHMI GENERATED IGNORES

@@ -1,0 +1,84 @@
+# Configuration and persistent state
+
+## Operator configuration
+
+The Settings and Network pages provide runtime configuration for:
+
+- Wi-Fi credentials
+- Up to four named Moonraker printer profiles
+- Active printer
+- OTA firmware URL
+- Display brightness and sleep timeout
+- Timezone
+- Theme, accent and density
+- Large text, high contrast, reduced transparency and reduced motion
+
+## Defaults
+
+| Setting | Default |
+| --- | --- |
+| Moonraker profile count | One configured profile |
+| Moonraker profile name | `Printer 1` |
+| Moonraker port | `7125` |
+| Theme | Operator |
+| Accent | Theme default |
+| Density | Comfortable |
+| Accessibility options | Off |
+| Brightness | 100% |
+| Display sleep | Disabled |
+| Timezone | Central Time (US/Canada) |
+
+The source currently contains development-only fallback network endpoints and
+credentials. They are not acceptable release defaults; see
+`KNOWN_ISSUES.md` and `SECURITY.md`.
+
+## NVS schema
+
+| Namespace | Keys | Owner |
+| --- | --- | --- |
+| `netcfg` | `ssid`, `pass` | Wi-Fi configuration |
+| `netcfg` | `mp_schema`, `mp_active`, `pN_used`, `pN_name`, `pN_host`, `pN_port` | Multi-printer profiles |
+| `display` | `brightness`, `sleep_min` | Display settings |
+| `ui_theme` | `active`, `accent`, `density`, `large_text`, `contrast`, `solid_glass`, `reduce_motion` | Appearance manager |
+| `time_cfg` | `zone_id` | Timezone configuration |
+| `ota` | `url` | OTA manager |
+| `hmi` | `last_file` | Thumbnail/session restore |
+
+Legacy `netcfg/moon_host` and `netcfg/moon_port` values are migrated into
+profile zero when the multi-printer schema is first loaded.
+
+## Time synchronization
+
+The timezone is applied before SNTP starts. After Wi-Fi obtains an address,
+the device polls `pool.ntp.org` and `time.google.com`. The shell renders local
+time using the selected POSIX timezone rule.
+
+Supported timezone presets are UTC, Atlantic, Eastern, Central, Mountain,
+Arizona, Pacific, Alaska, Hawaii, United Kingdom, Central Europe, India, China,
+Japan, Australia Eastern and New Zealand.
+
+## Moonraker connectivity
+
+The active profile supplies host and port to HTTP and WebSocket transports.
+The normal Moonraker port is 7125. Profile selection increments a generation
+counter so queued results from the previous endpoint can be rejected.
+
+Current API paths include server information, file listing, file metadata,
+thumbnail download, object subscription, G-code script execution and print
+start. Connections currently use local-network HTTP and `ws://`.
+
+## Factory reset
+
+Factory reset erases NVS and reboots. This removes saved Wi-Fi, Moonraker,
+appearance, display, timezone, OTA and last-file settings. It does not erase
+SD-card caches or files.
+
+## Changing persistent schemas
+
+Any NVS schema change must include:
+
+1. A schema version or compatible fallback.
+2. Migration behavior for existing devices.
+3. A fresh-device test.
+4. An upgrade test from the preceding known-good release.
+5. Updated factory-reset and recovery documentation.

@@ -1,0 +1,89 @@
+# Test plan
+
+PrinterHMI changes are not complete when they compile. The target device is the
+acceptance environment.
+
+## Build gate
+
+```bash
+idf.py build
+idf.py size
+idf.py size-components
+git diff --check
+```
+
+Requirements:
+
+- no build failure;
+- no new actionable compiler warning;
+- application and bootloader fit their partitions with margin;
+- no unexpected internal-RAM regression;
+- only intended files are modified.
+
+## Startup and persistence
+
+- Cold power-on reaches the printer chooser/dashboard.
+- Warm reboot clears the splash.
+- First boot after OTA completes and marks the image valid.
+- A second reboot and full power cycle also succeed.
+- Clock shows the selected timezone after SNTP synchronization.
+- Theme, appearance, brightness, sleep, timezone and printer profile persist.
+
+## Display and interaction
+
+- Touch coordinates align across all screen edges.
+- Dashboard, Drybox, Printer, Files, Network, Settings and Telemetry open.
+- Persistent status bar and navigation remain aligned.
+- Every popup blocks interaction with content behind it.
+- Popup footer buttons are visible, aligned and restore interaction on close.
+- Theme A, B and C rebuild all visible pages without reboot.
+- Accent, density and each accessibility option produce the expected change.
+
+## Printer and Moonraker
+
+- Each configured profile probes and selects correctly.
+- Switching profiles cannot publish stale data from the previous profile.
+- Live WebSocket status updates; HTTP polling recovers after disconnect.
+- Pause, resume, cancel and motion controls send the intended command.
+- Nozzle, bed, fan, speed and flow controls update safely.
+- Exclude-object list and map agree; selection requires confirmation.
+- Offline and error paths show a useful failure state without freezing the UI.
+
+Never run destructive printer commands without a safe machine state and an
+operator present.
+
+## Files and previews
+
+- File search uses the shared keyboard and filters correctly.
+- Files with thumbnails show the preview in the row.
+- Long press opens the large preview and metadata popup.
+- File start requires the intended confirmation path.
+- SD cache survives reboot and remains scoped to the correct printer/file.
+- Missing SD, missing thumbnail and malformed metadata degrade gracefully.
+
+## Drybox and telemetry
+
+- Live drybox temperature, humidity, heater and fan values update.
+- PLA, PETG and hold commands reach the intended macros.
+- Nozzle/bed and chamber/humidity charts update without scrolling artifacts.
+- Chart ranges, reference lines and newest-sample markers remain legible in all
+  themes.
+
+## Network interruption
+
+- Boot without an access point remains responsive.
+- Moonraker offline does not block navigation.
+- Wi-Fi and Moonraker reconnect without reboot when service returns.
+- SNTP failure leaves the UI usable and retries on a later network cycle.
+
+## Soak test
+
+For a release candidate, leave the device running with live Moonraker traffic
+for at least two hours. Exercise page changes, popup creation/deletion, profile
+switching and thumbnail loads while monitoring resets, heap trends and task
+watchdogs.
+
+## Test record
+
+Record commit, tag, binary checksum, hardware revision, flash method, tests
+performed, pass/fail result and any accepted exception.

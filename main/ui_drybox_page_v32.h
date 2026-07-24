@@ -1,0 +1,68 @@
+#pragma once
+
+#include <stdbool.h>
+#include "lvgl.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef lv_obj_t *(*ui_drybox_page_info_factory_cb_t)(
+    lv_obj_t *parent,
+    const char *title,
+    const char *value,
+    int x,
+    int y);
+
+typedef void (*ui_drybox_page_action_cb_t)(
+    const char *command,
+    lv_event_t *event);
+
+typedef const char *(*ui_drybox_page_banner_text_cb_t)(void);
+
+typedef struct {
+    lv_obj_t *panel;
+    lv_obj_t *banner_label;
+    lv_obj_t *air_label;
+    lv_obj_t *center_label;
+    lv_obj_t *humidity_label;
+    lv_obj_t *target_label;
+    lv_obj_t *heater_label;
+    lv_obj_t *fan_label;
+} ui_drybox_page_v32_t;
+
+typedef enum {
+    UI_DRYBOX_PROGRAM_NONE = 0,
+    UI_DRYBOX_PROGRAM_PLA,
+    UI_DRYBOX_PROGRAM_PETG,
+    UI_DRYBOX_PROGRAM_HOLD
+} ui_drybox_program_v32_t;
+
+typedef struct {
+    const char *banner_text;
+    float air_temp;
+    float center_temp;
+    float humidity;
+    float heater_target;
+    bool heater_on;
+    float fan_speed;
+    ui_drybox_program_v32_t active_program;
+} ui_drybox_page_v32_state_t;
+
+
+bool ui_drybox_page_v32_create(
+    ui_drybox_page_v32_t *page,
+    ui_drybox_page_info_factory_cb_t info_factory,
+    ui_drybox_page_action_cb_t action_cb,
+    ui_drybox_page_banner_text_cb_t banner_text_cb);
+
+void ui_drybox_page_v32_refresh(
+    const ui_drybox_page_v32_t *page,
+    const ui_drybox_page_v32_state_t *state);
+
+void ui_drybox_page_v32_cleanup(
+    ui_drybox_page_v32_t *page);
+
+#ifdef __cplusplus
+}
+#endif

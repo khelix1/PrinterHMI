@@ -1,0 +1,351 @@
+#include "ui_shell.h"
+#include "ui_button.h"
+#include "ui_theme.h"
+#include "ui_widgets.h"
+
+#include "esp_wifi.h"
+#include "esp_log.h"
+
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+#include <time.h>
+
+static lv_obj_t *shell_top_bar = NULL;
+
+static lv_obj_t *s_shell_printer_button = NULL;
+static lv_obj_t *s_shell_title_label = NULL;
+static ui_shell_printer_switch_cb_t
+    s_printer_switch_callback = NULL;
+static lv_obj_t *shell_clock_label = NULL;
+static lv_obj_t *shell_topbar_wifi_bars[4] = {0};
+static lv_obj_t *shell_topbar_eta_label = NULL;
+static lv_obj_t *shell_nav_rail = NULL;
+static lv_obj_t *shell_nav_buttons[UI_SHELL_PAGE_COUNT] = {0};
+static lv_timer_t *s_clock_timer = NULL;
+
+static const char *TAG = "ui_shell";
+
+static void shell_printer_switch_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+
+    if (s_printer_switch_callback) {
+        s_printer_switch_callback();
+    }
+}
+
+
+static void shell_clock_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+
+    if (!shell_clock_label) return;
+
+    time_t now = 0;
+    struct tm timeinfo = {0};
+
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    char buf[24];
+
+    if (timeinfo.tm_year < (2024 - 1900)) {
+        snprintf(buf, sizeof(buf), "--:--");
+    } else {
+        strftime(buf, sizeof(buf), "%I:%M %p", &timeinfo);
+        if (buf[0] == '0') {
+            memmove(buf, buf + 1, strlen(buf));
+        }
+    }
+
+    lv_label_set_text(shell_clock_label, buf);
+}
+
+void ui_shell_refresh_clock(void)
+{
+    shell_clock_timer_cb(NULL);
+}
+
+void ui_shell_create(void)
+{
+    if (shell_top_bar) {
+        ui_shell_raise_topbar();
+        return;
+    }
+
+    lv_obj_t *scr = lv_screen_active();
+
+    shell_top_bar = lv_obj_create(scr);
+    lv_obj_set_size(shell_top_bar, 1024, 72);
+    lv_obj_set_pos(shell_top_bar, 0, 0);
+    ui_apply_surface_role(shell_top_bar, UI_SURFACE_SHELL_TOPBAR);
+
+    /* TOPBAR_FIXED_NON_SCROLLING_CONTENT_AREA
+     * Absolute shell geometry must not inherit LVGL container padding or
+     * auto-scroll a focused child into view.
+     */
+    lv_obj_clear_flag(shell_top_bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(shell_top_bar, 0, 0);
+
+    s_shell_printer_button =
+        ui_button_create_empty(
+            shell_top_bar,
+            UI_BUTTON_OUTLINED);
+
+    if (s_shell_printer_button) {
+        lv_obj_set_size(s_shell_printer_button, 500, 52);
+        lv_obj_set_pos(s_shell_printer_button, 12, 10);
+        lv_obj_clear_flag(
+            s_shell_printer_button,
+            LV_OBJ_FLAG_SCROLLABLE);
+
+        s_shell_title_label =
+            ui_button_create_label(
+                s_shell_printer_button,
+                "PRINTERHMI  |  SELECT PRINTER  " LV_SYMBOL_DOWN);
+
+        lv_obj_add_event_cb(
+            s_shell_printer_button,
+            shell_printer_switch_event_cb,
+            LV_EVENT_CLICKED,
+            NULL);
+    }
+
+    shell_clock_label = lv_label_create(shell_top_bar);
+    lv_label_set_text(shell_clock_label, "--:--");
+    ui_apply_text_title(shell_clock_label);
+    ui_apply_label_primary(shell_clock_label);
+    lv_obj_align(shell_clock_label, LV_ALIGN_RIGHT_MID, -20, 0);
+
+    for (int i = 0; i < 4; i++) {
+        shell_topbar_wifi_bars[i] = lv_obj_create(shell_top_bar);
+        lv_obj_clear_flag(shell_topbar_wifi_bars[i], LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(shell_topbar_wifi_bars[i], 5, 6 + (i * 4));
+        ui_apply_surface_role(shell_topbar_wifi_bars[i], UI_SURFACE_INDICATOR);
+        lv_obj_set_style_bg_color(shell_topbar_wifi_bars[i], UI_WIFI_INACTIVE, 0);
+
+        lv_obj_align_to(shell_topbar_wifi_bars[i], shell_clock_label,
+                        LV_ALIGN_OUT_LEFT_MID,
+                        -90 + (i * 8),
+                        8 - (i * 2));
+    }
+
+    shell_topbar_eta_label = NULL;
+
+    if (!s_clock_timer) {
+        s_clock_timer = lv_timer_create(
+            shell_clock_timer_cb,
+            1000,
+            NULL);
+    }
+
+    shell_clock_timer_cb(NULL);
+}
+
+void ui_shell_destroy(void)
+{
+    if (shell_top_bar) {
+        lv_obj_delete(shell_top_bar);
+    }
+
+    if (shell_nav_rail) {
+        lv_obj_delete(shell_nav_rail);
+    }
+
+    shell_top_bar = NULL;
+    s_shell_printer_button = NULL;
+    s_shell_title_label = NULL;
+    shell_clock_label = NULL;
+    shell_topbar_eta_label = NULL;
+    shell_nav_rail = NULL;
+
+    for (int index = 0;
+         index < UI_SHELL_PAGE_COUNT;
+         ++index) {
+        shell_nav_buttons[index] = NULL;
+    }
+
+    for (int index = 0; index < 4; ++index) {
+        shell_topbar_wifi_bars[index] = NULL;
+    }
+
+}
+
+void ui_shell_raise_topbar(void)
+{
+    if (shell_top_bar) {
+        lv_obj_move_foreground(shell_top_bar);
+    }
+}
+
+/* ui_shell_raise() is still implemented in main.c during Phase 1. */
+
+void ui_shell_set_active_nav(int idx)
+{
+    for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {
+        if (!shell_nav_buttons[i]) {
+            continue;
+        }
+
+        ui_operator_nav_button_set_selected(
+            shell_nav_buttons[i],
+            i == idx);
+    }
+}
+
+void ui_shell_update_status_icons(void)
+{
+    int rssi = -127;
+    int bars = 0;
+
+    wifi_ap_record_t ap = {0};
+    esp_err_t err = esp_wifi_sta_get_ap_info(&ap);
+    if (err == ESP_OK) {
+        rssi = ap.rssi;
+
+        if (rssi >= -55) bars = 4;
+        else if (rssi >= -67) bars = 3;
+        else if (rssi >= -75) bars = 2;
+        else bars = 1;
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (!shell_topbar_wifi_bars[i]) continue;
+
+        lv_color_t c = UI_WIFI_INACTIVE;
+
+        if (i < bars) {
+            if (bars >= 3) c = UI_OK_BRIGHT;
+            else if (bars == 2) c = UI_WARN;
+            else c = UI_DANGER_BRIGHT;
+        }
+
+        lv_obj_set_style_bg_color(shell_topbar_wifi_bars[i], c, 0);
+    }
+}
+
+static void shell_nav_btn_event_cb(lv_event_t *e)
+{
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+
+    if (idx < UI_SHELL_PAGE_DASHBOARD || idx >= UI_SHELL_PAGE_COUNT) {
+        return;
+    }
+
+    ui_shell_set_active_nav(idx);
+    ui_shell_page_action((ui_shell_page_t)idx);
+}
+
+void ui_shell_create_nav(void)
+{
+    if (shell_nav_rail) {
+        ui_shell_raise_nav();
+        return;
+    }
+
+    lv_obj_t *scr = lv_screen_active();
+
+    shell_nav_rail = lv_obj_create(scr);
+    lv_obj_set_size(shell_nav_rail, 170, 528);
+    lv_obj_set_pos(shell_nav_rail, 0, 72);
+    ui_apply_surface_role(shell_nav_rail, UI_SURFACE_SHELL_NAV);
+    lv_obj_clear_flag(shell_nav_rail, LV_OBJ_FLAG_SCROLLABLE);
+
+    typedef struct {
+        const char *icon;
+        const char *text;
+    } shell_nav_item_t;
+
+    static const shell_nav_item_t nav[] = {
+        { LV_SYMBOL_HOME,     "Dashboard" },
+        { LV_SYMBOL_SETTINGS, "Drybox" },
+        { LV_SYMBOL_LIST,     "Printer" },
+        { LV_SYMBOL_FILE,     "Files" },
+        { LV_SYMBOL_WIFI,     "Network" },
+        { LV_SYMBOL_SETTINGS, "Settings" },
+        { LV_SYMBOL_CHARGE,   "Telemetry" }
+    };
+
+    for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {
+        lv_obj_t *button =
+            ui_create_operator_nav_button(
+                shell_nav_rail,
+                0,
+                0,
+                150,
+                48,
+                nav[i].icon,
+                nav[i].text);
+
+        if (!button) {
+            ESP_LOGE(
+                TAG,
+                "Failed to create navigation button %d",
+                i);
+            continue;
+        }
+
+        shell_nav_buttons[i] =
+            button;
+
+        /*
+         * Center against the rail's actual content area rather than
+         * relying on a hard-coded X coordinate.
+         */
+        lv_obj_align(
+            button,
+            LV_ALIGN_TOP_MID,
+            0,
+            16 + i * 58);
+
+        lv_obj_add_event_cb(
+            button,
+            shell_nav_btn_event_cb,
+            LV_EVENT_CLICKED,
+            (void *)(intptr_t)i);
+    }
+
+    ui_shell_set_active_nav(0);
+}
+
+void ui_shell_raise_nav(void)
+{
+    if (shell_nav_rail) {
+        lv_obj_move_foreground(shell_nav_rail);
+    }
+}
+
+
+
+void ui_shell_set_active_printer_name(const char *printer_name)
+{
+    if (!s_shell_title_label) return;
+
+    char title[96];
+
+    if (printer_name && printer_name[0]) {
+        lv_snprintf(
+            title,
+            sizeof(title),
+            "PRINTERHMI  |  %s  %s",
+            printer_name,
+            LV_SYMBOL_DOWN);
+    } else {
+        lv_snprintf(
+            title,
+            sizeof(title),
+            "PRINTERHMI  |  SELECT PRINTER  %s",
+            LV_SYMBOL_DOWN);
+    }
+
+    lv_label_set_text(s_shell_title_label, title);
+}
+
+
+
+void ui_shell_set_printer_switch_callback(
+    ui_shell_printer_switch_cb_t callback)
+{
+    s_printer_switch_callback = callback;
+}

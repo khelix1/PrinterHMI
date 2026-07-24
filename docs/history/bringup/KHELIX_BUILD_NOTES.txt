@@ -1,0 +1,1 @@
+Patched LVGL 9.2.2 compatibility: LV_COLOR_FORMAT_RGB565_SWAPPED alias/source replacement. Display/touch base remains v3_0_WORKING; WiFi path remains official station test style.

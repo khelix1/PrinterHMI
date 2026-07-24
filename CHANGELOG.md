@@ -5,6 +5,33 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Added
+
+- Added safe cancellation for an active OTA download.
+- Added Moonraker discovery directly to printer profile Add/Edit.
+- Added an active-print layer fallback based on file metadata when the slicer
+  does not publish `SET_PRINT_STATS_INFO`.
+- Added nightly firmware and SHA-256 publication through the end-of-night
+  checkpoint workflow.
+
+### Changed
+
+- Enabled the two-framebuffer, avoid-tearing LVGL direct-mode display path.
+- Separated the fast OTA UI timer from the general application refresh timer.
+- Moved ESP-Hosted/C6 transport initialization ahead of visible display
+  startup to prevent repeated splash flashes.
+- Normalized OTA keyboard, editor and progress-popup transitions.
+- Corrected printer-profile keyboard focus and field selection.
+
+### Fixed
+
+- Fixed delayed top-to-bottom OTA keyboard and progress-popup closure.
+- Fixed Add Printer host/IP and hostname text entry.
+- Fixed cancellation responsiveness while an OTA download is active.
+- Reduced startup flashing to a single initial panel appearance.
+- Preserved active-print layer reporting for files without slicer-provided
+  layer statistics.
+
 ### Documentation
 
 - Replaced the inherited LVGL demo README with a PrinterHMI project README.
@@ -17,7 +44,7 @@ v4.0.0 is preserved under `docs/history/`.
 - Remove embedded development credentials and rewrite affected Git history.
 - Remove tracked mechanical backups and accidental root artifacts.
 - Complete a repository-wide theme-token coverage audit.
-- Continue investigation of intermittent splash-frame flashing.
+- Investigate whether the remaining single initial panel appearance can be hidden.
 
 ## [4.0.0] - 2026-07-22
 

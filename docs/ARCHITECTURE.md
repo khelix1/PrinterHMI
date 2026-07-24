@@ -65,7 +65,8 @@ status banners, cards, previews, charts, action panels and popup controllers.
   status updates into synchronized Moonraker state.
 - `moonraker_poll` and `moonraker_live_transport` provide scheduled HTTP state
   refresh and fallback behavior.
-- `moonraker_probe` and `moonraker_discovery` test and discover endpoints.
+- `moonraker_probe` and `moonraker_discovery` test and discover endpoints;
+  discovery is presented inside printer profile Add/Edit.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
   `moonraker` and consumed through controllers.
 
@@ -89,22 +90,24 @@ card content.
 
 ### OTA lifecycle
 
-The OTA manager downloads to the inactive application slot. On successful
-installation the device reboots. When rollback support marks the new image as
-pending verification, startup marks the running image valid and cancels
-rollback after application initialization reaches that check.
+The OTA manager downloads to the inactive application slot. The progress
+popup can request cancellation; the worker aborts the OTA handle and returns
+without rebooting or selecting the incomplete image. On successful installation
+the device reboots. When rollback marks the new image as pending verification,
+startup marks the running image valid and cancels rollback.
 
 ## Startup sequence
 
 1. Initialize NVS, recovering from incompatible or exhausted storage.
 2. Load theme and timezone state.
-3. Initialize synchronized Moonraker state and PSRAM-backed capture storage.
-4. Start the BSP display/touch path with the LVGL task on CPU 1.
-5. Build the initial dashboard, printer chooser and splash while backlight is
-   held off.
-6. Load display settings, restore brightness and begin splash progress.
-7. Start hosted Wi-Fi, SNTP, SD and Moonraker runtime services.
-8. Mark a pending OTA image valid when rollback is enabled.
+3. Initialize synchronized Moonraker state.
+4. Hold the backlight off and initialize the ESP-Hosted/C6 transport.
+5. Allocate PSRAM-backed capture storage.
+6. Start the BSP display/touch path with the LVGL task on CPU 1.
+7. Build the dashboard, printer chooser and splash with the backlight off.
+8. Restore brightness and start Wi-Fi association.
+9. Start SNTP, delayed SD mounting and Moonraker runtime services.
+10. Mark a pending OTA image valid when rollback is enabled.
 
 ## Concurrency rules
 

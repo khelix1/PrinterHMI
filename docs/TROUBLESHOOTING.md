@@ -25,13 +25,14 @@ connection. Redact credentials, tokens and private addresses before sharing.
 ## White or flashing display during startup
 
 - Confirm the image uses the JD9165 1024 x 600 board path.
-- Confirm the backlight stays disabled until the first splash frame is ready.
-- Look for display reinitialization or page creation outside the LVGL lock.
-- Test without SD and with the network unavailable to isolate startup overlap.
-- Record whether the flash occurs before display-ready, during Wi-Fi startup or
-  when the splash is removed.
+- Confirm ESP-Hosted initialization logs before BSP display startup.
+- Confirm the backlight remains low while the C6 transport resets.
+- Confirm two framebuffers, direct mode and avoid-tearing are enabled.
+- Look for display reinitialization or LVGL access outside the display lock.
+- Distinguish the accepted initial panel appearance from repeated flashing.
 
-Intermittent brief splash-frame flashing remains under investigation.
+Repeated Wi-Fi-stage flashing means C6 initialization has moved behind visible
+display startup or another path is disturbing the display/backlight.
 
 ## Wi-Fi does not connect
 

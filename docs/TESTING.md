@@ -22,7 +22,8 @@ Requirements:
 
 ## Startup and persistence
 
-- Cold power-on reaches the printer chooser/dashboard.
+- Cold power-on reaches the printer chooser/dashboard without repeated splash flashing.
+- A single accepted initial panel appearance is distinguished from repeated flashes.
 - Warm reboot clears the splash.
 - First boot after OTA completes and marks the image valid.
 - A second reboot and full power cycle also succeed.
@@ -42,10 +43,12 @@ Requirements:
 ## Printer and Moonraker
 
 - Each configured profile probes and selects correctly.
+- Profile Add/Edit discovery fills host and port; `SAVE` remains explicit.
 - Switching profiles cannot publish stale data from the previous profile.
 - Live WebSocket status updates; HTTP polling recovers after disconnect.
 - Pause, resume, cancel and motion controls send the intended command.
 - Nozzle, bed, fan, speed and flow controls update safely.
+- Layer values follow Moonraker and fall back to file metadata when absent.
 - Exclude-object list and map agree; selection requires confirmation.
 - Offline and error paths show a useful failure state without freezing the UI.
 
@@ -60,6 +63,13 @@ operator present.
 - File start requires the intended confirmation path.
 - SD cache survives reboot and remains scoped to the correct printer/file.
 - Missing SD, missing thumbnail and malformed metadata degrade gracefully.
+
+## OTA
+
+- OTA keyboard and progress popups open and close without top-to-bottom redraw.
+- Progress remains responsive during download.
+- Cancellation closes promptly, does not reboot and preserves the running image.
+- A completed update reboots and validates the new image.
 
 ## Drybox and telemetry
 

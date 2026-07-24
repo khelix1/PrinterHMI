@@ -29,10 +29,12 @@
 
 - [ ] USB flash succeeds.
 - [ ] OTA from the previous known-good release succeeds.
+- [ ] OTA cancellation exits without rebooting or selecting a partial image.
 - [ ] First OTA boot marks the image valid.
 - [ ] Warm reboot succeeds.
 - [ ] Full power cycle succeeds.
-- [ ] Startup, navigation, themes and modal popups pass.
+- [ ] Startup has no repeated splash flashing.
+- [ ] Navigation, themes and modal popups pass.
 - [ ] Wi-Fi, SNTP, Moonraker HTTP/WebSocket and multi-printer switching pass.
 - [ ] Printer controls, Files, previews, Drybox and Telemetry pass.
 - [ ] Settings persist and factory-reset behavior is understood.
@@ -50,6 +52,7 @@ sha256sum build/PrinterHMI.bin
 - [ ] Annotated tag points to the tested commit.
 - [ ] `main` and tags are pushed to the private remote.
 - [ ] Release binary, checksum, partition table and test record are retained.
+- [ ] Nightly tag and firmware/checksum assets are verified when used.
 - [ ] A project-root `git archive` can be extracted and built.
 
 ## Rollback preparation

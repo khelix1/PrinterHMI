@@ -19,8 +19,10 @@ ESP32-P4.
 
 - Resolution: 1024 x 600
 - MIPI-DSI lanes: 2
-- Lane bitrate: 1 Gbit/s
+- Lane bitrate: 550 Mbit/s per configured lane
 - Pixel format: RGB565
+- Display framebuffers: 2
+- LVGL mode: direct mode with avoid-tearing enabled
 - Backlight: GPIO 23
 - LCD reset: GPIO 27
 - Touch I2C SDA: GPIO 7
@@ -31,6 +33,10 @@ The display and touch path is supplied by the local
 `espressif__esp32_p4_function_ev_board` component plus `bsp_extra`. The board
 component contains alternate panel definitions; PrinterHMI's active build is
 the 1024 x 600 JD9165 path.
+
+ESP-Hosted resets and initializes the C6 while the backlight is off. Display
+startup follows, preventing repeated C6-stage flashes. One brief initial panel
+appearance may remain when the splash first becomes visible.
 
 ## SDMMC pin map
 

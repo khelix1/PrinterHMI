@@ -63,9 +63,17 @@ The active profile supplies host and port to HTTP and WebSocket transports.
 The normal Moonraker port is 7125. Profile selection increments a generation
 counter so queued results from the previous endpoint can be rejected.
 
+Moonraker discovery is part of Manage Printers. Open Add or Edit, select
+`DISCOVER`, then choose an endpoint to populate host and port. Discovery does
+not save automatically; select `SAVE` after reviewing the profile.
+
 Current API paths include server information, file listing, file metadata,
 thumbnail download, object subscription, G-code script execution and print
 start. Connections currently use local-network HTTP and `ws://`.
+
+Active-print layers normally come from `print_stats.info`. When slicer layer
+statistics are absent, PrinterHMI estimates layers from file `object_height`,
+`layer_height` and print progress metadata.
 
 ## Factory reset
 

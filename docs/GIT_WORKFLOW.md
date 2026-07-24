@@ -62,13 +62,20 @@ tested:
 git push -u origin HEAD
 ```
 
-The repository includes `tools/end_of_night_checkpoint.sh`, which performs the
-clean-tree check, pushes the current branch, includes tags when on `main`, and
-verifies the remote branch points to the same commit:
+The repository includes `tools/end_of_night_checkpoint.sh`. On a clean,
+tested `main` branch it runs the public-tree audit, builds `PrinterHMI.bin`,
+creates its checksum, pushes `main`, creates a commit-specific nightly tag,
+publishes a GitHub prerelease and verifies the remote commit and both assets.
+
+It requires ESP-IDF 5.4.4 and an authenticated GitHub CLI:
 
 ```bash
+gh auth status
+idf.py --version
 ./tools/end_of_night_checkpoint.sh
 ```
+
+Do not use the checkpoint to publish uncommitted or untested work.
 
 ## Known-good tag
 

@@ -33,12 +33,12 @@ publishing repository history.
 - Multi-printer profile selection for as many as four Moonraker instances
 - Drybox status and PLA/PETG/hold program controls
 - Combined temperature and humidity telemetry
-- Network configuration and Moonraker discovery/probing
+- Network configuration with Moonraker discovery inside printer profile Add/Edit
 - Classic, Operator and Dark Glass runtime themes
 - Accent, density, high-contrast, large-text, reduced-transparency and
   reduced-motion appearance settings
 - Persistent brightness, display sleep and timezone configuration
-- OTA download, progress display, dual-slot boot and rollback cancellation
+- OTA download with cancellable progress, dual-slot boot and rollback cancellation
 
 ## Repository map
 

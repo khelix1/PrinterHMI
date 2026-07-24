@@ -12,6 +12,8 @@
 | Color depth | RGB565 / 16-bit |
 | FreeRTOS tick | 1000 Hz |
 | Main task stack | 8192 bytes |
+| LCD framebuffers | 2 |
+| LVGL display mode | Direct mode with avoid-tearing enabled |
 
 `dependencies.lock` is committed and is the authoritative resolved dependency
 set. `main/idf_component.yml` declares direct component constraints.

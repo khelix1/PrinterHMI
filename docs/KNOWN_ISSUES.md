@@ -6,24 +6,18 @@ Completed work is intentionally removed from this list so it remains an accurate
 
 ---
 
-# Release Blockers
+# Display Limitations
 
-## Splash screen flashing
+## Initial panel appearance
 
-**Status:** Open
+**Status:** Accepted cosmetic limitation
 
-The display may briefly flash during startup before the main UI is presented.
+ESP-Hosted/C6 initialization now completes while the backlight is off, removing
+the repeated flashes previously seen during splash progress. The display may
+still flash once when the panel and first splash frame become visible.
 
-The issue is cosmetic and does not affect normal firmware operation, but it should be resolved before declaring the firmware production-ready.
-
-Areas for investigation:
-
-* LCD initialization sequence
-* Backlight enable timing
-* LVGL buffer initialization
-* Display flush ordering
-* Panel reset timing
-* Wi-Fi startup interaction
+Further work may replace the fixed startup delay with an explicit first-frame
+completion signal if that does not destabilize startup.
 
 ---
 

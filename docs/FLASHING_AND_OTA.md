@@ -23,8 +23,10 @@ to ESP-IDF's generated flash arguments.
 3. Publish it on a server reachable by the HMI.
 4. Open Settings and enter the exact firmware URL.
 5. Start the update and leave power connected.
-6. Wait for the progress popup to complete and the device to reboot.
-7. Confirm the firmware version, active OTA slot and core features.
+6. To stop it, select `CANCEL` and wait for acknowledgement. A cancelled partial
+   image is not selected for boot.
+7. Otherwise, wait for completion and reboot.
+8. Confirm the firmware version, active OTA slot and core features.
 
 The OTA URL is persisted in NVS. The current manager accepts HTTP or HTTPS
 URLs, but server-certificate policy and image signing are not yet a complete
@@ -61,6 +63,15 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 `erase-flash` destroys all flash-resident settings and OTA state. Use it only
 when that loss is intended. It does not erase the removable SD card.
+
+## Nightly firmware
+
+A clean, tested `main` checkpoint publishes a GitHub prerelease tagged
+`nightly-YYYY-MM-DD-<commit>`. It contains `PrinterHMI.bin` and its SHA-256
+checksum. `tools/end_of_night_checkpoint.sh` builds, audits, pushes, tags,
+publishes and verifies these assets.
+
+Nightly builds are development checkpoints, not versioned releases.
 
 ## Release artifacts
 

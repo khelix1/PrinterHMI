@@ -536,7 +536,7 @@ static void manager_edit_cb(
         lv_obj_add_event_cb(
             s_editor_name,
             editor_field_focused_cb,
-            LV_EVENT_FOCUSED,
+            LV_EVENT_CLICKED,
             NULL);
     }
 
@@ -544,7 +544,7 @@ static void manager_edit_cb(
         lv_obj_add_event_cb(
             s_editor_host,
             editor_field_focused_cb,
-            LV_EVENT_FOCUSED,
+            LV_EVENT_CLICKED,
             NULL);
     }
 
@@ -552,7 +552,7 @@ static void manager_edit_cb(
         lv_obj_add_event_cb(
             s_editor_port,
             editor_field_focused_cb,
-            LV_EVENT_FOCUSED,
+            LV_EVENT_CLICKED,
             NULL);
     }
 

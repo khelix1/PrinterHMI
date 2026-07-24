@@ -52,5 +52,59 @@ v4.0.0 is preserved under `docs/history/`.
 ## Historical releases
 
 The v3.0 through v3.3 transition was an iterative hardware bring-up and UI
+
+
+## Development Update — Public Repository Hardening
+
+### Public repository audit modularization
+
+Extracted the embedded public-tree safety audit from `tools/end_of_night_checkpoint.sh` into the new reusable script:
+
+* `tools/audit/public_tree_audit.sh`
+
+`end_of_night_checkpoint.sh` now delegates repository validation to the standalone audit tool, making the audit reusable for future GitHub Actions workflows and manual validation while preserving existing checkpoint behavior.
+
+### Compiler format-warning cleanup
+
+Removed the global compiler suppression:
+
+```cmake
+add_compile_options(-Wno-format)
+```
+
+and replaced it with:
+
+```cmake
+add_compile_options(-Wformat=2)
+```
+
+Resolved every format warning originating from PrinterHMI-owned source code.
+
+Changes included:
+
+* Safe truncation handling for dashboard print filenames.
+* Safer folder path construction in the Files controller.
+* Increased buffer size for custom temperature popup initialization.
+* Replaced unnecessary empty `snprintf()` usage with direct buffer clearing.
+
+### Validation
+
+Completed successfully:
+
+* Clean project build.
+* No remaining PrinterHMI-owned format warnings.
+* Hardware smoke testing passed.
+* Public repository safety audit continues to pass after modularization.
+
+Remaining format warnings originate only from third-party components (ESP-IDF and LVGL) and are outside PrinterHMI source ownership.
+
+### Project impact
+
+This work improves overall code quality and prepares the project for future continuous integration by:
+
+* Eliminating a project-wide compiler warning suppression.
+* Making repository safety validation reusable.
+* Reducing technical debt without changing runtime behavior.
+
 ownership refactor. Its original plans, crash records and step-by-step logs are
 retained verbatim under `docs/history/`.

@@ -991,7 +991,7 @@ static void open_custom_temp_cb(lv_event_t *event)
     s_custom_temp_status = ui_popup_add_status_label(
         s_custom_temp_popup, instruction, 30, 52, 500);
 
-    char initial_text[8] = "";
+    char initial_text[16] = "";
     if (s_custom_temp_initial > 0) {
         snprintf(initial_text,
                  sizeof(initial_text),

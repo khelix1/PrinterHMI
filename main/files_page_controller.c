@@ -147,8 +147,14 @@ static void render_entries(void)
     int y = 0;
     for (size_t i = 0; i < folder_count; ++i) {
         char full_path[PRINTER_FILES_MAX_PATH];
-        snprintf(full_path, sizeof(full_path), "%s%s%s",
-                 s_folder, s_folder[0] ? "/" : "", folders[i]);
+        full_path[0] = '\0';
+
+        if (s_folder[0]) {
+            strlcpy(full_path, s_folder, sizeof(full_path));
+            strlcat(full_path, "/", sizeof(full_path));
+        }
+
+        strlcat(full_path, folders[i], sizeof(full_path));
         ui_files_v32_add_folder_button(folders[i], full_path, y);
         y += ui_theme_density_metric(66, 78, 90);
     }

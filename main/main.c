@@ -1516,7 +1516,6 @@ static void ota_popup_start_bridge(const char *url)
         ota_manager_set_url(url);
     }
 
-    lv_refr_now(NULL);
     ota_test_btn_cb(NULL);
 }
 
@@ -1625,7 +1624,8 @@ static void ui_dashboard_v32_push_live_banner_data(void)
         snprintf(
             file,
             sizeof(file),
-            "%s",
+            "%.*s",
+            (int)sizeof(file) - 1,
             mr_state->printer_file);
     } else {
         snprintf(

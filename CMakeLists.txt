@@ -8,7 +8,7 @@ set(EXTRA_COMPONENT_DIRS
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-add_compile_options(-Wno-format)
+add_compile_options(-Wformat=2)
 set(PROJECT_VER "4.0.0")
 # PRINTERHMI_RELEASE_VERSION_4_0_0
 project(PrinterHMI)

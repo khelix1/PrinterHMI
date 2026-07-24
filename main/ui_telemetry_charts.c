@@ -313,7 +313,7 @@ static void telemetry_update_chart_stats(
                 target,
                 unit);
         } else {
-            snprintf(buf, sizeof(buf), "");
+            buf[0] = '\0';
         }
 
         lv_label_set_text(chart->target_label, buf);

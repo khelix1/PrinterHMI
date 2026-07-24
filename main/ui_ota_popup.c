@@ -19,6 +19,13 @@ static lv_obj_t *s_ota_kb = NULL;
 static ui_ota_start_cb_t s_start_cb = NULL;
 static ui_ota_remote_cb_t s_remote_cb = NULL;
 
+/*
+ * OTA startup is deferred until LVGL has processed the asynchronous popup
+ * deletion and completed a redraw cycle.
+ */
+static char s_deferred_start_url[256] = "";
+static ui_ota_start_cb_t s_deferred_start_cb = NULL;
+
 
 void ui_ota_progress_show(void)
 {
@@ -158,18 +165,74 @@ static void close_cb(lv_event_t *e)
     ui_ota_popup_close();
 }
 
+static void deferred_start_cb(void *user_data)
+{
+    (void)user_data;
+
+    /*
+     * Clear the deferred ownership before invoking the bridge so a future OTA
+     * popup can safely schedule another request.
+     */
+    ui_ota_start_cb_t start_fn = s_deferred_start_cb;
+    char url[sizeof(s_deferred_start_url)];
+
+    snprintf(url, sizeof(url), "%s", s_deferred_start_url);
+
+    s_deferred_start_cb = NULL;
+    s_deferred_start_url[0] = '\0';
+
+    if (start_fn && url[0]) {
+        start_fn(url);
+    }
+}
+
 static void start_cb(lv_event_t *e)
 {
     (void)e;
 
-    if (s_ota_url_ta && s_start_cb) {
+    /*
+     * Preserve everything needed by the deferred callback before releasing
+     * popup ownership.
+     */
+    s_deferred_start_url[0] = '\0';
+    s_deferred_start_cb = s_start_cb;
+
+    if (s_ota_url_ta) {
         const char *txt = lv_textarea_get_text(s_ota_url_ta);
-        if (txt && txt[0]) {
-            s_start_cb(txt);
+        if (txt) {
+            snprintf(s_deferred_start_url,
+                     sizeof(s_deferred_start_url),
+                     "%s",
+                     txt);
         }
     }
 
-    ui_ota_popup_close();
+    /*
+     * Queue deletion first. LVGL's asynchronous callbacks are processed in
+     * order, so the popup deletion runs before deferred_start_cb().
+     */
+    lv_obj_t *popup = s_ota_popup;
+
+    s_ota_popup = NULL;
+    s_ota_url_ta = NULL;
+    s_ota_kb = NULL;
+    s_start_cb = NULL;
+    s_remote_cb = NULL;
+
+    if (popup) {
+        lv_obj_delete_async(popup);
+    }
+
+    /*
+     * Return from the touch event before NVS persistence and OTA startup.
+     * This allows the keyboard and popup to disappear without blocking.
+     */
+    if (s_deferred_start_cb && s_deferred_start_url[0]) {
+        lv_async_call(deferred_start_cb, NULL);
+    } else {
+        s_deferred_start_cb = NULL;
+        s_deferred_start_url[0] = '\0';
+    }
 }
 
 static void remote_cb(lv_event_t *e)

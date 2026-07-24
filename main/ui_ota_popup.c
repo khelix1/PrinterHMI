@@ -13,6 +13,8 @@ static lv_obj_t *s_progress_bar = NULL;
 static lv_obj_t *s_progress_label = NULL;
 static lv_obj_t *s_progress_pct_label = NULL;
 static lv_obj_t *s_progress_bytes_label = NULL;
+static lv_obj_t *s_progress_cancel_btn = NULL;
+static ui_ota_cancel_cb_t s_progress_cancel_cb = NULL;
 static bool s_progress_visible = false;
 static lv_obj_t *s_ota_url_ta = NULL;
 static lv_obj_t *s_ota_kb = NULL;
@@ -27,8 +29,31 @@ static char s_deferred_start_url[256] = "";
 static ui_ota_start_cb_t s_deferred_start_cb = NULL;
 
 
-void ui_ota_progress_show(void)
+static void progress_cancel_cb(lv_event_t *e)
 {
+    (void)e;
+
+    if (s_progress_cancel_btn) {
+        lv_obj_add_state(
+            s_progress_cancel_btn,
+            LV_STATE_DISABLED);
+    }
+
+    if (s_progress_label) {
+        lv_label_set_text(
+            s_progress_label,
+            "Cancelling OTA...");
+    }
+
+    if (s_progress_cancel_cb) {
+        s_progress_cancel_cb();
+    }
+}
+
+void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
+{
+    s_progress_cancel_cb = cancel_cb;
+
     if (s_progress_popup) {
         lv_obj_move_foreground(s_progress_popup);
         return;
@@ -38,7 +63,7 @@ void ui_ota_progress_show(void)
         ui_popup_create(
             lv_screen_active(),
             760,
-            320,
+            400,
             UI_POPUP_STANDARD);
 
     if (!s_progress_popup) {
@@ -90,15 +115,42 @@ void ui_ota_progress_show(void)
             264,
             680);
 
+    ui_popup_add_standard_footer_divider(
+        s_progress_popup);
+
+    s_progress_cancel_btn =
+        ui_popup_add_footer_action(
+            s_progress_popup,
+            UI_POPUP_ACTION_CANCEL,
+            "CANCEL",
+            220,
+            UI_POPUP_FOOTER_CENTER,
+            progress_cancel_cb,
+            NULL,
+            NULL);
+
     s_progress_visible = true;
 }
 
 void ui_ota_progress_pump(const char *status_text,
                           int percent,
                           int bytes_read,
-                          int content_length)
+                          int content_length,
+                          bool cancel_enabled)
 {
     if (!s_progress_visible) return;
+
+    if (s_progress_cancel_btn) {
+        if (cancel_enabled) {
+            lv_obj_remove_state(
+                s_progress_cancel_btn,
+                LV_STATE_DISABLED);
+        } else {
+            lv_obj_add_state(
+                s_progress_cancel_btn,
+                LV_STATE_DISABLED);
+        }
+    }
 
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
@@ -145,6 +197,23 @@ void ui_ota_progress_pump(const char *status_text,
 
         lv_label_set_text(s_progress_bytes_label, mbuf);
     }
+}
+
+
+void ui_ota_progress_close(void)
+{
+    if (s_progress_popup) {
+        lv_obj_delete(s_progress_popup);
+    }
+
+    s_progress_popup = NULL;
+    s_progress_bar = NULL;
+    s_progress_label = NULL;
+    s_progress_pct_label = NULL;
+    s_progress_bytes_label = NULL;
+    s_progress_cancel_btn = NULL;
+    s_progress_cancel_cb = NULL;
+    s_progress_visible = false;
 }
 
 void ui_ota_popup_close(void)

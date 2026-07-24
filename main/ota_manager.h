@@ -9,4 +9,5 @@ void ota_manager_set_url(const char *url);
 
 bool ota_manager_start(const char *url);
 bool ota_manager_is_running(void);
+void ota_manager_cancel(void);
 void ota_manager_pump_ui(void);

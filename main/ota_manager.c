@@ -6,6 +6,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "nvs.h"
 
@@ -26,6 +27,9 @@ static volatile int s_bytes_read = 0;
 static volatile int s_content_length = 0;
 
 static volatile bool s_task_running = false;
+static volatile bool s_cancel_requested = false;
+static volatile bool s_cancel_allowed = false;
+static volatile bool s_cancel_complete = false;
 static char s_task_url[192] = "";
 
 
@@ -243,7 +247,53 @@ static void update_task(void *arg)
         .http_config = &http_config,
     };
 
-    esp_err_t result = esp_https_ota(&ota_config);
+    esp_https_ota_handle_t ota_handle = NULL;
+    esp_err_t result =
+        esp_https_ota_begin(&ota_config, &ota_handle);
+
+    if (result != ESP_OK) {
+        if (s_cancel_requested) {
+            goto cancelled;
+        }
+        goto failed;
+    }
+
+    while (true) {
+        if (s_cancel_requested) {
+            goto cancelled;
+        }
+
+        result = esp_https_ota_perform(ota_handle);
+
+        if (result == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+            continue;
+        }
+
+        break;
+    }
+
+    if (s_cancel_requested) {
+        goto cancelled;
+    }
+
+    if (result != ESP_OK) {
+        goto failed;
+    }
+
+    if (!esp_https_ota_is_complete_data_received(ota_handle)) {
+        result = ESP_ERR_OTA_VALIDATE_FAILED;
+        goto failed;
+    }
+
+    /*
+     * Cancellation ends here. Once finish begins it may validate the image
+     * and switch the boot partition, so the UI must no longer offer CANCEL.
+     */
+    s_cancel_allowed = false;
+    set_state("Validating Firmware...", 99);
+
+    result = esp_https_ota_finish(ota_handle);
+    ota_handle = NULL;
 
     if (result == ESP_OK) {
         set_state("Update Complete\nRebooting...", 100);
@@ -252,6 +302,22 @@ static void update_task(void *arg)
 
         vTaskDelay(pdMS_TO_TICKS(500));
         esp_restart();
+    }
+
+failed:
+    s_cancel_allowed = false;
+
+    if (ota_handle) {
+        esp_err_t abort_result =
+            esp_https_ota_abort(ota_handle);
+
+        if (abort_result != ESP_OK) {
+            ESP_LOGW(TAG,
+                     "OTA abort after failure returned: %s",
+                     esp_err_to_name(abort_result));
+        }
+
+        ota_handle = NULL;
     }
 
     set_state(
@@ -263,6 +329,31 @@ static void update_task(void *arg)
              esp_err_to_name(result));
 
     s_task_running = false;
+    vTaskDelete(NULL);
+    return;
+
+cancelled:
+    s_cancel_allowed = false;
+
+    if (ota_handle) {
+        esp_err_t abort_result =
+            esp_https_ota_abort(ota_handle);
+
+        if (abort_result != ESP_OK) {
+            ESP_LOGW(TAG,
+                     "OTA cancel abort returned: %s",
+                     esp_err_to_name(abort_result));
+        }
+
+        ota_handle = NULL;
+    }
+
+    set_state("Update Cancelled", 0);
+
+    ESP_LOGI(TAG, "OTA cancelled safely");
+
+    s_task_running = false;
+    s_cancel_complete = true;
     vTaskDelete(NULL);
 }
 
@@ -277,8 +368,12 @@ bool ota_manager_start(const char *url)
              "%s",
              url);
 
+    s_cancel_requested = false;
+    s_cancel_complete = false;
+    s_cancel_allowed = true;
+
     set_state("Starting OTA...", 5);
-    ui_ota_progress_show();
+    ui_ota_progress_show(ota_manager_cancel);
     lv_refr_now(NULL);
 
     ESP_LOGI(TAG,
@@ -297,6 +392,7 @@ bool ota_manager_start(const char *url)
 
     if (result != pdPASS) {
         s_task_running = false;
+        s_cancel_allowed = false;
         set_state("Unable to start OTA task.", 0);
         ESP_LOGE(TAG, "failed to create OTA task");
         return false;
@@ -310,11 +406,30 @@ bool ota_manager_is_running(void)
     return s_task_running;
 }
 
+void ota_manager_cancel(void)
+{
+    if (!s_task_running || !s_cancel_allowed) {
+        return;
+    }
+
+    s_cancel_requested = true;
+    set_state("Cancelling OTA...", s_progress_pct);
+
+    ESP_LOGI(TAG, "OTA cancellation requested");
+}
+
 void ota_manager_pump_ui(void)
 {
+    if (s_cancel_complete) {
+        s_cancel_complete = false;
+        ui_ota_progress_close();
+        return;
+    }
+
     ui_ota_progress_pump(
         s_progress_text,
         s_progress_pct,
         s_bytes_read,
-        s_content_length);
+        s_content_length,
+        s_cancel_allowed);
 }

@@ -374,7 +374,6 @@ bool ota_manager_start(const char *url)
 
     set_state("Starting OTA...", 5);
     ui_ota_progress_show(ota_manager_cancel);
-    lv_refr_now(NULL);
 
     ESP_LOGI(TAG,
              "starting task for %s",

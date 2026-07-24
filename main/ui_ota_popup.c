@@ -27,6 +27,7 @@ static ui_ota_remote_cb_t s_remote_cb = NULL;
  */
 static char s_deferred_start_url[256] = "";
 static ui_ota_start_cb_t s_deferred_start_cb = NULL;
+static lv_obj_t *s_deferred_start_popup = NULL;
 
 
 static void progress_cancel_cb(lv_event_t *e)
@@ -250,6 +251,18 @@ static void deferred_start_cb(void *user_data)
     s_deferred_start_cb = NULL;
     s_deferred_start_url[0] = '\0';
 
+    /*
+     * Delete the editor and create the progress popup inside this same LVGL
+     * callback. LVGL cannot refresh between those operations, so the page
+     * beneath the popups is never exposed as an intermediate frame.
+     */
+    lv_obj_t *popup = s_deferred_start_popup;
+    s_deferred_start_popup = NULL;
+
+    if (popup) {
+        lv_obj_delete(popup);
+    }
+
     if (start_fn && url[0]) {
         start_fn(url);
     }
@@ -277,10 +290,11 @@ static void start_cb(lv_event_t *e)
     }
 
     /*
-     * Queue deletion first. LVGL's asynchronous callbacks are processed in
-     * order, so the popup deletion runs before deferred_start_cb().
+     * Transfer popup ownership to the deferred transition. The editor is
+     * deleted immediately before the progress popup is created, with no
+     * refresh opportunity between them.
      */
-    lv_obj_t *popup = s_ota_popup;
+    s_deferred_start_popup = s_ota_popup;
 
     s_ota_popup = NULL;
     s_ota_url_ta = NULL;
@@ -288,19 +302,18 @@ static void start_cb(lv_event_t *e)
     s_start_cb = NULL;
     s_remote_cb = NULL;
 
-    if (popup) {
-        lv_obj_delete_async(popup);
-    }
-
-    /*
-     * Return from the touch event before NVS persistence and OTA startup.
-     * This allows the keyboard and popup to disappear without blocking.
-     */
     if (s_deferred_start_cb && s_deferred_start_url[0]) {
         lv_async_call(deferred_start_cb, NULL);
     } else {
+        lv_obj_t *popup = s_deferred_start_popup;
+
+        s_deferred_start_popup = NULL;
         s_deferred_start_cb = NULL;
         s_deferred_start_url[0] = '\0';
+
+        if (popup) {
+            lv_obj_delete_async(popup);
+        }
     }
 }
 

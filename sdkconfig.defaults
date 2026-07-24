@@ -45,3 +45,11 @@ CONFIG_BOOTLOADER_LOG_LEVEL_INFO=y
 CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
 # PrinterHMI application startup requires an 8 KB main-task stack.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Use two JD9165 framebuffers to prevent visible scanline updates.
+
+# Present completed JD9165 frames at VSYNC instead of exposing partial strips.
+CONFIG_BSP_LCD_DPI_BUFFER_NUMS=2
+CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR=y
+# CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH is not set
+CONFIG_BSP_DISPLAY_LVGL_DIRECT_MODE=y

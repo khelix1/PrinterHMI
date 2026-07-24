@@ -1512,11 +1512,26 @@ static void ota_test_btn_cb(lv_event_t *e)
 
 static void ota_popup_start_bridge(const char *url)
 {
-    if (url && url[0]) {
-        ota_manager_set_url(url);
+    if (!url || !url[0]) {
+        return;
     }
 
-    ota_test_btn_cb(NULL);
+    if (ota_manager_is_running()) {
+        ESP_LOGW(TAG, "OTA: update already running");
+        return;
+    }
+
+    /*
+     * ota_manager_start() copies the URL, creates the progress popup and
+     * flushes it before returning. Persist the URL afterward so an NVS write
+     * cannot leave the keyboard visible during the transition.
+     */
+    if (!ota_manager_start(url)) {
+        ESP_LOGE(TAG, "OTA: unable to start update");
+        return;
+    }
+
+    ota_manager_set_url(url);
 }
 
 static void ota_popup_remote_bridge(void)
@@ -2015,11 +2030,17 @@ static void moonraker_process_filelist_notification(void)
 }
 
 
+static void ota_ui_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    ota_manager_pump_ui();
+}
+
+
 static void ui_refresh_timer_cb(lv_timer_t *timer)
 {
     int64_t ui_refresh_t0 = esp_timer_get_time();
 
-    ota_manager_pump_ui();
     moonraker_sync_legacy_from_state();
     moonraker_process_filelist_notification();
 
@@ -3629,6 +3650,11 @@ static void build_drybox_dashboard(void)
 
     app_create_wifi_status_label();
 
+    /*
+     * OTA progress and cancellation need prompt UI acknowledgement without
+     * forcing the full application refresh path to run more frequently.
+     */
+    lv_timer_create(ota_ui_timer_cb, 50, NULL);
     lv_timer_create(ui_refresh_timer_cb, 500, NULL);
 }
 

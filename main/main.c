@@ -1383,7 +1383,8 @@ static void ui_network_tools_open_printer_profiles_cb(
     (void)event;
 
     ui_printer_profiles_show(
-        printer_profiles_active_changed_bridge);
+        printer_profiles_active_changed_bridge,
+        scan_moonraker_now);
 }
 
 
@@ -1407,8 +1408,6 @@ static void scan_moonraker_now(void)
         NULL,
         moonraker_discovery_selected_bridge);
 
-    lv_refr_now(NULL);
-
     if (!moonraker_discovery_start(&s_ip)) {
         moonraker_discovery_set_status(
             "Unable to start Moonraker discovery task.");
@@ -1424,12 +1423,6 @@ static void moon_port_popup_save_bridge(int port)
     moonraker_configuration_changed(
         "Moonraker: port changed",
         true);
-}
-
-static void ui_network_tools_open_host_edit_cb(lv_event_t *e)
-{
-    (void)e;
-    scan_moonraker_now();
 }
 
 static void ui_network_tools_open_port_edit_cb(lv_event_t *e)
@@ -1838,7 +1831,8 @@ static void printer_chooser_manage_bridge(lv_event_t *event)
     (void)event;
 
     ui_printer_profiles_show(
-        printer_profiles_active_changed_bridge);
+        printer_profiles_active_changed_bridge,
+        scan_moonraker_now);
 }
 
 
@@ -2535,27 +2529,19 @@ static void ui_network_tools_wifi_scan_now(void)
 static void moonraker_discovery_selected_bridge(
     const char *host)
 {
-    if (!host || !host[0]) return;
-
-    if (!moonraker_config_select_host(host, 7125)) {
-        moonraker_discovery_set_status(
-            "Unable to save selected Moonraker.");
+    if (!host || !host[0]) {
         return;
     }
 
-    moonraker_configuration_changed(
-        "Moonraker: host changed",
-        false);
+    /*
+     * Discovery edits the open profile draft only. The operator remains
+     * responsible for reviewing the result and pressing SAVE.
+     */
+    ui_printer_profiles_set_discovered_endpoint(
+        host,
+        7125);
 
-    char status[512];
-
-    snprintf(status, sizeof(status),
-             "Selected Moonraker:\n"
-             "%s:7125\n\n"
-             "Saved. Press TEST MOONRAKER.",
-             moonraker_config_host());
-
-    moonraker_discovery_set_status(status);
+    moonraker_discovery_close();
 }
 
 

@@ -27,6 +27,9 @@ static int s_editor_profile = -1;
 static ui_printer_profiles_active_changed_cb_t
     s_active_changed_cb = NULL;
 
+static ui_printer_profiles_discover_cb_t
+    s_discover_cb = NULL;
+
 
 static void editor_close(void)
 {
@@ -62,6 +65,7 @@ void ui_printer_profiles_close_all(void)
         sizeof(s_profile_rows));
 
     s_active_changed_cb = NULL;
+    s_discover_cb = NULL;
 }
 
 
@@ -76,6 +80,16 @@ static void editor_cancel_cb(lv_event_t *event)
 {
     (void)event;
     editor_close();
+}
+
+
+static void editor_discover_cb(lv_event_t *event)
+{
+    (void)event;
+
+    if (s_discover_cb) {
+        s_discover_cb();
+    }
 }
 
 
@@ -369,6 +383,41 @@ static void editor_save_cb(
 }
 
 
+void ui_printer_profiles_set_discovered_endpoint(
+    const char *host,
+    int port)
+{
+    if (!s_editor_popup ||
+        !s_editor_host ||
+        !s_editor_port ||
+        !host ||
+        !host[0] ||
+        port <= 0 ||
+        port >= 65536) {
+        return;
+    }
+
+    char port_text[16];
+
+    snprintf(
+        port_text,
+        sizeof(port_text),
+        "%d",
+        port);
+
+    lv_textarea_set_text(
+        s_editor_host,
+        host);
+
+    lv_textarea_set_text(
+        s_editor_port,
+        port_text);
+
+    editor_set_status(
+        "Moonraker discovered. Review the profile and press SAVE.");
+}
+
+
 static void manager_edit_cb(
     lv_event_t *event)
 {
@@ -570,6 +619,16 @@ static void manager_edit_cb(
 
     ui_popup_add_footer_action(
         s_editor_popup,
+        UI_POPUP_ACTION_SECONDARY,
+        LV_SYMBOL_REFRESH " DISCOVER",
+        180,
+        UI_POPUP_FOOTER_CENTER,
+        editor_discover_cb,
+        NULL,
+        NULL);
+
+    ui_popup_add_footer_action(
+        s_editor_popup,
         UI_POPUP_ACTION_CONFIRM,
         LV_SYMBOL_SAVE " SAVE",
         180,
@@ -584,10 +643,14 @@ static void manager_edit_cb(
 
 
 void ui_printer_profiles_show(
-    ui_printer_profiles_active_changed_cb_t active_changed_cb)
+    ui_printer_profiles_active_changed_cb_t active_changed_cb,
+    ui_printer_profiles_discover_cb_t discover_cb)
 {
     s_active_changed_cb =
         active_changed_cb;
+
+    s_discover_cb =
+        discover_cb;
 
     if (s_manager_popup) {
         lv_obj_move_foreground(

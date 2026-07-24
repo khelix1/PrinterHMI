@@ -1,56 +1,97 @@
-# Known issues
+# Known Issues
 
-This list describes current v4.0.0 risks. Resolve release blockers before
-calling a build production-ready.
+This document tracks the remaining issues affecting release readiness, portability, security, and long-term maintenance.
 
-## Release blockers
+Completed work is intentionally removed from this list so it remains an accurate representation of the current project state.
 
-### Embedded development credentials
+---
 
-Development Wi-Fi credentials are present in tracked source and therefore in
-the initial Git history and private remote. They must be rotated, removed from
-source, replaced with a provisioning mechanism, and purged from reachable Git
-history. A later deletion commit is insufficient.
+# Release Blockers
 
-### Unencrypted local transports
+## Splash screen flashing
 
-Moonraker HTTP and WebSocket connections currently use unencrypted local
-transport. OTA also permits HTTP. Operate only on a trusted network until
-authenticated TLS and a firmware trust policy are implemented.
+**Status:** Open
 
-### Development fallback endpoints
+The display may briefly flash during startup before the main UI is presented.
 
-The firmware contains local development defaults for Moonraker and OTA,
-including an OTA filename from an earlier version. Release builds must not
-silently contact a developer-specific endpoint.
+The issue is cosmetic and does not affect normal firmware operation, but it should be resolved before declaring the firmware production-ready.
 
-### Project license not selected
+Areas for investigation:
 
-Component licenses exist, but PrinterHMI itself has no selected project-level
-license. The private repository currently grants no redistribution permission.
+* LCD initialization sequence
+* Backlight enable timing
+* LVGL buffer initialization
+* Display flush ordering
+* Panel reset timing
+* Wi-Fi startup interaction
 
-## Repository hygiene
+---
 
-- Numerous mechanical `.bak_*` source copies are currently tracked.
-- Accidental root artifacts and an old cleanup script are currently tracked.
-- The dependency lockfile contains an absolute workstation path for the local
-  board component.
-- Several source filenames retain `_v32` names although the product is v4.0.0.
+# Security Limitations
 
-These items do not necessarily alter the compiled image, but they undermine
-review quality, portability and release packaging.
+## Local network transport
 
-## Runtime and validation
+PrinterHMI communicates with Moonraker over HTTP and WebSocket on the local network.
 
-- Brief intermittent splash-frame flashing has been observed during startup.
-- Automated host tests and continuous integration are not yet established.
-- The build globally suppresses format warnings with `-Wno-format`; this can
-  conceal defects and should be removed after warning cleanup.
-- OTA integrity relies on the configured server and network path; a complete
-  production image-signing policy is not documented or enforced here.
-- Factory reset leaves SD-card cache data intact.
+This is appropriate for trusted LAN environments but does not provide encrypted transport.
 
-## Documentation maintenance
+## OTA trust model
 
-Historical v3.x records intentionally describe obsolete layouts and ownership.
-Only documents outside `docs/history/` describe current behavior.
+Firmware updates use the ESP-IDF OTA framework but do not currently implement a project-specific firmware signing policy.
+
+---
+
+# Build & Portability
+
+## Absolute paths in `dependencies.lock`
+
+The generated dependency lock file currently contains machine-specific absolute paths.
+
+This should be made portable before introducing automated CI or distributing the repository for general development.
+
+## Continuous Integration
+
+GitHub Actions (or an equivalent CI system) has not yet been implemented.
+
+Planned automated validation includes:
+
+* Public repository safety audit
+* Clean ESP-IDF build
+* Version consistency checks
+* Documentation consistency checks
+* Size regression monitoring
+* Compiler warning validation
+
+---
+
+# Technical Debt
+
+## Legacy `_v32` filenames
+
+Several modules retain historical `_v32` suffixes.
+
+This naming no longer reflects the project version and should eventually be simplified. This is a maintenance task only and has no functional impact.
+
+---
+
+# Maintenance
+
+The following items have been completed and are no longer tracked as known issues:
+
+* Public repository migration
+* Apache 2.0 licensing
+* SECURITY.md
+* CONTRIBUTING.md
+* CODE_OF_CONDUCT.md
+* Public-tree safety audit
+* Removal of the global `-Wno-format` compiler suppression
+* Shared Theme architecture
+* Runtime theme switching
+* Multi-printer support
+* Exclude-object support
+* Persistent timezone configuration
+* Operator UI migration
+* OTA update system
+* Documentation restructuring
+
+This document should remain focused on current issues rather than serving as a historical development log.

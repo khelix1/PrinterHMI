@@ -79,6 +79,37 @@ if [[ "$branch" != "main" ]]; then
     exit 0
 fi
 
+nightly_reply=""
+
+if [[ -t 0 ]]; then
+    read -r -p "Build and publish a nightly firmware release? [y/N] " \
+        nightly_reply
+else
+    echo "Non-interactive checkpoint: nightly build skipped."
+fi
+
+case "$nightly_reply" in
+    y|Y|yes|YES|Yes)
+        ;;
+    *)
+        git push --atomic -u origin main --follow-tags
+        git fetch origin --prune --tags --quiet
+
+        remote_commit="$(git rev-parse origin/main)"
+
+        if [[ "$local_commit" != "$remote_commit" ]]; then
+            echo "ERROR: local main and origin/main do not match after push" >&2
+            echo "local:  $local_commit" >&2
+            echo "remote: $remote_commit" >&2
+            exit 1
+        fi
+
+        echo "PASS: origin/main matches $short_commit"
+        echo "Nightly build skipped by operator."
+        exit 0
+        ;;
+esac
+
 for command in idf.py gh sha256sum; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "ERROR: required command not found: $command" >&2

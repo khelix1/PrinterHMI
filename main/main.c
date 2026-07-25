@@ -1385,6 +1385,9 @@ static void ui_network_tools_open_wifi_scan_cb(lv_event_t *e)
 
 static void printer_profiles_active_changed_bridge(void)
 {
+    /* FAILURE_STATE_POLISH_V1 */
+    ui_printer_popups_close_all();
+
     reset_preview_state_for_host_change();
     reset_active_printer_runtime_state();
     dashboard_restore_active_profile_preview();
@@ -1862,6 +1865,10 @@ static void ui_dashboard_v32_push_live_machine_data(void)
     ui_dashboard_v32_set_active_hotend(
         hotend_name,
         nozzle);
+
+    ui_dashboard_v32_set_machine_connection(
+        mr_state->moonraker_ok &&
+        mr_state->live_data_ok);
 }
 
 static void open_v32_dashboard_cb(lv_event_t *e)

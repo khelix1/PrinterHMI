@@ -770,6 +770,8 @@ static bool create_client(
         .uri = s_uri,
         .task_stack = 4096,
         .buffer_size = 4096,
+        .reconnect_timeout_ms = 5000,
+        .network_timeout_ms = 10000,
     };
 
     s_client = esp_websocket_client_init(&config);

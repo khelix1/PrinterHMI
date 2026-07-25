@@ -3,6 +3,7 @@
 #include "ui_widgets.h"
 
 typedef struct {
+    lv_obj_t *live;
     lv_obj_t *nozzle_name;
     lv_obj_t *nozzle;
     lv_obj_t *bed;
@@ -49,25 +50,25 @@ lv_obj_t *ui_machine_status_v32_create(
         18,
         12);
 
-    lv_obj_t *live = lv_label_create(panel);
+    ctx->live = lv_label_create(panel);
 
     lv_label_set_text(
-        live,
-        LV_SYMBOL_OK " LIVE");
+        ctx->live,
+        LV_SYMBOL_CLOSE " OFFLINE");
 
-    ui_apply_text_caption(live);
-    ui_apply_label_success(live);
+    ui_apply_text_caption(ctx->live);
+    ui_apply_label_error(ctx->live);
 
-    lv_obj_set_width(live, 90);
+    lv_obj_set_width(ctx->live, 110);
 
     lv_obj_set_style_text_align(
-        live,
+        ctx->live,
         LV_TEXT_ALIGN_RIGHT,
         0);
 
     lv_obj_set_pos(
-        live,
-        w - 108,
+        ctx->live,
+        w - 128,
         16);
 
     ui_create_operator_card_divider(
@@ -180,6 +181,31 @@ lv_obj_t *ui_machine_status_v32_create(
     lv_obj_set_user_data(panel, ctx);
 
     return panel;
+}
+
+
+void ui_machine_status_v32_set_connection(
+    lv_obj_t *panel,
+    bool online)
+{
+    if (!panel) return;
+
+    machine_status_ctx_t *ctx =
+        (machine_status_ctx_t *)lv_obj_get_user_data(panel);
+
+    if (!ctx || !ctx->live) return;
+
+    lv_label_set_text(
+        ctx->live,
+        online
+            ? LV_SYMBOL_OK " LIVE"
+            : LV_SYMBOL_CLOSE " OFFLINE");
+
+    if (online) {
+        ui_apply_label_success(ctx->live);
+    } else {
+        ui_apply_label_error(ctx->live);
+    }
 }
 
 

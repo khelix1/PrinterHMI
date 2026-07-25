@@ -4,6 +4,10 @@
 
 lv_obj_t *ui_machine_status_v32_create(lv_obj_t *parent, int x, int y, int w, int h);
 
+void ui_machine_status_v32_set_connection(
+    lv_obj_t *panel,
+    bool online);
+
 void ui_machine_status_v32_set_active_hotend(
     lv_obj_t *panel,
     const char *name,

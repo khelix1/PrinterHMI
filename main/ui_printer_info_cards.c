@@ -295,6 +295,41 @@ void ui_printer_info_cards_add_vivid_icon(lv_obj_t *value_label, const char *tit
     lv_obj_align(ico, LV_ALIGN_TOP_RIGHT, -10, 8);
 }
 
+static void apply_card_online_state(
+    lv_obj_t *value_label,
+    bool online)
+{
+    if (!value_label) {
+        return;
+    }
+
+    lv_obj_t *card =
+        lv_obj_get_parent(value_label);
+
+    if (!card) {
+        return;
+    }
+
+    if (online) {
+        lv_obj_remove_state(
+            card,
+            LV_STATE_DISABLED);
+
+        lv_obj_add_flag(
+            card,
+            LV_OBJ_FLAG_CLICKABLE);
+    } else {
+        lv_obj_add_state(
+            card,
+            LV_STATE_DISABLED);
+
+        lv_obj_clear_flag(
+            card,
+            LV_OBJ_FLAG_CLICKABLE);
+    }
+}
+
+
 static void apply_optional_card_capability(
     lv_obj_t *value_label,
     bool available)
@@ -382,6 +417,16 @@ void ui_printer_info_cards_refresh_live(
         remaining_buf,
         moonraker_ok);
 
+    apply_card_online_state(
+        cards->nozzle,
+        moonraker_ok);
+
+    if (!moonraker_ok) {
+        apply_card_online_state(cards->bed, false);
+        apply_card_online_state(cards->part_fan, false);
+        return;
+    }
+
     if (capabilities &&
         capabilities->discovered) {
         apply_optional_card_capability(
@@ -391,5 +436,8 @@ void ui_printer_info_cards_refresh_live(
         apply_optional_card_capability(
             cards->part_fan,
             capabilities->has_part_fan);
+    } else {
+        apply_card_online_state(cards->bed, true);
+        apply_card_online_state(cards->part_fan, true);
     }
 }

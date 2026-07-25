@@ -281,7 +281,7 @@ static void update_task(void *arg)
     }
 
     if (!esp_https_ota_is_complete_data_received(ota_handle)) {
-        result = ESP_ERR_OTA_VALIDATE_FAILED;
+        result = ESP_FAIL;
         goto failed;
     }
 

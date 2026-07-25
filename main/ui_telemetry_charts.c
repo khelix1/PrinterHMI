@@ -1,4 +1,5 @@
 #include "ui_telemetry_charts.h"
+#include "ui_page_layout_profile.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -957,10 +958,13 @@ static void telemetry_chart_load_history(void)
 
 static void telemetry_create_chart_panel(lv_obj_t *parent)
 {
+    const ui_dashboard_rect_t *rect =
+        &ui_page_layout_profile_current()->telemetry.charts;
+
     lv_obj_t *panel = lv_obj_create(parent);
 
-    lv_obj_set_size(panel, UI_PAGE_RAIL_WIDTH, 300);
-    lv_obj_set_pos(panel, UI_PAGE_RAIL_X, 208);
+    lv_obj_set_size(panel, rect->width, rect->height);
+    lv_obj_set_pos(panel, rect->x, rect->y);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
     ui_apply_surface_role(panel, UI_SURFACE_TELEMETRY_PANEL);

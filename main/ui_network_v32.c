@@ -1,4 +1,5 @@
 #include "ui_network_v32.h"
+#include "ui_page_layout_profile.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,6 +154,9 @@ void ui_network_v32_create_objects(
     lv_event_cb_t host_clicked_cb,
     lv_event_cb_t port_clicked_cb)
 {
+    const ui_network_layout_profile_t *layout =
+        &ui_page_layout_profile_current()->network;
+
     /*
      * Compatibility parameter retained while main.c still uses the old
      * create bridge. The new page uses shared Operator components directly.
@@ -214,7 +218,7 @@ void ui_network_v32_create_objects(
     ui_page_title_create(
         s_network.root,
         LV_SYMBOL_WIFI " NETWORK",
-        "Connectivity and remote access");
+        layout->subtitle);
 
     /*
      * Network-state banner.
@@ -243,10 +247,10 @@ void ui_network_v32_create_objects(
     s_network.wifi_card =
         ui_create_operator_card(
             s_network.root,
-            16,
-            130,
-            402,
-            190);
+            layout->wifi.x,
+            layout->wifi.y,
+            layout->wifi.width,
+            layout->wifi.height);
 
     if (s_network.wifi_card) {
         ui_create_operator_card_heading(
@@ -296,10 +300,10 @@ void ui_network_v32_create_objects(
     s_network.moonraker_card =
         ui_create_operator_card(
             s_network.root,
-            436,
-            130,
-            402,
-            190);
+            layout->moonraker.x,
+            layout->moonraker.y,
+            layout->moonraker.width,
+            layout->moonraker.height);
 
     if (s_network.moonraker_card) {
         ui_create_operator_card_heading(
@@ -371,10 +375,10 @@ void ui_network_v32_create_objects(
     s_network.networks_card =
         ui_create_operator_card(
             s_network.root,
-            16,
-            332,
-            474,
-            180);
+            layout->networks.x,
+            layout->networks.y,
+            layout->networks.width,
+            layout->networks.height);
 
     if (s_network.networks_card) {
         ui_create_operator_card_heading(
@@ -485,10 +489,10 @@ void ui_network_v32_create_objects(
     s_network.actions_card =
         ui_create_operator_card(
             s_network.root,
-            508,
-            332,
-            330,
-            180);
+            layout->actions.x,
+            layout->actions.y,
+            layout->actions.width,
+            layout->actions.height);
 
     if (s_network.actions_card) {
         ui_create_operator_card_heading(

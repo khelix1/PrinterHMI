@@ -1,4 +1,5 @@
 #include "ui_thumbnail_v32.h"
+#include "ui_preview_lightbox_v32.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
@@ -9,6 +10,34 @@ struct ui_thumbnail_v32 {
     void *canvas_buf;
     char loaded_file[160];
 };
+
+static void thumbnail_clicked_cb(lv_event_t *event)
+{
+    ui_thumbnail_v32_t *thumb =
+        (ui_thumbnail_v32_t *)lv_event_get_user_data(event);
+
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !thumb ||
+        !thumb->canvas) {
+        return;
+    }
+
+    ui_preview_lightbox_v32_show_object(thumb->canvas);
+}
+
+static void thumbnail_enable_lightbox(ui_thumbnail_v32_t *thumb)
+{
+    if (!thumb || !thumb->box) {
+        return;
+    }
+
+    lv_obj_add_flag(thumb->box, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(
+        thumb->box,
+        thumbnail_clicked_cb,
+        LV_EVENT_CLICKED,
+        thumb);
+}
 
 ui_thumbnail_v32_t *ui_thumbnail_v32_create(lv_obj_t *parent, int x, int y, int w, int h)
 {
@@ -26,6 +55,7 @@ ui_thumbnail_v32_t *ui_thumbnail_v32_create(lv_obj_t *parent, int x, int y, int 
 
     thumb->label = ui_create_card_subtitle(thumb->box, "THUMBNAIL");
     lv_obj_center(thumb->label);
+    thumbnail_enable_lightbox(thumb);
 
     return thumb;
 }
@@ -48,6 +78,7 @@ ui_thumbnail_v32_t *ui_thumbnail_v32_wrap(lv_obj_t *box)
 
     thumb->label = ui_create_card_subtitle(thumb->box, "THUMBNAIL");
     lv_obj_center(thumb->label);
+    thumbnail_enable_lightbox(thumb);
 
     return thumb;
 }
@@ -57,6 +88,57 @@ ui_thumbnail_v32_t *ui_thumbnail_v32_wrap(lv_obj_t *box)
 lv_obj_t *ui_thumbnail_v32_box(ui_thumbnail_v32_t *thumb)
 {
     return thumb ? thumb->box : NULL;
+}
+
+int ui_thumbnail_v32_fit_scale(
+    lv_obj_t *box,
+    int source_width,
+    int source_height,
+    int inset)
+{
+    if (!box || source_width <= 0 || source_height <= 0) {
+        return 256;
+    }
+
+    /*
+     * Printer creates and binds its cached image in the same LVGL pass.
+     * Resolve the new preview well before reading its dimensions; otherwise
+     * LVGL can still report zero and clamp the image to scale 1 (1/256x).
+     */
+    lv_obj_update_layout(box);
+
+    int available_width = lv_obj_get_width(box) - (inset * 2);
+    int available_height = lv_obj_get_height(box) - (inset * 2);
+
+    if (available_width < 1) available_width = 1;
+    if (available_height < 1) available_height = 1;
+
+    int scale_x = (available_width * 256) / source_width;
+    int scale_y = (available_height * 256) / source_height;
+    int scale = scale_x < scale_y ? scale_x : scale_y;
+
+    if (scale < 1) scale = 1;
+    if (scale > 768) scale = 768;
+    return scale;
+}
+
+void ui_thumbnail_v32_fit_object(
+    lv_obj_t *object,
+    lv_obj_t *box,
+    int source_width,
+    int source_height,
+    int inset)
+{
+    if (!object || !box) return;
+
+    lv_image_set_scale(
+        object,
+        ui_thumbnail_v32_fit_scale(
+            box,
+            source_width,
+            source_height,
+            inset));
+    lv_obj_center(object);
 }
 
 
@@ -74,8 +156,17 @@ void ui_thumbnail_v32_show_image(ui_thumbnail_v32_t *thumb, const lv_image_dsc_t
     }
 
     lv_image_set_src(thumb->canvas, dsc);
-    lv_image_set_scale(thumb->canvas, scale);
-    lv_obj_center(thumb->canvas);
+    if (scale > 0) {
+        lv_image_set_scale(thumb->canvas, scale);
+        lv_obj_center(thumb->canvas);
+    } else {
+        ui_thumbnail_v32_fit_object(
+            thumb->canvas,
+            thumb->box,
+            (int)dsc->header.w,
+            (int)dsc->header.h,
+            8);
+    }
 }
 
 

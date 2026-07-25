@@ -1,4 +1,5 @@
 #include "ui_printer_layout_v32.h"
+#include "ui_page_layout_profile.h"
 
 #include <string.h>
 
@@ -55,6 +56,9 @@ bool ui_printer_layout_v32_create(
 
     memset(layout, 0, sizeof(*layout));
 
+    const ui_printer_layout_profile_t *profile =
+        &ui_page_layout_profile_current()->printer;
+
     /*
      * Drybox uses an unpadded 854x528 page root, then places every
      * content surface on a 20px / 800px grid.
@@ -64,10 +68,10 @@ bool ui_printer_layout_v32_create(
     layout->active_panel =
         ui_create_operator_card(
             page,
-            UI_PAGE_RAIL_X,
-            118,
-            UI_PAGE_RAIL_WIDTH,
-            220);
+            profile->active.x,
+            profile->active.y,
+            profile->active.width,
+            profile->active.height);
 
     if (!layout->active_panel) {
         return false;
@@ -76,18 +80,18 @@ bool ui_printer_layout_v32_create(
     layout->status_panel =
         make_transparent_container(
             page,
-            UI_PAGE_RAIL_X,
-            350,
-            UI_PAGE_RAIL_WIDTH,
-            94);
+            profile->status.x,
+            profile->status.y,
+            profile->status.width,
+            profile->status.height);
 
     layout->action_panel =
         make_transparent_container(
             page,
-            UI_PAGE_RAIL_X,
-            456,
-            UI_PAGE_RAIL_WIDTH,
-            54);
+            profile->actions.x,
+            profile->actions.y,
+            profile->actions.width,
+            profile->actions.height);
 
     if (!layout->status_panel ||
         !layout->action_panel) {

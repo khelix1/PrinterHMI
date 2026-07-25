@@ -5,7 +5,9 @@
 #include "printer_controller.h"
 #include "moonraker_config_controller.h"
 #include "printer_preview_cache_v32.h"
+#include "ui_preview_lightbox_v32.h"
 #include "ui_theme.h"
+#include "ui_thumbnail_v32.h"
 #include "ui_widgets.h"
 
 /* Temporary bridge while Printer page implementation still lives in main.c. */
@@ -40,6 +42,24 @@ static lv_obj_t *s_preview_canvas = NULL;
 static char s_preview_canvas_file[160] = "";
 static uint32_t s_preview_cache_revision = 0;
 static int s_preview_cache_profile_index = -1;
+
+static void preview_clicked_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    if (s_preview_image &&
+        !lv_obj_has_flag(s_preview_image, LV_OBJ_FLAG_HIDDEN)) {
+        ui_preview_lightbox_v32_show_object(s_preview_image);
+        return;
+    }
+
+    if (s_preview_canvas &&
+        !lv_obj_has_flag(s_preview_canvas, LV_OBJ_FLAG_HIDDEN)) {
+        ui_preview_lightbox_v32_show_object(s_preview_canvas);
+    }
+}
 
 static void preview_copy_text(
     char *destination,
@@ -100,20 +120,51 @@ void ui_printer_v32_preview_create(lv_obj_t *parent)
         return;
     }
 
+    lv_obj_update_layout(parent);
+
+    int parent_width = lv_obj_get_width(parent);
+    int parent_height = lv_obj_get_height(parent);
+    int preview_width = (parent_width * 36) / 100;
+    int preview_height = parent_height - 36;
+
+    if (preview_width < 220) preview_width = 220;
+    if (preview_height < 120) preview_height = 120;
+
     /*
-     * parent is the 800x220 Active Print panel.
+     * This is an image well inside the Active Print card, not another
+     * structural card. Match Dashboard's lightweight preview hierarchy so
+     * the nested theme surface cannot cover the image child.
      */
-    s_preview_box =
-        ui_create_operator_card(
-            parent,
-            16,
-            28,
-            290,
-            184);
+    s_preview_box = lv_obj_create(parent);
 
     if (!s_preview_box) {
         return;
     }
+
+    lv_obj_set_size(
+        s_preview_box,
+        preview_width,
+        preview_height);
+    lv_obj_set_pos(
+        s_preview_box,
+        16,
+        28);
+    lv_obj_clear_flag(
+        s_preview_box,
+        LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(
+        s_preview_box,
+        0,
+        0);
+    ui_apply_preview_style(
+        s_preview_box);
+
+    lv_obj_add_flag(s_preview_box, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(
+        s_preview_box,
+        preview_clicked_cb,
+        LV_EVENT_CLICKED,
+        NULL);
 
     preview_show_placeholder();
 }
@@ -151,10 +202,14 @@ void ui_printer_v32_preview_show(
 
     if (cached_image &&
         cached_file &&
-        cached_file[0] &&
-        (!preview_file ||
-         !preview_file[0] ||
-         strcmp(cached_file, preview_file) == 0)) {
+        cached_file[0]) {
+        /*
+         * The preview cache is already isolated by active profile and
+         * printer endpoint. Treat that ownership as authoritative here.
+         * Moonraker and metadata paths can represent the same G-code with
+         * different prefixes, so a second raw-string filename gate can
+         * incorrectly hide the valid image that Dashboard is displaying.
+         */
         if (s_preview_canvas) {
             lv_obj_delete(s_preview_canvas);
             s_preview_canvas = NULL;
@@ -164,23 +219,28 @@ void ui_printer_v32_preview_show(
             s_preview_image = lv_image_create(s_preview_box);
         }
 
+        const void *current_source =
+            s_preview_image
+                ? lv_image_get_src(s_preview_image)
+                : NULL;
+
         if (s_preview_image &&
-            (s_preview_cache_profile_index != active_profile ||
+            (current_source != cached_image ||
+             s_preview_cache_profile_index != active_profile ||
              s_preview_cache_revision != cached_revision)) {
+            /*
+             * Bind a newly-created image even if the profile revision has
+             * not changed, while avoiding repeated source resets during the
+             * periodic Printer-page refresh.
+             */
             lv_image_set_src(s_preview_image, cached_image);
 
-            int scale_x =
-                (280 * 256) / (int)cached_image->header.w;
-
-            int scale_y =
-                (180 * 256) / (int)cached_image->header.h;
-
-            int scale = scale_x < scale_y ? scale_x : scale_y;
-            if (scale > 256) scale = 256;
-            if (scale < 1) scale = 1;
-
-            lv_image_set_scale(s_preview_image, scale);
-            lv_obj_center(s_preview_image);
+            ui_thumbnail_v32_fit_object(
+                s_preview_image,
+                s_preview_box,
+                (int)cached_image->header.w,
+                (int)cached_image->header.h,
+                6);
             s_preview_cache_revision = cached_revision;
             s_preview_cache_profile_index = active_profile;
         }
@@ -197,7 +257,9 @@ void ui_printer_v32_preview_show(
         preview_copy_text(
             s_preview_canvas_file,
             sizeof(s_preview_canvas_file),
-            preview_file);
+            preview_file && preview_file[0]
+                ? preview_file
+                : cached_file);
 
         return;
     }
@@ -266,4 +328,3 @@ lv_obj_t **ui_printer_v32_preview_image_ref(void)
 {
     return &s_preview_image;
 }
-

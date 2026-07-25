@@ -1,4 +1,5 @@
 #include "ui_drybox_page_v32.h"
+#include "ui_page_layout_profile.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -409,8 +410,15 @@ static lv_obj_t *make_program_button(
 static void build_environment_panel(
     ui_drybox_page_v32_t *page)
 {
+    const ui_dashboard_rect_t *rect =
+        &ui_page_layout_profile_current()->drybox.environment;
+
     lv_obj_t *panel =
-        make_panel(page->panel, 20, 120, 385, 230);
+        make_panel(page->panel,
+                   rect->x,
+                   rect->y,
+                   rect->width,
+                   rect->height);
 
     ui_create_operator_card_heading(
         panel,
@@ -521,8 +529,15 @@ static void build_environment_panel(
 static void build_system_panel(
     ui_drybox_page_v32_t *page)
 {
+    const ui_dashboard_rect_t *rect =
+        &ui_page_layout_profile_current()->drybox.drying_system;
+
     lv_obj_t *panel =
-        make_panel(page->panel, 425, 120, 395, 230);
+        make_panel(page->panel,
+                   rect->x,
+                   rect->y,
+                   rect->width,
+                   rect->height);
 
     ui_create_operator_card_heading(
         panel,
@@ -633,8 +648,15 @@ static void build_system_panel(
 static void build_program_panel(
     ui_drybox_page_v32_t *page)
 {
+    const ui_dashboard_rect_t *rect =
+        &ui_page_layout_profile_current()->drybox.material_program;
+
     lv_obj_t *panel =
-        make_panel(page->panel, 20, 365, 800, 145);
+        make_panel(page->panel,
+                   rect->x,
+                   rect->y,
+                   rect->width,
+                   rect->height);
 
     lv_obj_t *heading = make_text(
         panel,
@@ -767,10 +789,13 @@ bool ui_drybox_page_v32_create(
 
     ui_apply_root_style(page->panel);
 
+    const ui_drybox_layout_profile_t *layout =
+        &ui_page_layout_profile_current()->drybox;
+
     ui_page_title_create(
         page->panel,
         "DRYBOX",
-        "Filament Conditioning");
+        layout->subtitle);
 
     /*
      * Drybox uses the shared Operator banner shell.

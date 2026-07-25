@@ -1,4 +1,5 @@
 #include "ui_telemetry_v32.h"
+#include "ui_page_layout_profile.h"
 #include "ui_telemetry_components.h"
 #include "ui_telemetry_charts.h"
 
@@ -29,6 +30,9 @@ void ui_telemetry_v32_show(void)
 
     telemetry_history_init();
 
+    const ui_telemetry_layout_profile_t *layout =
+        &ui_page_layout_profile_current()->telemetry;
+
     s_panel = lv_obj_create(lv_screen_active());
 
     lv_obj_set_size(s_panel,
@@ -51,7 +55,7 @@ void ui_telemetry_v32_show(void)
 
     lv_obj_t *subtitle = telemetry_make_label(
         s_panel,
-        "Live machine instrumentation",
+        layout->subtitle,
         &lv_font_montserrat_14,
         UI_TEXT_DIM);
 
@@ -67,28 +71,28 @@ void ui_telemetry_v32_show(void)
 
     telemetry_create_metric_card(
         s_panel,
-        UI_PAGE_RAIL_X,
+        layout->metric_x[0],
         "NOZZLE",
         UI_ACCENT_CYAN,
         &s_nozzle_value);
 
     telemetry_create_metric_card(
         s_panel,
-        UI_PAGE_RAIL_X + 204,
+        layout->metric_x[1],
         "BED",
         UI_WARN,
         &s_bed_value);
 
     telemetry_create_metric_card(
         s_panel,
-        UI_PAGE_RAIL_X + 408,
+        layout->metric_x[2],
         "CHAMBER",
         UI_TELEMETRY_CHAMBER,
         &s_air_value);
 
     telemetry_create_metric_card(
         s_panel,
-        UI_PAGE_RAIL_X + 612,
+        layout->metric_x[3],
         "HUMIDITY",
         UI_TELEMETRY_HUMIDITY,
         &s_humidity_value);

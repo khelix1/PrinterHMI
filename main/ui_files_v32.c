@@ -1,4 +1,5 @@
 #include "ui_files_v32.h"
+#include "ui_page_layout_profile.h"
 
 #include "lvgl.h"
 #include "ui_theme.h"
@@ -8,6 +9,7 @@
 #include "ui_widgets.h"
 #include "ui_page_state_v32.h"
 #include "ui_page_geometry_v32.h"
+#include "ui_preview_lightbox_v32.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +47,23 @@ typedef struct file_row_context {
 } file_row_context_t;
 
 static file_row_context_t *s_file_rows = NULL;
+
+static void file_preview_clicked_cb(lv_event_t *event)
+{
+    file_row_context_t *row =
+        (file_row_context_t *)lv_event_get_user_data(event);
+
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !row) {
+        return;
+    }
+
+    lv_event_stop_bubbling(event);
+
+    if (row->preview_image) {
+        ui_preview_lightbox_v32_show_object(
+            row->preview_image);
+    }
+}
 
 lv_obj_t *ui_files_v32_get_popup(void)
 {
@@ -302,8 +321,14 @@ void ui_files_v32_add_file_entry(const char *path,
         ui_theme_density_metric(10, 12, 14),
         0);
     lv_obj_clear_flag(row->preview_frame, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(row->preview_frame, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_pad_all(row->preview_frame, 0, 0);
     ui_apply_surface_role(row->preview_frame, UI_SURFACE_PREVIEW_WELL);
+    lv_obj_add_event_cb(
+        row->preview_frame,
+        file_preview_clicked_cb,
+        LV_EVENT_CLICKED,
+        row);
 
     lv_obj_t *icon =
         lv_label_create(row->preview_frame);
@@ -687,7 +712,12 @@ void ui_files_v32_set_file_thumbnail(
         }
 
         lv_image_set_src(row->preview_image, image);
-        lv_obj_center(row->preview_image);
+        ui_thumbnail_v32_fit_object(
+            row->preview_image,
+            row->preview_frame,
+            (int)image->header.w,
+            (int)image->header.h,
+            2);
         return;
     }
 }
@@ -699,6 +729,9 @@ void ui_files_v32_show(void)
             s_printer_file_popup);
         return;
     }
+
+    const ui_files_layout_profile_t *layout =
+        &ui_page_layout_profile_current()->files;
 
     /*
      * TEST71_FILES_THEME_B_SHELL
@@ -734,22 +767,33 @@ void ui_files_v32_show(void)
     ui_page_title_create(
         s_printer_file_popup,
         LV_SYMBOL_FILE " FILES",
-        "Select a G-code file to preview and print.");
+        layout->subtitle);
 
     s_breadcrumb_label = lv_label_create(s_printer_file_popup);
-    lv_obj_set_width(s_breadcrumb_label, 360);
+    lv_obj_set_width(
+        s_breadcrumb_label,
+        layout->breadcrumb.width);
     lv_label_set_long_mode(s_breadcrumb_label, LV_LABEL_LONG_DOT);
     ui_apply_text_caption(s_breadcrumb_label);
     ui_apply_label_dim(s_breadcrumb_label);
-    lv_obj_set_pos(s_breadcrumb_label, 30, 62);
+    lv_obj_set_pos(
+        s_breadcrumb_label,
+        layout->breadcrumb.x,
+        layout->breadcrumb.y);
     ui_files_v32_set_breadcrumb(NULL);
 
     lv_obj_t *up = ui_button_create_icon(
         s_printer_file_popup, UI_BUTTON_OUTLINED,
         LV_SYMBOL_UP, "UP", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (up) {
-        lv_obj_set_size(up, 80, 42);
-        lv_obj_set_pos(up, 390, 10);
+        lv_obj_set_size(
+            up,
+            layout->up.width,
+            layout->up.height);
+        lv_obj_set_pos(
+            up,
+            layout->up.x,
+            layout->up.y);
         lv_obj_add_event_cb(up, up_button_cb, LV_EVENT_CLICKED, NULL);
     }
 
@@ -757,8 +801,14 @@ void ui_files_v32_show(void)
         s_printer_file_popup, UI_BUTTON_OUTLINED,
         LV_SYMBOL_EDIT, "SEARCH", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (search) {
-        lv_obj_set_size(search, 100, 42);
-        lv_obj_set_pos(search, 476, 10);
+        lv_obj_set_size(
+            search,
+            layout->search.width,
+            layout->search.height);
+        lv_obj_set_pos(
+            search,
+            layout->search.x,
+            layout->search.y);
         s_search_label = lv_obj_get_child(search, 1);
         ui_files_v32_set_search_text(s_search_text);
         lv_obj_add_event_cb(search, search_button_cb, LV_EVENT_CLICKED, NULL);
@@ -768,8 +818,14 @@ void ui_files_v32_show(void)
         s_printer_file_popup, UI_BUTTON_OUTLINED,
         LV_SYMBOL_LIST, "NAME", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (sort) {
-        lv_obj_set_size(sort, 120, 42);
-        lv_obj_set_pos(sort, 582, 10);
+        lv_obj_set_size(
+            sort,
+            layout->sort.width,
+            layout->sort.height);
+        lv_obj_set_pos(
+            sort,
+            layout->sort.x,
+            layout->sort.y);
         s_sort_label = lv_obj_get_child(sort, 1);
         lv_obj_add_event_cb(sort, sort_button_cb, LV_EVENT_CLICKED, NULL);
     }
@@ -789,13 +845,13 @@ void ui_files_v32_show(void)
     if (refresh) {
         lv_obj_set_size(
             refresh,
-            110,
-            42);
+            layout->refresh.width,
+            layout->refresh.height);
 
         lv_obj_set_pos(
             refresh,
-            708,
-            10);
+            layout->refresh.x,
+            layout->refresh.y);
 
         lv_obj_add_event_cb(
             refresh,
@@ -824,13 +880,13 @@ void ui_files_v32_show(void)
 
     lv_obj_set_size(
         s_printer_file_list,
-        814,
-        422);
+        layout->list.width,
+        layout->list.height);
 
     lv_obj_set_pos(
         s_printer_file_list,
-        20,
-        86);
+        layout->list.x,
+        layout->list.y);
 
     ui_apply_surface_role(s_printer_file_list, UI_SURFACE_TRANSPARENT);
 
@@ -859,10 +915,10 @@ void ui_files_v32_show(void)
 
     s_files_state = ui_page_state_v32_create(
         s_printer_file_popup,
-        20,
-        86,
-        814,
-        422);
+        layout->list.x,
+        layout->list.y,
+        layout->list.width,
+        layout->list.height);
 }
 
 void ui_files_v32_hide(void)

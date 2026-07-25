@@ -2,8 +2,19 @@
 
 #include "lvgl.h"
 #include "moonraker.h"
+#include "ui_dashboard_layout_profile.h"
 
-lv_obj_t *ui_machine_status_v32_create(lv_obj_t *parent, int x, int y, int w, int h);
+lv_obj_t *ui_machine_status_v32_create(
+    lv_obj_t *parent,
+    int x,
+    int y,
+    int w,
+    int h);
+
+lv_obj_t *ui_machine_status_v32_create_profile(
+    lv_obj_t *parent,
+    const ui_dashboard_rect_t *rect,
+    const ui_dashboard_machine_layout_t *layout);
 
 void ui_machine_status_v32_set_filament(
     lv_obj_t *panel,

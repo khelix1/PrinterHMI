@@ -1,5 +1,7 @@
 #include "ui_active_print_v32.h"
+#include "ui_preview_lightbox_v32.h"
 #include "ui_theme.h"
+#include "ui_thumbnail_v32.h"
 #include "ui_widgets.h"
 #include "esp_heap_caps.h"
 #include <string.h>
@@ -18,6 +20,16 @@ static lv_obj_t *s_active_print_thumb_canvas = NULL;
 static uint16_t *s_active_print_thumb_canvas_buf = NULL;
 static char s_active_print_thumb_canvas_file[160] = "";
 
+static void active_print_preview_clicked_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !s_active_print_thumb_canvas) {
+        return;
+    }
+
+    ui_preview_lightbox_v32_show_object(
+        s_active_print_thumb_canvas);
+}
 
 static void active_print_delete_cb(lv_event_t *event)
 {
@@ -160,7 +172,12 @@ void ui_active_print_v32_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, in
                          h,
                          LV_COLOR_FORMAT_RGB565);
 
-    lv_obj_center(s_active_print_thumb_canvas);
+    ui_thumbnail_v32_fit_object(
+        s_active_print_thumb_canvas,
+        box,
+        w,
+        h,
+        6);
     lv_obj_move_foreground(s_active_print_thumb_canvas);
 
     ui_active_print_v32_thumb_copy_file(file);
@@ -178,12 +195,18 @@ void ui_active_print_v32_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, i
                              w,
                              h,
                              LV_COLOR_FORMAT_RGB565);
-        lv_obj_center(s_active_print_thumb_canvas);
         lv_obj_move_foreground(s_active_print_thumb_canvas);
     } else {
         lv_obj_invalidate(s_active_print_thumb_canvas);
         lv_obj_move_foreground(s_active_print_thumb_canvas);
     }
+
+    ui_thumbnail_v32_fit_object(
+        s_active_print_thumb_canvas,
+        box,
+        w,
+        h,
+        6);
 
     ui_active_print_v32_thumb_clear_placeholder(card);
     ui_active_print_v32_thumb_copy_file(file);
@@ -197,9 +220,52 @@ lv_obj_t *ui_active_print_v32_create(
     int w,
     int h)
 {
-    if (!parent) {
+    const ui_dashboard_rect_t rect = {x, y, w, h};
+    const ui_dashboard_active_print_layout_t layout = {
+        .heading_x = 18,
+        .heading_y = 12,
+        .filename_x = 140,
+        .filename_y = 14,
+        .preview_x = 20,
+        .preview_y = 42,
+        .preview_width = 0,
+        .preview_height = 0,
+        .footer_x = 18,
+        .footer_bottom = 31,
+    };
+
+    return ui_active_print_v32_create_profile(
+        parent,
+        &rect,
+        &layout);
+}
+
+
+lv_obj_t *ui_active_print_v32_create_profile(
+    lv_obj_t *parent,
+    const ui_dashboard_rect_t *rect,
+    const ui_dashboard_active_print_layout_t *layout)
+{
+    if (!parent || !rect || !layout) {
         return NULL;
     }
+
+    const int x = rect->x;
+    const int y = rect->y;
+    const int w = rect->width;
+    const int h = rect->height;
+    int preview_width =
+        layout->preview_width > 0
+            ? layout->preview_width
+            : w - (layout->preview_x * 2);
+    int preview_height =
+        layout->preview_height > 0
+            ? layout->preview_height
+            : h - layout->footer_bottom -
+                layout->preview_y - 12;
+
+    if (preview_width < 120) preview_width = 120;
+    if (preview_height < 80) preview_height = 80;
 
     /*
      * The Active Print center card now uses the exact same shared
@@ -234,8 +300,8 @@ lv_obj_t *ui_active_print_v32_create(
     ui_create_operator_card_heading(
         panel,
         "ACTIVE PRINT",
-        18,
-        12);
+        layout->heading_x,
+        layout->heading_y);
 
     ctx->filename = lv_label_create(panel);
 
@@ -245,7 +311,7 @@ lv_obj_t *ui_active_print_v32_create(
 
     lv_obj_set_width(
         ctx->filename,
-        w - 160);
+        w - layout->filename_x - 20);
 
     lv_label_set_long_mode(
         ctx->filename,
@@ -263,8 +329,8 @@ lv_obj_t *ui_active_print_v32_create(
 
     lv_obj_set_pos(
         ctx->filename,
-        140,
-        14);
+        layout->filename_x,
+        layout->filename_y);
 
     /*
      * The expanded Dashboard card gives the preview another 30 px
@@ -278,16 +344,25 @@ lv_obj_t *ui_active_print_v32_create(
 
     lv_obj_set_size(
         ctx->preview_box,
-        310,
-        245);
+        preview_width,
+        preview_height);
 
     lv_obj_set_pos(
         ctx->preview_box,
-        40,
-        42);
+        layout->preview_x,
+        layout->preview_y);
 
     ui_apply_preview_style(
         ctx->preview_box);
+
+    lv_obj_add_flag(
+        ctx->preview_box,
+        LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(
+        ctx->preview_box,
+        active_print_preview_clicked_cb,
+        LV_EVENT_CLICKED,
+        NULL);
 
     ctx->preview_label =
         lv_label_create(ctx->preview_box);
@@ -320,7 +395,7 @@ lv_obj_t *ui_active_print_v32_create(
 
     lv_obj_set_width(
         ctx->footer,
-        w - 36);
+        w - (layout->footer_x * 2));
 
     lv_label_set_long_mode(
         ctx->footer,
@@ -360,8 +435,8 @@ lv_obj_t *ui_active_print_v32_create(
 
     lv_obj_set_pos(
         ctx->footer,
-        18,
-        h - 31);
+        layout->footer_x,
+        h - layout->footer_bottom);
 
     lv_obj_move_foreground(ctx->footer);
 

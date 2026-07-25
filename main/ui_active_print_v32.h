@@ -1,11 +1,23 @@
 #pragma once
 
 #include "lvgl.h"
+#include "ui_dashboard_layout_profile.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-lv_obj_t *ui_active_print_v32_create(lv_obj_t *parent, int x, int y, int w, int h);
+lv_obj_t *ui_active_print_v32_create(
+    lv_obj_t *parent,
+    int x,
+    int y,
+    int w,
+    int h);
+
+lv_obj_t *ui_active_print_v32_create_profile(
+    lv_obj_t *parent,
+    const ui_dashboard_rect_t *rect,
+    const ui_dashboard_active_print_layout_t *layout);
+
 lv_obj_t *ui_active_print_v32_thumb_box(lv_obj_t *card);
 
 lv_obj_t **ui_active_print_v32_thumb_canvas_ref(void);

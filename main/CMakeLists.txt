@@ -29,6 +29,8 @@ idf_component_register(
 
         # Dashboard
         "ui_dashboard_v32.c"
+        "ui_dashboard_layout_profile.c"
+        "ui_page_layout_profile.c"
         "ui_dashboard_page_v32.c"
         "ui_dashboard_status_v32.c"
         "ui_status_banner_v32.c"
@@ -62,6 +64,7 @@ idf_component_register(
         "thumbnail_session_v32.c"
         "thumbnail_preview_coordinator_v32.c"
         "ui_thumbnail_v32.c"
+        "ui_preview_lightbox_v32.c"
 
         # Network and Moonraker
         "ui_network_v32.c"

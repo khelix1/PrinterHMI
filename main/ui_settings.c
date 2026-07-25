@@ -1,4 +1,5 @@
 #include "ui_settings.h"
+#include "ui_page_layout_profile.h"
 #include "ui_settings_popups.h"
 #include "ui_settings_components.h"
 #include "ui_settings_backup_popup.h"
@@ -544,6 +545,9 @@ void ui_settings_show_page(
 {
     s_theme_rebuild_cb = theme_rebuild_cb;
 
+    const ui_settings_layout_profile_t *layout =
+        &ui_page_layout_profile_current()->settings;
+
     if (settings_panel) {
         lv_obj_move_foreground(settings_panel);
         return;
@@ -594,8 +598,14 @@ void ui_settings_show_page(
      */
     lv_obj_t *banner = lv_obj_create(settings_panel);
 
-    lv_obj_set_size(banner, UI_PAGE_RAIL_WIDTH, 86);
-    lv_obj_set_pos(banner, UI_PAGE_RAIL_X, 20);
+    lv_obj_set_size(
+        banner,
+        layout->banner.width,
+        layout->banner.height);
+    lv_obj_set_pos(
+        banner,
+        layout->banner.x,
+        layout->banner.y);
     lv_obj_clear_flag(banner, LV_OBJ_FLAG_SCROLLABLE);
 
     ui_apply_surface_role(banner, UI_SURFACE_SECTION);
@@ -610,7 +620,7 @@ void ui_settings_show_page(
 
     lv_obj_t *banner_subtitle = settings_make_label(
         banner,
-        "System configuration",
+        layout->subtitle,
         &lv_font_montserrat_14,
         UI_TEXT_DIM);
 
@@ -637,8 +647,14 @@ void ui_settings_show_page(
      */
     lv_obj_t *content = lv_obj_create(settings_panel);
 
-    lv_obj_set_size(content, UI_PAGE_RAIL_WIDTH, 398);
-    lv_obj_set_pos(content, UI_PAGE_RAIL_X, 118);
+    lv_obj_set_size(
+        content,
+        layout->content.width,
+        layout->content.height);
+    lv_obj_set_pos(
+        content,
+        layout->content.x,
+        layout->content.y);
 
     lv_obj_set_scroll_dir(content, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);

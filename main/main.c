@@ -125,6 +125,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_cards.h"
 #include "ui_page_title.h"
 #include "ui_page_geometry_v32.h"
+#include "ui_page_layout_profile.h"
 #include "ui_widgets.h"
 #include "ui_settings.h"
 #include "timezone_config.h"
@@ -2137,6 +2138,18 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
                                        telemetry_state.live_data_ok,
                                    &filament_state);
 
+    /*
+     * The active profile preview cache can become ready after the Printer
+     * page hierarchy is created. Refresh its consumer here so the Active
+     * Print card does not remain on its placeholder until page navigation.
+     */
+    if (printer_panel) {
+        ui_printer_v32_preview_show(
+            printer_state,
+            printer_file,
+            thumbnail_session_v32_selected_file());
+    }
+
     ui_printer_info_cards_refresh_live(
         printer_panel,
         &printer_info_cards,
@@ -3013,6 +3026,37 @@ static void printer_thumb_set_label(const char *txt)
 
 static void dashboard_show_loaded_thumbnail(void);
 
+static bool printer_publish_selected_preview_cache(void)
+{
+    const char *file =
+        thumbnail_session_v32_selected_file();
+
+    if (!file || !file[0] ||
+        !thumbnail_manager_v32_has_png()) {
+        return false;
+    }
+
+    bool published =
+        printer_preview_cache_v32_publish_png(
+            moonraker_config_active_profile_index(),
+            moonraker_config_host(),
+            moonraker_config_port(),
+            file,
+            thumbnail_manager_v32_png_data(),
+            thumbnail_manager_v32_png_size(),
+            DASH_THUMB_CANVAS_W,
+            DASH_THUMB_CANVAS_H);
+
+    if (published) {
+        printer_preview_store_v32_store_active(
+            file,
+            thumbnail_manager_v32_png_data(),
+            thumbnail_manager_v32_png_size());
+    }
+
+    return published;
+}
+
 
 static void dashboard_show_loaded_thumbnail(void)
 {
@@ -3097,7 +3141,12 @@ static void dashboard_show_loaded_thumbnail(void)
         DASH_THUMB_CANVAS_H,
         LV_COLOR_FORMAT_RGB565);
 
-    lv_obj_center(dash_thumb_canvas);
+    ui_thumbnail_v32_fit_object(
+        dash_thumb_canvas,
+        ui_dashboard_v32_thumb_box(),
+        DASH_THUMB_CANVAS_W,
+        DASH_THUMB_CANVAS_H,
+        6);
     lv_obj_move_foreground(dash_thumb_canvas);
 
     ui_dashboard_v32_thumb_clear_placeholder();
@@ -3127,11 +3176,17 @@ static void dashboard_apply_rendered_thumbnail(void)
                              DASH_THUMB_CANVAS_W,
                              DASH_THUMB_CANVAS_H,
                              LV_COLOR_FORMAT_RGB565);
-        lv_obj_center(dash_thumb_canvas);
         lv_obj_move_foreground(dash_thumb_canvas);
     } else {
         lv_obj_invalidate(dash_thumb_canvas);
     }
+
+    ui_thumbnail_v32_fit_object(
+        dash_thumb_canvas,
+        ui_dashboard_v32_thumb_box(),
+        DASH_THUMB_CANVAS_W,
+        DASH_THUMB_CANVAS_H,
+        6);
 
     ui_dashboard_v32_thumb_clear_placeholder();
 
@@ -3381,11 +3436,34 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
     ui_thumbnail_v32_show_image(
         printer_thumb_view,
         thumbnail_manager_v32_image_dsc(),
-        160);
+        0);
 
     if (!printer_controller_is_live_state(printer_state)) {
-        ui_dashboard_v32_thumb_canvas_file()[0] = 0;
-        dashboard_show_loaded_thumbnail();
+        /*
+         * Publish the selected file to the profile-owned preview cache even
+         * while Dashboard is not instantiated. Files owns the selection
+         * workflow; Dashboard and Printer are independent cache consumers.
+         */
+        bool published = false;
+
+        if (ui_dashboard_v32_thumb_ready()) {
+            ui_dashboard_v32_thumb_canvas_file()[0] = 0;
+            dashboard_show_loaded_thumbnail();
+            published =
+                printer_preview_cache_v32_matches(
+                    moonraker_config_active_profile_index(),
+                    thumbnail_session_v32_selected_file());
+        } else {
+            published =
+                printer_publish_selected_preview_cache();
+        }
+
+        if (published) {
+            ui_printer_v32_preview_show(
+                printer_state,
+                printer_file,
+                thumbnail_session_v32_selected_file());
+        }
     }
 }
 
@@ -3582,7 +3660,7 @@ void ui_printer_v32_create(void)
     ui_page_title_create(
         printer_panel,
         LV_SYMBOL_LIST " PRINTER",
-        "Machine Status and Print Control");
+        ui_page_layout_profile_current()->printer.subtitle);
 
     if (!ui_printer_layout_v32_create(
             printer_panel,

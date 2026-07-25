@@ -25,10 +25,13 @@ static void glass_surface(lv_obj_t *obj,
     lv_obj_set_style_bg_grad_dir(obj, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_main_stop(obj, 28, 0);
     lv_obj_set_style_bg_grad_stop(obj, 224, 0);
-    lv_obj_set_style_bg_opa(
-        obj,
-        ui_theme_accessible_opacity(opacity),
-        0);
+    /*
+     * Large translucent layers are expensive on the ESP32-P4 software
+     * renderer during full-page replacement. Keep the smoked gradient,
+     * edge, and outline treatment, but render the base surface opaquely.
+     */
+    (void)opacity;
+    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(obj, UI_GLASS_EDGE, 0);
     lv_obj_set_style_border_opa(obj, LV_OPA_70, 0);
     lv_obj_set_style_border_width(obj, UI_BORDER_THIN, 0);
@@ -38,7 +41,7 @@ static void glass_surface(lv_obj_t *obj,
     lv_obj_set_style_outline_opa(obj, LV_OPA_30, 0);
     lv_obj_set_style_outline_pad(obj, 2, 0);
     lv_obj_set_style_shadow_color(obj, edge, 0);
-    lv_obj_set_style_shadow_width(obj, 24, 0);
+    lv_obj_set_style_shadow_width(obj, 0, 0);
     lv_obj_set_style_shadow_spread(obj, 0, 0);
     lv_obj_set_style_shadow_opa(obj, glow_opacity, 0);
     lv_obj_set_style_shadow_offset_y(obj, 6, 0);
@@ -57,10 +60,11 @@ static void glass_button(lv_obj_t *obj,
     lv_obj_set_style_bg_grad_dir(obj, LV_GRAD_DIR_HOR, 0);
     lv_obj_set_style_bg_main_stop(obj, 24, 0);
     lv_obj_set_style_bg_grad_stop(obj, 230, 0);
-    lv_obj_set_style_bg_opa(
-        obj,
-        ui_theme_accessible_opacity(LV_OPA_70),
-        0);
+    /*
+     * Buttons retain their glass gradient and edge treatment without
+     * requiring background read-and-blend for every pixel.
+     */
+    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(obj, UI_GLASS_EDGE, 0);
     lv_obj_set_style_border_opa(obj, LV_OPA_80, 0);
     lv_obj_set_style_border_width(obj, UI_BORDER_THIN, 0);
@@ -70,7 +74,7 @@ static void glass_button(lv_obj_t *obj,
     lv_obj_set_style_outline_opa(obj, LV_OPA_30, 0);
     lv_obj_set_style_outline_pad(obj, 1, 0);
     lv_obj_set_style_shadow_color(obj, glow, 0);
-    lv_obj_set_style_shadow_width(obj, 18, 0);
+    lv_obj_set_style_shadow_width(obj, 0, 0);
     lv_obj_set_style_shadow_spread(obj, 0, 0);
     lv_obj_set_style_shadow_opa(obj, LV_OPA_30, 0);
     lv_obj_set_style_shadow_offset_y(obj, 4, 0);

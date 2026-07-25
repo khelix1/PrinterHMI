@@ -62,9 +62,7 @@
 static const char *TAG = "PrinterHMI";
 
 static lv_obj_t *wifi_label = NULL;
-static lv_obj_t *clock_label = NULL;
 static lv_obj_t *topbar_eta_label = NULL;
-static lv_obj_t *topbar_wifi_bars[4] = {0};
 
 
 void app_files_reload(void);
@@ -256,7 +254,6 @@ static lv_obj_t *printer_flow_label = NULL;
 static double printer_progress = -1.0;
 static double printer_print_duration = 0.0;
 static double printer_jog_step = 10.0;
-static char temp_popup_status[96] = "";
 static lv_obj_t *motion_step1_btn = NULL;
 static lv_obj_t *motion_step10_btn = NULL;
 static lv_obj_t *motion_step50_btn = NULL;
@@ -1526,20 +1523,6 @@ static void ui_network_v32_refresh_bridge(void)
         ui_network_tools_network_scan_status);
 }
 
-static void ota_test_btn_cb(lv_event_t *e)
-{
-    (void)e;
-
-    if (ota_manager_is_running()) {
-        ESP_LOGW(TAG, "OTA: update already running");
-        return;
-    }
-
-    if (!ota_manager_start(ota_manager_get_url())) {
-        ESP_LOGE(TAG, "OTA: unable to start update");
-    }
-}
-
 static void ota_popup_start_bridge(const char *url)
 {
     if (!url || !url[0]) {
@@ -1869,13 +1852,6 @@ static void ui_dashboard_v32_push_live_machine_data(void)
     ui_dashboard_v32_set_machine_connection(
         mr_state->moonraker_ok &&
         mr_state->live_data_ok);
-}
-
-static void open_v32_dashboard_cb(lv_event_t *e)
-{
-    (void)e;
-    hide_settings_tab();
-    ui_dashboard_v32_create();
 }
 
 static void show_settings_tab(void);
@@ -2241,46 +2217,6 @@ static void dashboard_dry_status_event_cb(lv_event_t *e)
 }
 
 
-static void show_dashboard_printer_status_popup(void)
-{
-    char elapsed[32];
-    char remaining[32];
-    char progress[24];
-
-    printer_controller_format_hhmm(
-        elapsed,
-        sizeof(elapsed),
-        printer_print_duration);
-
-    printer_controller_format_remaining(
-        remaining,
-        sizeof(remaining),
-        printer_progress,
-        printer_print_duration);
-
-    if (printer_progress >= 0.0) {
-        snprintf(progress,
-                 sizeof(progress),
-                 "%.0f %%",
-                 printer_progress * 100.0);
-    } else {
-        snprintf(progress, sizeof(progress), "-- %%");
-    }
-
-    ui_printer_popups_show_printer_status(
-        dash_print_state_text(),
-        printer_file,
-        progress,
-        elapsed,
-        remaining,
-        printer_nozzle_temp,
-        printer_nozzle_target,
-        printer_bed_temp,
-        printer_bed_target,
-        s_moonraker_ok);
-}
-
-
 static const char *printer_banner_text(void)
 {
     return printer_controller_machine_banner_text(printer_state, s_moonraker_ok);
@@ -2519,14 +2455,6 @@ static void ui_network_tools_wifi_ssid_selected_cb(lv_event_t *e)
         sizeof(ui_network_tools_network_scan_status));
 
     ui_network_tools_show_wifi_password_popup();
-}
-
-
-static void ui_network_tools_close_wifi_scan_popup_cb(lv_event_t *e)
-{
-    (void)e;
-
-    ui_network_tools_wifi_scan_close_owned();
 }
 
 
@@ -3003,19 +2931,6 @@ static void close_printer_file_detail_popup(void)
 
     printer_thumb_box = NULL;
     printer_thumb_view = NULL;
-}
-
-
-static bool printer_start_print_file_bridge(const char *filename)
-{
-    return printer_file_controller_start_file(
-        s_got_ip,
-        moonraker_config_host(),
-        moonraker_config_port(),
-        MOONRAKER_API_KEY,
-        filename,
-        moonraker_status,
-        sizeof(moonraker_status));
 }
 
 

@@ -10,52 +10,6 @@
 #include "ui_page_title.h"
 #include "ui_page_geometry_v32.h"
 
-static lv_obj_t *make_layout_host(
-    lv_obj_t *parent,
-    int x,
-    int y,
-    int width,
-    int height)
-{
-    lv_obj_t *host = lv_obj_create(parent);
-
-    lv_obj_clear_flag(
-        host,
-        LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_set_size(
-        host,
-        width,
-        height);
-
-    lv_obj_set_pos(
-        host,
-        x,
-        y);
-
-    lv_obj_set_style_bg_opa(
-        host,
-        LV_OPA_TRANSP,
-        0);
-
-    lv_obj_set_style_border_width(
-        host,
-        UI_BORDER_NONE,
-        0);
-
-    lv_obj_set_style_radius(
-        host,
-        UI_RADIUS_NONE,
-        0);
-
-    lv_obj_set_style_pad_all(
-        host,
-        0,
-        0);
-
-    return host;
-}
-
 ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
     lv_obj_t *parent)
 {

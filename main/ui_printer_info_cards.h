@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lvgl.h"
+#include "moonraker.h"
 
 typedef struct {
     lv_obj_t *progress;
@@ -43,4 +44,5 @@ void ui_printer_info_cards_refresh_live(
     double bed_target,
     double part_fan_speed,
     double print_duration,
-    bool moonraker_ok);
+    bool moonraker_ok,
+    const moonraker_capabilities_t *capabilities);

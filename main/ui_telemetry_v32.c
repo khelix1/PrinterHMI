@@ -167,17 +167,35 @@ void ui_telemetry_v32_refresh(
         s_nozzle_value,
         state->nozzle_temp);
 
-    telemetry_set_temperature(
-        s_bed_value,
-        state->bed_temp);
+    if (state->capabilities.discovered &&
+        !state->capabilities.has_heated_bed) {
+        if (s_bed_value) {
+            lv_label_set_text(s_bed_value, "N/A");
+        }
+    } else {
+        telemetry_set_temperature(
+            s_bed_value,
+            state->bed_temp);
+    }
 
-    telemetry_set_temperature(
-        s_air_value,
-        state->air_temp);
+    if (state->capabilities.discovered &&
+        !state->capabilities.has_drybox_environment_sensor) {
+        if (s_air_value) {
+            lv_label_set_text(s_air_value, "N/A");
+        }
 
-    telemetry_set_humidity(
-        s_humidity_value,
-        state->humidity);
+        if (s_humidity_value) {
+            lv_label_set_text(s_humidity_value, "N/A");
+        }
+    } else {
+        telemetry_set_temperature(
+            s_air_value,
+            state->air_temp);
+
+        telemetry_set_humidity(
+            s_humidity_value,
+            state->humidity);
+    }
 
     if (!sampled) {
         return;

@@ -90,6 +90,7 @@ static bool drybox_banner_is_offline(const char *banner)
     return !banner ||
            !banner[0] ||
            text_contains(banner, "OFFLINE") ||
+           text_contains(banner, "UNAVAILABLE") ||
            text_contains(banner, "DISCONNECTED") ||
            text_contains(banner, "NO CONNECTION") ||
            text_contains(banner, "NOT CONNECTED");
@@ -97,6 +98,7 @@ static bool drybox_banner_is_offline(const char *banner)
 
 static const char *drybox_status_text(const char *banner)
 {
+    if (text_contains(banner, "UNAVAILABLE")) return "UNAVAILABLE";
     if (drybox_banner_is_offline(banner)) return "OFFLINE";
     if (text_contains(banner, "ACTIVE") ||
         text_contains(banner, "DRYING")) return "DRYING";

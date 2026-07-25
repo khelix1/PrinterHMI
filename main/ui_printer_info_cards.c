@@ -295,6 +295,51 @@ void ui_printer_info_cards_add_vivid_icon(lv_obj_t *value_label, const char *tit
     lv_obj_align(ico, LV_ALIGN_TOP_RIGHT, -10, 8);
 }
 
+static void apply_optional_card_capability(
+    lv_obj_t *value_label,
+    bool available)
+{
+    if (!value_label) {
+        return;
+    }
+
+    lv_obj_t *card =
+        lv_obj_get_parent(value_label);
+
+    if (!card) {
+        return;
+    }
+
+    if (available) {
+        lv_obj_remove_state(
+            card,
+            LV_STATE_DISABLED);
+
+        lv_obj_add_flag(
+            card,
+            LV_OBJ_FLAG_CLICKABLE);
+        return;
+    }
+
+    lv_label_set_text(
+        value_label,
+        "N/A");
+
+    lv_obj_set_style_text_color(
+        value_label,
+        UI_TEXT_DIM,
+        0);
+
+    lv_obj_add_state(
+        card,
+        LV_STATE_DISABLED);
+
+    lv_obj_clear_flag(
+        card,
+        LV_OBJ_FLAG_CLICKABLE);
+}
+
+
 void ui_printer_info_cards_refresh_live(
     lv_obj_t *printer_panel,
     ui_printer_info_cards_t *cards,
@@ -305,8 +350,17 @@ void ui_printer_info_cards_refresh_live(
     double bed_target,
     double part_fan_speed,
     double print_duration,
-    bool moonraker_ok)
+    bool moonraker_ok,
+    const moonraker_capabilities_t *capabilities)
 {
+    /*
+     * Card pointers belong to the Printer page. Once that page is hidden,
+     * its objects have been deleted and must not receive capability updates.
+     */
+    if (!printer_panel || !cards) {
+        return;
+    }
+
     char remaining_buf[32];
 
     printer_controller_format_remaining(
@@ -327,4 +381,15 @@ void ui_printer_info_cards_refresh_live(
         print_duration,
         remaining_buf,
         moonraker_ok);
+
+    if (capabilities &&
+        capabilities->discovered) {
+        apply_optional_card_capability(
+            cards->bed,
+            capabilities->has_heated_bed);
+
+        apply_optional_card_capability(
+            cards->part_fan,
+            capabilities->has_part_fan);
+    }
 }

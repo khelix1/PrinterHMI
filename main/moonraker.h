@@ -23,6 +23,22 @@ typedef struct {
 } moonraker_hotend_t;
 
 typedef struct {
+    bool discovered;
+
+    bool has_heated_bed;
+    bool has_part_fan;
+    bool has_exclude_object;
+
+    bool has_drybox_center_sensor;
+    bool has_drybox_environment_sensor;
+    bool has_drybox_heater;
+    bool has_drybox_fan;
+    bool has_drybox_macros;
+
+    size_t filament_sensor_count;
+} moonraker_capabilities_t;
+
+typedef struct {
     double chamber_temp;
     double air_temp;
     double humidity;
@@ -51,6 +67,8 @@ typedef struct {
     size_t hotend_count;
     char active_hotend[MOONRAKER_HOTEND_NAME_MAX];
     moonraker_hotend_t hotends[MOONRAKER_MAX_HOTENDS];
+
+    moonraker_capabilities_t capabilities;
 
     double bed_temp;
     double bed_target;
@@ -126,6 +144,9 @@ void moonraker_state_set_connection(
 void moonraker_state_configure_hotends(
     const char names[][MOONRAKER_HOTEND_NAME_MAX],
     size_t count);
+
+void moonraker_state_configure_capabilities(
+    const moonraker_capabilities_t *capabilities);
 
 typedef enum {
     MOONRAKER_WEBSOCKET_MESSAGE_IGNORED = 0,

@@ -371,6 +371,24 @@ static const char *network_banner_text(void)
 
 static const char *drybox_banner_text(void)
 {
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+
+    const moonraker_capabilities_t *capabilities =
+        &state.capabilities;
+
+    bool drybox_available =
+        capabilities->has_drybox_center_sensor ||
+        capabilities->has_drybox_environment_sensor ||
+        capabilities->has_drybox_heater ||
+        capabilities->has_drybox_fan ||
+        capabilities->has_drybox_macros;
+
+    if (capabilities->discovered &&
+        !drybox_available) {
+        return "DRYBOX UNAVAILABLE";
+    }
+
     if (!s_live_data_ok) return "DRYBOX OFFLINE";
     if (live_heater_power) return "DRYBOX HEATING";
     if (live_humidity > 0.0 && live_humidity < 20.0) return "DRYBOX READY";
@@ -1751,7 +1769,10 @@ static void ui_dashboard_v32_push_live_machine_data(void)
         }
     }
 
-    if (mr_state->bed_temp > -100.0) {
+    if (mr_state->capabilities.discovered &&
+        !mr_state->capabilities.has_heated_bed) {
+        snprintf(bed, sizeof(bed), "N/A");
+    } else if (mr_state->bed_temp > -100.0) {
         snprintf(
             bed,
             sizeof(bed),
@@ -1769,30 +1790,36 @@ static void ui_dashboard_v32_push_live_machine_data(void)
      * The existing dashboard chamber field represents the drybox
      * environmental air temperature, not the center probe.
      */
-    if (mr_state->air_temp > -100.0) {
-        snprintf(
-            chamber,
-            sizeof(chamber),
-            "%.1f C",
-            mr_state->air_temp);
+    if (mr_state->capabilities.discovered &&
+        !mr_state->capabilities.has_drybox_environment_sensor) {
+        snprintf(chamber, sizeof(chamber), "N/A");
+        snprintf(humidity, sizeof(humidity), "N/A");
     } else {
-        snprintf(
-            chamber,
-            sizeof(chamber),
-            "-- C");
-    }
+        if (mr_state->air_temp > -100.0) {
+            snprintf(
+                chamber,
+                sizeof(chamber),
+                "%.1f C",
+                mr_state->air_temp);
+        } else {
+            snprintf(
+                chamber,
+                sizeof(chamber),
+                "-- C");
+        }
 
-    if (mr_state->humidity > -100.0) {
-        snprintf(
-            humidity,
-            sizeof(humidity),
-            "%.1f %%RH",
-            mr_state->humidity);
-    } else {
-        snprintf(
-            humidity,
-            sizeof(humidity),
-            "-- %%RH");
+        if (mr_state->humidity > -100.0) {
+            snprintf(
+                humidity,
+                sizeof(humidity),
+                "%.1f %%RH",
+                mr_state->humidity);
+        } else {
+            snprintf(
+                humidity,
+                sizeof(humidity),
+                "-- %%RH");
+        }
     }
 
     snprintf(
@@ -1807,7 +1834,10 @@ static void ui_dashboard_v32_push_live_machine_data(void)
         "%.0f%%",
         mr_state->flow_factor);
 
-    if (mr_state->part_fan_speed >= 0.0) {
+    if (mr_state->capabilities.discovered &&
+        !mr_state->capabilities.has_part_fan) {
+        snprintf(fan, sizeof(fan), "N/A");
+    } else if (mr_state->part_fan_speed >= 0.0) {
         snprintf(
             fan,
             sizeof(fan),
@@ -2121,7 +2151,8 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         printer_bed_target,
         printer_part_fan_speed,
         printer_print_duration,
-        s_moonraker_ok);
+        s_moonraker_ok,
+        &telemetry_state.capabilities);
     if (printer_panel && printer_file_label) {
         lv_label_set_text(printer_file_label, printer_file);
     }
@@ -2253,6 +2284,14 @@ static void part_fan_card_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+
+    if (state.capabilities.discovered &&
+        !state.capabilities.has_part_fan) {
+        return;
+    }
+
     ui_printer_popups_show_part_fan(
         printer_popup_send_gcode_bridge,
         printer_part_fan_speed);
@@ -2280,6 +2319,14 @@ static void nozzle_card_event_cb(lv_event_t *e)
 static void bed_card_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+
+    if (state.capabilities.discovered &&
+        !state.capabilities.has_heated_bed) {
+        return;
+    }
 
     ui_printer_popups_show_bed(
         printer_popup_send_gcode_bridge,

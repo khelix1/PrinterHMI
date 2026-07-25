@@ -177,6 +177,20 @@ void moonraker_state_set_connection(
 }
 
 
+void moonraker_state_configure_capabilities(
+    const moonraker_capabilities_t *capabilities)
+{
+    if (!capabilities) {
+        return;
+    }
+
+    state_lock();
+    g_moonraker_state.capabilities =
+        *capabilities;
+    state_unlock();
+}
+
+
 void moonraker_state_configure_hotends(
     const char names[][MOONRAKER_HOTEND_NAME_MAX],
     size_t count)

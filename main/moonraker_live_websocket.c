@@ -101,6 +101,35 @@ static bool object_list_contains(cJSON *objects, const char *name)
 }
 
 
+static size_t object_list_count_prefix(
+    cJSON *objects,
+    const char *prefix)
+{
+    if (!cJSON_IsArray(objects) ||
+        !prefix ||
+        !prefix[0]) {
+        return 0;
+    }
+
+    size_t count = 0;
+    size_t prefix_length = strlen(prefix);
+    cJSON *entry = NULL;
+
+    cJSON_ArrayForEach(entry, objects) {
+        if (cJSON_IsString(entry) &&
+            entry->valuestring &&
+            strncmp(
+                entry->valuestring,
+                prefix,
+                prefix_length) == 0) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+
 static bool append_subscription_text(
     size_t *used,
     const char *text)
@@ -123,10 +152,42 @@ static bool append_subscription_text(
 }
 
 
+static bool append_subscription_object(
+    size_t *used,
+    const char *object_name,
+    const char *fields)
+{
+    if (!used || !object_name || !object_name[0]) {
+        return false;
+    }
+
+    int written = snprintf(
+        s_subscription + *used,
+        sizeof(s_subscription) - *used,
+        "\"%s\":%s,",
+        object_name,
+        fields ? fields : "null");
+
+    if (written < 0 ||
+        (size_t)written >=
+            sizeof(s_subscription) - *used) {
+        return false;
+    }
+
+    *used += (size_t)written;
+    return true;
+}
+
+
 static bool build_subscription(
     const char names[][MOONRAKER_HOTEND_NAME_MAX],
-    size_t count)
+    size_t count,
+    const moonraker_capabilities_t *capabilities)
 {
+    if (!capabilities) {
+        return false;
+    }
+
     size_t used = 0;
     s_subscription[0] = '\0';
 
@@ -135,39 +196,88 @@ static bool build_subscription(
             "{\"jsonrpc\":\"2.0\","
             "\"method\":\"printer.objects.subscribe\","
             "\"params\":{\"objects\":{"
-            "\"temperature_sensor drybox_center\":null,"
-            "\"sht3x drybox_env\":null,"
-            "\"heater_generic drybox_heater\":null,"
-            "\"fan_generic drybox_fan\":null,"
-            "\"gcode_macro DRYBOX_VARS\":null,"
             "\"print_stats\":null,"
             "\"motion_report\":null,"
             "\"display_status\":null,"
-            "\"gcode_move\":null,"
-            "\"fan\":null,")) {
+            "\"gcode_move\":null,")) {
+        return false;
+    }
+
+    if (capabilities->has_drybox_center_sensor &&
+        !append_subscription_object(
+            &used,
+            "temperature_sensor drybox_center",
+            NULL)) {
+        return false;
+    }
+
+    if (capabilities->has_drybox_environment_sensor &&
+        !append_subscription_object(
+            &used,
+            "sht3x drybox_env",
+            NULL)) {
+        return false;
+    }
+
+    if (capabilities->has_drybox_heater &&
+        !append_subscription_object(
+            &used,
+            "heater_generic drybox_heater",
+            NULL)) {
+        return false;
+    }
+
+    if (capabilities->has_drybox_fan &&
+        !append_subscription_object(
+            &used,
+            "fan_generic drybox_fan",
+            NULL)) {
+        return false;
+    }
+
+    if (capabilities->has_drybox_macros &&
+        !append_subscription_object(
+            &used,
+            "gcode_macro DRYBOX_VARS",
+            NULL)) {
+        return false;
+    }
+
+    if (capabilities->has_part_fan &&
+        !append_subscription_object(
+            &used,
+            "fan",
+            NULL)) {
         return false;
     }
 
     for (size_t i = 0; i < count; ++i) {
-        int written = snprintf(
-            s_subscription + used,
-            sizeof(s_subscription) - used,
-            "\"%s\":null,",
-            names[i]);
-
-        if (written < 0 ||
-            (size_t)written >= sizeof(s_subscription) - used) {
+        if (!append_subscription_object(
+                &used,
+                names[i],
+                NULL)) {
             return false;
         }
+    }
 
-        used += (size_t)written;
+    if (capabilities->has_heated_bed &&
+        !append_subscription_object(
+            &used,
+            "heater_bed",
+            NULL)) {
+        return false;
+    }
+
+    if (capabilities->has_exclude_object &&
+        !append_subscription_object(
+            &used,
+            "exclude_object",
+            "[\"objects\",\"excluded_objects\",\"current_object\"]")) {
+        return false;
     }
 
     if (!append_subscription_text(
             &used,
-            "\"heater_bed\":null,"
-            "\"exclude_object\":[\"objects\",\"excluded_objects\","
-            "\"current_object\"],"
             "\"toolhead\":null}},"
             "\"id\":1002}")) {
         return false;
@@ -203,8 +313,53 @@ static bool handle_object_list_response(
         "extruder3",
     };
 
-    char names[MOONRAKER_MAX_HOTENDS][MOONRAKER_HOTEND_NAME_MAX] = {{0}};
+    char names[MOONRAKER_MAX_HOTENDS]
+              [MOONRAKER_HOTEND_NAME_MAX] = {{0}};
     size_t count = 0;
+
+    moonraker_capabilities_t capabilities = {
+        .discovered = true,
+        .has_heated_bed =
+            object_list_contains(
+                objects,
+                "heater_bed"),
+        .has_part_fan =
+            object_list_contains(
+                objects,
+                "fan"),
+        .has_exclude_object =
+            object_list_contains(
+                objects,
+                "exclude_object"),
+        .has_drybox_center_sensor =
+            object_list_contains(
+                objects,
+                "temperature_sensor drybox_center"),
+        .has_drybox_environment_sensor =
+            object_list_contains(
+                objects,
+                "sht3x drybox_env"),
+        .has_drybox_heater =
+            object_list_contains(
+                objects,
+                "heater_generic drybox_heater"),
+        .has_drybox_fan =
+            object_list_contains(
+                objects,
+                "fan_generic drybox_fan"),
+        .has_drybox_macros =
+            object_list_contains(
+                objects,
+                "gcode_macro DRYBOX_VARS"),
+    };
+
+    capabilities.filament_sensor_count =
+        object_list_count_prefix(
+            objects,
+            "filament_switch_sensor ") +
+        object_list_count_prefix(
+            objects,
+            "filament_motion_sensor ");
 
     for (size_t i = 0; i < MOONRAKER_MAX_HOTENDS; ++i) {
         if (!object_list_contains(objects, candidates[i])) continue;
@@ -226,8 +381,13 @@ static bool handle_object_list_response(
     }
 
     moonraker_state_configure_hotends(names, count);
+    moonraker_state_configure_capabilities(
+        &capabilities);
 
-    if (!build_subscription(names, count)) {
+    if (!build_subscription(
+            names,
+            count,
+            &capabilities)) {
         ESP_LOGE(TAG, "WS dynamic subscription overflow");
         s_subscription_ready = false;
         s_subscribe_pending = false;
@@ -240,8 +400,32 @@ static bool handle_object_list_response(
 
     ESP_LOGI(
         TAG,
-        "WS_HOTENDS_DISCOVERED count=%u active subscription ready",
-        (unsigned)count);
+        "WS_CAPABILITIES hotends=%u bed=%d fan=%d drybox=%d "
+        "filament_sensors=%u subscription ready",
+        (unsigned)count,
+        capabilities.has_heated_bed,
+        capabilities.has_part_fan,
+        capabilities.has_drybox_center_sensor ||
+            capabilities.has_drybox_environment_sensor ||
+            capabilities.has_drybox_heater ||
+            capabilities.has_drybox_fan ||
+            capabilities.has_drybox_macros,
+        (unsigned)capabilities.filament_sensor_count);
+
+    operator_event_log_add(
+        OPERATOR_EVENT_INFO,
+        "Capabilities: %u hotend%s, bed %s, fan %s, drybox %s",
+        (unsigned)count,
+        count == 1 ? "" : "s",
+        capabilities.has_heated_bed ? "yes" : "no",
+        capabilities.has_part_fan ? "yes" : "no",
+        (capabilities.has_drybox_center_sensor ||
+         capabilities.has_drybox_environment_sensor ||
+         capabilities.has_drybox_heater ||
+         capabilities.has_drybox_fan ||
+         capabilities.has_drybox_macros)
+            ? "yes"
+            : "no");
 
     cJSON_Delete(root);
     return true;

@@ -37,6 +37,21 @@ static const char *s_hotend_command_ptrs[6] = {0};
 static lv_obj_t *s_custom_temp_popup = NULL;
 static lv_obj_t *s_custom_temp_textarea = NULL;
 static lv_obj_t *s_custom_temp_status = NULL;
+static lv_obj_t *s_filament_list_popup = NULL;
+static lv_timer_t *s_filament_refresh_timer = NULL;
+static moonraker_filament_state_t s_filament_list_state = {0};
+static lv_obj_t *s_filament_status_labels[
+    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
+static lv_obj_t *s_filament_toggle_buttons[
+    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
+static lv_obj_t *s_filament_toggle_labels[
+    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
+static bool s_filament_toggle_pending[
+    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
+static bool s_filament_toggle_expected[
+    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
+static uint8_t s_filament_toggle_wait_ticks[
+    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
 static const char *s_custom_temp_title = NULL;
 static const char *s_custom_temp_command_prefix = NULL;
 static int s_custom_temp_max = 0;
@@ -1935,41 +1950,102 @@ static const char *filament_sensor_display_name(
 }
 
 
-void ui_printer_popups_show_filament_sensors(
-    const moonraker_filament_state_t *state)
+static bool filament_sensor_command_name_is_safe(
+    const char *name)
 {
-    if (!state || !state->discovered ||
-        state->total_count == 0) {
+    if (!name || !name[0]) return false;
+
+    for (const unsigned char *cursor =
+             (const unsigned char *)name;
+         *cursor;
+         ++cursor) {
+        bool safe =
+            (*cursor >= 'a' && *cursor <= 'z') ||
+            (*cursor >= 'A' && *cursor <= 'Z') ||
+            (*cursor >= '0' && *cursor <= '9') ||
+            *cursor == '_' ||
+            *cursor == '-' ||
+            *cursor == '.';
+
+        if (!safe) return false;
+    }
+
+    return true;
+}
+
+
+static void filament_list_popup_deleted_cb(lv_event_t *event)
+{
+    if (!event ||
+        lv_event_get_target(event) != s_filament_list_popup) {
         return;
     }
 
-    char body[768];
-    size_t used = 0;
+    s_filament_list_popup = NULL;
 
-    int written = snprintf(
-        body,
-        sizeof(body),
-        "Detected: %u sensor%s\n\n",
-        (unsigned)state->total_count,
-        state->total_count == 1 ? "" : "s");
+    if (s_filament_refresh_timer) {
+        lv_timer_delete(s_filament_refresh_timer);
+        s_filament_refresh_timer = NULL;
+    }
 
-    if (written < 0) return;
-    used = (size_t)written;
+    memset(
+        &s_filament_list_state,
+        0,
+        sizeof(s_filament_list_state));
+    memset(
+        s_filament_status_labels,
+        0,
+        sizeof(s_filament_status_labels));
+    memset(
+        s_filament_toggle_buttons,
+        0,
+        sizeof(s_filament_toggle_buttons));
+    memset(
+        s_filament_toggle_labels,
+        0,
+        sizeof(s_filament_toggle_labels));
+    memset(
+        s_filament_toggle_pending,
+        0,
+        sizeof(s_filament_toggle_pending));
+    memset(
+        s_filament_toggle_expected,
+        0,
+        sizeof(s_filament_toggle_expected));
+    memset(
+        s_filament_toggle_wait_ticks,
+        0,
+        sizeof(s_filament_toggle_wait_ticks));
+}
 
-    for (size_t i = 0;
-         i < state->sensor_count &&
-         used < sizeof(body);
-         ++i) {
+
+static void close_filament_list_cb(lv_event_t *event)
+{
+    (void)event;
+
+    if (s_filament_list_popup) {
+        lv_obj_delete(s_filament_list_popup);
+    }
+}
+
+
+static void refresh_filament_list(lv_timer_t *timer)
+{
+    (void)timer;
+
+    if (!s_filament_list_popup) return;
+
+    moonraker_filament_state_snapshot(
+        &s_filament_list_state);
+
+    size_t count = s_filament_list_state.sensor_count;
+    if (count > MOONRAKER_MAX_FILAMENT_SENSORS) {
+        count = MOONRAKER_MAX_FILAMENT_SENSORS;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
         const moonraker_filament_sensor_t *sensor =
-            &state->sensors[i];
-
-        const char *type =
-            strncmp(
-                sensor->object_name,
-                "filament_motion_sensor ",
-                strlen("filament_motion_sensor ")) == 0
-                ? "MOTION"
-                : "SWITCH";
+            &s_filament_list_state.sensors[i];
 
         const char *status =
             !sensor->enabled
@@ -1980,42 +2056,279 @@ void ui_printer_popups_show_filament_sensors(
                         ? "FILAMENT PRESENT"
                         : "RUNOUT";
 
-        written = snprintf(
-            body + used,
-            sizeof(body) - used,
-            "%s\n  %s  -  %s\n%s",
-            filament_sensor_display_name(
-                sensor->object_name),
-            type,
-            status,
-            i + 1 < state->sensor_count
-                ? "\n"
-                : "");
+        if (s_filament_status_labels[i]) {
+            lv_label_set_text(
+                s_filament_status_labels[i],
+                status);
 
-        if (written < 0 ||
-            (size_t)written >= sizeof(body) - used) {
-            used = sizeof(body) - 1;
-            body[used] = '\0';
-            break;
+            lv_color_t status_color =
+                !sensor->enabled || !sensor->status_known
+                    ? UI_TEXT
+                    : sensor->filament_detected
+                        ? UI_OK_BRIGHT
+                        : UI_DANGER_BRIGHT;
+
+            lv_obj_set_style_text_color(
+                s_filament_status_labels[i],
+                status_color,
+                0);
         }
 
-        used += (size_t)written;
-    }
+        if (s_filament_toggle_pending[i]) {
+            if (sensor->enabled ==
+                s_filament_toggle_expected[i]) {
+                s_filament_toggle_pending[i] = false;
+                s_filament_toggle_wait_ticks[i] = 0;
+            } else if (++s_filament_toggle_wait_ticks[i] >= 10) {
+                /*
+                 * No WebSocket acknowledgement arrived within five
+                 * seconds. Restore the action so the operator can retry.
+                 */
+                s_filament_toggle_pending[i] = false;
+                s_filament_toggle_wait_ticks[i] = 0;
+            }
+        }
 
-    if (state->truncated &&
-        used < sizeof(body)) {
-        snprintf(
-            body + used,
-            sizeof(body) - used,
-            "\n\nShowing first %u sensors.",
-            (unsigned)state->sensor_count);
-    }
+        lv_obj_t *button =
+            s_filament_toggle_buttons[i];
+        lv_obj_t *label =
+            s_filament_toggle_labels[i];
 
-    ui_dashboard_v32_status_popup_show(
-        "FILAMENT SENSORS",
-        body);
+        if (!button || !label) continue;
+
+        if (s_filament_toggle_pending[i]) {
+            lv_label_set_text(label, "UPDATING");
+            lv_obj_add_state(button, LV_STATE_DISABLED);
+        } else {
+            lv_obj_clear_state(button, LV_STATE_DISABLED);
+            lv_label_set_text(
+                label,
+                sensor->enabled
+                    ? "DISABLE"
+                    : "ENABLE");
+            ui_button_apply_kind(
+                button,
+                sensor->enabled
+                    ? UI_BUTTON_WARNING
+                    : UI_BUTTON_SUCCESS);
+        }
+    }
 }
 
+
+static void filament_toggle_event_cb(lv_event_t *event)
+{
+    if (!event ||
+        lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !s_send_gcode_cb) {
+        return;
+    }
+
+    size_t index =
+        (size_t)(uintptr_t)lv_event_get_user_data(event);
+
+    moonraker_filament_state_snapshot(
+        &s_filament_list_state);
+
+    if (index >= s_filament_list_state.sensor_count ||
+        index >= MOONRAKER_MAX_FILAMENT_SENSORS ||
+        s_filament_toggle_pending[index]) {
+        return;
+    }
+
+    const moonraker_filament_sensor_t *sensor =
+        &s_filament_list_state.sensors[index];
+    const char *sensor_name =
+        filament_sensor_display_name(
+            sensor->object_name);
+
+    if (!filament_sensor_command_name_is_safe(
+            sensor_name)) {
+        ui_dashboard_v32_status_popup_show(
+            "FILAMENT SENSOR",
+            "This sensor name cannot be sent safely as a "
+            "Klipper G-code parameter.");
+        return;
+    }
+
+    bool enable = !sensor->enabled;
+    char command[
+        MOONRAKER_FILAMENT_SENSOR_NAME_MAX + 48];
+    int written = snprintf(
+        command,
+        sizeof(command),
+        "SET_FILAMENT_SENSOR SENSOR=%s ENABLE=%u",
+        sensor_name,
+        enable ? 1U : 0U);
+
+    if (written <= 0 ||
+        (size_t)written >= sizeof(command)) {
+        return;
+    }
+
+    s_filament_toggle_pending[index] = true;
+    s_filament_toggle_expected[index] = enable;
+    s_filament_toggle_wait_ticks[index] = 0;
+
+    if (s_filament_toggle_labels[index]) {
+        lv_label_set_text(
+            s_filament_toggle_labels[index],
+            "UPDATING");
+    }
+    if (s_filament_toggle_buttons[index]) {
+        lv_obj_add_state(
+            s_filament_toggle_buttons[index],
+            LV_STATE_DISABLED);
+    }
+
+    s_send_gcode_cb(command);
+}
+
+
+void ui_printer_popups_show_filament_sensors(
+    ui_printer_popups_send_gcode_cb_t send_cb,
+    const moonraker_filament_state_t *state)
+{
+    if (!state || !state->discovered ||
+        state->total_count == 0) {
+        return;
+    }
+
+    s_send_gcode_cb = send_cb;
+    memcpy(
+        &s_filament_list_state,
+        state,
+        sizeof(s_filament_list_state));
+
+    if (s_filament_list_popup) {
+        lv_obj_move_foreground(s_filament_list_popup);
+        return;
+    }
+
+    s_filament_list_popup =
+        ui_popup_create(
+            lv_layer_top(),
+            720,
+            480,
+            UI_POPUP_STANDARD);
+
+    if (!s_filament_list_popup) return;
+
+    lv_obj_add_event_cb(
+        s_filament_list_popup,
+        filament_list_popup_deleted_cb,
+        LV_EVENT_DELETE,
+        NULL);
+
+    ui_popup_add_title(
+        s_filament_list_popup,
+        "FILAMENT SENSOR CONTROL",
+        false,
+        8);
+    ui_popup_add_header_divider(
+        s_filament_list_popup,
+        44);
+
+    size_t count = s_filament_list_state.sensor_count;
+    if (count > MOONRAKER_MAX_FILAMENT_SENSORS) {
+        count = MOONRAKER_MAX_FILAMENT_SENSORS;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const moonraker_filament_sensor_t *sensor =
+            &s_filament_list_state.sensors[i];
+        int y = 60 + (int)i * 78;
+
+        lv_obj_t *row =
+            lv_obj_create(s_filament_list_popup);
+        lv_obj_set_pos(row, 24, y);
+        lv_obj_set_size(row, 470, 66);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        ui_apply_surface_role(row, UI_SURFACE_SECTION);
+
+        char name[96];
+        const char *type =
+            strncmp(
+                sensor->object_name,
+                "filament_motion_sensor ",
+                strlen("filament_motion_sensor ")) == 0
+                ? "MOTION"
+                : "SWITCH";
+        snprintf(
+            name,
+            sizeof(name),
+            "%s  (%s)",
+            filament_sensor_display_name(
+                sensor->object_name),
+            type);
+
+        lv_obj_t *name_label = lv_label_create(row);
+        lv_label_set_text(name_label, name);
+        ui_apply_text_body(name_label);
+        lv_obj_set_style_text_color(
+            name_label,
+            UI_TEXT,
+            0);
+        lv_obj_set_pos(name_label, 18, 8);
+
+        s_filament_status_labels[i] =
+            lv_label_create(row);
+        lv_label_set_text(
+            s_filament_status_labels[i],
+            "CHECKING");
+        ui_apply_text_value_small(
+            s_filament_status_labels[i]);
+        lv_obj_set_pos(
+            s_filament_status_labels[i],
+            18,
+            33);
+
+        s_filament_toggle_buttons[i] =
+            ui_popup_add_action_at(
+                s_filament_list_popup,
+                sensor->enabled
+                    ? UI_POPUP_ACTION_CHOICE
+                    : UI_POPUP_ACTION_CONFIRM,
+                sensor->enabled
+                    ? "DISABLE"
+                    : "ENABLE",
+                516,
+                y + 7,
+                174,
+                52,
+                filament_toggle_event_cb,
+                (void *)(uintptr_t)i,
+                &s_filament_toggle_labels[i]);
+    }
+
+    if (state->truncated) {
+        ui_popup_add_caption(
+            s_filament_list_popup,
+            "Additional sensors are not shown.",
+            24,
+            374,
+            360);
+    }
+
+    ui_popup_add_standard_footer_divider(
+        s_filament_list_popup);
+    ui_popup_add_footer_action(
+        s_filament_list_popup,
+        UI_POPUP_ACTION_CLOSE,
+        LV_SYMBOL_CLOSE " CLOSE",
+        170,
+        UI_POPUP_FOOTER_CENTER,
+        close_filament_list_cb,
+        NULL,
+        NULL);
+
+    refresh_filament_list(NULL);
+    s_filament_refresh_timer =
+        lv_timer_create(
+            refresh_filament_list,
+            500,
+            NULL);
+}
 
 void ui_printer_popups_show_printer_status(
     const char *state,
@@ -2066,6 +2379,7 @@ void ui_printer_popups_close_all(void)
     if (s_control_popup) lv_obj_delete(s_control_popup);
 
     close_hotend_list_cb(NULL);
+    close_filament_list_cb(NULL);
 
     close_object_confirm_cb(NULL);
     close_object_list_cb(NULL);

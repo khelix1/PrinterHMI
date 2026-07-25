@@ -317,6 +317,23 @@ static void refresh_filament_label(
         }
     }
 
+    /*
+     * The Printer-page filament value owns the control entry point.
+     * Show an affordance only when a real sensor is available.
+     */
+    if (state &&
+        state->discovered &&
+        state->total_count > 0) {
+        size_t used = strlen(text);
+
+        if (used < sizeof(text)) {
+            snprintf(
+                text + used,
+                sizeof(text) - used,
+                " " LV_SYMBOL_RIGHT);
+        }
+    }
+
     lv_label_set_text(label, text);
 }
 

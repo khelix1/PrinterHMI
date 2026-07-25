@@ -339,14 +339,13 @@ lv_obj_t *ui_active_print_v32_create(
         LV_TEXT_ALIGN_CENTER,
         0);
 
-    lv_obj_set_style_bg_color(
-        ctx->footer,
-        UI_BG_DEEP,
-        0);
-
+    /*
+     * Keep layer and timing metadata visually integrated with the
+     * Active Print card instead of placing it on a dark overlay.
+     */
     lv_obj_set_style_bg_opa(
         ctx->footer,
-        LV_OPA_80,
+        LV_OPA_TRANSP,
         0);
 
     lv_obj_set_style_pad_top(

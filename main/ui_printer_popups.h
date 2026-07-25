@@ -25,6 +25,7 @@ void ui_printer_popups_show_bed(ui_printer_popups_send_gcode_cb_t send_cb,
                                 double target_temp);
 
 void ui_printer_popups_show_filament_sensors(
+    ui_printer_popups_send_gcode_cb_t send_cb,
     const moonraker_filament_state_t *state);
 
 void ui_printer_popups_show_printer_status(const char *state,

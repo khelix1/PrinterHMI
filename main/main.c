@@ -2245,10 +2245,9 @@ static void filament_sensor_banner_event_cb(lv_event_t *e)
     moonraker_filament_state_t state;
     moonraker_filament_state_snapshot(&state);
 
-    /* FILAMENT_MULTI_SENSOR_DETAIL_V1 */
-    if (state.total_count <= 1) return;
-
+    /* Filament status opens live controls for one or more sensors. */
     ui_printer_popups_show_filament_sensors(
+        printer_popup_send_gcode_bridge,
         &state);
 }
 

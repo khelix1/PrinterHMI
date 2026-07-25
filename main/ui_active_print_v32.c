@@ -267,9 +267,8 @@ lv_obj_t *ui_active_print_v32_create(
         14);
 
     /*
-     * Preserve the existing 310 x 215 preview surface. The current
-     * Dashboard renderer and restored canvas already target this
-     * established area.
+     * The expanded Dashboard card gives the preview another 30 px
+     * vertically while preserving its established width and canvas path.
      */
     ctx->preview_box = lv_obj_create(panel);
 
@@ -280,7 +279,7 @@ lv_obj_t *ui_active_print_v32_create(
     lv_obj_set_size(
         ctx->preview_box,
         310,
-        215);
+        245);
 
     lv_obj_set_pos(
         ctx->preview_box,

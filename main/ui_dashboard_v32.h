@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lvgl.h"
+#include "moonraker.h"
 #include "ui_dashboard_status_v32.h"
 
 /*
@@ -15,6 +16,10 @@ void ui_dashboard_v32_update(void);
 void ui_dashboard_v32_set_active_print_file(const char *filename);
 void ui_dashboard_v32_set_active_print(const char *layer, const char *elapsed, const char *remaining);
 void ui_dashboard_v32_destroy(void);
+
+void ui_dashboard_v32_set_filament(
+    bool moonraker_online,
+    const moonraker_filament_state_t *state);
 
 void ui_dashboard_v32_set_machine_connection(
     bool online);

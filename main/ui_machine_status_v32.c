@@ -4,6 +4,7 @@
 
 typedef struct {
     lv_obj_t *live;
+    lv_obj_t *filament;
     lv_obj_t *nozzle_name;
     lv_obj_t *nozzle;
     lv_obj_t *bed;
@@ -89,6 +90,7 @@ lv_obj_t *ui_machine_status_v32_create(
         "SPEED FACTOR",
         "FLOW FACTOR",
         "PART FAN",
+        "FILAMENT",
     };
 
     const char *defaults[] = {
@@ -99,16 +101,18 @@ lv_obj_t *ui_machine_status_v32_create(
         "100%",
         "100%",
         "--%",
+        "N/A",
     };
 
     const int row_y[] = {
         56,
-        86,
-        124,
-        154,
-        192,
-        222,
+        84,
+        120,
+        148,
+        184,
+        212,
         248,
+        276,
     };
 
     lv_obj_t **values[] = {
@@ -119,9 +123,10 @@ lv_obj_t *ui_machine_status_v32_create(
         &ctx->speed,
         &ctx->flow,
         &ctx->fan,
+        &ctx->filament,
     };
 
-    for (int index = 0; index < 7; ++index) {
+    for (int index = 0; index < 8; ++index) {
         lv_obj_t *name =
             lv_label_create(panel);
 
@@ -181,6 +186,102 @@ lv_obj_t *ui_machine_status_v32_create(
     lv_obj_set_user_data(panel, ctx);
 
     return panel;
+}
+
+
+void ui_machine_status_v32_set_filament(
+    lv_obj_t *panel,
+    bool moonraker_online,
+    const moonraker_filament_state_t *state)
+{
+    if (!panel) return;
+
+    machine_status_ctx_t *ctx =
+        (machine_status_ctx_t *)lv_obj_get_user_data(panel);
+
+    if (!ctx || !ctx->filament) return;
+
+    if (state &&
+        state->discovered &&
+        state->total_count > 0 &&
+        !moonraker_online) {
+        lv_label_set_text(
+            ctx->filament,
+            "OFFLINE");
+        ui_apply_label_error(
+            ctx->filament);
+        return;
+    }
+
+    size_t present = 0;
+    size_t enabled = 0;
+
+    moonraker_filament_status_t status =
+        moonraker_filament_state_status(
+            state,
+            &present,
+            &enabled);
+
+    char text[24];
+
+    switch (status) {
+        case MOONRAKER_FILAMENT_ABSENT:
+            snprintf(text, sizeof(text), "N/A");
+            ui_apply_label_dim(ctx->filament);
+            break;
+
+        case MOONRAKER_FILAMENT_CHECKING:
+            snprintf(text, sizeof(text), "CHECKING");
+            ui_apply_label_warning(ctx->filament);
+            break;
+
+        case MOONRAKER_FILAMENT_READY:
+            if (enabled <= 1) {
+                snprintf(
+                    text,
+                    sizeof(text),
+                    "PRESENT");
+            } else {
+                snprintf(
+                    text,
+                    sizeof(text),
+                    "%u/%u PRESENT",
+                    (unsigned)present,
+                    (unsigned)enabled);
+            }
+            ui_apply_label_success(ctx->filament);
+            break;
+
+        case MOONRAKER_FILAMENT_RUNOUT:
+            if (enabled <= 1) {
+                snprintf(
+                    text,
+                    sizeof(text),
+                    "RUNOUT");
+            } else {
+                snprintf(
+                    text,
+                    sizeof(text),
+                    "%u/%u RUNOUT",
+                    (unsigned)present,
+                    (unsigned)enabled);
+            }
+            ui_apply_label_error(ctx->filament);
+            break;
+
+        case MOONRAKER_FILAMENT_DISABLED:
+            snprintf(text, sizeof(text), "DISABLED");
+            ui_apply_label_dim(ctx->filament);
+            break;
+
+        case MOONRAKER_FILAMENT_UNKNOWN:
+        default:
+            snprintf(text, sizeof(text), "--");
+            ui_apply_label_dim(ctx->filament);
+            break;
+    }
+
+    lv_label_set_text(ctx->filament, text);
 }
 
 

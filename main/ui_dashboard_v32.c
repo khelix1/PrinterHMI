@@ -205,6 +205,19 @@ void ui_dashboard_v32_destroy(void)
     dash32_status = (ui_dashboard_status_v32_t){0};
 }
 
+void ui_dashboard_v32_set_filament(
+    bool moonraker_online,
+    const moonraker_filament_state_t *state)
+{
+    if (!dash32_machine) return;
+
+    ui_machine_status_v32_set_filament(
+        dash32_machine,
+        moonraker_online,
+        state);
+}
+
+
 void ui_dashboard_v32_set_machine_connection(
     bool online)
 {

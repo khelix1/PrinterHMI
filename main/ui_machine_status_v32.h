@@ -1,8 +1,14 @@
 #pragma once
 
 #include "lvgl.h"
+#include "moonraker.h"
 
 lv_obj_t *ui_machine_status_v32_create(lv_obj_t *parent, int x, int y, int w, int h);
+
+void ui_machine_status_v32_set_filament(
+    lv_obj_t *panel,
+    bool moonraker_online,
+    const moonraker_filament_state_t *state);
 
 void ui_machine_status_v32_set_connection(
     lv_obj_t *panel,

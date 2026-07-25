@@ -246,6 +246,7 @@ static lv_obj_t *printer_tuning_label = NULL;
 static lv_obj_t *printer_fan_label = NULL;
 static lv_obj_t *printer_speed_label = NULL;
 static lv_obj_t *printer_flow_label = NULL;
+static lv_obj_t *printer_filament_label = NULL;
 static double printer_progress = -1.0;
 static double printer_print_duration = 0.0;
 static double printer_jog_step = 10.0;
@@ -1847,6 +1848,15 @@ static void ui_dashboard_v32_push_live_machine_data(void)
     ui_dashboard_v32_set_machine_connection(
         mr_state->moonraker_ok &&
         mr_state->live_data_ok);
+
+    moonraker_filament_state_t filament_state;
+    moonraker_filament_state_snapshot(
+        &filament_state);
+
+    ui_dashboard_v32_set_filament(
+        mr_state->moonraker_ok &&
+            mr_state->live_data_ok,
+        &filament_state);
 }
 
 static void show_settings_tab(void);
@@ -2092,6 +2102,10 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     moonraker_state_t telemetry_state;
     moonraker_state_snapshot(&telemetry_state);
 
+    moonraker_filament_state_t filament_state;
+    moonraker_filament_state_snapshot(
+        &filament_state);
+
     ui_telemetry_v32_refresh(
         &telemetry_state,
         esp_timer_get_time());
@@ -2107,6 +2121,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
                                    printer_fan_label,
                                    printer_speed_label,
                                    printer_flow_label,
+                                   printer_filament_label,
                                    printer_state,
                                    printer_file,
                                    printer_live_velocity,
@@ -2117,7 +2132,10 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
                                    printer_total_layer,
                                    printer_meta_object_height,
                                    printer_meta_layer_height,
-                                   printer_progress);
+                                   printer_progress,
+                                   telemetry_state.moonraker_ok &&
+                                       telemetry_state.live_data_ok,
+                                   &filament_state);
 
     ui_printer_info_cards_refresh_live(
         printer_panel,
@@ -2215,6 +2233,23 @@ static void dashboard_dry_status_event_cb(lv_event_t *e)
 static const char *printer_banner_text(void)
 {
     return printer_controller_machine_banner_text(printer_state, s_moonraker_ok);
+}
+
+
+static void filament_sensor_banner_event_cb(lv_event_t *e)
+{
+    /* FILAMENT_STATUS_LAYOUT_V2 */
+    /* FILAMENT_COUNT_SIMPLIFIED_V1 */
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+    moonraker_filament_state_t state;
+    moonraker_filament_state_snapshot(&state);
+
+    /* FILAMENT_MULTI_SENSOR_DETAIL_V1 */
+    if (state.total_count <= 1) return;
+
+    ui_printer_popups_show_filament_sensors(
+        &state);
 }
 
 
@@ -2336,6 +2371,7 @@ void ui_printer_v32_destroy(void)
     printer_fan_label = NULL;
     printer_speed_label = NULL;
     printer_flow_label = NULL;
+    printer_filament_label = NULL;
 
     ui_shell_raise_topbar();
     ui_shell_raise_nav();
@@ -3561,12 +3597,15 @@ void ui_printer_v32_create(void)
     ui_printer_banner_create(printer_panel,
                              &printer_banner_label,
                              printer_banner_text());
+
     ui_printer_live_status_create(
         printer_layout.active_panel,
         &printer_active_file_label,
         &printer_fan_label,
         &printer_speed_label,
         &printer_flow_label,
+        &printer_filament_label,
+        filament_sensor_banner_event_cb,
         printer_speed_factor,
         printer_flow_factor,
         moonraker_send_gcode);

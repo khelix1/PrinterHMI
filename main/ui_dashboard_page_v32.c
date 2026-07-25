@@ -70,7 +70,7 @@ ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
             UI_PAGE_RAIL_X,
             126,
             390,
-            276);
+            306);
 
     page.machine_status_host =
         ui_machine_status_v32_create(
@@ -78,7 +78,7 @@ ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
             UI_PAGE_RAIL_X + 410,
             126,
             390,
-            276);
+            306);
 
     /* Print timing now lives in the Active Print card footer. */
     page.print_status = (ui_dashboard_status_v32_t){0};

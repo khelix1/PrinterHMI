@@ -11,6 +11,8 @@
 #include <limits.h>
 static moonraker_state_t g_moonraker_state;
 static moonraker_exclude_state_t *g_moonraker_exclude_state = NULL;
+static moonraker_filament_state_t
+    *g_moonraker_filament_state = NULL;
 static StaticSemaphore_t s_state_mutex_buffer;
 static SemaphoreHandle_t s_state_mutex = NULL;
 
@@ -35,6 +37,16 @@ void moonraker_module_init(void)
 {
     s_state_mutex =
         xSemaphoreCreateMutexStatic(&s_state_mutex_buffer);
+
+    g_moonraker_filament_state = heap_caps_calloc(
+        1,
+        sizeof(*g_moonraker_filament_state),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+    if (!g_moonraker_filament_state) {
+        g_moonraker_filament_state =
+            calloc(1, sizeof(*g_moonraker_filament_state));
+    }
 
     g_moonraker_exclude_state = heap_caps_calloc(
         1,
@@ -72,6 +84,24 @@ void moonraker_state_snapshot(moonraker_state_t *out)
 
     state_lock();
     memcpy(out, &g_moonraker_state, sizeof(*out));
+    state_unlock();
+}
+
+
+void moonraker_filament_state_snapshot(
+    moonraker_filament_state_t *out)
+{
+    if (!out) return;
+
+    state_lock();
+    if (g_moonraker_filament_state) {
+        memcpy(
+            out,
+            g_moonraker_filament_state,
+            sizeof(*out));
+    } else {
+        memset(out, 0, sizeof(*out));
+    }
     state_unlock();
 }
 
@@ -119,6 +149,12 @@ void moonraker_state_reset(void)
     if (g_moonraker_exclude_state) {
         memset(g_moonraker_exclude_state, 0,
                sizeof(*g_moonraker_exclude_state));
+    }
+    if (g_moonraker_filament_state) {
+        memset(
+            g_moonraker_filament_state,
+            0,
+            sizeof(*g_moonraker_filament_state));
     }
 
     g_moonraker_state.chamber_temp = -999.0;
@@ -188,6 +224,115 @@ void moonraker_state_configure_capabilities(
     g_moonraker_state.capabilities =
         *capabilities;
     state_unlock();
+}
+
+
+void moonraker_filament_state_configure(
+    const char names[][MOONRAKER_FILAMENT_SENSOR_NAME_MAX],
+    size_t count,
+    size_t total_count)
+{
+    if (count > MOONRAKER_MAX_FILAMENT_SENSORS) {
+        count = MOONRAKER_MAX_FILAMENT_SENSORS;
+    }
+
+    state_lock();
+
+    if (g_moonraker_filament_state) {
+        memset(
+            g_moonraker_filament_state,
+            0,
+            sizeof(*g_moonraker_filament_state));
+
+        g_moonraker_filament_state->discovered = true;
+        g_moonraker_filament_state->total_count =
+            total_count;
+        g_moonraker_filament_state->sensor_count =
+            count;
+        g_moonraker_filament_state->truncated =
+            total_count > count;
+
+        for (size_t i = 0; i < count; ++i) {
+            moonraker_filament_sensor_t *sensor =
+                &g_moonraker_filament_state->sensors[i];
+
+            mr_safe_copy(
+                sensor->object_name,
+                sizeof(sensor->object_name),
+                names ? names[i] : "");
+
+            /*
+             * Klipper normally publishes enabled in the first response.
+             * Treat a missing field as enabled until told otherwise.
+             */
+            sensor->enabled = true;
+        }
+    }
+
+    state_unlock();
+}
+
+
+moonraker_filament_status_t moonraker_filament_state_status(
+    const moonraker_filament_state_t *state,
+    size_t *present_out,
+    size_t *enabled_out)
+{
+    if (present_out) *present_out = 0;
+    if (enabled_out) *enabled_out = 0;
+
+    if (!state || !state->discovered) {
+        return MOONRAKER_FILAMENT_UNKNOWN;
+    }
+
+    if (state->total_count == 0) {
+        return MOONRAKER_FILAMENT_ABSENT;
+    }
+
+    size_t present = 0;
+    size_t enabled = 0;
+    size_t known = 0;
+    bool runout = false;
+
+    for (size_t i = 0; i < state->sensor_count; ++i) {
+        const moonraker_filament_sensor_t *sensor =
+            &state->sensors[i];
+
+        if (!sensor->enabled) {
+            continue;
+        }
+
+        ++enabled;
+
+        if (!sensor->status_known) {
+            continue;
+        }
+
+        ++known;
+
+        if (sensor->filament_detected) {
+            ++present;
+        } else {
+            runout = true;
+        }
+    }
+
+    if (present_out) *present_out = present;
+    if (enabled_out) *enabled_out = enabled;
+
+    if (runout) {
+        return MOONRAKER_FILAMENT_RUNOUT;
+    }
+
+    if (enabled == 0 && state->sensor_count > 0) {
+        return MOONRAKER_FILAMENT_DISABLED;
+    }
+
+    if (state->truncated || known < enabled) {
+        return MOONRAKER_FILAMENT_CHECKING;
+    }
+
+    return MOONRAKER_FILAMENT_READY;
 }
 
 
@@ -700,6 +845,47 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
                 hotend->temperature;
             g_moonraker_state.nozzle_target =
                 hotend->target;
+        }
+    }
+
+    if (g_moonraker_filament_state) {
+        for (size_t i = 0;
+             i < g_moonraker_filament_state->sensor_count;
+             ++i) {
+            moonraker_filament_sensor_t *sensor =
+                &g_moonraker_filament_state->sensors[i];
+
+            cJSON *object =
+                cJSON_GetObjectItemCaseSensitive(
+                    status,
+                    sensor->object_name);
+
+            if (!cJSON_IsObject(object)) {
+                continue;
+            }
+
+            cJSON *enabled =
+                cJSON_GetObjectItemCaseSensitive(
+                    object,
+                    "enabled");
+
+            if (cJSON_IsBool(enabled)) {
+                sensor->enabled =
+                    cJSON_IsTrue(enabled);
+                ++updates;
+            }
+
+            cJSON *detected =
+                cJSON_GetObjectItemCaseSensitive(
+                    object,
+                    "filament_detected");
+
+            if (cJSON_IsBool(detected)) {
+                sensor->filament_detected =
+                    cJSON_IsTrue(detected);
+                sensor->status_known = true;
+                ++updates;
+            }
         }
     }
 

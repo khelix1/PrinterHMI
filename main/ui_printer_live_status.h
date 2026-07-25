@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #include "lvgl.h"
+#include "moonraker.h"
 
 typedef bool (*ui_printer_live_status_send_gcode_cb_t)(
     const char *command);
@@ -13,6 +14,8 @@ void ui_printer_live_status_create(
     lv_obj_t **speed_label,
     lv_obj_t **flow_label,
     lv_obj_t **layer_label,
+    lv_obj_t **filament_label,
+    lv_event_cb_t filament_event_cb,
     double initial_speed_factor,
     double initial_flow_factor,
     ui_printer_live_status_send_gcode_cb_t send_gcode_cb);
@@ -24,6 +27,7 @@ void ui_printer_live_status_refresh(
     lv_obj_t *speed_label,
     lv_obj_t *flow_label,
     lv_obj_t *layer_label,
+    lv_obj_t *filament_label,
     const char *printer_state,
     const char *printer_file,
     double printer_live_velocity,
@@ -34,4 +38,6 @@ void ui_printer_live_status_refresh(
     int printer_total_layer,
     double printer_meta_object_height,
     double printer_meta_layer_height,
-    double printer_progress);
+    double printer_progress,
+    bool moonraker_online,
+    const moonraker_filament_state_t *filament_state);

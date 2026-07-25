@@ -13,10 +13,11 @@
 
 ## Versioning
 
-- [ ] `PROJECT_VER` in `CMakeLists.txt` is correct.
-- [ ] `FW_VERSION` and build name in `main/main.c` are correct.
-- [ ] `version.txt` matches the release.
-- [ ] Changelog contains the release date and summary.
+- [ ] `version.txt` contains the intended semantic release version.
+- [ ] CMake derives `PROJECT_VER` from `version.txt`.
+- [ ] Runtime version labels read the running image's `esp_app_desc_t`.
+- [ ] `tools/audit/version_audit.sh` passes.
+- [ ] Changelog and release notes contain the release date and summary.
 
 ## Build
 

@@ -64,6 +64,13 @@ idf.py build
 
 `fullclean` deletes generated build output. It does not modify tracked source.
 
+## Version policy
+
+`version.txt` is the single build-version source. CMake reads it into
+`PROJECT_VER`, ESP-IDF stores that value in the application descriptor, and
+runtime UI surfaces read the descriptor with `esp_app_get_description()`.
+Current documentation is checked by `tools/audit/version_audit.sh`.
+
 ## Configuration policy
 
 - `sdkconfig.defaults` contains settings that must survive a fresh target

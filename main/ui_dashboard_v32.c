@@ -1,5 +1,7 @@
 #include "ui_dashboard_v32.h"
+#include "esp_app_desc.h"
 #include "esp_heap_caps.h"
+#include <stdio.h>
 #include <string.h>
 #include "ui_theme.h"
 #include "ui_widgets.h"
@@ -165,10 +167,25 @@ void ui_dashboard_v32_update(void)
 {
     if (!dash32_banner) return;
 
+    const esp_app_desc_t *app =
+        esp_app_get_description();
+    const char *version =
+        app && app->version[0]
+            ? app->version
+            : "--";
+
+    char console_name[64];
+    snprintf(
+        console_name,
+        sizeof(console_name),
+        "PrinterHMI %s%s Operator Console",
+        version[0] == 'v' ? "" : "v",
+        version);
+
     ui_status_banner_v32_set(
         dash32_banner,
         LV_SYMBOL_OK " READY",
-        "PrinterHMI v4.1.0 Operator Console",
+        console_name,
         "ETA --:--",
         "--%"
     );

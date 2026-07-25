@@ -46,7 +46,7 @@
 #include "operator_event_log.h"
 
 /*
- * PrinterHMI v4.1.0 Capability Release
+ * PrinterHMI capability-driven firmware
  * Board: JC1060P470C / ESP32-P4 1024x600 MIPI-DSI + GT911 touch
  *
  * WiFi engine: copied from the proven P4+C6 hosted WiFi build.
@@ -189,11 +189,6 @@ static bool sd_mount_attempted = false;
 static char sd_status[128] = "SD: not mounted";
 
 static char wifi_status[128] = "";
-
-#define FW_NAME "PrinterHMI"
-#define FW_VERSION "v4.1.0"
-#define FW_BUILD_NAME "Multi-Printer Release"
-#define FW_BUILD_STAMP __DATE__ " " __TIME__
 
 static char moonraker_status[160] = "Moonraker: waiting for WiFi...";
 static lv_obj_t *printer_panel = NULL;
@@ -3982,7 +3977,16 @@ void app_main(void)
 
     app_splash_locked(ui_splash_v32_destroy);
 
-    ESP_LOGI(TAG, "PrinterHMI v4.1.0 WiFi/display baseline ready");
+    const esp_app_desc_t *running_app =
+        esp_app_get_description();
+
+    ESP_LOGI(
+        TAG,
+        "PrinterHMI version %s WiFi/display baseline ready",
+        running_app && running_app->version[0]
+            ? running_app->version
+            : "unknown");
+
     ota_confirm_running_app_valid();
 
     BaseType_t rc = xTaskCreatePinnedToCore(

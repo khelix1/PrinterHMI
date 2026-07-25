@@ -41,6 +41,7 @@ esac
 
 if [[ "$branch" == "main" ]]; then
     "$repo_dir/tools/audit/public_tree_audit.sh"
+    "$repo_dir/tools/audit/version_audit.sh"
 fi
 
 git diff-tree --check --root --no-commit-id HEAD

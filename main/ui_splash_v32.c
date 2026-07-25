@@ -1,5 +1,6 @@
 #include "ui_splash_v32.h"
 
+#include "esp_app_desc.h"
 #include "lvgl.h"
 #include "ui_logo_assets.h"
 #include "ui_theme.h"
@@ -91,8 +92,23 @@ void ui_splash_v32_create(void)
     lv_image_set_src(logo, ui_logo_assets_splash());
     lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 18);
 
+    const esp_app_desc_t *app =
+        esp_app_get_description();
+    const char *version =
+        app && app->version[0]
+            ? app->version
+            : "--";
+
+    char version_text[64];
+    snprintf(
+        version_text,
+        sizeof(version_text),
+        "%s%s  |  ESP32-P4 + ESP32-C6",
+        version[0] == 'v' ? "" : "v",
+        version);
+
     lv_obj_t *sub = lv_label_create(panel);
-    lv_label_set_text(sub, "v4.1.0  |  ESP32-P4 + ESP32-C6");
+    lv_label_set_text(sub, version_text);
     ui_apply_text_body(sub);
     ui_apply_label_dim(sub);
     lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 130);

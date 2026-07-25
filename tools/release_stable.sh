@@ -29,11 +29,6 @@ if [[ "$(tr -d '[:space:]' < version.txt)" != "$version" ]]; then
     exit 1
 fi
 
-grep -Fqx 'set(PROJECT_VER "4.1.0")' CMakeLists.txt || {
-    echo "ERROR: CMake PROJECT_VER is not 4.1.0" >&2
-    exit 1
-}
-
 origin_url="$(git remote get-url origin 2>/dev/null)" || {
     echo "ERROR: remote 'origin' is not configured" >&2
     exit 1
@@ -62,6 +57,7 @@ gh auth status >/dev/null 2>&1 || {
 }
 
 "$repo_dir/tools/audit/public_tree_audit.sh"
+"$repo_dir/tools/audit/version_audit.sh"
 git diff-tree --check --root --no-commit-id HEAD
 
 local_commit="$(git rev-parse HEAD)"

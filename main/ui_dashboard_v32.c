@@ -188,6 +188,19 @@ void ui_dashboard_v32_destroy(void)
     dash32_status = (ui_dashboard_status_v32_t){0};
 }
 
+void ui_dashboard_v32_set_active_hotend(
+    const char *name,
+    const char *value)
+{
+    if (!dash32_machine) return;
+
+    ui_machine_status_v32_set_active_hotend(
+        dash32_machine,
+        name,
+        value);
+}
+
+
 void ui_dashboard_v32_set_machine(
     const char *nozzle,
     const char *bed,

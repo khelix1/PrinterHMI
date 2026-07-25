@@ -3,6 +3,7 @@
 #include "ui_widgets.h"
 
 typedef struct {
+    lv_obj_t *nozzle_name;
     lv_obj_t *nozzle;
     lv_obj_t *bed;
     lv_obj_t *air;
@@ -127,6 +128,10 @@ lv_obj_t *ui_machine_status_v32_create(
             name,
             names[index]);
 
+        if (index == 0) {
+            ctx->nozzle_name = name;
+        }
+
         ui_apply_text_caption(name);
         ui_apply_label_dim(name);
 
@@ -175,6 +180,32 @@ lv_obj_t *ui_machine_status_v32_create(
     lv_obj_set_user_data(panel, ctx);
 
     return panel;
+}
+
+
+void ui_machine_status_v32_set_active_hotend(
+    lv_obj_t *panel,
+    const char *name,
+    const char *value)
+{
+    if (!panel) return;
+
+    machine_status_ctx_t *ctx =
+        (machine_status_ctx_t *)lv_obj_get_user_data(panel);
+
+    if (!ctx) return;
+
+    if (ctx->nozzle_name) {
+        lv_label_set_text(
+            ctx->nozzle_name,
+            name && name[0] ? name : "NOZZLE");
+    }
+
+    if (ctx->nozzle) {
+        lv_label_set_text(
+            ctx->nozzle,
+            value && value[0] ? value : "-- / -- C");
+    }
 }
 
 

@@ -16,6 +16,10 @@ void ui_dashboard_v32_set_active_print_file(const char *filename);
 void ui_dashboard_v32_set_active_print(const char *layer, const char *elapsed, const char *remaining);
 void ui_dashboard_v32_destroy(void);
 
+void ui_dashboard_v32_set_active_hotend(
+    const char *name,
+    const char *value);
+
 void ui_dashboard_v32_set_machine(
     const char *nozzle,
     const char *bed,

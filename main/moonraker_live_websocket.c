@@ -11,6 +11,7 @@
 #include "esp_timer.h"
 #include "esp_websocket_client.h"
 #include "freertos/FreeRTOS.h"
+#include "cJSON.h"
 #include "moonraker.h"
 
 
@@ -22,7 +23,9 @@
 static esp_websocket_client_handle_t s_client = NULL;
 static bool s_started = false;
 static volatile bool s_connected = false;
+static volatile bool s_discovery_pending = false;
 static volatile bool s_subscribe_pending = false;
+static volatile bool s_subscription_ready = false;
 static volatile bool s_subscribed = false;
 static volatile int64_t s_last_status_update_us = 0;
 static bool s_file_change_pending = false;
@@ -38,25 +41,8 @@ static char s_api_key[160] = "";
 static char s_uri[256] = "";
 
 
-static const char s_subscription[] =
-    "{\"jsonrpc\":\"2.0\","
-    "\"method\":\"printer.objects.subscribe\","
-    "\"params\":{\"objects\":{"
-    "\"temperature_sensor drybox_center\":null,"
-    "\"sht3x drybox_env\":null,"
-    "\"heater_generic drybox_heater\":null,"
-    "\"fan_generic drybox_fan\":null,"
-    "\"gcode_macro DRYBOX_VARS\":null,"
-    "\"print_stats\":null,"
-    "\"motion_report\":null,"
-    "\"display_status\":null,"
-    "\"gcode_move\":null,"
-    "\"fan\":null,"
-    "\"extruder\":null,"
-    "\"heater_bed\":null,"
-    "\"exclude_object\":[\"objects\",\"excluded_objects\",\"current_object\"],"
-    "\"toolhead\":null}},"
-    "\"id\":1001}";
+static char s_subscription[1536] = "";
+static size_t s_subscription_hotend_count = 0;
 
 
 static void copy_text(
@@ -92,6 +78,171 @@ static bool ensure_message_capacity(size_t required)
     if (s_message_buffer) heap_caps_free(s_message_buffer);
     s_message_buffer = replacement;
     s_message_capacity = required;
+    return true;
+}
+
+
+
+static bool object_list_contains(cJSON *objects, const char *name)
+{
+    if (!cJSON_IsArray(objects) || !name || !name[0]) return false;
+
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, objects) {
+        if (cJSON_IsString(entry) &&
+            entry->valuestring &&
+            strcmp(entry->valuestring, name) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+static bool append_subscription_text(
+    size_t *used,
+    const char *text)
+{
+    if (!used || !text || *used >= sizeof(s_subscription)) return false;
+
+    int written = snprintf(
+        s_subscription + *used,
+        sizeof(s_subscription) - *used,
+        "%s",
+        text);
+
+    if (written < 0 ||
+        (size_t)written >= sizeof(s_subscription) - *used) {
+        return false;
+    }
+
+    *used += (size_t)written;
+    return true;
+}
+
+
+static bool build_subscription(
+    const char names[][MOONRAKER_HOTEND_NAME_MAX],
+    size_t count)
+{
+    size_t used = 0;
+    s_subscription[0] = '\0';
+
+    if (!append_subscription_text(
+            &used,
+            "{\"jsonrpc\":\"2.0\","
+            "\"method\":\"printer.objects.subscribe\","
+            "\"params\":{\"objects\":{"
+            "\"temperature_sensor drybox_center\":null,"
+            "\"sht3x drybox_env\":null,"
+            "\"heater_generic drybox_heater\":null,"
+            "\"fan_generic drybox_fan\":null,"
+            "\"gcode_macro DRYBOX_VARS\":null,"
+            "\"print_stats\":null,"
+            "\"motion_report\":null,"
+            "\"display_status\":null,"
+            "\"gcode_move\":null,"
+            "\"fan\":null,")) {
+        return false;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        int written = snprintf(
+            s_subscription + used,
+            sizeof(s_subscription) - used,
+            "\"%s\":null,",
+            names[i]);
+
+        if (written < 0 ||
+            (size_t)written >= sizeof(s_subscription) - used) {
+            return false;
+        }
+
+        used += (size_t)written;
+    }
+
+    if (!append_subscription_text(
+            &used,
+            "\"heater_bed\":null,"
+            "\"exclude_object\":[\"objects\",\"excluded_objects\","
+            "\"current_object\"],"
+            "\"toolhead\":null}},"
+            "\"id\":1002}")) {
+        return false;
+    }
+
+    s_subscription_hotend_count = count;
+    return true;
+}
+
+
+static bool handle_object_list_response(
+    const char *json,
+    size_t length)
+{
+    cJSON *root = cJSON_ParseWithLength(json, length);
+    if (!root) return false;
+
+    cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "id");
+    if (!cJSON_IsNumber(id) || id->valueint != 1001) {
+        cJSON_Delete(root);
+        return false;
+    }
+
+    cJSON *result = cJSON_GetObjectItemCaseSensitive(root, "result");
+    cJSON *objects = cJSON_IsObject(result)
+        ? cJSON_GetObjectItemCaseSensitive(result, "objects")
+        : NULL;
+
+    static const char *candidates[MOONRAKER_MAX_HOTENDS] = {
+        "extruder",
+        "extruder1",
+        "extruder2",
+        "extruder3",
+    };
+
+    char names[MOONRAKER_MAX_HOTENDS][MOONRAKER_HOTEND_NAME_MAX] = {{0}};
+    size_t count = 0;
+
+    for (size_t i = 0; i < MOONRAKER_MAX_HOTENDS; ++i) {
+        if (!object_list_contains(objects, candidates[i])) continue;
+
+        snprintf(
+            names[count],
+            sizeof(names[count]),
+            "%s",
+            candidates[i]);
+        ++count;
+    }
+
+    if (count == 0) {
+        ESP_LOGW(TAG, "WS object discovery found no standard hotends");
+        s_subscription_ready = false;
+        s_subscribe_pending = false;
+        cJSON_Delete(root);
+        return true;
+    }
+
+    moonraker_state_configure_hotends(names, count);
+
+    if (!build_subscription(names, count)) {
+        ESP_LOGE(TAG, "WS dynamic subscription overflow");
+        s_subscription_ready = false;
+        s_subscribe_pending = false;
+        cJSON_Delete(root);
+        return true;
+    }
+
+    s_subscription_ready = true;
+    s_subscribe_pending = true;
+
+    ESP_LOGI(
+        TAG,
+        "WS_HOTENDS_DISCOVERED count=%u active subscription ready",
+        (unsigned)count);
+
+    cJSON_Delete(root);
     return true;
 }
 
@@ -139,6 +290,12 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         return;
     }
 
+    if (handle_object_list_response(
+            s_message_buffer,
+            (size_t)payload_length)) {
+        return;
+    }
+
     moonraker_websocket_message_t message =
         moonraker_state_merge_websocket_json(
             s_message_buffer,
@@ -160,8 +317,10 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         /* A Klippy restart invalidates the old object subscription. */
         s_last_status_update_us = 0;
         s_subscribed = false;
-        s_subscribe_pending = true;
-        ESP_LOGI(TAG, "WS_KLIPPY_READY resubscribe generation=%u",
+        s_subscription_ready = false;
+        s_subscribe_pending = false;
+        s_discovery_pending = true;
+        ESP_LOGI(TAG, "WS_KLIPPY_READY rediscover generation=%u",
                  (unsigned)s_generation);
         break;
 
@@ -198,7 +357,9 @@ static void websocket_event_handler(
     case WEBSOCKET_EVENT_CONNECTED:
         s_connected = true;
         s_subscribed = false;
-        s_subscribe_pending = true;
+        s_subscription_ready = false;
+        s_subscribe_pending = false;
+        s_discovery_pending = true;
         ESP_LOGI(TAG, "WS_CONNECTED %s", s_uri);
         break;
 
@@ -322,6 +483,33 @@ static bool send_identify(void)
 }
 
 
+static bool send_object_list(void)
+{
+    if (!s_client || !s_connected) return false;
+
+    static const char request[] =
+        "{\"jsonrpc\":\"2.0\","
+        "\"method\":\"printer.objects.list\","
+        "\"id\":1001}";
+
+    int length = (int)strlen(request);
+    int sent = esp_websocket_client_send_text(
+        s_client,
+        request,
+        length,
+        pdMS_TO_TICKS(1000));
+
+    if (sent != length) {
+        ESP_LOGW(TAG, "WS object-list send failed: %d/%d", sent, length);
+        return false;
+    }
+
+    ESP_LOGI(TAG, "WS_OBJECT_LIST_SENT generation=%u",
+             (unsigned)s_generation);
+    return true;
+}
+
+
 static bool send_subscription(void)
 {
     if (!s_client || !s_connected) return false;
@@ -338,8 +526,11 @@ static bool send_subscription(void)
         return false;
     }
 
-    ESP_LOGI(TAG, "WS_SUBSCRIBE_SENT objects=14 generation=%u",
-             (unsigned)s_generation);
+    ESP_LOGI(
+        TAG,
+        "WS_SUBSCRIBE_SENT hotends=%u generation=%u",
+        (unsigned)s_subscription_hotend_count,
+        (unsigned)s_generation);
     return true;
 }
 
@@ -459,14 +650,28 @@ void moonraker_live_websocket_tasklet(
         }
     }
 
-    if (s_connected && s_subscribe_pending) {
-        s_subscribe_pending = false;
+    if (s_connected && s_discovery_pending) {
+        s_discovery_pending = false;
 
         bool identified = send_identify();
-        bool subscribed = identified && send_subscription();
+        bool requested = identified && send_object_list();
+
+        if (!requested) {
+            s_discovery_pending = true;
+            ESP_LOGW(TAG, "WS discovery transaction failed");
+        }
+    }
+
+    if (s_connected &&
+        s_subscription_ready &&
+        s_subscribe_pending) {
+        s_subscribe_pending = false;
+
+        bool subscribed = send_subscription();
         s_subscribed = subscribed;
 
         if (!subscribed) {
+            s_subscribe_pending = true;
             ESP_LOGW(TAG, "WS subscribe transaction failed");
         }
     }

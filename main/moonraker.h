@@ -12,6 +12,16 @@
  * State object is the bridge toward removing globals from main.c.
  */
 
+#define MOONRAKER_MAX_HOTENDS 4
+#define MOONRAKER_HOTEND_NAME_MAX 24
+
+typedef struct {
+    char object_name[MOONRAKER_HOTEND_NAME_MAX];
+    double temperature;
+    double target;
+    bool active;
+} moonraker_hotend_t;
+
 typedef struct {
     double chamber_temp;
     double air_temp;
@@ -31,8 +41,17 @@ typedef struct {
     double live_velocity;
     double live_flow;
 
+    /*
+     * Compatibility values used by the existing single-hotend UI. They
+     * mirror the active hotend when capability-aware data is available.
+     */
     double nozzle_temp;
     double nozzle_target;
+
+    size_t hotend_count;
+    char active_hotend[MOONRAKER_HOTEND_NAME_MAX];
+    moonraker_hotend_t hotends[MOONRAKER_MAX_HOTENDS];
+
     double bed_temp;
     double bed_target;
 
@@ -103,6 +122,10 @@ void moonraker_state_set_drybox_programs(
 void moonraker_state_set_connection(
     bool live_data_ok,
     bool moonraker_ok);
+
+void moonraker_state_configure_hotends(
+    const char names[][MOONRAKER_HOTEND_NAME_MAX],
+    size_t count);
 
 typedef enum {
     MOONRAKER_WEBSOCKET_MESSAGE_IGNORED = 0,

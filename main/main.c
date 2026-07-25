@@ -1708,6 +1708,7 @@ static void ui_dashboard_v32_push_live_machine_data(void)
     const moonraker_state_t *mr_state = &mr_state_snapshot;
 
     char nozzle[32];
+    char hotend_name[32];
     char bed[32];
     char chamber[32];
     char humidity[32];
@@ -1727,6 +1728,26 @@ static void ui_dashboard_v32_push_live_machine_data(void)
             nozzle,
             sizeof(nozzle),
             "-- / -- C");
+    }
+
+    snprintf(
+        hotend_name,
+        sizeof(hotend_name),
+        "NOZZLE");
+
+    if (mr_state->hotend_count > 1) {
+        for (size_t i = 0;
+             i < mr_state->hotend_count;
+             ++i) {
+            if (!mr_state->hotends[i].active) continue;
+
+            snprintf(
+                hotend_name,
+                sizeof(hotend_name),
+                "T%u ACTIVE",
+                (unsigned)i);
+            break;
+        }
     }
 
     if (mr_state->bed_temp > -100.0) {
@@ -1806,6 +1827,10 @@ static void ui_dashboard_v32_push_live_machine_data(void)
         speed,
         flow,
         fan);
+
+    ui_dashboard_v32_set_active_hotend(
+        hotend_name,
+        nozzle);
 }
 
 static void open_v32_dashboard_cb(lv_event_t *e)

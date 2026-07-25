@@ -129,6 +129,20 @@ void moonraker_state_reset(void)
     g_moonraker_state.part_fan_speed = -1.0;
     g_moonraker_state.nozzle_temp = -999.0;
     g_moonraker_state.nozzle_target = -999.0;
+
+    g_moonraker_state.hotend_count = 1;
+    mr_safe_copy(
+        g_moonraker_state.active_hotend,
+        sizeof(g_moonraker_state.active_hotend),
+        "extruder");
+    mr_safe_copy(
+        g_moonraker_state.hotends[0].object_name,
+        sizeof(g_moonraker_state.hotends[0].object_name),
+        "extruder");
+    g_moonraker_state.hotends[0].temperature = -999.0;
+    g_moonraker_state.hotends[0].target = -999.0;
+    g_moonraker_state.hotends[0].active = true;
+
     g_moonraker_state.bed_temp = -999.0;
     g_moonraker_state.bed_target = -999.0;
     g_moonraker_state.progress = -1.0;
@@ -159,6 +173,62 @@ void moonraker_state_set_connection(
     state_lock();
     g_moonraker_state.live_data_ok = live_data_ok;
     g_moonraker_state.moonraker_ok = moonraker_ok;
+    state_unlock();
+}
+
+
+void moonraker_state_configure_hotends(
+    const char names[][MOONRAKER_HOTEND_NAME_MAX],
+    size_t count)
+{
+    if (!names || count == 0) {
+        return;
+    }
+
+    if (count > MOONRAKER_MAX_HOTENDS) {
+        count = MOONRAKER_MAX_HOTENDS;
+    }
+
+    state_lock();
+
+    memset(
+        g_moonraker_state.hotends,
+        0,
+        sizeof(g_moonraker_state.hotends));
+
+    g_moonraker_state.hotend_count = count;
+
+    for (size_t i = 0; i < count; ++i) {
+        mr_safe_copy(
+            g_moonraker_state.hotends[i].object_name,
+            sizeof(g_moonraker_state.hotends[i].object_name),
+            names[i]);
+
+        g_moonraker_state.hotends[i].temperature = -999.0;
+        g_moonraker_state.hotends[i].target = -999.0;
+    }
+
+    bool active_found = false;
+
+    for (size_t i = 0; i < count; ++i) {
+        bool active =
+            strcmp(
+                g_moonraker_state.hotends[i].object_name,
+                g_moonraker_state.active_hotend) == 0;
+
+        g_moonraker_state.hotends[i].active = active;
+        active_found = active_found || active;
+    }
+
+    if (!active_found) {
+        mr_safe_copy(
+            g_moonraker_state.active_hotend,
+            sizeof(g_moonraker_state.active_hotend),
+            g_moonraker_state.hotends[0].object_name);
+
+        g_moonraker_state.hotends[0].active = true;
+    }
+
     state_unlock();
 }
 
@@ -203,6 +273,16 @@ void moonraker_state_update_from_legacy(
     g_moonraker_state.live_flow = live_flow;
     g_moonraker_state.nozzle_temp = nozzle_temp;
     g_moonraker_state.nozzle_target = nozzle_target;
+
+    /*
+     * The HTTP fallback currently queries the conventional primary
+     * extruder. Preserve that result in the capability-aware state.
+     */
+    if (g_moonraker_state.hotend_count > 0) {
+        g_moonraker_state.hotends[0].temperature = nozzle_temp;
+        g_moonraker_state.hotends[0].target = nozzle_target;
+    }
+
     g_moonraker_state.bed_temp = bed_temp;
     g_moonraker_state.bed_target = bed_target;
     g_moonraker_state.progress = progress;
@@ -521,6 +601,20 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 
     cJSON *toolhead = cJSON_GetObjectItemCaseSensitive(
         status, "toolhead");
+
+    cJSON *active_extruder = cJSON_IsObject(toolhead)
+        ? cJSON_GetObjectItemCaseSensitive(toolhead, "extruder")
+        : NULL;
+
+    if (cJSON_IsString(active_extruder) &&
+        active_extruder->valuestring) {
+        mr_safe_copy(
+            g_moonraker_state.active_hotend,
+            sizeof(g_moonraker_state.active_hotend),
+            active_extruder->valuestring);
+        ++updates;
+    }
+
     if (cJSON_IsObject(toolhead) && g_moonraker_exclude_state) {
         moonraker_exclude_point_t minimum;
         moonraker_exclude_point_t maximum;
@@ -553,14 +647,47 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     MERGE_NUMBER("gcode_move", "extrude_factor", flow_factor, 100.0);
     MERGE_NUMBER("motion_report", "live_velocity", live_velocity, 1.0);
     MERGE_NUMBER("motion_report", "live_extruder_velocity", live_flow, 1.0);
-    MERGE_NUMBER("extruder", "temperature", nozzle_temp, 1.0);
-    MERGE_NUMBER("extruder", "target", nozzle_target, 1.0);
     MERGE_NUMBER("heater_bed", "temperature", bed_temp, 1.0);
     MERGE_NUMBER("heater_bed", "target", bed_target, 1.0);
     MERGE_NUMBER("display_status", "progress", progress, 1.0);
     MERGE_NUMBER("print_stats", "print_duration", print_duration, 1.0);
 
 #undef MERGE_NUMBER
+
+    for (size_t i = 0;
+         i < g_moonraker_state.hotend_count;
+         ++i) {
+        moonraker_hotend_t *hotend =
+            &g_moonraker_state.hotends[i];
+
+        cJSON *object = cJSON_GetObjectItemCaseSensitive(
+            status,
+            hotend->object_name);
+
+        bool active =
+            strcmp(
+                hotend->object_name,
+                g_moonraker_state.active_hotend) == 0;
+
+        hotend->active = active;
+
+        if (json_number(object, "temperature", &value)) {
+            hotend->temperature = value;
+            ++updates;
+        }
+
+        if (json_number(object, "target", &value)) {
+            hotend->target = value;
+            ++updates;
+        }
+
+        if (active) {
+            g_moonraker_state.nozzle_temp =
+                hotend->temperature;
+            g_moonraker_state.nozzle_target =
+                hotend->target;
+        }
+    }
 
     cJSON *heater = cJSON_GetObjectItemCaseSensitive(
         status, "heater_generic drybox_heater");

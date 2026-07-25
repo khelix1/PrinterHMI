@@ -1,6 +1,7 @@
 #include "ota_manager.h"
 
 #include "ui_ota_popup.h"
+#include "operator_event_log.h"
 
 #include "esp_err.h"
 #include "esp_http_client.h"
@@ -299,6 +300,9 @@ static void update_task(void *arg)
         set_state("Update Complete\nRebooting...", 100);
 
         ESP_LOGI(TAG, "success, rebooting");
+        operator_event_log_add(
+            OPERATOR_EVENT_INFO,
+            "Firmware update completed; rebooting");
 
         vTaskDelay(pdMS_TO_TICKS(500));
         esp_restart();
@@ -328,6 +332,11 @@ failed:
              "failed: %s",
              esp_err_to_name(result));
 
+    operator_event_log_add(
+        OPERATOR_EVENT_ERROR,
+        "Firmware update failed: %s",
+        esp_err_to_name(result));
+
     s_task_running = false;
     vTaskDelete(NULL);
     return;
@@ -351,6 +360,9 @@ cancelled:
     set_state("Update Cancelled", 0);
 
     ESP_LOGI(TAG, "OTA cancelled safely");
+    operator_event_log_add(
+        OPERATOR_EVENT_WARNING,
+        "Firmware update cancelled safely");
 
     s_task_running = false;
     s_cancel_complete = true;
@@ -379,6 +391,10 @@ bool ota_manager_start(const char *url)
              "starting task for %s",
              s_task_url);
 
+    operator_event_log_add(
+        OPERATOR_EVENT_INFO,
+        "Firmware update started");
+
     s_task_running = true;
 
     BaseType_t result = xTaskCreate(
@@ -394,6 +410,9 @@ bool ota_manager_start(const char *url)
         s_cancel_allowed = false;
         set_state("Unable to start OTA task.", 0);
         ESP_LOGE(TAG, "failed to create OTA task");
+        operator_event_log_add(
+            OPERATOR_EVENT_ERROR,
+            "Unable to start firmware-update task");
         return false;
     }
 

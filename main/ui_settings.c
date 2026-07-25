@@ -1,6 +1,7 @@
 #include "ui_settings.h"
 #include "ui_settings_popups.h"
 #include "ui_settings_components.h"
+#include "ui_event_history_popup.h"
 #include "settings_system_info.h"
 #include "timezone_config.h"
 #include "theme_manager.h"
@@ -104,6 +105,13 @@ static void settings_theme_lab_cb(lv_event_t *event)
 {
     (void)event;
     ui_theme_lab_show();
+}
+
+
+static void settings_event_history_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_event_history_popup_show();
 }
 
 static void settings_brightness_changed_cb(lv_event_t *e)
@@ -850,6 +858,30 @@ void ui_settings_show_page(
         NULL);
 
     section_y += storage_height + section_gap;
+
+    /*
+     * Operator history
+     */
+    const int operator_height =
+        first_row_y + action_height + 6;
+
+    lv_obj_t *operator_section =
+        ui_settings_section_create(
+            content,
+            "OPERATOR",
+            section_y,
+            operator_height);
+
+    ui_settings_section_add_action_row(
+        operator_section,
+        "Event History",
+        "Recent connection, firmware, and machine events",
+        "VIEW HISTORY",
+        first_row_y,
+        settings_event_history_cb,
+        false);
+
+    section_y += operator_height + section_gap;
 
     /*
      * Display

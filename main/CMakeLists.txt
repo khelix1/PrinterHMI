@@ -19,6 +19,8 @@ idf_component_register(
         "ui_page_title.c"
         "ui_page_state_v32.c"
         "ui_toast_v32.c"
+        "operator_event_log.c"
+        "ui_event_history_popup.c"
 
         # Shell and splash
         "ui_shell.c"

@@ -43,6 +43,7 @@
 #include "ui_command_bar_v32.h"
 #include "ui_ota_popup.h"
 #include "ota_manager.h"
+#include "operator_event_log.h"
 
 /*
  * PrinterHMI v4.0.0 Multi-Printer Release
@@ -3905,6 +3906,12 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    operator_event_log_init();
+    operator_event_log_add(
+        OPERATOR_EVENT_INFO,
+        "Controller started; reset reason %d",
+        (int)esp_reset_reason());
 
     theme_manager_init();
 

@@ -13,6 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "cJSON.h"
 #include "moonraker.h"
+#include "operator_event_log.h"
 
 
 #define TAG "moon_live_ws"
@@ -322,12 +323,18 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         s_discovery_pending = true;
         ESP_LOGI(TAG, "WS_KLIPPY_READY rediscover generation=%u",
                  (unsigned)s_generation);
+        operator_event_log_add(
+            OPERATOR_EVENT_INFO,
+            "Klipper ready; capabilities rediscovered");
         break;
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_SHUTDOWN:
         s_last_status_update_us = esp_timer_get_time();
         ESP_LOGW(TAG, "WS_KLIPPY_SHUTDOWN generation=%u",
                  (unsigned)s_generation);
+        operator_event_log_add(
+            OPERATOR_EVENT_ERROR,
+            "Klipper reported shutdown");
         break;
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED:
@@ -335,6 +342,9 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         s_subscribed = false;
         ESP_LOGW(TAG, "WS_KLIPPY_DISCONNECTED generation=%u",
                  (unsigned)s_generation);
+        operator_event_log_add(
+            OPERATOR_EVENT_WARNING,
+            "Klipper disconnected");
         break;
 
     case MOONRAKER_WEBSOCKET_MESSAGE_IGNORED:
@@ -361,6 +371,9 @@ static void websocket_event_handler(
         s_subscribe_pending = false;
         s_discovery_pending = true;
         ESP_LOGI(TAG, "WS_CONNECTED %s", s_uri);
+        operator_event_log_add(
+            OPERATOR_EVENT_INFO,
+            "Moonraker live connection established");
         break;
 
     case WEBSOCKET_EVENT_DISCONNECTED:
@@ -370,6 +383,9 @@ static void websocket_event_handler(
         s_last_status_update_us = 0;
         moonraker_state_set_connection(false, false);
         ESP_LOGW(TAG, "WS_DISCONNECTED %s", s_uri);
+        operator_event_log_add(
+            OPERATOR_EVENT_WARNING,
+            "Moonraker live connection lost");
         break;
 
     case WEBSOCKET_EVENT_DATA: {
@@ -392,6 +408,9 @@ static void websocket_event_handler(
 
     case WEBSOCKET_EVENT_ERROR:
         ESP_LOGW(TAG, "WS_ERROR %s", s_uri);
+        operator_event_log_add(
+            OPERATOR_EVENT_WARNING,
+            "Moonraker WebSocket error");
         break;
 
     case WEBSOCKET_EVENT_CLOSED:

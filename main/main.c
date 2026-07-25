@@ -2261,10 +2261,19 @@ static void nozzle_card_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-    ui_printer_popups_show_nozzle(
-        printer_popup_send_gcode_bridge,
-        printer_nozzle_temp,
-        printer_nozzle_target);
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+
+    if (state.hotend_count > 1) {
+        ui_printer_popups_show_hotends(
+            printer_popup_send_gcode_bridge,
+            &state);
+    } else {
+        ui_printer_popups_show_nozzle(
+            printer_popup_send_gcode_bridge,
+            printer_nozzle_temp,
+            printer_nozzle_target);
+    }
 }
 
 static void bed_card_event_cb(lv_event_t *e)

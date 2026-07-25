@@ -3,6 +3,7 @@
 #include "ui_theme.h"
 #include "ui_dashboard_v32.h"
 #include "moonraker.h"
+#include "printer_controller.h"
 #include "esp_heap_caps.h"
 
 #include <stdio.h>
@@ -20,6 +21,19 @@ static lv_obj_t *s_object_rows[MOONRAKER_EXCLUDE_MAX_OBJECTS];
 static lv_obj_t *s_exclude_action_button = NULL;
 static int s_selected_object_index = -1;
 static lv_obj_t *s_control_popup = NULL;
+static lv_obj_t *s_hotend_list_popup = NULL;
+static lv_obj_t *s_hotend_activate_popup = NULL;
+static lv_timer_t *s_hotend_refresh_timer = NULL;
+static moonraker_state_t s_hotend_list_state = {0};
+static lv_obj_t *s_hotend_name_labels[MOONRAKER_MAX_HOTENDS] = {0};
+static lv_obj_t *s_hotend_temp_labels[MOONRAKER_MAX_HOTENDS] = {0};
+static lv_obj_t *s_hotend_activate_buttons[MOONRAKER_MAX_HOTENDS] = {0};
+static lv_obj_t *s_hotend_activate_labels[MOONRAKER_MAX_HOTENDS] = {0};
+static size_t s_hotend_activate_index = 0;
+static char s_hotend_title[48] = "";
+static char s_hotend_custom_prefix[96] = "";
+static char s_hotend_commands[6][96] = {{0}};
+static const char *s_hotend_command_ptrs[6] = {0};
 static lv_obj_t *s_custom_temp_popup = NULL;
 static lv_obj_t *s_custom_temp_textarea = NULL;
 static lv_obj_t *s_custom_temp_status = NULL;
@@ -927,7 +941,7 @@ static void set_custom_temp_cb(lv_event_t *event)
         return;
     }
 
-    char command[32];
+    char command[128];
     int written = snprintf(command,
                            sizeof(command),
                            "%s%ld",
@@ -1291,6 +1305,502 @@ static void show_control_popup(
         NULL);
 }
 
+
+
+static void close_hotend_activate_cb(lv_event_t *event)
+{
+    (void)event;
+
+    if (s_hotend_activate_popup) {
+        lv_obj_delete(s_hotend_activate_popup);
+        s_hotend_activate_popup = NULL;
+    }
+}
+
+
+static void confirm_hotend_activate_cb(lv_event_t *event)
+{
+    (void)event;
+
+    if (s_hotend_activate_index >= s_hotend_list_state.hotend_count ||
+        s_hotend_activate_index >= MOONRAKER_MAX_HOTENDS) {
+        close_hotend_activate_cb(NULL);
+        return;
+    }
+
+    const moonraker_hotend_t *hotend =
+        &s_hotend_list_state.hotends[s_hotend_activate_index];
+
+    if (!hotend->object_name[0] ||
+        printer_controller_is_live_state(
+            s_hotend_list_state.printer_state)) {
+        close_hotend_activate_cb(NULL);
+        return;
+    }
+
+    char command[96];
+    int written = snprintf(
+        command,
+        sizeof(command),
+        "ACTIVATE_EXTRUDER EXTRUDER=%s",
+        hotend->object_name);
+
+    if (written > 0 &&
+        (size_t)written < sizeof(command) &&
+        s_send_gcode_cb) {
+        s_send_gcode_cb(command);
+    }
+
+    close_hotend_activate_cb(NULL);
+}
+
+
+static void hotend_activate_event_cb(lv_event_t *event)
+{
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+
+    size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= s_hotend_list_state.hotend_count ||
+        index >= MOONRAKER_MAX_HOTENDS ||
+        s_hotend_list_state.hotends[index].active ||
+        printer_controller_is_live_state(
+            s_hotend_list_state.printer_state)) {
+        return;
+    }
+
+    s_hotend_activate_index = index;
+
+    if (s_hotend_activate_popup) {
+        lv_obj_move_foreground(s_hotend_activate_popup);
+        return;
+    }
+
+    s_hotend_activate_popup =
+        ui_popup_create(
+            lv_layer_top(),
+            500,
+            270,
+            UI_POPUP_STANDARD);
+
+    if (!s_hotend_activate_popup) return;
+
+    char title[48];
+    snprintf(
+        title,
+        sizeof(title),
+        "ACTIVATE T%u?",
+        (unsigned)index);
+
+    ui_popup_add_title(
+        s_hotend_activate_popup,
+        title,
+        false,
+        4);
+
+    ui_popup_add_header_divider(
+        s_hotend_activate_popup,
+        44);
+
+    char body[180];
+    snprintf(
+        body,
+        sizeof(body),
+        "Make %s the active Klipper hotend?\n\n"
+        "This does not move or park a physical toolchanger.",
+        s_hotend_list_state.hotends[index].object_name);
+
+    ui_popup_add_body(
+        s_hotend_activate_popup,
+        body,
+        24,
+        66,
+        452);
+
+    ui_popup_add_standard_footer_divider(
+        s_hotend_activate_popup);
+
+    ui_popup_add_footer_action(
+        s_hotend_activate_popup,
+        UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_LEFT " BACK",
+        170,
+        UI_POPUP_FOOTER_LEFT,
+        close_hotend_activate_cb,
+        NULL,
+        NULL);
+
+    ui_popup_add_footer_action(
+        s_hotend_activate_popup,
+        UI_POPUP_ACTION_CONFIRM,
+        LV_SYMBOL_OK " ACTIVATE",
+        170,
+        UI_POPUP_FOOTER_RIGHT,
+        confirm_hotend_activate_cb,
+        NULL,
+        NULL);
+}
+
+
+static void refresh_hotend_list(lv_timer_t *timer)
+{
+    (void)timer;
+
+    if (!s_hotend_list_popup) return;
+
+    moonraker_state_snapshot(&s_hotend_list_state);
+
+    size_t count = s_hotend_list_state.hotend_count;
+    if (count > MOONRAKER_MAX_HOTENDS) {
+        count = MOONRAKER_MAX_HOTENDS;
+    }
+
+    bool activation_locked =
+        printer_controller_is_live_state(
+            s_hotend_list_state.printer_state);
+
+    for (size_t i = 0; i < count; ++i) {
+        const moonraker_hotend_t *hotend =
+            &s_hotend_list_state.hotends[i];
+
+        if (s_hotend_name_labels[i]) {
+            char name[64];
+            snprintf(
+                name,
+                sizeof(name),
+                hotend->active
+                    ? "T%u  ACTIVE  (%s)"
+                    : "T%u  (%s)",
+                (unsigned)i,
+                hotend->object_name);
+
+            lv_label_set_text(
+                s_hotend_name_labels[i],
+                name);
+
+            lv_obj_set_style_text_color(
+                s_hotend_name_labels[i],
+                hotend->active ? UI_OK_BRIGHT : UI_TEXT,
+                0);
+        }
+
+        if (s_hotend_temp_labels[i]) {
+            char temperature[64];
+
+            if (hotend->temperature > -100.0) {
+                snprintf(
+                    temperature,
+                    sizeof(temperature),
+                    "%.1f / %.1f C",
+                    hotend->temperature,
+                    hotend->target);
+            } else {
+                snprintf(
+                    temperature,
+                    sizeof(temperature),
+                    "-- / -- C");
+            }
+
+            lv_label_set_text(
+                s_hotend_temp_labels[i],
+                temperature);
+        }
+
+        if (s_hotend_activate_labels[i]) {
+            lv_label_set_text(
+                s_hotend_activate_labels[i],
+                hotend->active
+                    ? LV_SYMBOL_OK " ACTIVE"
+                    : "MAKE ACTIVE");
+        }
+
+        if (s_hotend_activate_buttons[i]) {
+            bool disabled =
+                hotend->active || activation_locked;
+
+            if (disabled) {
+                lv_obj_add_state(
+                    s_hotend_activate_buttons[i],
+                    LV_STATE_DISABLED);
+                lv_obj_set_style_opa(
+                    s_hotend_activate_buttons[i],
+                    LV_OPA_50,
+                    0);
+            } else {
+                lv_obj_clear_state(
+                    s_hotend_activate_buttons[i],
+                    LV_STATE_DISABLED);
+                lv_obj_set_style_opa(
+                    s_hotend_activate_buttons[i],
+                    LV_OPA_COVER,
+                    0);
+            }
+        }
+    }
+}
+
+
+static void close_hotend_list_cb(lv_event_t *event)
+{
+    (void)event;
+
+    close_hotend_activate_cb(NULL);
+
+    if (s_hotend_refresh_timer) {
+        lv_timer_delete(s_hotend_refresh_timer);
+        s_hotend_refresh_timer = NULL;
+    }
+
+    if (s_hotend_list_popup) {
+        lv_obj_delete(s_hotend_list_popup);
+        s_hotend_list_popup = NULL;
+    }
+
+    memset(
+        s_hotend_name_labels,
+        0,
+        sizeof(s_hotend_name_labels));
+    memset(
+        s_hotend_temp_labels,
+        0,
+        sizeof(s_hotend_temp_labels));
+    memset(
+        s_hotend_activate_buttons,
+        0,
+        sizeof(s_hotend_activate_buttons));
+    memset(
+        s_hotend_activate_labels,
+        0,
+        sizeof(s_hotend_activate_labels));
+}
+
+
+static void hotend_temperature_event_cb(lv_event_t *event)
+{
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+
+    size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= s_hotend_list_state.hotend_count ||
+        index >= MOONRAKER_MAX_HOTENDS) {
+        return;
+    }
+
+    moonraker_hotend_t hotend =
+        s_hotend_list_state.hotends[index];
+
+    close_hotend_list_cb(NULL);
+
+    static const char *labels[] = {
+        "180 C",
+        "200 C",
+        "215 C",
+        "230 C",
+        "250 C",
+        "OFF",
+    };
+
+    static const double values[] = {
+        180,
+        200,
+        215,
+        230,
+        250,
+        0,
+    };
+
+    const int targets[] = {
+        180,
+        200,
+        215,
+        230,
+        250,
+        0,
+    };
+
+    snprintf(
+        s_hotend_title,
+        sizeof(s_hotend_title),
+        "T%u TEMPERATURE",
+        (unsigned)index);
+
+    snprintf(
+        s_hotend_custom_prefix,
+        sizeof(s_hotend_custom_prefix),
+        "SET_HEATER_TEMPERATURE HEATER=%s TARGET=",
+        hotend.object_name);
+
+    for (size_t i = 0; i < 6; ++i) {
+        snprintf(
+            s_hotend_commands[i],
+            sizeof(s_hotend_commands[i]),
+            "SET_HEATER_TEMPERATURE HEATER=%s TARGET=%d",
+            hotend.object_name,
+            targets[i]);
+
+        s_hotend_command_ptrs[i] =
+            s_hotend_commands[i];
+    }
+
+    show_control_popup(
+        s_hotend_title,
+        hotend.temperature,
+        hotend.target,
+        "C",
+        true,
+        s_hotend_command_ptrs,
+        labels,
+        values,
+        6,
+        s_hotend_title,
+        s_hotend_custom_prefix,
+        300);
+}
+
+
+void ui_printer_popups_show_hotends(
+    ui_printer_popups_send_gcode_cb_t send_cb,
+    const moonraker_state_t *state)
+{
+    if (!state || state->hotend_count == 0) return;
+
+    s_send_gcode_cb = send_cb;
+    memcpy(
+        &s_hotend_list_state,
+        state,
+        sizeof(s_hotend_list_state));
+
+    if (s_hotend_list_popup) {
+        lv_obj_move_foreground(s_hotend_list_popup);
+        return;
+    }
+
+    s_hotend_list_popup =
+        ui_popup_create(
+            lv_layer_top(),
+            720,
+            480,
+            UI_POPUP_STANDARD);
+
+    if (!s_hotend_list_popup) return;
+
+    ui_popup_add_title(
+        s_hotend_list_popup,
+        "HOTEND CONTROL",
+        false,
+        8);
+
+    ui_popup_add_header_divider(
+        s_hotend_list_popup,
+        44);
+
+    size_t count = s_hotend_list_state.hotend_count;
+    if (count > MOONRAKER_MAX_HOTENDS) {
+        count = MOONRAKER_MAX_HOTENDS;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        const moonraker_hotend_t *hotend =
+            &s_hotend_list_state.hotends[i];
+
+        int y = 60 + (int)i * 78;
+
+        lv_obj_t *row = lv_obj_create(s_hotend_list_popup);
+        lv_obj_set_pos(row, 24, y);
+        lv_obj_set_size(row, 342, 66);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        ui_apply_surface_role(row, UI_SURFACE_SECTION);
+
+        char name[64];
+        snprintf(
+            name,
+            sizeof(name),
+            hotend->active
+                ? "T%u  ACTIVE  (%s)"
+                : "T%u  (%s)",
+            (unsigned)i,
+            hotend->object_name);
+
+        lv_obj_t *name_label = lv_label_create(row);
+        s_hotend_name_labels[i] = name_label;
+        lv_label_set_text(name_label, name);
+        ui_apply_text_body(name_label);
+        lv_obj_set_style_text_color(
+            name_label,
+            hotend->active ? UI_OK_BRIGHT : UI_TEXT,
+            0);
+        lv_obj_set_pos(name_label, 18, 8);
+
+        char temperature[64];
+        if (hotend->temperature > -100.0) {
+            snprintf(
+                temperature,
+                sizeof(temperature),
+                "%.1f / %.1f C",
+                hotend->temperature,
+                hotend->target);
+        } else {
+            snprintf(
+                temperature,
+                sizeof(temperature),
+                "-- / -- C");
+        }
+
+        lv_obj_t *temperature_label = lv_label_create(row);
+        s_hotend_temp_labels[i] = temperature_label;
+        lv_label_set_text(temperature_label, temperature);
+        ui_apply_text_value_small(temperature_label);
+        ui_apply_label_bright(temperature_label);
+        lv_obj_set_pos(temperature_label, 18, 33);
+
+        ui_popup_add_action_at(
+            s_hotend_list_popup,
+            UI_POPUP_ACTION_CHOICE,
+            "SET TEMP",
+            384,
+            y + 7,
+            138,
+            52,
+            hotend_temperature_event_cb,
+            (void *)(uintptr_t)i,
+            NULL);
+
+        s_hotend_activate_buttons[i] =
+            ui_popup_add_action_at(
+                s_hotend_list_popup,
+                UI_POPUP_ACTION_CONFIRM,
+                hotend->active
+                    ? LV_SYMBOL_OK " ACTIVE"
+                    : "MAKE ACTIVE",
+                540,
+                y + 7,
+                150,
+                52,
+                hotend_activate_event_cb,
+                (void *)(uintptr_t)i,
+                &s_hotend_activate_labels[i]);
+    }
+
+    ui_popup_add_standard_footer_divider(
+        s_hotend_list_popup);
+
+    ui_popup_add_footer_action(
+        s_hotend_list_popup,
+        UI_POPUP_ACTION_CLOSE,
+        LV_SYMBOL_CLOSE " CLOSE",
+        170,
+        UI_POPUP_FOOTER_CENTER,
+        close_hotend_list_cb,
+        NULL,
+        NULL);
+
+    refresh_hotend_list(NULL);
+    s_hotend_refresh_timer =
+        lv_timer_create(
+            refresh_hotend_list,
+            500,
+            NULL);
+}
+
+
 void ui_printer_popups_show_part_fan(
     ui_printer_popups_send_gcode_cb_t send_cb,
     double current_fan_percent)
@@ -1457,6 +1967,8 @@ void ui_printer_popups_close_all(void)
 {
     close_custom_temp_cb(NULL);
     if (s_control_popup) lv_obj_delete(s_control_popup);
+
+    close_hotend_list_cb(NULL);
 
     close_object_confirm_cb(NULL);
     close_object_list_cb(NULL);

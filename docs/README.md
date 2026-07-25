@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v4.0.0 behavior unless they are
+Documents in this directory describe current v4.1.0 behavior unless they are
 under `history/`.
 
 | Document | Purpose |

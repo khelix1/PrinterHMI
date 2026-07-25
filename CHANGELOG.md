@@ -5,9 +5,19 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+No changes yet.
+
+## [4.1.0] - 2026-07-24
+
 ### Added
 
-- Added safe cancellation for an active OTA download.
+- Added capability-driven discovery and controls for as many as four hotends,
+  including live temperatures, independent targets and active-tool selection.
+- Added live Moonraker switch and motion filament-sensor status, with compact
+  single-sensor state and detailed multi-sensor reporting.
+- Added operator event history with chronological live updates and clear
+  control.
+- Added configuration backup and restore.
 - Added Moonraker discovery directly to printer profile Add/Edit.
 - Added an active-print layer fallback based on file metadata when the slicer
   does not publish `SET_PRINT_STATS_INFO`.
@@ -16,35 +26,35 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Changed
 
+- Made printer controls reflect discovered Moonraker capabilities.
+- Added auto-scaling telemetry ranges and removed unnecessary chart sliders.
+- Hardened WebSocket profile rebinding, stale-client event handling and
+  capability rediscovery.
+- Expanded Dashboard status cards for filament state while preserving preview
+  proportions.
 - Enabled the two-framebuffer, avoid-tearing LVGL direct-mode display path.
 - Separated the fast OTA UI timer from the general application refresh timer.
 - Moved ESP-Hosted/C6 transport initialization ahead of visible display
-  startup to prevent repeated splash flashes.
+  startup.
 - Normalized OTA keyboard, editor and progress-popup transitions.
-- Corrected printer-profile keyboard focus and field selection.
 
 ### Fixed
 
-- Fixed delayed top-to-bottom OTA keyboard and progress-popup closure.
+- Fixed delayed OTA keyboard and progress-popup closure.
+- Fixed OTA cancellation responsiveness and final image validation handling.
 - Fixed Add Printer host/IP and hostname text entry.
-- Fixed cancellation responsiveness while an OTA download is active.
+- Fixed active-printer connection failure and recovery states.
+- Fixed live capability state after switching between Moonraker profiles.
 - Reduced startup flashing to a single initial panel appearance.
-- Preserved active-print layer reporting for files without slicer-provided
-  layer statistics.
+- Removed obsolete UI compatibility symbols reported by the compiler.
 
-### Documentation
+### Validation
 
-- Replaced the inherited LVGL demo README with a PrinterHMI project README.
-- Established authoritative architecture, build, hardware, configuration,
-  test, release, security and troubleshooting documentation.
-- Moved v3.x design and refactor records into a clearly historical area.
-
-### Known work
-
-- Remove embedded development credentials and rewrite affected Git history.
-- Remove tracked mechanical backups and accidental root artifacts.
-- Complete a repository-wide theme-token coverage audit.
-- Investigate whether the remaining single initial panel appearance can be hidden.
+- Verified clean ESP-IDF 5.4.4 builds and target operation.
+- Verified cold boot, warm reboot, power-cycle and display sleep/wake behavior.
+- Verified multi-printer switching, Moonraker/Klipper restart recovery,
+  previews, telemetry, layer reporting and printer controls.
+- Verified configuration backup/restore and OTA update behavior.
 
 ## [4.0.0] - 2026-07-22
 

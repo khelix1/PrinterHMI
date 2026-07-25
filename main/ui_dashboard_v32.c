@@ -168,7 +168,7 @@ void ui_dashboard_v32_update(void)
     ui_status_banner_v32_set(
         dash32_banner,
         LV_SYMBOL_OK " READY",
-        "PrinterHMI v4.0.0 Operator Console",
+        "PrinterHMI v4.1.0 Operator Console",
         "ETA --:--",
         "--%"
     );

@@ -4,7 +4,7 @@
 #include "ui_dashboard_status_v32.h"
 
 /*
- * PrinterHMI v4.0.0 Dashboard
+ * PrinterHMI v4.1.0 Dashboard
  * Clean Theme A dashboard built beside the existing v3.1 UI.
  */
 

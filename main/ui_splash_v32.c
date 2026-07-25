@@ -92,7 +92,7 @@ void ui_splash_v32_create(void)
     lv_obj_align(logo, LV_ALIGN_TOP_MID, 0, 18);
 
     lv_obj_t *sub = lv_label_create(panel);
-    lv_label_set_text(sub, "v4.0.0  |  ESP32-P4 + ESP32-C6");
+    lv_label_set_text(sub, "v4.1.0  |  ESP32-P4 + ESP32-C6");
     ui_apply_text_body(sub);
     ui_apply_label_dim(sub);
     lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 130);

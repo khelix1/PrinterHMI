@@ -653,7 +653,7 @@ static bool send_identify(void)
 
     const esp_app_desc_t *app = esp_app_get_description();
     const char *app_version =
-        app && app->version[0] ? app->version : "4.0.0";
+        app && app->version[0] ? app->version : "4.1.0";
 
     char request[512];
     int length = snprintf(

@@ -70,7 +70,7 @@ idf.py build
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v4.0.0.
+- `partitions.csv` is the only supported partition layout for v4.1.0.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy

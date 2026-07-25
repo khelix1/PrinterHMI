@@ -330,139 +330,35 @@ static void telemetry_chart_apply_axis(
         return;
     }
 
-    if (!stats || !stats->valid) {
-        if (!chart->axis_locked) {
-            chart->axis_min =
-                (int32_t)lround(chart->fallback_min_c * 10.0);
+    /*
+     * Scale directly from the visible sample range. Targets remain
+     * reference lines and do not widen the graph during warm-up.
+     */
+    (void)follow_reference;
+    (void)preferred_center;
 
-            chart->axis_max =
-                (int32_t)lround(chart->fallback_max_c * 10.0);
+    int32_t new_min = 0;
+    int32_t new_max = 0;
 
-            chart->axis_edge_samples = 0;
+    telemetry_calculate_axis(
+        stats,
+        chart->fallback_min_c,
+        chart->fallback_max_c,
+        chart->minimum_span_c,
+        &new_min,
+        &new_max);
 
-            lv_chart_set_range(
-                chart->chart,
-                chart->axis,
-                chart->axis_min,
-                chart->axis_max);
-        }
-
+    if (new_min == chart->axis_min &&
+        new_max == chart->axis_max) {
         return;
     }
 
-    double requested_center = preferred_center;
-
-    if (!isfinite(requested_center)) {
-        requested_center = stats->current;
-    }
-
-    bool reference_changed = false;
-
-    if (chart->axis_locked && follow_reference) {
-        double reference_threshold =
-            chart->minimum_span_c * 0.5;
-
-        if (reference_threshold < 0.5) {
-            reference_threshold = 0.5;
-        }
-
-        reference_changed =
-            fabs(requested_center - chart->axis_anchor) >=
-            reference_threshold;
-    }
-
-    /*
-     * Keep the Y-axis stationary while the newest sample remains inside
-     * the middle 80 percent of the current range.
-     *
-     * The outer 10 percent at each edge is the hysteresis zone.
-     */
-    if (chart->axis_locked && !reference_changed) {
-        const double low =
-            (double)chart->axis_min / 10.0;
-
-        const double high =
-            (double)chart->axis_max / 10.0;
-
-        const double span = high - low;
-        const double inner_low = low + span * 0.10;
-        const double inner_high = high - span * 0.10;
-
-        if (stats->current >= inner_low &&
-            stats->current <= inner_high) {
-            chart->axis_edge_samples = 0;
-            return;
-        }
-
-        if (chart->axis_edge_samples < UINT8_MAX) {
-            chart->axis_edge_samples++;
-        }
-
-        /*
-         * Ignore brief spikes. Recenter only after four consecutive
-         * samples remain near or beyond an edge.
-         */
-        if (chart->axis_edge_samples < 4) {
-            return;
-        }
-    }
-
-    chart->axis_edge_samples = 0;
-
-    /*
-     * Center on the newest actual value when adapting. This allows a
-     * heating or cooling trace to move through several stable windows
-     * instead of jumping directly to the final target range.
-     */
-    double center = stats->current;
-
-    if (!isfinite(center)) {
-        center = requested_center;
-    }
-
-    double half_span = chart->minimum_span_c * 0.5;
-    double low = center - half_span;
-    double high = center + half_span;
-
-    /*
-     * Keep the new range on clean half-unit boundaries.
-     */
-    low = floor(low * 2.0) / 2.0;
-    high = ceil(high * 2.0) / 2.0;
-
-    if (low < 0.0) {
-        high -= low;
-        low = 0.0;
-    }
-
-    if (high > 320.0) {
-        const double excess = high - 320.0;
-
-        low -= excess;
-        high = 320.0;
-
-        if (low < 0.0) {
-            low = 0.0;
-        }
-    }
-
-    if (high - low < chart->minimum_span_c) {
-        high = low + chart->minimum_span_c;
-    }
-
-    chart->axis_min = (int32_t)lround(low * 10.0);
-    chart->axis_max = (int32_t)lround(high * 10.0);
-
-    /*
-     * Preserve the commanded target as the reference-change anchor for
-     * heater graphs. Environment graphs use the actual center.
-     */
+    chart->axis_min = new_min;
+    chart->axis_max = new_max;
+    chart->axis_locked = stats && stats->valid;
     chart->axis_anchor =
-        follow_reference
-            ? requested_center
-            : center;
-
-    chart->axis_locked = true;
+        stats && stats->valid ? stats->current : NAN;
+    chart->axis_edge_samples = 0;
 
     lv_chart_set_range(
         chart->chart,
@@ -470,6 +366,7 @@ static void telemetry_chart_apply_axis(
         chart->axis_min,
         chart->axis_max);
 }
+
 
 static void telemetry_collect_recent_stats(
     telemetry_range_stats_t *nozzle,
@@ -486,10 +383,10 @@ static void telemetry_collect_recent_stats(
     size_t count = telemetry_history_count();
 
     /*
-     * Four-minute adaptive window at the current two-second sample rate.
-     * All retained history remains plotted; only the scale uses this window.
+     * Scale from the complete plotted ten-minute history so every visible
+     * sample remains inside the graph.
      */
-    size_t window = 120;
+    size_t window = TELEMETRY_HISTORY_CAPACITY;
     size_t start = count > window ? count - window : 0;
 
     for (size_t i = start; i < count; i++) {
@@ -695,6 +592,25 @@ static void telemetry_create_single_chart(
         8);
 
     out->chart = lv_chart_create(card);
+
+    /*
+     * Charts contain marker and reference-line child objects. Explicitly
+     * disable scrolling on the chart itself so those children cannot cause
+     * LVGL scrollbars to appear.
+     */
+    lv_obj_clear_flag(
+        out->chart,
+        LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_set_scrollbar_mode(
+        out->chart,
+        LV_SCROLLBAR_MODE_OFF);
+
+    lv_obj_scroll_to(
+        out->chart,
+        0,
+        0,
+        LV_ANIM_OFF);
 
     /*
      * Telemetry chart parent is a fixed instrument card.

@@ -170,7 +170,7 @@ static lv_obj_t *create_tuning_slider(
 
     lv_obj_set_style_border_width(
         slider,
-        1,
+        UI_BORDER_THIN,
         LV_PART_MAIN);
 
     lv_obj_set_style_radius(
@@ -210,12 +210,12 @@ static lv_obj_t *create_tuning_slider(
 
     lv_obj_set_style_border_width(
         slider,
-        2,
+        UI_BORDER_STRONG,
         LV_PART_KNOB);
 
     lv_obj_set_style_pad_all(
         slider,
-        6,
+        ui_theme_density_metric(4, 6, 8),
         LV_PART_KNOB);
 
     lv_obj_add_event_cb(

@@ -148,7 +148,10 @@ lv_obj_t *ui_command_bar_v32_create(lv_obj_t *parent, int x, int y, int w, int h
     s_command_bar = bar;
     lv_obj_set_size(bar, w, h);
     lv_obj_set_pos(bar, x, y);
-    lv_obj_set_style_pad_all(bar, 10, 0);
+    lv_obj_set_style_pad_all(
+        bar,
+        UI_PAD_CARD,
+        0);
 
     lv_obj_add_event_cb(
         bar,

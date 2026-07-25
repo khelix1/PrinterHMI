@@ -17,12 +17,17 @@ ui_dashboard_status_v32_t ui_dashboard_status_v32_create(lv_obj_t *parent)
     lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(right_panel, 370, 320);
     lv_obj_set_pos(right_panel, 575, 170);
-    lv_obj_set_style_radius(right_panel, 16, 0);
     ui_apply_panel_style(right_panel);
     lv_obj_set_style_bg_color(right_panel, UI_PANEL_ALT, 0);
     lv_obj_set_style_border_color(right_panel, UI_BORDER_SOFT, 0);
-    lv_obj_set_style_border_width(right_panel, 1, 0);
-    lv_obj_set_style_pad_all(right_panel, 16, 0);
+    lv_obj_set_style_border_width(
+        right_panel,
+        UI_BORDER_THIN,
+        0);
+    lv_obj_set_style_pad_all(
+        right_panel,
+        UI_PAD_PANEL,
+        0);
 
     lv_obj_t *rt = lv_label_create(right_panel);
     lv_label_set_text(rt, "PRINT STATUS");

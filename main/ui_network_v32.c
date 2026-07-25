@@ -454,7 +454,7 @@ void ui_network_v32_create_objects(
 
             lv_obj_set_style_pad_row(
                 s_network.networks_list,
-                4,
+                ui_theme_density_metric(2, 4, 6),
                 0);
 
             lv_obj_set_flex_flow(
@@ -744,12 +744,12 @@ void ui_network_v32_render_scan_results(
 
         lv_obj_set_style_pad_left(
             button,
-            10,
+            UI_PAD_CARD,
             0);
 
         lv_obj_set_style_pad_right(
             button,
-            10,
+            UI_PAD_CARD,
             0);
 
         char *ssid_copy =

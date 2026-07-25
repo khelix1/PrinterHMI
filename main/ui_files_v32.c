@@ -836,7 +836,7 @@ void ui_files_v32_show(void)
 
     lv_obj_set_style_pad_row(
         s_printer_file_list,
-        14,
+        ui_theme_density_metric(10, 14, 18),
         0);
 
     lv_obj_add_flag(

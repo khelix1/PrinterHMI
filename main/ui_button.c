@@ -235,12 +235,12 @@ lv_obj_t *ui_button_create_icon(
 
         lv_obj_set_style_pad_left(
             button,
-            7,
+            ui_theme_density_metric(5, 7, 9),
             0);
 
         lv_obj_set_style_pad_right(
             button,
-            7,
+            ui_theme_density_metric(5, 7, 9),
             0);
 
         lv_obj_set_style_pad_top(
@@ -255,7 +255,7 @@ lv_obj_t *ui_button_create_icon(
 
         lv_obj_set_style_pad_column(
             button,
-            6,
+            ui_theme_density_metric(4, 6, 8),
             0);
     }
 

@@ -350,12 +350,12 @@ lv_obj_t *ui_active_print_v32_create(
 
     lv_obj_set_style_pad_top(
         ctx->footer,
-        4,
+        ui_theme_density_metric(2, 4, 6),
         0);
 
     lv_obj_set_style_pad_bottom(
         ctx->footer,
-        4,
+        ui_theme_density_metric(2, 4, 6),
         0);
 
     lv_obj_set_pos(

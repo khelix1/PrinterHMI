@@ -84,8 +84,8 @@ void ui_splash_v32_create(void)
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(panel, UI_NAV, 0);
     lv_obj_set_style_border_color(panel, UI_BORDER_SOFT, 0);
-    lv_obj_set_style_border_width(panel, 2, 0);
-    lv_obj_set_style_radius(panel, 22, 0);
+    lv_obj_set_style_border_width(panel, UI_BORDER_STRONG, 0);
+    lv_obj_set_style_radius(panel, UI_RADIUS_SPLASH, 0);
     lv_obj_set_style_pad_all(panel, 0, 0);
 
     lv_obj_t *logo = lv_image_create(panel);
@@ -124,10 +124,13 @@ void ui_splash_v32_create(void)
     lv_obj_align(splash_bar, LV_ALIGN_TOP_MID, 0, 216);
     lv_bar_set_range(splash_bar, 0, 100);
     lv_bar_set_value(splash_bar, 0, LV_ANIM_OFF);
-    lv_obj_set_style_radius(splash_bar, 12, 0);
+    lv_obj_set_style_radius(splash_bar, UI_RADIUS_BAR, 0);
     lv_obj_set_style_bg_color(splash_bar, UI_PROGRESS_TRACK, 0);
     lv_obj_set_style_bg_color(splash_bar, UI_ACCENT, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(splash_bar, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(
+        splash_bar,
+        UI_RADIUS_BAR,
+        LV_PART_INDICATOR);
 
     splash_percent = lv_label_create(panel);
     lv_label_set_text(splash_percent, "0%");

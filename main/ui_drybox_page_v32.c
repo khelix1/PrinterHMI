@@ -157,7 +157,9 @@ static void set_program_button_state(
 
         lv_obj_set_style_border_width(
             button,
-            active ? 3 : UI_BORDER_THIN,
+            active
+                ? ui_theme_accessible_border_width(3)
+                : UI_BORDER_THIN,
             0);
 
         lv_obj_set_style_bg_color(
@@ -167,7 +169,9 @@ static void set_program_button_state(
 
         lv_obj_set_style_bg_opa(
             button,
-            online ? LV_OPA_COVER : LV_OPA_50,
+            online
+                ? LV_OPA_COVER
+                : ui_theme_accessible_opacity(LV_OPA_50),
             0);
     }
 

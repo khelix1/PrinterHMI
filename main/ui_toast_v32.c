@@ -37,7 +37,10 @@ void ui_toast_v32_show(ui_status_kind_t kind,
     lv_obj_clear_flag(s_toast, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_popup_style(s_toast);
     lv_obj_set_style_border_color(s_toast, ui_status_color(kind), 0);
-    lv_obj_set_style_border_width(s_toast, 2, 0);
+    lv_obj_set_style_border_width(
+        s_toast,
+        UI_BORDER_STRONG,
+        0);
     lv_obj_set_style_pad_all(s_toast, 0, 0);
 
     lv_obj_t *accent = lv_obj_create(s_toast);

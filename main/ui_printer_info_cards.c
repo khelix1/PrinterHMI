@@ -290,7 +290,7 @@ void ui_printer_info_cards_add_vivid_icon(lv_obj_t *value_label, const char *tit
 
     lv_obj_t *ico = lv_label_create(box);
     lv_label_set_text(ico, card_icon_for_title(title));
-    lv_obj_set_style_text_font(ico, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_font(ico, UI_FONT_TITLE, 0);
     lv_obj_set_style_text_color(ico, card_color_for_title(title), 0);
     lv_obj_align(ico, LV_ALIGN_TOP_RIGHT, -10, 8);
 }

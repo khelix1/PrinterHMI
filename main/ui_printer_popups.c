@@ -502,11 +502,18 @@ static void select_object_index(int index)
         lv_obj_set_style_bg_color(
             row, selected ? UI_ACCENT_CYAN : UI_BG, 0);
         lv_obj_set_style_bg_opa(
-            row, selected ? LV_OPA_30 : LV_OPA_COVER, 0);
+            row,
+            selected
+                ? ui_theme_accessible_opacity(LV_OPA_30)
+                : LV_OPA_COVER,
+            0);
         lv_obj_set_style_border_width(
             row,
-            selected ? 3 :
-                (s_exclude_snapshot->objects[i].current ? 2 : 1),
+            selected
+                ? ui_theme_accessible_border_width(3)
+                : (s_exclude_snapshot->objects[i].current
+                    ? UI_BORDER_STRONG
+                    : UI_BORDER_THIN),
             0);
         lv_obj_set_style_border_color(
             row,
@@ -693,7 +700,10 @@ static void show_cancel_object_list(void)
     lv_obj_set_pos(s_object_map, 20, 82);
     lv_obj_set_size(s_object_map, 420, 292);
     ui_apply_surface_role(s_object_map, UI_SURFACE_POPUP_LIST);
-    lv_obj_set_style_pad_all(s_object_map, 12, 0);
+    lv_obj_set_style_pad_all(
+        s_object_map,
+        UI_PAD_PANEL,
+        0);
     lv_obj_clear_flag(s_object_map, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_object_map, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(
@@ -711,7 +721,10 @@ static void show_cancel_object_list(void)
                           LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
     ui_apply_surface_role(list, UI_SURFACE_POPUP_LIST);
-    lv_obj_set_style_pad_row(list, 8, 0);
+    lv_obj_set_style_pad_row(
+        list,
+        UI_GAP_ROW,
+        0);
 
     for (size_t i = 0; i < s_exclude_snapshot->object_count; ++i) {
         moonraker_exclude_object_t *object =
@@ -720,12 +733,20 @@ static void show_cancel_object_list(void)
         lv_obj_t *row = ui_button_create_empty(list, UI_BUTTON_OUTLINED);
         lv_obj_set_width(row, LV_PCT(100));
         lv_obj_set_height(row, 46);
-        lv_obj_set_style_border_width(row, object->current ? 2 : 1, 0);
+        lv_obj_set_style_border_width(
+            row,
+            object->current
+                ? UI_BORDER_STRONG
+                : UI_BORDER_THIN,
+            0);
         lv_obj_set_style_border_color(
             row,
             object->current ? UI_ACCENT_CYAN : UI_BORDER_SOFT,
             0);
-        lv_obj_set_style_pad_hor(row, 10, 0);
+        lv_obj_set_style_pad_hor(
+            row,
+            UI_PAD_CARD,
+            0);
 
         char label_text[MOONRAKER_EXCLUDE_NAME_MAX + 24];
         snprintf(label_text,
@@ -1115,7 +1136,10 @@ static lv_obj_t *control_popup_button(
 
     if (button && selected) {
         lv_obj_set_style_border_color(button, UI_ACCENT_CYAN, 0);
-        lv_obj_set_style_border_width(button, 3, 0);
+        lv_obj_set_style_border_width(
+            button,
+            ui_theme_accessible_border_width(3),
+            0);
     }
 
     return button;
@@ -1254,7 +1278,9 @@ static void show_control_popup(
             lv_obj_set_style_border_color(
                 target_card, UI_ACCENT_CYAN, LV_STATE_PRESSED);
             lv_obj_set_style_border_width(
-                target_card, 3, LV_STATE_PRESSED);
+                target_card,
+                ui_theme_accessible_border_width(3),
+                LV_STATE_PRESSED);
             lv_obj_add_event_cb(
                 target_card,
                 open_custom_temp_cb,

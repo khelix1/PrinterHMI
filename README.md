@@ -42,6 +42,21 @@ publishing repository history.
 - Persistent brightness, display sleep and timezone configuration
 - OTA download with cancellable progress, dual-slot boot and rollback cancellation
 
+## Interface on Hardware
+
+PrinterHMI v4.1.0 running on the JC1060P470C-I/W ESP32-P4 panel.
+These photographs show the interface operating on the target hardware.
+
+<!-- PRINTERHMI_HARDWARE_GALLERY_V1 -->
+
+| Runtime theme selection | Active filament conditioning |
+| :---: | :---: |
+| ![PrinterHMI runtime theme selection](docs/images/hardware/interface-themes.jpg) | ![PrinterHMI active drybox conditioning](docs/images/hardware/drybox-heating.jpg) |
+| Multi-hotend discovery and control | File thumbnail and print metadata |
+| ![PrinterHMI multi-hotend control](docs/images/hardware/multi-hotend-control.jpg) | ![PrinterHMI file preview and print metadata](docs/images/hardware/file-preview.jpg) |
+| Auto-scaling live telemetry | Firmware and device settings |
+| ![PrinterHMI live telemetry](docs/images/hardware/telemetry.jpg) | ![PrinterHMI firmware and device settings](docs/images/hardware/settings-version.jpg) |
+
 ## Repository map
 
 | Path | Purpose |

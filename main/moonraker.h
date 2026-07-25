@@ -15,12 +15,40 @@
 #define MOONRAKER_MAX_HOTENDS 4
 #define MOONRAKER_HOTEND_NAME_MAX 24
 
+#define MOONRAKER_MAX_FILAMENT_SENSORS 4
+#define MOONRAKER_FILAMENT_SENSOR_NAME_MAX 64
+
 typedef struct {
     char object_name[MOONRAKER_HOTEND_NAME_MAX];
     double temperature;
     double target;
     bool active;
 } moonraker_hotend_t;
+
+typedef struct {
+    char object_name[MOONRAKER_FILAMENT_SENSOR_NAME_MAX];
+    bool enabled;
+    bool status_known;
+    bool filament_detected;
+} moonraker_filament_sensor_t;
+
+typedef struct {
+    bool discovered;
+    bool truncated;
+    size_t total_count;
+    size_t sensor_count;
+    moonraker_filament_sensor_t
+        sensors[MOONRAKER_MAX_FILAMENT_SENSORS];
+} moonraker_filament_state_t;
+
+typedef enum {
+    MOONRAKER_FILAMENT_UNKNOWN = 0,
+    MOONRAKER_FILAMENT_ABSENT,
+    MOONRAKER_FILAMENT_CHECKING,
+    MOONRAKER_FILAMENT_READY,
+    MOONRAKER_FILAMENT_RUNOUT,
+    MOONRAKER_FILAMENT_DISABLED
+} moonraker_filament_status_t;
 
 typedef struct {
     bool discovered;
@@ -129,6 +157,8 @@ void moonraker_module_init(void);
 
 const moonraker_state_t *moonraker_state_get(void);
 void moonraker_state_snapshot(moonraker_state_t *out);
+void moonraker_filament_state_snapshot(
+    moonraker_filament_state_t *out);
 void moonraker_exclude_state_snapshot(moonraker_exclude_state_t *out);
 bool moonraker_exclude_objects_available(void);
 void moonraker_state_reset(void);
@@ -144,6 +174,16 @@ void moonraker_state_set_connection(
 void moonraker_state_configure_hotends(
     const char names[][MOONRAKER_HOTEND_NAME_MAX],
     size_t count);
+
+void moonraker_filament_state_configure(
+    const char names[][MOONRAKER_FILAMENT_SENSOR_NAME_MAX],
+    size_t count,
+    size_t total_count);
+
+moonraker_filament_status_t moonraker_filament_state_status(
+    const moonraker_filament_state_t *state,
+    size_t *present_out,
+    size_t *enabled_out);
 
 void moonraker_state_configure_capabilities(
     const moonraker_capabilities_t *capabilities);

@@ -1921,6 +1921,102 @@ void ui_printer_popups_show_bed(
                        120);
 }
 
+static const char *filament_sensor_display_name(
+    const char *object_name)
+{
+    if (!object_name) return "Sensor";
+
+    const char *separator =
+        strchr(object_name, ' ');
+
+    return separator && separator[1]
+        ? separator + 1
+        : object_name;
+}
+
+
+void ui_printer_popups_show_filament_sensors(
+    const moonraker_filament_state_t *state)
+{
+    if (!state || !state->discovered ||
+        state->total_count == 0) {
+        return;
+    }
+
+    char body[768];
+    size_t used = 0;
+
+    int written = snprintf(
+        body,
+        sizeof(body),
+        "Detected: %u sensor%s\n\n",
+        (unsigned)state->total_count,
+        state->total_count == 1 ? "" : "s");
+
+    if (written < 0) return;
+    used = (size_t)written;
+
+    for (size_t i = 0;
+         i < state->sensor_count &&
+         used < sizeof(body);
+         ++i) {
+        const moonraker_filament_sensor_t *sensor =
+            &state->sensors[i];
+
+        const char *type =
+            strncmp(
+                sensor->object_name,
+                "filament_motion_sensor ",
+                strlen("filament_motion_sensor ")) == 0
+                ? "MOTION"
+                : "SWITCH";
+
+        const char *status =
+            !sensor->enabled
+                ? "DISABLED"
+                : !sensor->status_known
+                    ? "CHECKING"
+                    : sensor->filament_detected
+                        ? "FILAMENT PRESENT"
+                        : "RUNOUT";
+
+        written = snprintf(
+            body + used,
+            sizeof(body) - used,
+            "%s\n  %s  -  %s\n%s",
+            filament_sensor_display_name(
+                sensor->object_name),
+            type,
+            status,
+            i + 1 < state->sensor_count
+                ? "\n"
+                : "");
+
+        if (written < 0 ||
+            (size_t)written >= sizeof(body) - used) {
+            used = sizeof(body) - 1;
+            body[used] = '\0';
+            break;
+        }
+
+        used += (size_t)written;
+    }
+
+    if (state->truncated &&
+        used < sizeof(body)) {
+        snprintf(
+            body + used,
+            sizeof(body) - used,
+            "\n\nShowing first %u sensors.",
+            (unsigned)state->sensor_count);
+    }
+
+    ui_dashboard_v32_status_popup_show(
+        "FILAMENT SENSORS",
+        body);
+}
+
+
 void ui_printer_popups_show_printer_status(
     const char *state,
     const char *file,
@@ -1965,6 +2061,7 @@ void ui_printer_popups_show_printer_status(
 
 void ui_printer_popups_close_all(void)
 {
+    ui_dashboard_v32_status_popup_close();
     close_custom_temp_cb(NULL);
     if (s_control_popup) lv_obj_delete(s_control_popup);
 

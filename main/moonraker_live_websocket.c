@@ -101,6 +101,47 @@ static bool object_list_contains(cJSON *objects, const char *name)
 }
 
 
+static size_t object_list_collect_prefix(
+    cJSON *objects,
+    const char *prefix,
+    char names[][MOONRAKER_FILAMENT_SENSOR_NAME_MAX],
+    size_t count)
+{
+    if (!cJSON_IsArray(objects) ||
+        !prefix ||
+        !prefix[0] ||
+        !names) {
+        return count;
+    }
+
+    size_t prefix_length = strlen(prefix);
+    cJSON *entry = NULL;
+
+    cJSON_ArrayForEach(entry, objects) {
+        if (count >= MOONRAKER_MAX_FILAMENT_SENSORS) {
+            break;
+        }
+
+        if (!cJSON_IsString(entry) ||
+            !entry->valuestring ||
+            strncmp(
+                entry->valuestring,
+                prefix,
+                prefix_length) != 0) {
+            continue;
+        }
+
+        copy_text(
+            names[count],
+            MOONRAKER_FILAMENT_SENSOR_NAME_MAX,
+            entry->valuestring);
+        ++count;
+    }
+
+    return count;
+}
+
+
 static size_t object_list_count_prefix(
     cJSON *objects,
     const char *prefix)
@@ -182,6 +223,9 @@ static bool append_subscription_object(
 static bool build_subscription(
     const char names[][MOONRAKER_HOTEND_NAME_MAX],
     size_t count,
+    const char filament_names[]
+        [MOONRAKER_FILAMENT_SENSOR_NAME_MAX],
+    size_t filament_count,
     const moonraker_capabilities_t *capabilities)
 {
     if (!capabilities) {
@@ -268,6 +312,15 @@ static bool build_subscription(
         return false;
     }
 
+    for (size_t i = 0; i < filament_count; ++i) {
+        if (!append_subscription_object(
+                &used,
+                filament_names[i],
+                "[\"enabled\",\"filament_detected\"]")) {
+            return false;
+        }
+    }
+
     if (capabilities->has_exclude_object &&
         !append_subscription_object(
             &used,
@@ -317,6 +370,10 @@ static bool handle_object_list_response(
               [MOONRAKER_HOTEND_NAME_MAX] = {{0}};
     size_t count = 0;
 
+    char filament_names[MOONRAKER_MAX_FILAMENT_SENSORS]
+                       [MOONRAKER_FILAMENT_SENSOR_NAME_MAX] = {{0}};
+    size_t filament_count = 0;
+
     moonraker_capabilities_t capabilities = {
         .discovered = true,
         .has_heated_bed =
@@ -361,6 +418,20 @@ static bool handle_object_list_response(
             objects,
             "filament_motion_sensor ");
 
+    filament_count =
+        object_list_collect_prefix(
+            objects,
+            "filament_switch_sensor ",
+            filament_names,
+            filament_count);
+
+    filament_count =
+        object_list_collect_prefix(
+            objects,
+            "filament_motion_sensor ",
+            filament_names,
+            filament_count);
+
     for (size_t i = 0; i < MOONRAKER_MAX_HOTENDS; ++i) {
         if (!object_list_contains(objects, candidates[i])) continue;
 
@@ -381,12 +452,18 @@ static bool handle_object_list_response(
     }
 
     moonraker_state_configure_hotends(names, count);
+    moonraker_filament_state_configure(
+        filament_names,
+        filament_count,
+        capabilities.filament_sensor_count);
     moonraker_state_configure_capabilities(
         &capabilities);
 
     if (!build_subscription(
             names,
             count,
+            filament_names,
+            filament_count,
             &capabilities)) {
         ESP_LOGE(TAG, "WS dynamic subscription overflow");
         s_subscription_ready = false;
@@ -414,7 +491,8 @@ static bool handle_object_list_response(
 
     operator_event_log_add(
         OPERATOR_EVENT_INFO,
-        "Capabilities: %u hotend%s, bed %s, fan %s, drybox %s",
+        "Capabilities: %u hotend%s, bed %s, fan %s, drybox %s, "
+        "filament %u",
         (unsigned)count,
         count == 1 ? "" : "s",
         capabilities.has_heated_bed ? "yes" : "no",
@@ -425,7 +503,8 @@ static bool handle_object_list_response(
          capabilities.has_drybox_fan ||
          capabilities.has_drybox_macros)
             ? "yes"
-            : "no");
+            : "no",
+        (unsigned)capabilities.filament_sensor_count);
 
     cJSON_Delete(root);
     return true;

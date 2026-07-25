@@ -234,6 +234,93 @@ static lv_obj_t *create_tuning_slider(
 }
 
 
+static void refresh_filament_label(
+    lv_obj_t *label,
+    bool moonraker_online,
+    const moonraker_filament_state_t *state)
+{
+    if (!label) return;
+
+    size_t present = 0;
+    size_t enabled = 0;
+
+    moonraker_filament_status_t status =
+        moonraker_filament_state_status(
+            state,
+            &present,
+            &enabled);
+
+    char text[40];
+
+    if (state &&
+        state->discovered &&
+        state->total_count > 0 &&
+        !moonraker_online) {
+        snprintf(text, sizeof(text), "FILAMENT\nOFFLINE");
+        ui_apply_label_error(label);
+    } else {
+        switch (status) {
+            case MOONRAKER_FILAMENT_ABSENT:
+                snprintf(text, sizeof(text), "FILAMENT\nN/A");
+                ui_apply_label_dim(label);
+                break;
+
+            case MOONRAKER_FILAMENT_CHECKING:
+                snprintf(text, sizeof(text), "FILAMENT\nCHECKING");
+                ui_apply_label_warning(label);
+                break;
+
+            case MOONRAKER_FILAMENT_READY:
+                if (enabled <= 1) {
+                    snprintf(
+                        text,
+                        sizeof(text),
+                        "FILAMENT\nPRESENT");
+                } else {
+                    snprintf(
+                        text,
+                        sizeof(text),
+                        "FILAMENT\n%u/%u PRESENT",
+                        (unsigned)present,
+                        (unsigned)enabled);
+                }
+                ui_apply_label_success(label);
+                break;
+
+            case MOONRAKER_FILAMENT_RUNOUT:
+                if (enabled <= 1) {
+                    snprintf(
+                        text,
+                        sizeof(text),
+                        "FILAMENT\nRUNOUT");
+                } else {
+                    snprintf(
+                        text,
+                        sizeof(text),
+                        "FILAMENT\n%u/%u RUNOUT",
+                        (unsigned)present,
+                        (unsigned)enabled);
+                }
+                ui_apply_label_error(label);
+                break;
+
+            case MOONRAKER_FILAMENT_DISABLED:
+                snprintf(text, sizeof(text), "FILAMENT\nDISABLED");
+                ui_apply_label_dim(label);
+                break;
+
+            case MOONRAKER_FILAMENT_UNKNOWN:
+            default:
+                snprintf(text, sizeof(text), "FILAMENT\n--");
+                ui_apply_label_dim(label);
+                break;
+        }
+    }
+
+    lv_label_set_text(label, text);
+}
+
+
 static void refresh_factor_slider(
     lv_obj_t *slider,
     lv_obj_t *value_label,
@@ -290,6 +377,8 @@ void ui_printer_live_status_create(
     lv_obj_t **speed_label,
     lv_obj_t **flow_label,
     lv_obj_t **layer_label,
+    lv_obj_t **filament_label,
+    lv_event_cb_t filament_event_cb,
     double initial_speed_factor,
     double initial_flow_factor,
     ui_printer_live_status_send_gcode_cb_t send_gcode_cb)
@@ -393,7 +482,7 @@ void ui_printer_live_status_create(
 
         lv_obj_set_width(
             *layer_label,
-            130);
+            105);
 
         ui_apply_text_body(
             *layer_label);
@@ -425,9 +514,13 @@ void ui_printer_live_status_create(
         ui_apply_label_primary(
             *speed_label);
 
+        lv_obj_set_width(
+            *speed_label,
+            105);
+
         lv_obj_set_pos(
             *speed_label,
-            485,
+            445,
             62);
     }
 
@@ -441,7 +534,7 @@ void ui_printer_live_status_create(
 
         lv_obj_set_width(
             *flow_label,
-            140);
+            105);
 
         ui_apply_text_body(
             *flow_label);
@@ -451,8 +544,44 @@ void ui_printer_live_status_create(
 
         lv_obj_set_pos(
             *flow_label,
-            640,
+            560,
             62);
+    }
+
+    if (filament_label) {
+        *filament_label =
+            lv_label_create(card);
+
+        lv_label_set_text(
+            *filament_label,
+            "FILAMENT\n--");
+
+        lv_obj_set_width(
+            *filament_label,
+            105);
+
+        ui_apply_text_body(
+            *filament_label);
+
+        ui_apply_label_dim(
+            *filament_label);
+
+        lv_obj_set_pos(
+            *filament_label,
+            675,
+            62);
+
+        lv_obj_add_flag(
+            *filament_label,
+            LV_OBJ_FLAG_CLICKABLE);
+
+        if (filament_event_cb) {
+            lv_obj_add_event_cb(
+                *filament_label,
+                filament_event_cb,
+                LV_EVENT_CLICKED,
+                NULL);
+        }
     }
 
     lv_obj_t *speed_title =
@@ -581,6 +710,7 @@ void ui_printer_live_status_refresh(
     lv_obj_t *speed_label,
     lv_obj_t *flow_label,
     lv_obj_t *layer_label,
+    lv_obj_t *filament_label,
     const char *printer_state,
     const char *printer_file,
     double printer_live_velocity,
@@ -591,7 +721,9 @@ void ui_printer_live_status_refresh(
     int printer_total_layer,
     double printer_meta_object_height,
     double printer_meta_layer_height,
-    double printer_progress)
+    double printer_progress,
+    bool moonraker_online,
+    const moonraker_filament_state_t *filament_state)
 {
     if (printer_panel &&
         active_file_box &&
@@ -706,6 +838,11 @@ void ui_printer_live_status_refresh(
     }
 
     if (printer_panel) {
+        refresh_filament_label(
+            filament_label,
+            moonraker_online,
+            filament_state);
+
         refresh_factor_slider(
             s_speed_factor_slider,
             s_speed_factor_value,

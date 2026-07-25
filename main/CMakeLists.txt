@@ -96,6 +96,8 @@ idf_component_register(
         "ui_settings.c"
         "ui_settings_components.c"
         "settings_system_info.c"
+        "settings_backup.c"
+        "ui_settings_backup_popup.c"
         "timezone_config.c"
         "ui_settings_popups.c"
         "ui_ota_popup.c"

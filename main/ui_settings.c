@@ -1,6 +1,7 @@
 #include "ui_settings.h"
 #include "ui_settings_popups.h"
 #include "ui_settings_components.h"
+#include "ui_settings_backup_popup.h"
 #include "ui_event_history_popup.h"
 #include "settings_system_info.h"
 #include "timezone_config.h"
@@ -112,6 +113,13 @@ static void settings_event_history_cb(lv_event_t *event)
 {
     (void)event;
     ui_event_history_popup_show();
+}
+
+
+static void settings_backup_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_settings_backup_popup_show();
 }
 
 static void settings_brightness_changed_cb(lv_event_t *e)
@@ -831,7 +839,9 @@ void ui_settings_show_page(
      */
     const int storage_row_1 = first_row_y;
     const int storage_row_2 = storage_row_1 + row_height + 1;
-    const int storage_height = storage_row_2 + row_height + 6;
+    const int storage_row_3 = storage_row_2 + row_height + 1;
+    const int storage_height =
+        storage_row_3 + action_height + 6;
     lv_obj_t *storage = ui_settings_section_create(
         content,
         "STORAGE",
@@ -856,6 +866,19 @@ void ui_settings_show_page(
         storage_text ? storage_text : "--",
         storage_row_2,
         NULL);
+
+    ui_settings_section_add_divider(
+        storage,
+        storage_row_2 + row_height);
+
+    ui_settings_section_add_action_row(
+        storage,
+        "Configuration Backup",
+        "Back up or restore profiles and interface settings",
+        "BACKUP / RESTORE",
+        storage_row_3,
+        settings_backup_cb,
+        false);
 
     section_y += storage_height + section_gap;
 
@@ -991,6 +1014,86 @@ void ui_settings_refresh(void)
     settings_system_info_refresh();
 }
 
+int ui_settings_brightness_percent(void)
+{
+    return s_display_brightness_percent;
+}
+
+
+uint8_t ui_settings_sleep_timeout_minutes(void)
+{
+    return s_sleep_timeout_minutes;
+}
+
+
+bool ui_settings_restore_display_preferences(
+    int brightness_percent,
+    uint8_t sleep_timeout_minutes)
+{
+    if (brightness_percent < 10 ||
+        brightness_percent > 100 ||
+        (sleep_timeout_minutes != 0 &&
+         sleep_timeout_minutes != 5 &&
+         sleep_timeout_minutes != 15 &&
+         sleep_timeout_minutes != 30)) {
+        return false;
+    }
+
+    nvs_handle_t handle;
+
+    esp_err_t error = nvs_open(
+        SETTINGS_NVS_NAMESPACE,
+        NVS_READWRITE,
+        &handle);
+
+    if (error != ESP_OK) {
+        return false;
+    }
+
+    error = nvs_set_u8(
+        handle,
+        SETTINGS_NVS_BRIGHTNESS_KEY,
+        (uint8_t)brightness_percent);
+
+    if (error == ESP_OK) {
+        error = nvs_set_u8(
+            handle,
+            SETTINGS_NVS_SLEEP_KEY,
+            sleep_timeout_minutes);
+    }
+
+    if (error == ESP_OK) {
+        error = nvs_commit(handle);
+    }
+
+    nvs_close(handle);
+
+    if (error != ESP_OK) {
+        return false;
+    }
+
+    s_display_brightness_percent =
+        brightness_percent;
+
+    s_saved_display_brightness_percent =
+        brightness_percent;
+
+    s_sleep_timeout_minutes =
+        sleep_timeout_minutes;
+
+    (void)bsp_display_brightness_set(
+        brightness_percent);
+
+    if (settings_sleep_label) {
+        lv_label_set_text(
+            settings_sleep_label,
+            settings_sleep_timeout_text());
+    }
+
+    return true;
+}
+
+
 void hide_settings_tab(void)
 {
     if (settings_panel) {
@@ -1005,6 +1108,7 @@ void hide_settings_tab(void)
         ui_appearance_popups_close_all();
         ui_theme_lab_close();
         ui_settings_popups_close_all();
+        ui_settings_backup_popup_close();
     }
 
 

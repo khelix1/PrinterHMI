@@ -74,6 +74,15 @@ bool moonraker_config_delete_profile(
     int profile_index);
 
 /*
+ * Validates and atomically replaces the complete profile collection.
+ * Used by versioned configuration restore.
+ */
+bool moonraker_config_replace_profiles(
+    const moonraker_profile_t *profiles,
+    size_t profile_capacity,
+    int active_profile_index);
+
+/*
  * Compatibility editing APIs. These update the active profile.
  */
 bool moonraker_config_select_host(

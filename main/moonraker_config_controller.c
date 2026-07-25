@@ -805,6 +805,92 @@ bool moonraker_config_delete_profile(
 }
 
 
+bool moonraker_config_replace_profiles(
+    const moonraker_profile_t *profiles,
+    size_t profile_capacity,
+    int active_profile_index)
+{
+    if (!profiles ||
+        profile_capacity !=
+            MOONRAKER_CONFIG_MAX_PROFILES ||
+        !valid_profile_index(
+            active_profile_index)) {
+        return false;
+    }
+
+    int configured_count = 0;
+
+    for (int index = 0;
+         index < MOONRAKER_CONFIG_MAX_PROFILES;
+         ++index) {
+        if (profiles[index].configured) {
+            if (!profile_valid(
+                    &profiles[index])) {
+                return false;
+            }
+
+            ++configured_count;
+        }
+    }
+
+    if (configured_count == 0 ||
+        !profiles[
+            active_profile_index].configured) {
+        return false;
+    }
+
+    moonraker_profile_t previous_profiles[
+        MOONRAKER_CONFIG_MAX_PROFILES];
+
+    memcpy(
+        previous_profiles,
+        s_profiles,
+        sizeof(previous_profiles));
+
+    int previous_active =
+        s_active_profile;
+
+    bool changed =
+        previous_active != active_profile_index ||
+        memcmp(
+            previous_profiles,
+            profiles,
+            sizeof(previous_profiles)) != 0;
+
+    memcpy(
+        s_profiles,
+        profiles,
+        sizeof(s_profiles));
+
+    s_active_profile =
+        active_profile_index;
+
+    if (!persist_collection()) {
+        memcpy(
+            s_profiles,
+            previous_profiles,
+            sizeof(previous_profiles));
+
+        s_active_profile =
+            previous_active;
+
+        return false;
+    }
+
+    if (changed) {
+        advance_configuration_generation();
+    }
+
+    ESP_LOGI(
+        TAG,
+        "Restored %d configured profiles; active=%d",
+        configured_count,
+        s_active_profile);
+
+    return true;
+}
+
+
 bool moonraker_config_select_host(
     const char *host,
     int port)

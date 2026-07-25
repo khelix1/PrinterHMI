@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "lvgl.h"
 #include "ui_settings_popups.h"
 
@@ -25,6 +28,13 @@ void ui_settings_show_page(
 
 void ui_settings_refresh(void);
 void hide_settings_tab(void);
+
+int ui_settings_brightness_percent(void);
+uint8_t ui_settings_sleep_timeout_minutes(void);
+
+bool ui_settings_restore_display_preferences(
+    int brightness_percent,
+    uint8_t sleep_timeout_minutes);
 
 void settings_reboot_cb(lv_event_t *e);
 

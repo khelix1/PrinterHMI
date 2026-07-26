@@ -123,7 +123,20 @@ if ! gh auth status >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Building nightly firmware..."
+nightly_date="$(date +%Y-%m-%d)"
+nightly_tag="nightly-${nightly_date}-${short_commit}"
+stable_version="$(tr -d '[:space:]' < version.txt)"
+
+restore_stable_version()
+{
+    printf '%s\n' "$stable_version" > "$repo_dir/version.txt"
+}
+
+# The exact tag fits esp_app_desc_t.version (31 characters plus NUL).
+trap restore_stable_version EXIT
+printf '%s\n' "$nightly_tag" > "$repo_dir/version.txt"
+
+echo "Building nightly firmware identity ${nightly_tag}..."
 idf.py build
 
 firmware="$repo_dir/build/PrinterHMI.bin"
@@ -133,8 +146,20 @@ if [[ ! -s "$firmware" ]]; then
     exit 1
 fi
 
-nightly_date="$(date +%Y-%m-%d)"
-nightly_tag="nightly-${nightly_date}-${short_commit}"
+if ! grep -aFq "$nightly_tag" "$firmware"; then
+    echo "ERROR: nightly identity was not embedded in firmware" >&2
+    exit 1
+fi
+
+restore_stable_version
+trap - EXIT
+
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "ERROR: nightly version restoration left a dirty tree" >&2
+    git status --short
+    exit 1
+fi
+
 asset_name="PrinterHMI-${nightly_tag}.bin"
 checksum_name="${asset_name}.sha256"
 
@@ -197,6 +222,7 @@ else
         --notes "Automated nightly firmware from tested main.
 
 Commit: $local_commit
+Firmware identity: $nightly_tag
 Change: $commit_subject
 ESP-IDF: $(idf.py --version)
 

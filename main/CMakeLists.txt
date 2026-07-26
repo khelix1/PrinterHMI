@@ -105,7 +105,9 @@ idf_component_register(
         "timezone_config.c"
         "ui_settings_popups.c"
         "ui_ota_popup.c"
+        "ui_ota_release_browser.c"
         "ota_manager.c"
+        "ota_release_catalog.c"
 
     INCLUDE_DIRS
         "."
@@ -126,6 +128,7 @@ idf_component_register(
 
     PRIV_REQUIRES
         esp_https_ota
+        mbedtls
         fatfs
         sdmmc
         espressif__esp_lcd_jd9165

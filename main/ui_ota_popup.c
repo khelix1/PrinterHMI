@@ -1,9 +1,13 @@
 #include "ui_ota_popup.h"
 
+#include "ota_release_catalog.h"
 #include "ui_theme.h"
+
+#include "esp_heap_caps.h"
 #include "ui_popup.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static lv_obj_t *s_ota_popup = NULL;
@@ -441,69 +445,6 @@ void ui_ota_popup_show(const char *current_url,
         220,
         UI_POPUP_FOOTER_RIGHT,
         start_cb,
-        NULL,
-        NULL);
-}
-
-static lv_obj_t *s_remote_builds_popup = NULL;
-
-static void remote_placeholder_close_cb(lv_event_t *e)
-{
-    (void)e;
-
-    if (!s_remote_builds_popup) {
-        return;
-    }
-
-    lv_obj_delete(s_remote_builds_popup);
-    s_remote_builds_popup = NULL;
-}
-
-void ui_ota_remote_builds_placeholder_show(void)
-{
-    if (s_remote_builds_popup) {
-        lv_obj_move_foreground(s_remote_builds_popup);
-        return;
-    }
-
-    s_remote_builds_popup =
-        ui_popup_create(
-            lv_screen_active(),
-            640,
-            300,
-            UI_POPUP_STANDARD);
-
-    if (!s_remote_builds_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_remote_builds_popup,
-        "REMOTE BUILDS",
-        false,
-        0);
-
-    ui_popup_add_header_divider(
-        s_remote_builds_popup,
-        44);
-
-    ui_popup_add_body(
-        s_remote_builds_popup,
-        "Remote build catalog will appear here.\n\n"
-        "Next step: fetch ota.json from the OTA server.",
-        10,
-        70,
-        580);
-
-    ui_popup_add_standard_footer_divider(s_remote_builds_popup);
-
-    ui_popup_add_footer_action(
-        s_remote_builds_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_CENTER,
-        remote_placeholder_close_cb,
         NULL,
         NULL);
 }

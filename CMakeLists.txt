@@ -18,9 +18,17 @@ string(STRIP
     PRINTERHMI_VERSION
 )
 
-if(NOT PRINTERHMI_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+set(PRINTERHMI_STABLE_VERSION_PATTERN
+    "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+)
+set(PRINTERHMI_NIGHTLY_VERSION_PATTERN
+    "^nightly-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9a-f]+$"
+)
+
+if(NOT PRINTERHMI_VERSION MATCHES "${PRINTERHMI_STABLE_VERSION_PATTERN}" AND
+   NOT PRINTERHMI_VERSION MATCHES "${PRINTERHMI_NIGHTLY_VERSION_PATTERN}")
     message(FATAL_ERROR
-        "version.txt must contain one semantic X.Y.Z version"
+        "version.txt must contain X.Y.Z or a generated nightly identity"
     )
 endif()
 

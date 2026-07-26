@@ -4,6 +4,7 @@
 #include "operator_event_log.h"
 
 #include "esp_err.h"
+#include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
@@ -242,6 +243,14 @@ static void update_task(void *arg)
         .timeout_ms = 15000,
         .keep_alive_enable = true,
         .event_handler = http_event_handler,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+
+        /*
+         * GitHub redirects browser_download_url to a signed asset URL whose
+         * request target is longer than ESP HTTP client's 512-byte default.
+         * This is the request/header buffer, not a firmware download buffer.
+         */
+        .buffer_size_tx = 2048,
     };
 
     esp_https_ota_config_t ota_config = {

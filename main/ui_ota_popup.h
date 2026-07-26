@@ -4,6 +4,7 @@
 
 typedef void (*ui_ota_start_cb_t)(const char *url);
 typedef void (*ui_ota_remote_cb_t)(void);
+typedef void (*ui_ota_custom_cb_t)(void);
 typedef void (*ui_ota_cancel_cb_t)(void);
 
 void ui_ota_popup_show(const char *current_url,
@@ -21,4 +22,3 @@ void ui_ota_progress_pump(const char *status_text,
                           int bytes_read,
                           int content_length,
                           bool cancel_enabled);
-void ui_ota_remote_builds_placeholder_show(void);

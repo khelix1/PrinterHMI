@@ -42,6 +42,7 @@
 #include "ui_dashboard_status_v32.h"
 #include "ui_command_bar_v32.h"
 #include "ui_ota_popup.h"
+#include "ui_ota_release_browser.h"
 #include "ota_manager.h"
 #include "operator_event_log.h"
 
@@ -1544,22 +1545,18 @@ static void ota_popup_start_bridge(const char *url)
     ota_manager_set_url(url);
 }
 
-static void ota_popup_remote_bridge(void)
-{
-    ui_ota_remote_builds_placeholder_show();
-}
+static void ota_popup_remote_bridge(void);
 
-static void ota_open_popup_cb(lv_event_t *e)
-{
-    (void)e;
 
+static void ota_open_custom_url_bridge(void)
+{
     const esp_app_desc_t *app = esp_app_get_description();
     const esp_partition_t *running = esp_ota_get_running_partition();
 
     char ota_info[320];
     snprintf(ota_info, sizeof(ota_info),
-             "Current firmware v2: %s  |  Built: %s %s  |  Slot: %s",
-             app ? app->project_name : "unknown",
+             "Current firmware: %s  |  Built: %s %s  |  Slot: %s",
+             app ? app->version : "unknown",
              app ? app->date : __DATE__,
              app ? app->time : __TIME__,
              running ? running->label : "unknown");
@@ -1569,6 +1566,29 @@ static void ota_open_popup_cb(lv_event_t *e)
                       ota_manager_url_capacity() - 1,
                       ota_popup_start_bridge,
                       ota_popup_remote_bridge);
+}
+
+
+static void ota_popup_remote_bridge(void)
+{
+    /*
+     * The URL editor may invoke this bridge. Remove it before restoring the
+     * primary release catalog so the two full-size popups never stack.
+     */
+    ui_ota_popup_close();
+    ui_ota_release_browser_show(
+        ota_popup_start_bridge,
+        ota_open_custom_url_bridge);
+}
+
+
+static void ota_open_popup_cb(lv_event_t *e)
+{
+    (void)e;
+
+    ui_ota_release_browser_show(
+        ota_popup_start_bridge,
+        ota_open_custom_url_bridge);
 }
 
 

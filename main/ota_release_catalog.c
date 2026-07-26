@@ -419,12 +419,14 @@ static bool parse_releases(
         cJSON *published = cJSON_GetObjectItemCaseSensitive(
             release, "published_at");
         if (cJSON_IsString(published) &&
-            published->valuestring) {
+            published->valuestring &&
+            strlen(published->valuestring) >= 16) {
             snprintf(
                 entry->published,
                 sizeof(entry->published),
-                "%.10s",
-                published->valuestring);
+                "%.10s %.5s UTC",
+                published->valuestring,
+                published->valuestring + 11);
         }
 
         cJSON *size = cJSON_GetObjectItemCaseSensitive(

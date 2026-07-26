@@ -24,7 +24,7 @@ typedef enum {
 typedef struct {
     char version[40];
     char name[64];
-    char published[16];
+    char published[24];
     char asset_url[192];
     char notes[192];
     int64_t asset_size;

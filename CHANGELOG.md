@@ -15,8 +15,8 @@ No changes yet.
   builds published by the official PrinterHMI GitHub repository.
 - Added separate `STABLE` and `NIGHTLY` release channels with development-build
   warnings and exact installed-nightly detection.
-- Added release status, publication date, firmware size and release-note
-  details for each compatible OTA asset.
+- Added release status, publication date and time, firmware size and
+  release-note details for each compatible OTA asset.
 - Added explicit installation, downgrade and same-version reinstall
   confirmation paths.
 - Added a secondary custom OTA URL path for local and development servers.

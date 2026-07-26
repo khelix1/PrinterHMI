@@ -282,7 +282,7 @@ static bool parse_releases(
 
     const esp_app_desc_t *app = esp_app_get_description();
     const char *running =
-        app && app->version[0] ? app->version : "0.0.0";
+        app && app->version[0] ? app->version : "unknown";
     size_t stable_count = 0;
     size_t nightly_count = 0;
 

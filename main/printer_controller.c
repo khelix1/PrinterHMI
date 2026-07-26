@@ -115,6 +115,39 @@ static void set_btn_enabled(lv_obj_t *btn, bool enabled)
     }
 }
 
+static bool printer_controller_remaining_seconds(
+    double progress,
+    double print_duration_seconds,
+    double *remaining_seconds)
+{
+    if (!remaining_seconds) {
+        return false;
+    }
+
+    *remaining_seconds = 0.0;
+
+    if (progress >= 0.999) {
+        return true;
+    }
+
+    if (progress <= 0.01 ||
+        print_duration_seconds <= 1.0) {
+        return false;
+    }
+
+    *remaining_seconds =
+        print_duration_seconds *
+        (1.0 - progress) /
+        progress;
+
+    if (*remaining_seconds < 0.0) {
+        *remaining_seconds = 0.0;
+    }
+
+    return true;
+}
+
+
 void printer_controller_format_eta_clock(char *out,
                                          size_t out_len,
                                          double progress,
@@ -124,21 +157,25 @@ void printer_controller_format_eta_clock(char *out,
 
     snprintf(out, out_len, "--:--");
 
-    if (progress <= 0.01 || progress >= 0.999 || print_duration_seconds <= 1.0) {
+    double remaining_seconds = 0.0;
+
+    if (!printer_controller_remaining_seconds(
+            progress,
+            print_duration_seconds,
+            &remaining_seconds)) {
         return;
     }
-
-    double remain = print_duration_seconds * (1.0 - progress) / progress;
 
     time_t now = 0;
     struct tm ti = {0};
 
     time(&now);
-    now += (time_t)remain;
+    now += (time_t)(remaining_seconds + 0.5);
     localtime_r(&now, &ti);
 
     if (ti.tm_year >= (2024 - 1900)) {
         strftime(out, out_len, "%I:%M %p", &ti);
+
         if (out[0] == '0') {
             memmove(out, out + 1, strlen(out));
         }
@@ -154,8 +191,24 @@ void printer_controller_format_topbar_eta(char *out,
 {
     if (!out || out_len == 0) return;
 
-    if (progress > 0.01 && progress < 0.999 && print_duration_seconds > 1.0) {
-        snprintf(out, out_len, "ETA %s", (remaining_text && remaining_text[0]) ? remaining_text : "--:--");
+    /*
+     * Compatibility parameter retained for existing callers. The top bar
+     * now uses the actual completion clock, not the remaining-duration text.
+     */
+    (void)remaining_text;
+
+    char eta_clock[32];
+
+    printer_controller_format_eta_clock(
+        eta_clock,
+        sizeof(eta_clock),
+        progress,
+        print_duration_seconds);
+
+    if (strcmp(eta_clock, "--:--") != 0 &&
+        progress > 0.01 &&
+        progress < 0.999) {
+        snprintf(out, out_len, "ETA %s", eta_clock);
     } else if (moonraker_ok) {
         snprintf(out, out_len, "IDLE");
     } else {
@@ -187,15 +240,28 @@ void printer_controller_format_remaining(char *out,
 {
     if (!out || out_len == 0) return;
 
-    if (progress > 0.01 && progress < 0.999 && print_duration_seconds > 1.0) {
-        double remain = print_duration_seconds * (1.0 - progress) / progress;
-        int mins = (int)(remain / 60.0);
-        int hrs = mins / 60;
-        mins = mins % 60;
-        snprintf(out, out_len, "%d:%02d", hrs, mins);
-    } else {
+    double remaining_seconds = 0.0;
+
+    if (!printer_controller_remaining_seconds(
+            progress,
+            print_duration_seconds,
+            &remaining_seconds)) {
         snprintf(out, out_len, "--:--");
+        return;
     }
+
+    int total_minutes =
+        (int)((remaining_seconds / 60.0) + 0.5);
+
+    int hours = total_minutes / 60;
+    int minutes = total_minutes % 60;
+
+    snprintf(
+        out,
+        out_len,
+        "%d:%02d",
+        hours,
+        minutes);
 }
 
 void printer_controller_update_action_buttons(lv_obj_t *home_btn,

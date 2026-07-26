@@ -135,7 +135,8 @@ void ui_printer_banner_refresh(
     lv_obj_t *banner_label,
     lv_obj_t *state_label,
     const char *banner_text,
-    const char *printer_state)
+    const char *printer_state,
+    const char *printer_file)
 {
     (void)state_label;
 
@@ -169,14 +170,22 @@ void ui_printer_banner_refresh(
         normalized_state,
         sizeof(normalized_state));
 
+    const bool has_active_file =
+        printer_file &&
+        printer_file[0] &&
+        strcmp(printer_file, "No file") != 0 &&
+        strcmp(printer_file, "--") != 0;
+
     ui_status_banner_v32_set(
         banner,
         normalized_state[0]
             ? normalized_state
             : "--",
-        banner_text && banner_text[0]
-            ? banner_text
-            : "MACHINE STATUS",
+        has_active_file
+            ? printer_file
+            : (banner_text && banner_text[0]
+                   ? banner_text
+                   : "MACHINE STATUS"),
         NULL,
         NULL);
 

@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v4.2.0 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v4.2.1 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 

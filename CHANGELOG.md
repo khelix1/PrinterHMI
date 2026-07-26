@@ -7,6 +7,39 @@ v4.0.0 is preserved under `docs/history/`.
 
 No changes yet.
 
+## [4.2.1] - 2026-07-25
+
+### Added
+
+- Added an on-device browser for stable releases and identity-aware nightly
+  builds published by the official PrinterHMI GitHub repository.
+- Added separate `STABLE` and `NIGHTLY` release channels with development-build
+  warnings and exact installed-nightly detection.
+- Added release status, publication date, firmware size and release-note
+  details for each compatible OTA asset.
+- Added explicit installation, downgrade and same-version reinstall
+  confirmation paths.
+- Added a secondary custom OTA URL path for local and development servers.
+
+### Security
+
+- Added trusted certificate-bundle verification to the GitHub Releases API
+  request and HTTPS release-asset OTA download.
+- Restricted stable entries to non-draft semantic-version releases containing
+  the exact expected PrinterHMI OTA asset.
+- Restricted nightly entries to prereleases with strict nightly tags, exact
+  firmware assets and matching embedded-identity release metadata.
+
+### Changed
+
+- Made the official remote release browser the primary Settings OTA entry.
+- Kept GitHub catalog parsing off the LVGL thread.
+- Moved release-catalog buffers, task stack, mutex and selected-release state
+  to PSRAM-backed runtime allocation to protect startup internal RAM.
+- Increased OTA HTTP transmit buffering for GitHub signed-asset redirects.
+- Updated nightly publishing so each firmware image embeds its exact nightly
+  tag while restoring the stable version file after the build.
+
 ## [4.2.0] - 2026-07-25
 
 ### Added

@@ -985,7 +985,12 @@ static bool moonraker_get_live_objects(void)
          *     area = pi * (1.75 / 2)^2 = 2.40528 mm^2
          */
         static const double filament_area_mm2 = 2.405281875;
-        printer_live_flow = lf * filament_area_mm2;
+        printer_live_flow = fabs(lf) * filament_area_mm2;
+
+        /* Suppress tiny interpolation noise while the extruder is idle. */
+        if (printer_live_flow < 0.01) {
+            printer_live_flow = 0.0;
+        }
     }
 
     /*
@@ -2282,11 +2287,13 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         &telemetry_state,
         esp_timer_get_time());
     if (wifi_label) lv_label_set_text(wifi_label, wifi_status);
-    ui_printer_banner_refresh(printer_panel,
-                              printer_banner_label,
-                              printer_state_label,
-                              printer_banner_text(),
-                              printer_state);
+    ui_printer_banner_refresh(
+        printer_panel,
+        printer_banner_label,
+        printer_state_label,
+        printer_banner_text(),
+        printer_state,
+        printer_file);
     ui_printer_live_status_refresh(printer_panel,
                                    printer_active_file_box,
                                    printer_active_file_label,

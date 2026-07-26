@@ -7,6 +7,27 @@ v4.0.0 is preserved under `docs/history/`.
 
 No changes yet.
 
+## [4.2.2] - 2026-07-26
+
+### Changed
+
+- Unified active-print filename presentation across the Dashboard and Printer
+  page.
+- Made `virtual_sdcard.progress` the primary live progress source, with
+  `display_status.progress` retained as a compatibility fallback.
+- Unified Remaining and ETA calculations under the shared printer controller.
+- Made the top bar show the actual estimated completion clock instead of
+  labeling the remaining-duration value as ETA.
+
+### Fixed
+
+- Corrected volumetric-flow presentation by treating retraction velocity as a
+  magnitude and suppressing insignificant idle noise.
+- Kept Dashboard, Printer page and top-bar timing values synchronized.
+- Made completed jobs report `0:00` remaining while unknown timing remains
+  `--:--`.
+
+
 ## [4.2.1] - 2026-07-25
 
 ### Added

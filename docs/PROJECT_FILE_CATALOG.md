@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v4.2.1 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v4.2.2 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator

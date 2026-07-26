@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 
 #include "ui_printer_v32.h"
@@ -31,8 +32,6 @@ void ui_printer_v32_refresh(void)
 /* =================================================================
  * Printer-page thumbnail preview
  * ================================================================= */
-
-static const char *s_preview_tag = "ui_printer_preview";
 
 static lv_obj_t *s_preview_box = NULL;
 static lv_obj_t *s_preview_label = NULL;

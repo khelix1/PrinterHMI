@@ -30,13 +30,33 @@ device logs in a public issue.
 
 ## Network assumptions
 
-The current development transport uses local-network HTTP and WebSocket
-connections to Moonraker. It does not provide transport encryption. Operate it
-only on a trusted, segmented network until authenticated TLS is implemented.
+The current Moonraker transport uses local-network HTTP and `ws://`. It does
+not provide transport encryption. Keep printers and the HMI behind the same
+firewall; do not expose either service directly to the public internet.
 
-The OTA manager accepts a configurable URL and currently permits HTTP. An
-operator must control the update server and network path. Do not install an
-image from an untrusted location.
+Where practical, place the print cell on a printer or IoT VLAN. Give the HMI a
+DHCP reservation and, if Moonraker `trusted_clients` is used, trust only that
+single address with a `/32` entry instead of trusting the whole LAN. Network
+segmentation limits who can observe commands or control a printer; it does not
+encrypt Moonraker traffic.
+
+Stable and nightly GitHub release downloads use HTTPS with server certificate
+verification. The custom OTA editor also permits HTTP for a trusted local
+development server and displays that limitation in the UI. Never install an
+image from an untrusted location or across an untrusted network.
+
+## Device-local credentials
+
+Wi-Fi credentials are provisioned on the device and stored in ordinary NVS in
+the current development configuration. Temporary plaintext copies used by the
+Wi-Fi connection screen are cleared after the connection request. The Wi-Fi
+driver and NVS retain the copies required for reconnecting.
+
+Configuration backups intentionally exclude Wi-Fi passwords and Moonraker API
+keys. Physical extraction resistance is not claimed while flash encryption is
+disabled. Secure Boot, flash encryption and eFuse changes require a separate
+production provisioning design and testing on spare hardware; they are not
+part of routine firmware updates.
 
 ## Release security gate
 

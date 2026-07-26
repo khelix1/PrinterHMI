@@ -28,9 +28,9 @@ The Settings and Network pages provide runtime configuration for:
 | Display sleep | Disabled |
 | Timezone | Central Time (US/Canada) |
 
-The source currently contains development-only fallback network endpoints and
-credentials. They are not acceptable release defaults; see
-`KNOWN_ISSUES.md` and `SECURITY.md`.
+Tracked source does not contain Wi-Fi passwords or Moonraker API keys.
+Credentials are provisioned on the device. See `SECURITY.md` for storage and
+network assumptions.
 
 ## NVS schema
 
@@ -74,6 +74,11 @@ not save automatically; select `SAVE` after reviewing the profile.
 Current API paths include server information, file listing, file metadata,
 thumbnail download, object subscription, G-code script execution and print
 start. Connections currently use local-network HTTP and `ws://`.
+
+Use a DHCP reservation for the HMI. If Moonraker `trusted_clients` is required,
+prefer the HMI's single address as a `/32` entry instead of trusting the entire
+LAN. Keep the print cell behind a firewall and use a printer or IoT VLAN where
+practical. See `SECURITY.md` for the complete network assumptions.
 
 Active-print layers normally come from `print_stats.info`. When slicer layer
 statistics are absent, PrinterHMI estimates layers from file `object_height`,

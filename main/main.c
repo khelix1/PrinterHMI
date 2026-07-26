@@ -1555,7 +1555,7 @@ static void ota_open_custom_url_bridge(void)
 
     char ota_info[320];
     snprintf(ota_info, sizeof(ota_info),
-             "Current firmware: %s  |  Built: %s %s  |  Slot: %s",
+             "HTTPS verifies the server. Use HTTP only for a trusted local development server.  |  Current: %s  |  Built: %s %s  |  Slot: %s",
              app ? app->version : "unknown",
              app ? app->date : __DATE__,
              app ? app->time : __TIME__,
@@ -2417,6 +2417,24 @@ static void ui_network_tools_close_wifi_password_popup_cb(lv_event_t *e)
 }
 
 
+/*
+ * Volatile writes prevent the compiler from optimizing away cleanup of
+ * short-lived plaintext credential buffers.
+ */
+static void clear_sensitive_buffer(
+    void *buffer,
+    size_t size)
+{
+    volatile unsigned char *cursor =
+        (volatile unsigned char *)buffer;
+
+    while (cursor && size > 0) {
+        *cursor++ = 0;
+        --size;
+    }
+}
+
+
 static void connect_selected_wifi(void)
 {
     if (!ui_network_tools_selected_wifi_ssid[0]) {
@@ -2459,8 +2477,21 @@ static void connect_selected_wifi(void)
             sizeof(ui_network_tools_network_scan_status),
             "Connect failed applying WiFi configuration:\n%s",
             esp_err_to_name(err));
+
+        clear_sensitive_buffer(
+            cfg.sta.password,
+            sizeof(cfg.sta.password));
+
         return;
     }
+
+    /*
+     * esp_wifi_set_config() has copied the configuration. The stack copy is
+     * no longer needed after this point.
+     */
+    clear_sensitive_buffer(
+        cfg.sta.password,
+        sizeof(cfg.sta.password));
 
     s_wifi_credentials_configured = true;
     s_retry_num = 0;
@@ -2486,6 +2517,10 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
 
     save_wifi_credentials_to_nvs(ui_network_tools_selected_wifi_ssid, ui_network_tools_selected_wifi_password);
     connect_selected_wifi();
+
+    clear_sensitive_buffer(
+        ui_network_tools_selected_wifi_password,
+        sizeof(ui_network_tools_selected_wifi_password));
 
     ui_network_tools_wifi_scan_set_status(
         ui_network_tools_network_scan_status);

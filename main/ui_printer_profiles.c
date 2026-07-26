@@ -364,7 +364,7 @@ static void editor_save_cb(
             host,
             (int)port)) {
         editor_set_status(
-            "Unable to save this printer profile.");
+            "Use a hostname or IPv4 address only; omit http://, paths and spaces.");
         return;
     }
 

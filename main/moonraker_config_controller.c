@@ -66,6 +66,67 @@ static bool valid_port(int port)
 }
 
 
+/*
+ * Profiles store a host, not a URL. Restrict the value to practical DNS,
+ * mDNS and IPv4 characters so it cannot inject a path, credentials, port or
+ * URL scheme into the HTTP and WebSocket endpoint builders.
+ */
+static bool valid_host(const char *host)
+{
+    if (!host) {
+        return false;
+    }
+
+    size_t length =
+        strnlen(
+            host,
+            MOONRAKER_CONFIG_HOST_LENGTH);
+
+    if (length == 0 ||
+        length >= MOONRAKER_CONFIG_HOST_LENGTH) {
+        return false;
+    }
+
+    for (size_t index = 0;
+         index < length;
+         ++index) {
+        unsigned char character =
+            (unsigned char)host[index];
+
+        bool alpha_numeric =
+            (character >= 'a' && character <= 'z') ||
+            (character >= 'A' && character <= 'Z') ||
+            (character >= '0' && character <= '9');
+
+        if (!alpha_numeric &&
+            character != '.' &&
+            character != '-' &&
+            character != '_') {
+            return false;
+        }
+    }
+
+    unsigned char first =
+        (unsigned char)host[0];
+
+    unsigned char last =
+        (unsigned char)host[length - 1];
+
+    bool first_alpha_numeric =
+        (first >= 'a' && first <= 'z') ||
+        (first >= 'A' && first <= 'Z') ||
+        (first >= '0' && first <= '9');
+
+    bool last_alpha_numeric =
+        (last >= 'a' && last <= 'z') ||
+        (last >= 'A' && last <= 'Z') ||
+        (last >= '0' && last <= '9');
+
+    return first_alpha_numeric &&
+           last_alpha_numeric;
+}
+
+
 static bool valid_profile_index(int profile_index)
 {
     return profile_index >= 0 &&
@@ -166,7 +227,7 @@ static bool profile_valid(
     return profile &&
            profile->configured &&
            profile->name[0] &&
-           profile->host[0] &&
+           valid_host(profile->host) &&
            valid_port(profile->port);
 }
 
@@ -692,8 +753,7 @@ bool moonraker_config_save_profile(
     int port)
 {
     if (!valid_profile_index(profile_index) ||
-        !host ||
-        !host[0] ||
+        !valid_host(host) ||
         !valid_port(port)) {
         return false;
     }

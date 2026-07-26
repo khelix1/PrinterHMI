@@ -810,30 +810,6 @@ void ui_printer_live_status_refresh(
         int current =
             printer_current_layer;
 
-        if ((current < 0 || total <= 0) &&
-            printer_meta_object_height > 0.0 &&
-            printer_meta_layer_height > 0.0 &&
-            printer_progress >= 0.0) {
-            total =
-                (int)(
-                    (printer_meta_object_height /
-                     printer_meta_layer_height) +
-                    0.5);
-
-            current =
-                (int)(
-                    (printer_progress * total) +
-                    0.5);
-
-            if (current < 1 &&
-                printer_progress > 0.0) {
-                current = 1;
-            }
-
-            if (current > total) {
-                current = total;
-            }
-        }
 
         if (current >= 0 && total > 0) {
             snprintf(

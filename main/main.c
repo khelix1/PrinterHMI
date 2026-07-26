@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <math.h>
 #include <stdbool.h>
 #include "ui_button.h"
 
@@ -315,6 +316,7 @@ static double printer_speed_factor = 100.0;
 static double printer_flow_factor = 100.0;
 static double printer_live_velocity = 0.0;
 static double printer_live_flow = 0.0;
+static double printer_current_z = -1.0;
 static int printer_current_layer = -1;
 static int printer_total_layer = -1;
 static double printer_meta_object_height = 0.0;
@@ -449,6 +451,7 @@ static void reset_active_printer_runtime_state(void)
 
     printer_progress = -1.0;
     printer_print_duration = 0.0;
+    printer_current_z = -1.0;
     printer_current_layer = -1;
     printer_total_layer = -1;
     printer_meta_object_height = 0.0;
@@ -926,8 +929,41 @@ static bool moonraker_get_live_objects(void)
     if (strlen(printer_file) == 0) {
         safe_copy(printer_file, sizeof(printer_file), "No file");
     }
-    json_find_number_after(s_moonraker_objects, "\"display_status\"", "progress", &printer_progress);
-    json_find_number_after(s_moonraker_objects, "\"print_stats\"", "print_duration", &printer_print_duration);
+    /*
+     * Use virtual_sdcard.progress as the authoritative completion value.
+     * This is the file-position progress normally presented by Moonraker
+     * frontends. display_status.progress may instead reflect slicer M73
+     * commands and can disagree substantially.
+     */
+    printer_progress = 0.0;
+
+    if (!json_find_number_after(
+            s_moonraker_objects,
+            "\"virtual_sdcard\"",
+            "progress",
+            &printer_progress)) {
+        /*
+         * Fallback for printers without virtual_sdcard or while no file
+         * is active.
+         */
+        json_find_number_after(
+            s_moonraker_objects,
+            "\"display_status\"",
+            "progress",
+            &printer_progress);
+    }
+
+    if (printer_progress < 0.0) {
+        printer_progress = 0.0;
+    } else if (printer_progress > 1.0) {
+        printer_progress = 1.0;
+    }
+
+    json_find_number_after(
+        s_moonraker_objects,
+        "\"print_stats\"",
+        "print_duration",
+        &printer_print_duration);
 
     double lv = 0.0;
     if (json_find_number_after(s_moonraker_objects, "\"motion_report\"", "live_velocity", &lv)) {
@@ -935,17 +971,130 @@ static bool moonraker_get_live_objects(void)
     }
 
     double lf = 0.0;
-    if (json_find_number_after(s_moonraker_objects, "\"motion_report\"", "live_extruder_velocity", &lf)) {
-        printer_live_flow = lf;
+    if (json_find_number_after(
+            s_moonraker_objects,
+            "\"motion_report\"",
+            "live_extruder_velocity",
+            &lf)) {
+        /*
+         * Klipper motion_report.live_extruder_velocity is linear
+         * filament speed in mm/s. Moonraker frontends normally show
+         * volumetric flow in mm^3/s.
+         *
+         * For standard 1.75 mm filament:
+         *     area = pi * (1.75 / 2)^2 = 2.40528 mm^2
+         */
+        static const double filament_area_mm2 = 2.405281875;
+        printer_live_flow = lf * filament_area_mm2;
     }
 
+    /*
+     * current_layer and total_layer belong to print_stats.info.
+     * Anchor the lookup inside print_stats so another generic "info"
+     * object in the Moonraker response cannot capture the search.
+     */
+    /*
+     * Do not clear the cached layer values here. The thumbnail/file
+     * metadata fallback may have already calculated them. Replace each
+     * value only when print_stats.info publishes a valid value.
+     */
+    const char *print_stats_json =
+        strstr(s_moonraker_objects, "\"print_stats\"");
+
+    const char *print_info_json =
+        print_stats_json
+            ? strstr(print_stats_json, "\"info\"")
+            : NULL;
+
     double layer_val = 0.0;
-    if (json_find_number_after(s_moonraker_objects, "\"info\"", "current_layer", &layer_val)) {
+
+    if (print_info_json &&
+        json_find_number_after(
+            print_info_json,
+            "\"info\"",
+            "current_layer",
+            &layer_val)) {
         printer_current_layer = (int)(layer_val + 0.5);
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"info\"", "total_layer", &layer_val)) {
+    if (print_info_json &&
+        json_find_number_after(
+            print_info_json,
+            "\"info\"",
+            "total_layer",
+            &layer_val)) {
         printer_total_layer = (int)(layer_val + 0.5);
+    }
+
+    /*
+     * Klipper commonly leaves print_stats.info layer values null.
+     * Match Moonraker's displayed layer using current G-code Z and
+     * the active file's layer metadata.
+     */
+    const char *gcode_move_json =
+        strstr(s_moonraker_objects, "\"gcode_move\"");
+
+    const char *gcode_position_json =
+        gcode_move_json
+            ? strstr(gcode_move_json, "\"position\"")
+            : NULL;
+
+    const char *gcode_position_array =
+        gcode_position_json
+            ? strchr(gcode_position_json, '[')
+            : NULL;
+
+    if (gcode_position_array) {
+        double x = 0.0;
+        double y = 0.0;
+        double z = 0.0;
+
+        if (sscanf(gcode_position_array,
+                   "[ %lf , %lf , %lf",
+                   &x,
+                   &y,
+                   &z) == 3) {
+            printer_current_z = z;
+        }
+    }
+
+    if (printer_current_layer <= 0 ||
+        printer_total_layer <= 0) {
+        double object_height = 0.0;
+        double layer_height = 0.0;
+
+        if (thumbnail_session_v32_get_layer_metadata(
+                &object_height,
+                &layer_height) &&
+            object_height > 0.0 &&
+            layer_height > 0.0) {
+
+            printer_meta_object_height = object_height;
+            printer_meta_layer_height = layer_height;
+
+            printer_total_layer =
+                (int)floor(
+                    (object_height / layer_height) +
+                    0.001);
+
+            if (printer_current_z >= 0.0) {
+                printer_current_layer =
+                    (int)floor(
+                        (printer_current_z / layer_height) +
+                        0.001);
+
+                if (printer_current_layer < 1 &&
+                    printer_current_z > 0.0) {
+                    printer_current_layer = 1;
+                }
+
+                if (printer_current_layer >
+                    printer_total_layer) {
+                    printer_current_layer =
+                        printer_total_layer;
+                }
+            }
+        }
     }
 
     json_find_number_after(s_moonraker_objects, "\"extruder\"", "temperature", &printer_nozzle_temp);
@@ -1068,12 +1217,25 @@ static void update_dashboard_status_cards(
     ui_dashboard_status_v32_refresh(mr_state->progress,
                                     mr_state->print_duration);
 
-    if (mr_state->current_layer > 0 || mr_state->total_layer > 0) {
+    int display_current_layer = mr_state->current_layer;
+    int display_total_layer = mr_state->total_layer;
+
+    /*
+     * Some Klipper configurations do not publish
+     * print_stats.info.current_layer/total_layer. Moonraker can still
+     * display layer information using the active file metadata.
+     *
+     * Use the same metadata already fetched for the active-print
+     * thumbnail as a Dashboard fallback.
+     */
+
+    if (display_current_layer > 0 &&
+        display_total_layer > 0) {
         snprintf(layer,
                  sizeof(layer),
                  "%d/%d",
-                 mr_state->current_layer,
-                 mr_state->total_layer);
+                 display_current_layer,
+                 display_total_layer);
     } else {
         snprintf(layer, sizeof(layer), "--/--");
     }
@@ -1086,8 +1248,6 @@ static void update_dashboard_status_cards(
                                         mr_state->progress,
                                         mr_state->print_duration);
     ui_dashboard_v32_set_active_print(layer, elapsed, remaining);
-
-    ui_dashboard_v32_set_active_print_file(mr_state->printer_file);
 
     ui_dashboard_status_v32_set_print_state(
         dash_print_state_text());
@@ -1692,28 +1852,19 @@ static void ui_dashboard_v32_push_live_banner_data(void)
             "--%%");
     }
 
-    if (printer_eta_label) {
-        const char *txt =
-            lv_label_get_text(printer_eta_label);
+    char eta_clock[32];
 
-        if (txt && txt[0]) {
-            snprintf(
-                eta,
-                sizeof(eta),
-                "%s",
-                txt);
-        } else {
-            snprintf(
-                eta,
-                sizeof(eta),
-                "ETA --:--");
-        }
-    } else {
-        snprintf(
-            eta,
-            sizeof(eta),
-            "ETA --:--");
-    }
+    printer_controller_format_eta_clock(
+        eta_clock,
+        sizeof(eta_clock),
+        mr_state->progress,
+        mr_state->print_duration);
+
+    snprintf(
+        eta,
+        sizeof(eta),
+        "ETA %s",
+        eta_clock);
 
     ui_dashboard_v32_set_banner(
         state,

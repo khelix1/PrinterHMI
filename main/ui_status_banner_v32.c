@@ -224,7 +224,7 @@ lv_obj_t *ui_status_banner_v32_create(
 
     lv_label_set_long_mode(
         ctx->file,
-        LV_LABEL_LONG_DOT);
+        LV_LABEL_LONG_SCROLL_CIRCULAR);
 
     ui_apply_text_value_small(
         ctx->file);

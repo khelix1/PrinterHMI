@@ -10,7 +10,6 @@
 typedef struct {
     lv_obj_t *preview_box;
     lv_obj_t *preview_label;
-    lv_obj_t *filename;
     lv_obj_t *footer;
 } active_print_ctx_t;
 
@@ -303,35 +302,6 @@ lv_obj_t *ui_active_print_v32_create_profile(
         layout->heading_x,
         layout->heading_y);
 
-    ctx->filename = lv_label_create(panel);
-
-    lv_label_set_text(
-        ctx->filename,
-        "No active file");
-
-    lv_obj_set_width(
-        ctx->filename,
-        w - layout->filename_x - 20);
-
-    lv_label_set_long_mode(
-        ctx->filename,
-        LV_LABEL_LONG_DOT);
-
-    ui_apply_text_body(
-        ctx->filename);
-    ui_apply_label_bright(
-        ctx->filename);
-
-    lv_obj_set_style_text_align(
-        ctx->filename,
-        LV_TEXT_ALIGN_RIGHT,
-        0);
-
-    lv_obj_set_pos(
-        ctx->filename,
-        layout->filename_x,
-        layout->filename_y);
-
     /*
      * The expanded Dashboard card gives the preview another 30 px
      * vertically while preserving its established width and canvas path.
@@ -453,27 +423,6 @@ lv_obj_t *ui_active_print_v32_create_profile(
     return panel;
 }
 
-
-void ui_active_print_v32_set_filename(lv_obj_t *panel,
-                                      const char *filename)
-{
-    if (!panel) panel = s_active_print_panel;
-    if (!panel) return;
-
-    active_print_ctx_t *ctx =
-        (active_print_ctx_t *)lv_obj_get_user_data(panel);
-    if (!ctx || !ctx->filename) return;
-
-    if (!filename ||
-        !filename[0] ||
-        strcmp(filename, "No file") == 0 ||
-        strcmp(filename, "--") == 0) {
-        lv_label_set_text(ctx->filename, "No active file");
-        return;
-    }
-
-    lv_label_set_text(ctx->filename, filename);
-}
 
 void ui_active_print_v32_set(lv_obj_t *panel,
                              const char *layer,

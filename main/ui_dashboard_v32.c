@@ -148,11 +148,12 @@ void ui_dashboard_v32_create(void)
 
 void ui_dashboard_v32_set_active_print_file(const char *filename)
 {
-    if (!dash32_active_print) return;
-
-    ui_active_print_v32_set_filename(
-        dash32_active_print,
-        filename);
+    /*
+     * The active filename now belongs exclusively to the Dashboard
+     * status banner. Preserve this compatibility API as a no-op so
+     * older call sites do not require immediate removal.
+     */
+    (void)filename;
 }
 
 void ui_dashboard_v32_set_active_print(const char *layer,

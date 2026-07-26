@@ -36,7 +36,8 @@ publishing repository history.
 - Auto-scaling combined temperature and humidity telemetry
 - Operator event history and configuration backup/restore
 - Network configuration with Moonraker discovery inside printer profile Add/Edit
-- Classic, Operator and Dark Glass runtime themes
+- Classic, Operator and Dark Glass runtime themes plus validated SD-card
+  custom themes created with PrinterHMI Theme Studio
 - Accent, density, high-contrast, large-text, reduced-transparency and
   reduced-motion appearance settings
 - Persistent brightness, display sleep and timezone configuration
@@ -94,6 +95,7 @@ network credentials or API keys.
 - [Build instructions](docs/BUILDING.md)
 - [Hardware](docs/HARDWARE.md)
 - [Configuration and persistence](docs/CONFIGURATION.md)
+- [Custom themes](docs/CUSTOM_THEMES.md)
 - [Flashing and OTA](docs/FLASHING_AND_OTA.md)
 - [Testing](docs/TESTING.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)

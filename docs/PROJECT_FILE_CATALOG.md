@@ -15,6 +15,7 @@ when ownership or build membership changes.
 | --- | --- |
 | `ui_theme`, `ui_theme_a`, `ui_theme_b`, `ui_theme_c` | Runtime theme contract and three implementations |
 | `theme_manager` | Persistent theme, accent, density and accessibility state |
+| `custom_theme` | SD-card custom-theme discovery, validation, overrides and removal |
 | `ui_theme_preview`, `ui_theme_lab`, `ui_appearance_popups` | Theme selection and operator preview tools |
 | `ui_widgets`, `ui_button`, `ui_cards`, `ui_popup` | Shared controls and modal popup system |
 | `ui_page_title`, `ui_page_state_v32`, `ui_toast_v32` | Shared page and transient-state components |

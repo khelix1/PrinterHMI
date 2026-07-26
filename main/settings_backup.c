@@ -30,6 +30,7 @@ typedef struct {
     int active_profile;
 
     ui_theme_id_t theme;
+    char custom_theme_id[CUSTOM_THEME_ID_MAX + 1];
     ui_accent_id_t accent;
     ui_density_id_t density;
     ui_accessibility_t accessibility;
@@ -170,6 +171,12 @@ static void capture_current(
         moonraker_config_active_profile_index();
 
     snapshot->theme = theme_manager_active();
+    if (theme_manager_custom_active()) {
+        strlcpy(
+            snapshot->custom_theme_id,
+            custom_theme_active_id(),
+            sizeof(snapshot->custom_theme_id));
+    }
     snapshot->accent = theme_manager_accent();
     snapshot->density = theme_manager_density();
     snapshot->accessibility =
@@ -280,6 +287,11 @@ static cJSON *snapshot_to_json(
         appearance,
         "theme",
         snapshot->theme);
+
+    cJSON_AddStringToObject(
+        appearance,
+        "custom_theme_id",
+        snapshot->custom_theme_id);
 
     cJSON_AddNumberToObject(
         appearance,
@@ -549,6 +561,26 @@ static bool parse_snapshot(
     snapshot->accent = (ui_accent_id_t)accent;
     snapshot->density = (ui_density_id_t)density;
 
+    const cJSON *custom_theme_id =
+        cJSON_GetObjectItemCaseSensitive(
+            appearance,
+            "custom_theme_id");
+    if (cJSON_IsString(custom_theme_id) &&
+        custom_theme_id->valuestring) {
+        if (strlen(custom_theme_id->valuestring) >
+            CUSTOM_THEME_ID_MAX) {
+            set_status(
+                status,
+                status_size,
+                "Backup custom-theme identity is invalid.");
+            return false;
+        }
+        strlcpy(
+            snapshot->custom_theme_id,
+            custom_theme_id->valuestring,
+            sizeof(snapshot->custom_theme_id));
+    }
+
     int timezone_index = 0;
     int brightness = 0;
     int sleep_timeout = 0;
@@ -603,8 +635,14 @@ static bool apply_snapshot(
         return false;
     }
 
+    bool theme_applied =
+        snapshot->custom_theme_id[0]
+            ? theme_manager_select_custom_id(
+                snapshot->custom_theme_id)
+            : theme_manager_select(snapshot->theme);
+
     return
-        theme_manager_select(snapshot->theme) &&
+        theme_applied &&
         theme_manager_select_accent(snapshot->accent) &&
         theme_manager_select_density(snapshot->density) &&
         theme_manager_set_accessibility(

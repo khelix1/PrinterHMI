@@ -1,5 +1,6 @@
 #include "ui_dashboard_layout_profile.h"
 
+#include "custom_theme.h"
 /*
  * Dashboard composition belongs here. The page model, live setters,
  * thumbnail session, and action callbacks remain shared by every theme.
@@ -110,6 +111,10 @@ ui_dashboard_layout_profile_for_theme(ui_theme_id_t theme)
 const ui_dashboard_layout_profile_t *
 ui_dashboard_layout_profile_current(void)
 {
-    return ui_dashboard_layout_profile_for_theme(
-        ui_theme_get_active());
+    const ui_dashboard_layout_profile_t *custom =
+        custom_theme_dashboard_profile();
+    return custom
+        ? custom
+        : ui_dashboard_layout_profile_for_theme(
+            ui_theme_get_active());
 }

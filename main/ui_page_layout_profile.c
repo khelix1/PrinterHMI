@@ -1,5 +1,6 @@
 #include "ui_page_layout_profile.h"
 
+#include "custom_theme.h"
 #include "ui_theme.h"
 
 static const ui_page_layout_profile_t s_operator = {
@@ -125,9 +126,10 @@ static const ui_page_layout_profile_t s_glass = {
     },
 };
 
-const ui_page_layout_profile_t *ui_page_layout_profile_current(void)
+const ui_page_layout_profile_t *
+ui_page_layout_profile_for_theme(ui_theme_id_t theme)
 {
-    switch (ui_theme_get_active()) {
+    switch (theme) {
         case UI_THEME_CLASSIC:
             return &s_foundry;
         case UI_THEME_GLASS:
@@ -136,4 +138,14 @@ const ui_page_layout_profile_t *ui_page_layout_profile_current(void)
         default:
             return &s_operator;
     }
+}
+
+const ui_page_layout_profile_t *ui_page_layout_profile_current(void)
+{
+    const ui_page_layout_profile_t *custom =
+        custom_theme_page_profile();
+    return custom
+        ? custom
+        : ui_page_layout_profile_for_theme(
+            ui_theme_get_active());
 }

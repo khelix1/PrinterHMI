@@ -9,6 +9,7 @@ idf_component_register(
         "ui_theme_b.c"
         "ui_theme_c.c"
         "theme_manager.c"
+        "custom_theme.c"
         "ui_theme_preview.c"
         "ui_theme_lab.c"
         "ui_appearance_popups.c"

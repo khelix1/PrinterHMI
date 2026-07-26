@@ -39,7 +39,11 @@ credentials. They are not acceptable release defaults; see
 | `netcfg` | `ssid`, `pass` | Wi-Fi configuration |
 | `netcfg` | `mp_schema`, `mp_active`, `pN_used`, `pN_name`, `pN_host`, `pN_port` | Multi-printer profiles |
 | `display` | `brightness`, `sleep_min` | Display settings |
-| `ui_theme` | `active`, `accent`, `density`, `large_text`, `contrast`, `solid_glass`, `reduce_motion` | Appearance manager |
+| `ui_theme` | `active`, `custom_id`, `accent`, `density`, `large_text`, `contrast`, `solid_glass`, `reduce_motion` | Appearance manager |
+
+Custom `.phmitheme` packages are discovered from
+`/sdcard/PrinterHMI/themes/`. See [Custom themes](CUSTOM_THEMES.md) for the
+package contract, validation limits and fallback behavior.
 | `time_cfg` | `zone_id` | Timezone configuration |
 | `ota` | `url` | OTA manager |
 | `hmi` | `last_file` | Thumbnail/session restore |

@@ -56,3 +56,5 @@ typedef struct {
 } ui_page_layout_profile_t;
 
 const ui_page_layout_profile_t *ui_page_layout_profile_current(void);
+const ui_page_layout_profile_t *
+ui_page_layout_profile_for_theme(ui_theme_id_t theme);

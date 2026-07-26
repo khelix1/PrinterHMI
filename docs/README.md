@@ -9,6 +9,7 @@ under `history/`.
 | [Build](BUILDING.md) | Toolchain, dependencies and reproducible build |
 | [Hardware](HARDWARE.md) | Target board, display, touch, SD and flash layout |
 | [Configuration](CONFIGURATION.md) | Operator settings and persistent state |
+| [Custom themes](CUSTOM_THEMES.md) | SD package format, validation and recovery |
 | [Flashing and OTA](FLASHING_AND_OTA.md) | USB installation, OTA and recovery |
 | [Testing](TESTING.md) | Required host and target validation |
 | [Troubleshooting](TROUBLESHOOTING.md) | Diagnostic and recovery procedures |

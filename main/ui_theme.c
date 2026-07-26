@@ -1,5 +1,6 @@
 #include "ui_theme.h"
 
+#include "custom_theme.h"
 #include "ui_theme_a.h"
 #include "ui_theme_b.h"
 #include "ui_theme_c.h"
@@ -58,6 +59,15 @@ lv_color_t ui_theme_color(uint32_t operator_rgb,
                           uint32_t foundry_rgb,
                           uint32_t glass_rgb)
 {
+    uint32_t custom_rgb = 0;
+    if (custom_theme_color_override(
+            operator_rgb,
+            foundry_rgb,
+            glass_rgb,
+            &custom_rgb)) {
+        return lv_color_hex(custom_rgb);
+    }
+
     if (s_active_theme == UI_THEME_CLASSIC) {
         return lv_color_hex(foundry_rgb);
     }
@@ -71,6 +81,15 @@ int32_t ui_theme_metric(int32_t operator_value,
                         int32_t foundry_value,
                         int32_t glass_value)
 {
+    int32_t custom_value = 0;
+    if (custom_theme_metric_override(
+            operator_value,
+            foundry_value,
+            glass_value,
+            &custom_value)) {
+        return custom_value;
+    }
+
     if (s_active_theme == UI_THEME_CLASSIC) {
         return foundry_value;
     }
@@ -120,6 +139,12 @@ lv_color_t ui_theme_accent_color(uint32_t operator_rgb,
                                  uint8_t tone)
 {
     if (s_active_accent == UI_ACCENT_DEFAULT) {
+        uint32_t custom_rgb = 0;
+        if (custom_theme_accent_override(
+                tone,
+                &custom_rgb)) {
+            return lv_color_hex(custom_rgb);
+        }
         return ui_theme_color(operator_rgb, foundry_rgb, glass_rgb);
     }
 
@@ -194,6 +219,18 @@ bool ui_theme_motion_enabled(void)
         }                                                \
     } while (0)
 
+static void apply_custom_surface_opacity(lv_obj_t *object)
+{
+    uint8_t opacity = 0;
+    if (object &&
+        custom_theme_surface_opacity(&opacity)) {
+        lv_obj_set_style_bg_opa(
+            object,
+            (lv_opa_t)opacity,
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+}
+
 void ui_apply_root_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_root_style, obj);
@@ -202,16 +239,19 @@ void ui_apply_root_style(lv_obj_t *obj)
 void ui_apply_panel_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_panel_style, obj);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_card_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_card_style, obj);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_banner_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_banner_style, obj);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_banner_status_style(
@@ -220,32 +260,38 @@ void ui_apply_banner_status_style(
 {
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_banner_style(obj);
+        apply_custom_surface_opacity(obj);
         return;
     }
 
     if (s_active_theme == UI_THEME_GLASS) {
         ui_theme_c_apply_banner_status_style(obj, kind);
+        apply_custom_surface_opacity(obj);
         return;
     }
 
     ui_theme_b_apply_banner_status_style(
         obj,
         kind);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_preview_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_preview_style, obj);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_info_box_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_info_box_style, obj);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_popup_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_popup_style, obj);
+    apply_custom_surface_opacity(obj);
 
     /*
      * Shared popup primitives use explicit coordinates measured from the
@@ -262,6 +308,7 @@ void ui_apply_popup_style(lv_obj_t *obj)
 void ui_apply_dialog_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_dialog_style, obj);
+    apply_custom_surface_opacity(obj);
 }
 
 void ui_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
@@ -272,6 +319,16 @@ void ui_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
         ui_theme_c_apply_surface_role(obj, role);
     } else {
         ui_theme_b_apply_surface_role(obj, role);
+    }
+
+    switch (role) {
+        case UI_SURFACE_TRANSPARENT:
+        case UI_SURFACE_DIVIDER:
+        case UI_SURFACE_INDICATOR:
+            break;
+        default:
+            apply_custom_surface_opacity(obj);
+            break;
     }
 }
 

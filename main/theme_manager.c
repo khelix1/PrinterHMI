@@ -1,10 +1,12 @@
 #include "theme_manager.h"
 
+#include "custom_theme.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "nvs.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #define THEME_NVS_NAMESPACE "ui_theme"
 #define THEME_NVS_ACTIVE_KEY "active"
@@ -14,8 +16,10 @@
 #define THEME_NVS_CONTRAST_KEY "contrast"
 #define THEME_NVS_SOLID_KEY "solid_glass"
 #define THEME_NVS_MOTION_KEY "reduce_motion"
+#define THEME_NVS_CUSTOM_KEY "custom_id"
 
 static const char *TAG = "theme_manager";
+static char s_pending_custom_id[CUSTOM_THEME_ID_MAX + 1] = "";
 
 static bool save_u8(const char *key, uint8_t value)
 {
@@ -46,6 +50,19 @@ static uint8_t load_u8(nvs_handle_t handle,
     uint8_t value = fallback;
     if (nvs_get_u8(handle, key, &value) != ESP_OK) return fallback;
     return value;
+}
+
+static void load_custom_id(nvs_handle_t handle)
+{
+    size_t length = sizeof(s_pending_custom_id);
+    s_pending_custom_id[0] = 0;
+    if (nvs_get_str(
+            handle,
+            THEME_NVS_CUSTOM_KEY,
+            s_pending_custom_id,
+            &length) != ESP_OK) {
+        s_pending_custom_id[0] = 0;
+    }
 }
 
 static bool theme_valid(ui_theme_id_t theme)
@@ -99,6 +116,7 @@ void theme_manager_init(void)
             handle, THEME_NVS_SOLID_KEY, 0) != 0;
         accessibility.reduced_motion = load_u8(
             handle, THEME_NVS_MOTION_KEY, 0) != 0;
+        load_custom_id(handle);
         nvs_close(handle);
     }
 
@@ -131,6 +149,9 @@ ui_theme_id_t theme_manager_active(void)
 
 const char *theme_manager_active_label(void)
 {
+    if (custom_theme_is_active()) {
+        return custom_theme_active_name();
+    }
     return theme_label(ui_theme_get_active());
 }
 
@@ -159,6 +180,15 @@ bool theme_manager_select(ui_theme_id_t theme)
         (uint8_t)theme);
 
     if (error == ESP_OK) {
+        error = nvs_erase_key(
+            handle,
+            THEME_NVS_CUSTOM_KEY);
+        if (error == ESP_ERR_NVS_NOT_FOUND) {
+            error = ESP_OK;
+        }
+    }
+
+    if (error == ESP_OK) {
         error = nvs_commit(handle);
     }
 
@@ -171,12 +201,126 @@ bool theme_manager_select(ui_theme_id_t theme)
         return false;
     }
 
+    custom_theme_deactivate();
+    s_pending_custom_id[0] = 0;
     ui_theme_set_active(theme);
 
     ESP_LOGI(TAG,
              "Selected theme: %s",
              theme_label(theme));
     return true;
+}
+
+size_t theme_manager_scan_custom_themes(void)
+{
+    size_t count = custom_theme_scan_sd();
+
+    if (s_pending_custom_id[0] &&
+        custom_theme_activate_id(
+            s_pending_custom_id)) {
+        ESP_LOGI(TAG,
+                 "Restored custom theme: %s",
+                 custom_theme_active_name());
+    } else if (s_pending_custom_id[0]) {
+        ESP_LOGW(TAG,
+                 "Saved custom theme unavailable: %s",
+                 s_pending_custom_id);
+    }
+
+    return count;
+}
+
+size_t theme_manager_custom_count(void)
+{
+    return custom_theme_count();
+}
+
+const custom_theme_summary_t *
+theme_manager_custom_summary(size_t index)
+{
+    return custom_theme_summary(index);
+}
+
+bool theme_manager_select_custom(size_t index)
+{
+    const custom_theme_summary_t *summary =
+        custom_theme_summary(index);
+    if (!summary) return false;
+
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(
+        THEME_NVS_NAMESPACE,
+        NVS_READWRITE,
+        &handle);
+    if (error != ESP_OK) return false;
+
+    error = nvs_set_u8(
+        handle,
+        THEME_NVS_ACTIVE_KEY,
+        (uint8_t)summary->base_theme);
+    if (error == ESP_OK) {
+        error = nvs_set_str(
+            handle,
+            THEME_NVS_CUSTOM_KEY,
+            summary->id);
+    }
+    if (error == ESP_OK) error = nvs_commit(handle);
+    nvs_close(handle);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG,
+                 "Could not save custom theme: %s",
+                 esp_err_to_name(error));
+        return false;
+    }
+
+    if (!custom_theme_activate(index)) {
+        return false;
+    }
+    strlcpy(
+        s_pending_custom_id,
+        summary->id,
+        sizeof(s_pending_custom_id));
+    return true;
+}
+
+bool theme_manager_select_custom_id(const char *id)
+{
+    if (!id || !id[0]) return false;
+    for (size_t index = 0;
+         index < custom_theme_count();
+         ++index) {
+        const custom_theme_summary_t *summary =
+            custom_theme_summary(index);
+        if (summary &&
+            strcmp(summary->id, id) == 0) {
+            return theme_manager_select_custom(index);
+        }
+    }
+    return false;
+}
+
+bool theme_manager_remove_custom(size_t index)
+{
+    const custom_theme_summary_t *summary =
+        custom_theme_summary(index);
+    if (!summary) return false;
+
+    bool removing_active =
+        custom_theme_is_active() &&
+        strcmp(custom_theme_active_id(),
+               summary->id) == 0;
+
+    if (removing_active &&
+        !theme_manager_select(UI_THEME_OPERATOR)) {
+        return false;
+    }
+
+    return custom_theme_remove(index);
+}
+
+bool theme_manager_custom_active(void)
+{
+    return custom_theme_is_active();
 }
 
 ui_accent_id_t theme_manager_accent(void)

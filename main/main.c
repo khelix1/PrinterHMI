@@ -3862,6 +3862,18 @@ static void init_sd_card_storage(void)
         ESP_LOGW(TAG, "SD write test failed errno=%d", errno);
     }
 
+    /*
+     * Custom themes live on removable storage, so their saved identity can
+     * only be resolved after the delayed SD mount. Rebuild existing LVGL
+     * objects once when a saved custom theme becomes available.
+     */
+    theme_manager_scan_custom_themes();
+    if (theme_manager_custom_active() &&
+        bsp_display_lock(1000)) {
+        app_theme_changed();
+        bsp_display_unlock();
+    }
+
 }
 
 

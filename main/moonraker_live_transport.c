@@ -100,6 +100,7 @@ bool moonraker_live_transport_fetch(
         "&gcode_macro%%20DRYBOX_VARS"
         "&print_stats&motion_report"
         "&display_status"
+        "&virtual_sdcard"
         "&gcode_move"
         "&fan"
         "&extruder"

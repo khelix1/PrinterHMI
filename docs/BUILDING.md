@@ -8,7 +8,7 @@
 | Target | `esp32p4` |
 | Compiler architecture | RISC-V |
 | Flash size | 16 MiB |
-| LVGL | 9.2.2 |
+| LVGL | 9.5.0 |
 | Color depth | RGB565 / 16-bit |
 | FreeRTOS tick | 1000 Hz |
 | Main task stack | 8192 bytes |
@@ -77,7 +77,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v4.1.0.
+- `partitions.csv` is the only supported partition layout for v4.2.0.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy

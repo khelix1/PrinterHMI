@@ -7,6 +7,32 @@ v4.0.0 is preserved under `docs/history/`.
 
 No changes yet.
 
+## [4.2.0] - 2026-07-25
+
+### Added
+
+- Added versioned custom-theme packages loaded from the SD card.
+- Added custom-theme discovery, validation, preview, selection, persistence,
+  configuration backup/restore and protected removal.
+- Added per-page custom layout geometry, palette, radius and surface-opacity
+  overrides with built-in theme fallbacks.
+
+### Changed
+
+- Upgraded LVGL from 9.2.2 to 9.5.0.
+- Kept Foundry, Operator and Dark Glass compiled into firmware as protected
+  fallback themes.
+
+### Fixed
+
+- Added missing standard I/O declarations found by the LVGL clean rebuild.
+
+### Validation
+
+- Verified a clean ESP-IDF 5.4.4 build with LVGL 9.5.0.
+- Verified startup, navigation, built-in themes, popups, previews, telemetry,
+  scrolling and display sleep/wake on target hardware.
+
 ## [4.1.0] - 2026-07-24
 
 ### Added

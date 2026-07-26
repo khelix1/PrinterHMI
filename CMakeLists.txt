@@ -2,6 +2,12 @@
 # PRINTERHMI_VERSION_IDENTITY_V1
 cmake_minimum_required(VERSION 3.5)
 
+set_property(
+    DIRECTORY APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_LIST_DIR}/version.txt"
+)
+
 file(STRINGS
     "${CMAKE_CURRENT_LIST_DIR}/version.txt"
     PRINTERHMI_VERSION

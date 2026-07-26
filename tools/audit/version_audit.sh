@@ -41,6 +41,8 @@ require_text CMakeLists.txt \
     "PRINTERHMI_VERSION"
 require_text CMakeLists.txt \
     'set(PROJECT_VER "${PRINTERHMI_VERSION}")'
+require_text CMakeLists.txt \
+    "CMAKE_CONFIGURE_DEPENDS"
 
 if rg -n \
     '"v?[0-9]+\.[0-9]+\.[0-9]+"' \

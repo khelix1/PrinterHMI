@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V1
 expected_origin_repo="khelix1/PrinterHMI_v3_2"
-version="4.1.0"
+version="4.2.0"
 tag="v${version}"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -105,7 +105,7 @@ echo "Building PrinterHMI ${tag} from ${short_commit}..."
 idf.py build
 
 firmware="$repo_dir/build/PrinterHMI.bin"
-notes="$repo_dir/docs/releases/v4.1.0.md"
+notes="$repo_dir/docs/releases/v4.2.0.md"
 
 [[ -s "$firmware" ]] || {
     echo "ERROR: firmware not found: $firmware" >&2

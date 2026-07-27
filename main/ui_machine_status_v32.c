@@ -137,8 +137,8 @@ lv_obj_t *ui_machine_status_v32_create_profile(
         "BED",
         "AIR TEMPERATURE",
         "HUMIDITY",
-        "SPEED FACTOR",
-        "FLOW FACTOR",
+        "SPEED",
+        "FLOW",
         "PART FAN",
         "FILAMENT",
     };
@@ -148,8 +148,8 @@ lv_obj_t *ui_machine_status_v32_create_profile(
         "-- / -- C",
         "-- C",
         "-- %RH",
-        "100%",
-        "100%",
+        "-- mm/s",
+        "-- mm3/s",
         "--%",
         "N/A",
     };

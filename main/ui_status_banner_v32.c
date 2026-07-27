@@ -226,6 +226,15 @@ lv_obj_t *ui_status_banner_v32_create(
         ctx->file,
         LV_LABEL_LONG_SCROLL_CIRCULAR);
 
+    /*
+     * Slow the active filename marquee so long names remain readable.
+     * LVGL uses this duration for one complete circular-scroll cycle.
+     */
+    lv_obj_set_style_anim_duration(
+        ctx->file,
+        14000,
+        0);
+
     ui_apply_text_value_small(
         ctx->file);
 

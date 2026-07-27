@@ -431,32 +431,13 @@ void ui_printer_live_status_create(
 
     lv_obj_set_pos(title, 330, 12);
 
+    /*
+     * The shared status banner already owns the active filename.
+     * Keep the compatibility output clear, but do not create a duplicate
+     * filename inside the Printer Active Print card.
+     */
     if (active_file_label) {
-        *active_file_label =
-            lv_label_create(card);
-
-        lv_label_set_text(
-            *active_file_label,
-            "FILE: --");
-
-        lv_obj_set_width(
-            *active_file_label,
-            300);
-
-        lv_label_set_long_mode(
-            *active_file_label,
-            LV_LABEL_LONG_DOT);
-
-        ui_apply_text_body(
-            *active_file_label);
-
-        ui_apply_label_bright(
-            *active_file_label);
-
-        lv_obj_set_pos(
-            *active_file_label,
-            470,
-            14);
+        *active_file_label = NULL;
     }
 
     lv_obj_t *divider =
@@ -742,36 +723,15 @@ void ui_printer_live_status_refresh(
     bool moonraker_online,
     const moonraker_filament_state_t *filament_state)
 {
-    if (printer_panel &&
-        active_file_box &&
-        active_file_label) {
-        bool active_job =
-            printer_controller_has_active_job(
-                printer_state,
-                printer_file);
-
-        if (active_job) {
-            char file_text[300];
-
-            snprintf(
-                file_text,
-                sizeof(file_text),
-                "FILE: %s",
-                printer_file);
-
-            lv_label_set_text(
-                active_file_label,
-                file_text);
-
-            lv_obj_remove_flag(
-                active_file_box,
-                LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(
-                active_file_box,
-                LV_OBJ_FLAG_HIDDEN);
-        }
-    }
+    /*
+     * Filename presentation belongs to the shared status banner.
+     * The Active Print card remains visible and contains thumbnail,
+     * layer, live speed, live flow, filament, and tuning controls.
+     */
+    (void)active_file_box;
+    (void)active_file_label;
+    (void)printer_state;
+    (void)printer_file;
 
     if (printer_panel && speed_label) {
         char text[48];

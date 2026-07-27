@@ -1981,17 +1981,35 @@ static void ui_dashboard_v32_push_live_machine_data(void)
         }
     }
 
-    snprintf(
-        speed,
-        sizeof(speed),
-        "%.0f%%",
-        mr_state->speed_factor);
+    /*
+     * Machine Status reports actual live process values.
+     * M220/M221 tuning factors remain editable on the Printer page.
+     */
+    if (mr_state->live_velocity >= 0.0) {
+        snprintf(
+            speed,
+            sizeof(speed),
+            "%.0f mm/s",
+            mr_state->live_velocity);
+    } else {
+        snprintf(
+            speed,
+            sizeof(speed),
+            "-- mm/s");
+    }
 
-    snprintf(
-        flow,
-        sizeof(flow),
-        "%.0f%%",
-        mr_state->flow_factor);
+    if (mr_state->live_flow >= 0.0) {
+        snprintf(
+            flow,
+            sizeof(flow),
+            "%.1f mm3/s",
+            mr_state->live_flow);
+    } else {
+        snprintf(
+            flow,
+            sizeof(flow),
+            "-- mm3/s");
+    }
 
     if (mr_state->capabilities.discovered &&
         !mr_state->capabilities.has_part_fan) {

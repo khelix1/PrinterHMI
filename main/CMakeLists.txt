@@ -1,5 +1,6 @@
 idf_component_register(
     SRCS
+        "dashboard_runtime_controller.c"
         # Application entry point
         "main.c"
 
@@ -30,6 +31,7 @@ idf_component_register(
 
         # Dashboard
         "ui_dashboard_v32.c"
+        "dashboard_live_controller.c"
         "ui_dashboard_layout_profile.c"
         "ui_page_layout_profile.c"
         "ui_dashboard_page_v32.c"

@@ -181,6 +181,8 @@ static void sntp_wait_task(void *arg);
 #include "printer_file_controller.h"
 
 #include "files_page_controller.h"
+#include "dashboard_live_controller.h"
+#include "dashboard_runtime_controller.h"
 void ui_shell_raise(void)
 {
     ui_shell_raise_topbar();
@@ -1175,228 +1177,9 @@ static lv_color_t temp_value_color(double temp, double target)
     return UI_OK_BRIGHT;                    // at/near target
 }
 
-static void update_dashboard_status_cards(
-    const moonraker_state_t *mr_state)
-{
-    char buf[64];
-    char layer[32];
-    char elapsed[32];
-    char remaining[32];
-
-    if (dash_nozzle_label) {
-        if (mr_state->nozzle_temp > -100.0) {
-            snprintf(buf,
-                     sizeof(buf),
-                     "%.1f / %.1f C",
-                     mr_state->nozzle_temp,
-                     mr_state->nozzle_target);
-        } else {
-            snprintf(buf, sizeof(buf), "-- / -- C");
-        }
-
-        lv_label_set_text(dash_nozzle_label, buf);
-        lv_obj_set_style_text_color(
-            dash_nozzle_label,
-            temp_value_color(mr_state->nozzle_temp,
-                             mr_state->nozzle_target),
-            0);
-    }
-
-    if (dash_bed_label) {
-        if (mr_state->bed_temp > -100.0) {
-            snprintf(buf,
-                     sizeof(buf),
-                     "%.1f / %.1f C",
-                     mr_state->bed_temp,
-                     mr_state->bed_target);
-        } else {
-            snprintf(buf, sizeof(buf), "-- / -- C");
-        }
-
-        lv_label_set_text(dash_bed_label, buf);
-        lv_obj_set_style_text_color(
-            dash_bed_label,
-            temp_value_color(mr_state->bed_temp,
-                             mr_state->bed_target),
-            0);
-    }
-
-    ui_dashboard_status_v32_refresh(mr_state->progress,
-                                    mr_state->print_duration);
-
-    int display_current_layer = mr_state->current_layer;
-    int display_total_layer = mr_state->total_layer;
-
-    /*
-     * Some Klipper configurations do not publish
-     * print_stats.info.current_layer/total_layer. Resolve the same metadata
-     * fallback used by the Printer page before formatting the Dashboard.
-     */
-    printer_layer_result_t display_layers =
-        printer_layer_resolver_resolve(
-            display_current_layer,
-            display_total_layer,
-            printer_current_z,
-            printer_meta_object_height,
-            printer_meta_layer_height,
-            mr_state->progress);
-
-    display_current_layer = display_layers.current;
-    display_total_layer = display_layers.total;
-
-    if (display_current_layer > 0 &&
-        display_total_layer > 0) {
-        snprintf(layer,
-                 sizeof(layer),
-                 "%d/%d",
-                 display_current_layer,
-                 display_total_layer);
-    } else {
-        snprintf(layer, sizeof(layer), "--/--");
-    }
-
-    printer_controller_format_hhmm(elapsed,
-                                   sizeof(elapsed),
-                                   mr_state->print_duration);
-    printer_controller_format_remaining(remaining,
-                                        sizeof(remaining),
-                                        mr_state->progress,
-                                        mr_state->print_duration);
-    ui_dashboard_v32_set_active_print(layer, elapsed, remaining);
-
-    ui_dashboard_status_v32_set_print_state(
-        dash_print_state_text());
-
-}
-
 static void thumbnail_preview_coordinator_v32_set_live_target(void)
 {
     printer_thumb_target = THUMB_TARGET_LIVE;
-}
-
-static void update_dashboard_live_preview(
-    const moonraker_state_t *mr_state)
-{
-    thumbnail_preview_coordinator_v32_context_t context = {
-        .printer_state = mr_state->printer_state,
-        .printer_file = mr_state->printer_file,
-
-        .moonraker_host = moonraker_config_host(),
-        .moonraker_port = moonraker_config_port(),
-
-        .selected_print_file = thumbnail_session_v32_selected_file(),
-        .selected_print_file_size = thumbnail_session_v32_selected_file_size(),
-
-        .selected_thumbnail_path = thumbnail_session_v32_selected_thumbnail_path(),
-
-        .dashboard_canvas_file =
-            ui_dashboard_v32_thumb_canvas_file(),
-        .printer_canvas_file =
-            ui_printer_v32_preview_canvas_file(),
-
-        .dashboard_canvas = &dash_thumb_canvas,
-        .dashboard_image = &dash_thumb_img,
-        .printer_canvas = ui_printer_v32_preview_canvas_ref(),
-        .printer_image = ui_printer_v32_preview_image_ref(),
-
-        .metadata_info = thumbnail_session_v32_metadata_info(),
-        .metadata_info_size = thumbnail_session_v32_metadata_info_size(),
-
-        .set_live_target =
-            thumbnail_preview_coordinator_v32_set_live_target,
-        .free_thumbnail = thumbnail_session_v32_free_thumbnail,
-        .build_metadata = printer_build_metadata_text,
-        .start_delayed = printer_thumb_start_delayed,
-    };
-
-    thumbnail_preview_coordinator_v32_update(&context);
-}
-
-static void update_dashboard_print_complete_cleanup(void)
-{
-    const char *now_state = dash_print_state_text();
-
-    if ((strcmp(last_dashboard_print_state, "PRINTING") == 0 ||
-         strcmp(last_dashboard_print_state, "PAUSED") == 0) &&
-        (strcmp(now_state, "READY") == 0 ||
-         strcmp(now_state, "CONNECTED") == 0)) {
-
-        ui_dashboard_v32_set_active_print_file("No active file");
-        ui_dashboard_status_v32_set_progress("-- %", 0, UI_TEXT);
-        ui_dashboard_status_v32_set_times("--:--",
-                                          "--:--",
-                                          "--:--");
-
-        if (dash_thumb_img) {
-            lv_obj_delete(dash_thumb_img);
-            dash_thumb_img = NULL;
-        }
-
-        ui_dashboard_v32_thumb_set_placeholder(
-            "PRINT\nTHUMBNAIL");
-
-        thumbnail_session_v32_selected_file()[0] = 0;
-        thumbnail_session_v32_selected_thumbnail_path()[0] = 0;
-        thumbnail_session_v32_free_thumbnail();
-
-        ESP_LOGI(TAG, "DASH_PRINT_COMPLETE cleanup");
-    }
-
-    safe_copy(last_dashboard_print_state,
-              sizeof(last_dashboard_print_state),
-              now_state);
-}
-
-static void update_environment_cards(void)
-{
-    char buf[64];
-
-    if (card_chamber_temp) {
-        snprintf(buf, sizeof(buf), "%.1f C", live_air_temp);
-        lv_label_set_text(card_chamber_temp, buf);
-    }
-
-    if (card_humidity) {
-        snprintf(buf, sizeof(buf), "%.1f %%RH", live_humidity);
-        lv_label_set_text(card_humidity, buf);
-    }
-
-    if (card_target_rh) {
-        snprintf(buf,
-                 sizeof(buf),
-                 "Heat %.0f C",
-                 live_heater_target);
-        lv_label_set_text(card_target_rh, buf);
-    }
-
-    if (card_heater) {
-        lv_label_set_text(card_heater,
-                          live_heater_power ? "ON" : "OFF");
-    }
-
-    if (card_fan) {
-        snprintf(buf, sizeof(buf), "%.0f %%", live_fan_speed);
-        lv_label_set_text(card_fan, buf);
-    }
-
-    if (card_moonraker) {
-        lv_label_set_text(card_moonraker,
-                          s_live_data_ok
-                              ? "linked"
-                              : "not linked");
-    }
-}
-
-static void update_live_cards(void)
-{
-    moonraker_state_t mr_state_snapshot;
-    moonraker_state_snapshot(&mr_state_snapshot);
-    const moonraker_state_t *mr_state = &mr_state_snapshot;
-
-    update_dashboard_status_cards(mr_state);
-    update_dashboard_live_preview(mr_state);
-    update_dashboard_print_complete_cleanup();
-    update_environment_cards();
 }
 
 static void moonraker_live_poll_tasklet(void)
@@ -1821,249 +1604,6 @@ return;
 }
 
 
-static void ui_dashboard_v32_push_live_banner_data(void)
-{
-    moonraker_state_t mr_state_snapshot;
-    moonraker_state_snapshot(&mr_state_snapshot);
-    const moonraker_state_t *mr_state = &mr_state_snapshot;
-
-    char state[48];
-    char file[160];
-    char progress[24];
-    char eta[48];
-
-    printer_controller_format_status_symbol_text(
-        state,
-        sizeof(state),
-        mr_state->printer_state,
-        s_moonraker_ok,
-        mr_state->live_data_ok);
-
-    if (mr_state->printer_file[0] &&
-        strcmp(mr_state->printer_file, "No file") != 0) {
-        snprintf(
-            file,
-            sizeof(file),
-            "%.*s",
-            (int)sizeof(file) - 1,
-            mr_state->printer_file);
-    } else {
-        snprintf(
-            file,
-            sizeof(file),
-            "No active print");
-    }
-
-    if (mr_state->progress >= 0.0) {
-        snprintf(
-            progress,
-            sizeof(progress),
-            "%.0f%%",
-            mr_state->progress * 100.0);
-    } else {
-        snprintf(
-            progress,
-            sizeof(progress),
-            "--%%");
-    }
-
-    char eta_clock[32];
-
-    printer_controller_format_eta_clock(
-        eta_clock,
-        sizeof(eta_clock),
-        mr_state->progress,
-        mr_state->print_duration);
-
-    snprintf(
-        eta,
-        sizeof(eta),
-        "ETA %s",
-        eta_clock);
-
-    ui_dashboard_v32_set_banner(
-        state,
-        file,
-        eta,
-        progress);
-}
-
-
-static void ui_dashboard_v32_push_live_machine_data(void)
-{
-    moonraker_state_t mr_state_snapshot;
-    moonraker_state_snapshot(&mr_state_snapshot);
-    const moonraker_state_t *mr_state = &mr_state_snapshot;
-
-    char nozzle[32];
-    char hotend_name[32];
-    char bed[32];
-    char chamber[32];
-    char humidity[32];
-    char speed[24];
-    char flow[24];
-    char fan[24];
-
-    if (mr_state->nozzle_temp > -100.0) {
-        snprintf(
-            nozzle,
-            sizeof(nozzle),
-            "%.1f / %.1f C",
-            mr_state->nozzle_temp,
-            mr_state->nozzle_target);
-    } else {
-        snprintf(
-            nozzle,
-            sizeof(nozzle),
-            "-- / -- C");
-    }
-
-    snprintf(
-        hotend_name,
-        sizeof(hotend_name),
-        "NOZZLE");
-
-    if (mr_state->hotend_count > 1) {
-        for (size_t i = 0;
-             i < mr_state->hotend_count;
-             ++i) {
-            if (!mr_state->hotends[i].active) continue;
-
-            snprintf(
-                hotend_name,
-                sizeof(hotend_name),
-                "T%u ACTIVE",
-                (unsigned)i);
-            break;
-        }
-    }
-
-    if (mr_state->capabilities.discovered &&
-        !mr_state->capabilities.has_heated_bed) {
-        snprintf(bed, sizeof(bed), "N/A");
-    } else if (mr_state->bed_temp > -100.0) {
-        snprintf(
-            bed,
-            sizeof(bed),
-            "%.1f / %.1f C",
-            mr_state->bed_temp,
-            mr_state->bed_target);
-    } else {
-        snprintf(
-            bed,
-            sizeof(bed),
-            "-- / -- C");
-    }
-
-    /*
-     * The existing dashboard chamber field represents the drybox
-     * environmental air temperature, not the center probe.
-     */
-    if (mr_state->capabilities.discovered &&
-        !mr_state->capabilities.has_drybox_environment_sensor) {
-        snprintf(chamber, sizeof(chamber), "N/A");
-        snprintf(humidity, sizeof(humidity), "N/A");
-    } else {
-        if (mr_state->air_temp > -100.0) {
-            snprintf(
-                chamber,
-                sizeof(chamber),
-                "%.1f C",
-                mr_state->air_temp);
-        } else {
-            snprintf(
-                chamber,
-                sizeof(chamber),
-                "-- C");
-        }
-
-        if (mr_state->humidity > -100.0) {
-            snprintf(
-                humidity,
-                sizeof(humidity),
-                "%.1f %%RH",
-                mr_state->humidity);
-        } else {
-            snprintf(
-                humidity,
-                sizeof(humidity),
-                "-- %%RH");
-        }
-    }
-
-    /*
-     * Machine Status reports actual live process values.
-     * M220/M221 tuning factors remain editable on the Printer page.
-     */
-    if (mr_state->live_velocity >= 0.0) {
-        snprintf(
-            speed,
-            sizeof(speed),
-            "%.0f mm/s",
-            mr_state->live_velocity);
-    } else {
-        snprintf(
-            speed,
-            sizeof(speed),
-            "-- mm/s");
-    }
-
-    if (mr_state->live_flow >= 0.0) {
-        snprintf(
-            flow,
-            sizeof(flow),
-            "%.1f mm3/s",
-            mr_state->live_flow);
-    } else {
-        snprintf(
-            flow,
-            sizeof(flow),
-            "-- mm3/s");
-    }
-
-    if (mr_state->capabilities.discovered &&
-        !mr_state->capabilities.has_part_fan) {
-        snprintf(fan, sizeof(fan), "N/A");
-    } else if (mr_state->part_fan_speed >= 0.0) {
-        snprintf(
-            fan,
-            sizeof(fan),
-            "%.0f%%",
-            mr_state->part_fan_speed);
-    } else {
-        snprintf(
-            fan,
-            sizeof(fan),
-            "--%%");
-    }
-
-    ui_dashboard_v32_set_machine(
-        nozzle,
-        bed,
-        chamber,
-        humidity,
-        speed,
-        flow,
-        fan);
-
-    ui_dashboard_v32_set_active_hotend(
-        hotend_name,
-        nozzle);
-
-    ui_dashboard_v32_set_machine_connection(
-        mr_state->moonraker_ok &&
-        mr_state->live_data_ok);
-
-    moonraker_filament_state_t filament_state;
-    moonraker_filament_state_snapshot(
-        &filament_state);
-
-    ui_dashboard_v32_set_filament(
-        mr_state->moonraker_ok &&
-            mr_state->live_data_ok,
-        &filament_state);
-}
-
 static void show_settings_tab(void);
 static void app_theme_changed(void);
 
@@ -2363,8 +1903,8 @@ ui_drybox_v32_refresh();
     ui_settings_refresh();
 
 
-    ui_dashboard_v32_push_live_banner_data();
-    ui_dashboard_v32_push_live_machine_data();
+    dashboard_live_controller_push_banner(s_moonraker_ok);
+    dashboard_live_controller_push_machine();
     ui_command_bar_v32_update(
         printer_state,
         moonraker_exclude_objects_available());
@@ -4120,7 +3660,46 @@ static void hmi_runtime_task(void *arg)
 
             ui_shell_update_status_icons();
 
-            update_live_cards();
+            dashboard_runtime_controller_tick(
+        &(dashboard_runtime_context_t) {
+            .moonraker_ok = s_moonraker_ok,
+            .live_data_ok = s_live_data_ok,
+
+            .current_z = printer_current_z,
+            .meta_object_height = printer_meta_object_height,
+            .meta_layer_height = printer_meta_layer_height,
+
+            .air_temp = live_air_temp,
+            .humidity = live_humidity,
+            .heater_target = live_heater_target,
+            .heater_on = live_heater_power,
+            .fan_speed = live_fan_speed,
+
+            .nozzle_label = dash_nozzle_label,
+            .bed_label = dash_bed_label,
+            .chamber_label = card_chamber_temp,
+            .humidity_label = card_humidity,
+            .target_rh_label = card_target_rh,
+            .heater_label = card_heater,
+            .fan_label = card_fan,
+            .moonraker_label = card_moonraker,
+
+            .dashboard_canvas = &dash_thumb_canvas,
+            .dashboard_image = &dash_thumb_img,
+
+            .last_print_state = last_dashboard_print_state,
+            .last_print_state_size =
+                sizeof(last_dashboard_print_state),
+
+            .set_live_target =
+                thumbnail_preview_coordinator_v32_set_live_target,
+            .free_thumbnail =
+                thumbnail_session_v32_free_thumbnail,
+            .build_metadata =
+                printer_build_metadata_text,
+            .start_delayed =
+                printer_thumb_start_delayed,
+        });
 
             bsp_display_unlock();
         }

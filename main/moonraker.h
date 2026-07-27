@@ -86,6 +86,18 @@ typedef struct {
     double live_flow;
 
     /*
+     * Live Toolhead state. Position is the reported physical Toolhead
+     * position. z_offset is the current runtime G-code Z offset derived from
+     * gcode_move.homing_origin[2].
+     */
+    bool toolhead_position_valid;
+    double toolhead_x;
+    double toolhead_y;
+    double toolhead_z;
+    char homed_axes[8];
+    double z_offset;
+
+    /*
      * Compatibility values used by the existing single-hotend UI. They
      * mirror the active hotend when capability-aware data is available.
      */

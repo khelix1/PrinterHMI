@@ -186,6 +186,13 @@ void moonraker_state_reset(void)
     g_moonraker_state.current_layer = -1;
     g_moonraker_state.total_layer = -1;
 
+    g_moonraker_state.toolhead_position_valid = false;
+    g_moonraker_state.toolhead_x = 0.0;
+    g_moonraker_state.toolhead_y = 0.0;
+    g_moonraker_state.toolhead_z = 0.0;
+    g_moonraker_state.homed_axes[0] = '\0';
+    g_moonraker_state.z_offset = 0.0;
+
     mr_safe_copy(g_moonraker_state.printer_state, sizeof(g_moonraker_state.printer_state), "--");
     mr_safe_copy(g_moonraker_state.printer_file, sizeof(g_moonraker_state.printer_file), "No file");
     state_unlock();
@@ -775,6 +782,42 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         ++updates;
     }
 
+    if (cJSON_IsObject(toolhead)) {
+        cJSON *position = cJSON_GetObjectItemCaseSensitive(
+            toolhead,
+            "position");
+
+        if (cJSON_IsArray(position) &&
+            cJSON_GetArraySize(position) >= 3) {
+            cJSON *x = cJSON_GetArrayItem(position, 0);
+            cJSON *y = cJSON_GetArrayItem(position, 1);
+            cJSON *z = cJSON_GetArrayItem(position, 2);
+
+            if (cJSON_IsNumber(x) &&
+                cJSON_IsNumber(y) &&
+                cJSON_IsNumber(z)) {
+                g_moonraker_state.toolhead_x = x->valuedouble;
+                g_moonraker_state.toolhead_y = y->valuedouble;
+                g_moonraker_state.toolhead_z = z->valuedouble;
+                g_moonraker_state.toolhead_position_valid = true;
+                ++updates;
+            }
+        }
+
+        cJSON *homed_axes = cJSON_GetObjectItemCaseSensitive(
+            toolhead,
+            "homed_axes");
+
+        if (cJSON_IsString(homed_axes) &&
+            homed_axes->valuestring) {
+            mr_safe_copy(
+                g_moonraker_state.homed_axes,
+                sizeof(g_moonraker_state.homed_axes),
+                homed_axes->valuestring);
+            ++updates;
+        }
+    }
+
     if (cJSON_IsObject(toolhead) && g_moonraker_exclude_state) {
         moonraker_exclude_point_t minimum;
         moonraker_exclude_point_t maximum;
@@ -792,6 +835,26 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
             g_moonraker_exclude_state->bed_max_y = maximum.y;
             g_moonraker_exclude_state->bed_bounds_valid = true;
             ++updates;
+        }
+    }
+
+    cJSON *gcode_move = cJSON_GetObjectItemCaseSensitive(
+        status,
+        "gcode_move");
+
+    if (cJSON_IsObject(gcode_move)) {
+        cJSON *homing_origin = cJSON_GetObjectItemCaseSensitive(
+            gcode_move,
+            "homing_origin");
+
+        if (cJSON_IsArray(homing_origin) &&
+            cJSON_GetArraySize(homing_origin) >= 3) {
+            cJSON *z_origin = cJSON_GetArrayItem(homing_origin, 2);
+
+            if (cJSON_IsNumber(z_origin)) {
+                g_moonraker_state.z_offset = z_origin->valuedouble;
+                ++updates;
+            }
         }
     }
 

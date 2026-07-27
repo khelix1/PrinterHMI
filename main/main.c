@@ -2275,32 +2275,6 @@ static void moonraker_sync_legacy_from_state(void)
 }
 
 
-/* MOONRAKER_WEBSOCKET_PUSH_EVENTS
- * Moonraker keeps file payload transport on HTTP. WebSocket only invalidates
- * the active profile's visible Files page, coalescing bursts into one reload.
- */
-static void moonraker_process_filelist_notification(void)
-{
-    if (!moonraker_live_websocket_file_change_pending()) return;
-
-    if (!ui_files_v32_get_popup()) {
-        /* Opening Files always performs a fresh HTTP reload. */
-        (void)moonraker_live_websocket_take_file_change();
-        return;
-    }
-
-    if (ui_files_v32_detail_is_open()) {
-        /* Preserve the confirmation popup; consume after it closes. */
-        return;
-    }
-
-    if (!moonraker_live_websocket_take_file_change()) return;
-
-    ESP_LOGI(TAG, "WS_FILELIST_REFRESH visible Files page");
-    ui_files_v32_refresh();
-}
-
-
 static void ota_ui_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
@@ -2313,7 +2287,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     int64_t ui_refresh_t0 = esp_timer_get_time();
 
     moonraker_sync_legacy_from_state();
-    moonraker_process_filelist_notification();
+    files_page_controller_process_live_notification();
 
     (void)timer;
 
@@ -2327,98 +2301,66 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     ui_telemetry_v32_refresh(
         &telemetry_state,
         esp_timer_get_time());
-    if (wifi_label) lv_label_set_text(wifi_label, wifi_status);
-    ui_printer_banner_refresh(
-        printer_panel,
-        printer_banner_label,
-        printer_state_label,
-        printer_banner_text(),
-        printer_state,
-        printer_file);
-    ui_printer_live_status_refresh(printer_panel,
-                                   printer_active_file_box,
-                                   printer_active_file_label,
-                                   printer_fan_label,
-                                   printer_speed_label,
-                                   printer_flow_label,
-                                   printer_filament_label,
-                                   printer_state,
-                                   printer_file,
-                                   printer_live_velocity,
-                                   printer_live_flow,
-                                   printer_speed_factor,
-                                   printer_flow_factor,
-                                   printer_current_layer,
-                                   printer_total_layer,
-                                   printer_meta_object_height,
-                                   printer_meta_layer_height,
-                                   printer_progress,
-                                   telemetry_state.moonraker_ok &&
-                                       telemetry_state.live_data_ok,
-                                   &filament_state);
+    network_status_controller_update_topbar(
+        wifi_label,
+        wifi_status);
+    printer_ui_controller_refresh_ctx_t printer_refresh = {
+        .printer_panel = printer_panel,
+        .banner_label = printer_banner_label,
+        .state_label = printer_state_label,
+        .active_file_box = printer_active_file_box,
+        .active_file_label = printer_active_file_label,
+        .speed_label = printer_fan_label,
+        .flow_label = printer_speed_label,
+        .layer_label = printer_flow_label,
+        .filament_label = printer_filament_label,
+        .file_label = printer_file_label,
+        .topbar_eta_label = topbar_eta_label,
 
-    /*
-     * The active profile preview cache can become ready after the Printer
-     * page hierarchy is created. Refresh its consumer here so the Active
-     * Print card does not remain on its placeholder until page navigation.
-     */
-    if (printer_panel) {
-        ui_printer_v32_preview_show(
-            printer_state,
-            printer_file,
-            thumbnail_session_v32_selected_file());
-    }
+        .home_button = printer_home_btn,
+        .pause_button = printer_pause_btn,
+        .resume_button = printer_resume_btn,
+        .object_button = printer_object_btn,
+        .cancel_button = printer_cancel_btn,
 
-    ui_printer_info_cards_refresh_live(
-        printer_panel,
-        &printer_info_cards,
-        printer_progress,
-        printer_nozzle_temp,
-        printer_nozzle_target,
-        printer_bed_temp,
-        printer_bed_target,
-        printer_part_fan_speed,
-        printer_print_duration,
-        s_moonraker_ok,
-        &telemetry_state.capabilities);
-    if (printer_panel && printer_file_label) {
-        lv_label_set_text(printer_file_label, printer_file);
-    }
+        .info_cards = &printer_info_cards,
 
-    if (topbar_eta_label) {
-        char printer_remaining_buf[32];
-        char tbuf[40];
+        .banner_text = printer_banner_text(),
+        .printer_state = printer_state,
+        .printer_file = printer_file,
+        .selected_preview_file = thumbnail_session_v32_selected_file(),
 
-        printer_controller_format_remaining(
-            printer_remaining_buf,
-            sizeof(printer_remaining_buf),
-            printer_progress,
-            printer_print_duration);
+        .live_velocity = printer_live_velocity,
+        .live_flow = printer_live_flow,
+        .speed_factor = printer_speed_factor,
+        .flow_factor = printer_flow_factor,
+        .current_layer = printer_current_layer,
+        .total_layer = printer_total_layer,
+        .metadata_object_height = printer_meta_object_height,
+        .metadata_layer_height = printer_meta_layer_height,
+        .progress = printer_progress,
+        .nozzle_temp = printer_nozzle_temp,
+        .nozzle_target = printer_nozzle_target,
+        .bed_temp = printer_bed_temp,
+        .bed_target = printer_bed_target,
+        .part_fan_speed = printer_part_fan_speed,
+        .print_duration = printer_print_duration,
 
-        printer_controller_format_topbar_eta(
-            tbuf,
-            sizeof(tbuf),
-            printer_progress,
-            printer_print_duration,
-            printer_remaining_buf,
-            s_moonraker_ok);
+        .moonraker_ok = telemetry_state.moonraker_ok,
+        .live_data_ok = telemetry_state.live_data_ok,
+        .exclude_objects_available =
+            moonraker_exclude_objects_available(),
 
-        lv_label_set_text(topbar_eta_label, tbuf);
-    }
+        .capabilities = &telemetry_state.capabilities,
+        .filament_state = &filament_state,
+    };
+
+    printer_ui_controller_refresh(&printer_refresh);
 
 ui_drybox_v32_refresh();
 
     ui_network_v32_refresh_bridge();
     ui_settings_refresh();
-
-    printer_ui_controller_update_action_buttons(
-        printer_home_btn,
-        printer_pause_btn,
-        printer_resume_btn,
-        printer_object_btn,
-        printer_cancel_btn,
-        moonraker_exclude_objects_available(),
-        printer_state);
 
 
     ui_dashboard_v32_push_live_banner_data();

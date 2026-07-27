@@ -33,6 +33,14 @@ void files_page_controller_cycle_sort(void);
 void files_page_controller_open_folder(const char *path);
 void files_page_controller_up_folder(void);
 
+/*
+ * Process one coalesced Moonraker file-list notification.
+ *
+ * Hidden Files pages discard the notification because opening Files performs
+ * a fresh reload. An open detail popup defers consumption until it closes.
+ */
+void files_page_controller_process_live_notification(void);
+
 #ifdef __cplusplus
 }
 #endif

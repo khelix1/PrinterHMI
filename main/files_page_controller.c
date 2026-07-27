@@ -5,8 +5,10 @@
 #include "files_row_preview_v32.h"
 #include "ui_files_v32.h"
 #include "ui_theme.h"
+#include "moonraker_live_websocket.h"
 
 #include "esp_err.h"
+#include "esp_log.h"
 #include "esp_heap_caps.h"
 
 #include <stddef.h>
@@ -18,6 +20,8 @@
 
 #define FILES_PAGE_LIST_CAPACITY 16384
 #define FILES_PAGE_ENTRY_CAPACITY 64
+
+static const char *TAG = "files_page_controller";
 
 typedef enum {
     FILE_SORT_NAME = 0,
@@ -349,4 +353,35 @@ void files_page_controller_reload(
     } else {
         render_entries();
     }
+}
+
+void files_page_controller_process_live_notification(void)
+{
+    if (!moonraker_live_websocket_file_change_pending()) {
+        return;
+    }
+
+    if (!ui_files_v32_get_popup()) {
+        /*
+         * Opening Files always performs a fresh HTTP reload, so a notification
+         * received while the page is hidden does not need to remain pending.
+         */
+        (void)moonraker_live_websocket_take_file_change();
+        return;
+    }
+
+    if (ui_files_v32_detail_is_open()) {
+        /*
+         * Preserve the confirmation/detail popup. The pending notification is
+         * consumed by a later refresh cycle after the popup closes.
+         */
+        return;
+    }
+
+    if (!moonraker_live_websocket_take_file_change()) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "WS_FILELIST_REFRESH visible Files page");
+    ui_files_v32_refresh();
 }

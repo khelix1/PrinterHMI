@@ -42,3 +42,16 @@ void network_status_controller_refresh(
         moonraker_http_code,
         scan_status ? scan_status : "");
 }
+
+void network_status_controller_update_topbar(
+    lv_obj_t *wifi_label,
+    const char *wifi_status)
+{
+    if (!wifi_label) {
+        return;
+    }
+
+    lv_label_set_text(
+        wifi_label,
+        wifi_status ? wifi_status : "");
+}

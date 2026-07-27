@@ -3,6 +3,10 @@
 #include <string.h>
 
 #include "printer_controller.h"
+#include "ui_printer_banner.h"
+#include "ui_printer_live_status.h"
+#include "ui_printer_v32.h"
+#include "ui_printer_info_cards.h"
 
 static printer_ui_controller_send_gcode_cb_t
     s_send_gcode_cb = NULL;
@@ -102,4 +106,111 @@ void printer_ui_controller_update_action_buttons(
             lv_obj_set_style_opa(object_button, LV_OPA_50, 0);
         }
     }
+}
+
+void printer_ui_controller_update_topbar_eta(
+    lv_obj_t *eta_label,
+    double progress,
+    double print_duration,
+    bool moonraker_ok)
+{
+    if (!eta_label) {
+        return;
+    }
+
+    char remaining[32];
+    char text[40];
+
+    printer_controller_format_remaining(
+        remaining,
+        sizeof(remaining),
+        progress,
+        print_duration);
+
+    printer_controller_format_topbar_eta(
+        text,
+        sizeof(text),
+        progress,
+        print_duration,
+        remaining,
+        moonraker_ok);
+
+    lv_label_set_text(eta_label, text);
+}
+
+void printer_ui_controller_refresh(
+    const printer_ui_controller_refresh_ctx_t *ctx)
+{
+    if (!ctx) {
+        return;
+    }
+
+    ui_printer_banner_refresh(
+        ctx->printer_panel,
+        ctx->banner_label,
+        ctx->state_label,
+        ctx->banner_text,
+        ctx->printer_state,
+        ctx->printer_file);
+
+    ui_printer_live_status_refresh(
+        ctx->printer_panel,
+        ctx->active_file_box,
+        ctx->active_file_label,
+        ctx->speed_label,
+        ctx->flow_label,
+        ctx->layer_label,
+        ctx->filament_label,
+        ctx->printer_state,
+        ctx->printer_file,
+        ctx->live_velocity,
+        ctx->live_flow,
+        ctx->speed_factor,
+        ctx->flow_factor,
+        ctx->current_layer,
+        ctx->total_layer,
+        ctx->metadata_object_height,
+        ctx->metadata_layer_height,
+        ctx->progress,
+        ctx->moonraker_ok && ctx->live_data_ok,
+        ctx->filament_state);
+
+    if (ctx->printer_panel) {
+        ui_printer_v32_preview_show(
+            ctx->printer_state,
+            ctx->printer_file,
+            ctx->selected_preview_file);
+    }
+
+    ui_printer_info_cards_refresh_live(
+        ctx->printer_panel,
+        ctx->info_cards,
+        ctx->progress,
+        ctx->nozzle_temp,
+        ctx->nozzle_target,
+        ctx->bed_temp,
+        ctx->bed_target,
+        ctx->part_fan_speed,
+        ctx->print_duration,
+        ctx->moonraker_ok,
+        ctx->capabilities);
+
+    if (ctx->printer_panel && ctx->file_label) {
+        lv_label_set_text(ctx->file_label, ctx->printer_file);
+    }
+
+    printer_ui_controller_update_topbar_eta(
+        ctx->topbar_eta_label,
+        ctx->progress,
+        ctx->print_duration,
+        ctx->moonraker_ok);
+
+    printer_ui_controller_update_action_buttons(
+        ctx->home_button,
+        ctx->pause_button,
+        ctx->resume_button,
+        ctx->object_button,
+        ctx->cancel_button,
+        ctx->exclude_objects_available,
+        ctx->printer_state);
 }

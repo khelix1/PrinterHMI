@@ -144,6 +144,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_printer_actions.h"
 #include "ui_printer_banner.h"
 #include "printer_controller.h"
+#include "printer_layer_resolver.h"
 #include "printer_files.h"
 #include "thumbnail_manager_v32.h"
 #include "thumbnail_render_v32.h"
@@ -321,6 +322,7 @@ static int printer_current_layer = -1;
 static int printer_total_layer = -1;
 static double printer_meta_object_height = 0.0;
 static double printer_meta_layer_height = 0.0;
+
 static bool live_heater_power = false;
 static bool s_live_data_ok = false;
 static volatile bool s_moonraker_http_busy = false;
@@ -1227,12 +1229,20 @@ static void update_dashboard_status_cards(
 
     /*
      * Some Klipper configurations do not publish
-     * print_stats.info.current_layer/total_layer. Moonraker can still
-     * display layer information using the active file metadata.
-     *
-     * Use the same metadata already fetched for the active-print
-     * thumbnail as a Dashboard fallback.
+     * print_stats.info.current_layer/total_layer. Resolve the same metadata
+     * fallback used by the Printer page before formatting the Dashboard.
      */
+    printer_layer_result_t display_layers =
+        printer_layer_resolver_resolve(
+            display_current_layer,
+            display_total_layer,
+            printer_current_z,
+            printer_meta_object_height,
+            printer_meta_layer_height,
+            mr_state->progress);
+
+    display_current_layer = display_layers.current;
+    display_total_layer = display_layers.total;
 
     if (display_current_layer > 0 &&
         display_total_layer > 0) {
@@ -2239,6 +2249,19 @@ static void moonraker_sync_legacy_from_state(void)
     printer_print_duration = state.print_duration;
     printer_current_layer = state.current_layer;
     printer_total_layer = state.total_layer;
+
+    printer_layer_result_t resolved_layers =
+        printer_layer_resolver_resolve(
+            printer_current_layer,
+            printer_total_layer,
+            printer_current_z,
+            printer_meta_object_height,
+            printer_meta_layer_height,
+            state.progress);
+
+    printer_current_layer = resolved_layers.current;
+    printer_total_layer = resolved_layers.total;
+
     s_live_data_ok = state.live_data_ok;
     s_moonraker_ok = state.moonraker_ok;
 

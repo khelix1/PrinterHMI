@@ -1,4 +1,5 @@
 #include "ui_bed_mesh_v32.h"
+#include "esp_log.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,9 +39,9 @@ static void render(void){
 static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,"No active bed mesh. Calibrate or load a profile.");return;}char b[256];snprintf(b,sizeof(b),"PROFILE %s   GRID %u x %u   LOW %+.3f mm   HIGH %+.3f mm   RANGE %.3f mm   Z %.0fx%s",s.mesh.profile_name,s.mesh.cols,s.mesh.rows,s.mesh.minimum,s.mesh.maximum,s.mesh.range,s.zscale,s.mesh.truncated?"   TRUNCATED":"");lv_label_set_text(s.stats,b);}
 void ui_bed_mesh_v32_refresh(void){if(!s.popup)return;if(!s.values)s.values=alloc_psram_first(VALUE_CAP,sizeof(float));if(!s.values||!bed_mesh_controller_snapshot(&s.mesh,s.values,VALUE_CAP)){memset(&s.mesh,0,sizeof(s.mesh));stats();if(s.canvas)lv_canvas_fill_bg(s.canvas,UI_CARD,LV_OPA_COVER);return;}stats();render();}
 static void close_cb(lv_event_t*e){(void)e;ui_bed_mesh_v32_close();}static void reset_cb(lv_event_t*e){(void)e;s.yaw=-.72f;s.pitch=.88f;s.zoom=1;s.zscale=20;stats();render();}static void plus_cb(lv_event_t*e){(void)e;s.zoom=fminf(3.5f,s.zoom*1.15f);render();}static void minus_cb(lv_event_t*e){(void)e;s.zoom=fmaxf(.45f,s.zoom/1.15f);render();}static void calibrate_cb(lv_event_t*e){(void)e;if(s.command)s.command("BED_MESH_CALIBRATE");}
-static void canvas_cb(lv_event_t*e){lv_event_code_t code=lv_event_get_code(e);lv_indev_t*i=lv_indev_active();if(!i)return;if(code==LV_EVENT_PRESSED){lv_indev_get_point(i,&s.last);s.drag=true;}else if(code==LV_EVENT_PRESSING&&s.drag){lv_point_t p;lv_indev_get_point(i,&p);s.yaw+=(p.x-s.last.x)*.012f;s.pitch+=(p.y-s.last.y)*.01f;if(s.pitch<.15f)s.pitch=.15f;if(s.pitch>1.45f)s.pitch=1.45f;s.last=p;render();}else if(code==LV_EVENT_RELEASED||code==LV_EVENT_PRESS_LOST)s.drag=false;
+static void canvas_cb(lv_event_t*e){lv_event_code_t code=lv_event_get_code(e);lv_indev_t*i=lv_indev_active();if(!i)return;if(code==LV_EVENT_PRESSED){lv_indev_get_point(i,&s.last);s.drag=true;}else if(code==LV_EVENT_PRESSING&&s.drag){lv_point_t p;lv_indev_get_point(i,&p);s.yaw-=(p.x-s.last.x)*.012f;s.pitch-=(p.y-s.last.y)*.01f;if(s.pitch<.15f)s.pitch=.15f;if(s.pitch>1.45f)s.pitch=1.45f;s.last=p;render();}else if(code==LV_EVENT_RELEASED||code==LV_EVENT_PRESS_LOST)s.drag=false;
 #if LV_USE_GESTURE_RECOGNITION
- else if(code==LV_EVENT_GESTURE){lv_indev_gesture_type_t type=lv_event_get_gesture_type(e);if(type==LV_INDEV_GESTURE_TYPE_PINCH){float scale=lv_event_get_pinch_scale(e);if(scale>.01f){s.zoom*=scale;if(s.zoom<.45f)s.zoom=.45f;if(s.zoom>3.5f)s.zoom=3.5f;render();}}else if(type==LV_INDEV_GESTURE_TYPE_ROTATION){s.yaw+=lv_event_get_rotation(e);render();}}
+ else if(code==LV_EVENT_GESTURE){lv_indev_gesture_type_t type=lv_event_get_gesture_type(e);ESP_LOGI("BED_MESH","GESTURE event type=%d",(int)type);if(type==LV_INDEV_GESTURE_PINCH){float scale=lv_event_get_pinch_scale(e);ESP_LOGI("BED_MESH","PINCH scale=%.3f",(double)scale);if(scale>.01f){s.zoom*=scale;if(s.zoom<.45f)s.zoom=.45f;if(s.zoom>3.5f)s.zoom=3.5f;render();}}else if(type==LV_INDEV_GESTURE_ROTATE){s.yaw+=lv_event_get_rotation(e);render();}}
 #endif
 }
 bool ui_bed_mesh_v32_is_open(void){return s.popup!=NULL;}void ui_bed_mesh_v32_close(void){if(s.popup)lv_obj_delete(s.popup);if(s.buf)heap_caps_free(s.buf);if(s.values)heap_caps_free(s.values);memset(&s,0,sizeof(s));}

@@ -6,6 +6,7 @@
 
 #include "esp_heap_caps.h"
 #include "cJSON.h"
+#include "bed_mesh_controller.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -38,6 +39,8 @@ void moonraker_module_init(void)
 {
     s_state_mutex =
         xSemaphoreCreateMutexStatic(&s_state_mutex_buffer);
+
+    bed_mesh_controller_init();
 
     g_moonraker_filament_state = heap_caps_calloc(
         1,
@@ -763,6 +766,10 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         status, "exclude_object");
     if (cJSON_IsObject(exclude_object)) {
         merge_exclude_object_locked(exclude_object);
+        ++updates;
+    }
+
+    if (bed_mesh_controller_merge_status(status)) {
         ++updates;
     }
 

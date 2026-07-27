@@ -56,6 +56,8 @@ idf_component_register(
         "printer_ui_controller.c"
         "printer_file_controller.c"
         "printer_files.c"
+        "bed_mesh_controller.c"
+        "ui_bed_mesh_v32.c"
 
         # Files
         "ui_files_v32.c"

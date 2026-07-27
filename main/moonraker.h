@@ -56,6 +56,7 @@ typedef struct {
     bool has_heated_bed;
     bool has_part_fan;
     bool has_exclude_object;
+    bool has_bed_mesh;
 
     bool has_drybox_center_sensor;
     bool has_drybox_environment_sensor;

@@ -141,6 +141,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_printer_live_status.h"
 #include "ui_printer_layout_v32.h"
 #include "ui_printer_info_cards.h"
+#include "ui_bed_mesh_v32.h"
 #include "ui_printer_actions.h"
 #include "ui_printer_banner.h"
 #include "printer_controller.h"
@@ -2004,7 +2005,14 @@ static void nozzle_card_event_cb(lv_event_t *e)
 
 static void bed_card_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    lv_event_code_t code = lv_event_get_code(e);
+
+    if (code == LV_EVENT_LONG_PRESSED) {
+        ui_bed_mesh_v32_show(printer_popup_send_gcode_bridge);
+        return;
+    }
+
+    if (code != LV_EVENT_CLICKED) return;
 
     moonraker_state_t state;
     moonraker_state_snapshot(&state);

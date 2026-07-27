@@ -329,6 +329,14 @@ static bool build_subscription(
         return false;
     }
 
+    if (capabilities->has_bed_mesh &&
+        !append_subscription_object(
+            &used,
+            "bed_mesh",
+            "[\"profile_name\",\"mesh_min\",\"mesh_max\",\"probed_matrix\",\"mesh_matrix\"]")) {
+        return false;
+    }
+
     if (!append_subscription_text(
             &used,
             "\"toolhead\":null}},"
@@ -388,6 +396,10 @@ static bool handle_object_list_response(
             object_list_contains(
                 objects,
                 "exclude_object"),
+        .has_bed_mesh =
+            object_list_contains(
+                objects,
+                "bed_mesh"),
         .has_drybox_center_sensor =
             object_list_contains(
                 objects,

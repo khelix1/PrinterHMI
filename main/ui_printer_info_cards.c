@@ -171,6 +171,11 @@ void ui_printer_info_cards_create(
             bed_cb,
             LV_EVENT_CLICKED,
             NULL);
+        lv_obj_add_event_cb(
+            box,
+            bed_cb,
+            LV_EVENT_LONG_PRESSED,
+            NULL);
     }
 
     if (cards->part_fan && part_fan_cb) {

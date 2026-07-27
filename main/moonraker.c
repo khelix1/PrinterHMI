@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "esp_heap_caps.h"
 #include "cJSON.h"
@@ -805,7 +806,35 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     MERGE_NUMBER("gcode_move", "speed_factor", speed_factor, 100.0);
     MERGE_NUMBER("gcode_move", "extrude_factor", flow_factor, 100.0);
     MERGE_NUMBER("motion_report", "live_velocity", live_velocity, 1.0);
-    MERGE_NUMBER("motion_report", "live_extruder_velocity", live_flow, 1.0);
+
+    /*
+     * Klipper reports live_extruder_velocity as linear filament speed
+     * in mm/s. Convert it to volumetric flow so the WebSocket path
+     * matches the existing HTTP fallback and the UI mm3/s label.
+     *
+     * Standard 1.75 mm filament:
+     *     area = pi * (1.75 / 2)^2 = 2.405281875 mm2
+     */
+    cJSON *motion_report = cJSON_GetObjectItemCaseSensitive(
+        status,
+        "motion_report");
+
+    if (json_number(
+            motion_report,
+            "live_extruder_velocity",
+            &value)) {
+        static const double filament_area_mm2 = 2.405281875;
+
+        g_moonraker_state.live_flow =
+            fabs(value) * filament_area_mm2;
+
+        if (g_moonraker_state.live_flow < 0.01) {
+            g_moonraker_state.live_flow = 0.0;
+        }
+
+        ++updates;
+    }
+
     MERGE_NUMBER("heater_bed", "temperature", bed_temp, 1.0);
     MERGE_NUMBER("heater_bed", "target", bed_target, 1.0);
     MERGE_NUMBER("display_status", "progress", progress, 1.0);

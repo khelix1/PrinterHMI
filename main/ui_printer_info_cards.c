@@ -19,8 +19,12 @@ static lv_color_t progress_value_color(double progress)
 {
     if (progress < 0.0) return UI_TEXT_DIM;
     if (progress >= 0.999) return UI_OK_BRIGHT;
-    if (progress > 0.0) return UI_ACCENT;
-    return UI_TEXT;
+
+    /*
+     * Keep the PROGRESS heading unchanged. This color is applied only
+     * to the value label containing the percentage.
+     */
+    return UI_TEXT_BRIGHT;
 }
 
 static lv_color_t fan_value_color(double fan)
@@ -71,11 +75,26 @@ void ui_printer_info_cards_create(
     cards->progress = ui_create_operator_info_card(
         parent,
         "PROGRESS",
-        "-- %",
+        "--%",
         CARD_X,
         CARD_Y,
         CARD_W,
         CARD_H);
+
+    if (cards->progress) {
+        /*
+         * Progress is the Printer page's primary at-a-glance value.
+         * Give it stronger typography than the other compact cards.
+         */
+        lv_obj_set_style_text_font(
+            cards->progress,
+            UI_FONT_HEADING,
+            0);
+        lv_obj_set_style_text_align(
+            cards->progress,
+            LV_TEXT_ALIGN_CENTER,
+            0);
+    }
 
     cards->nozzle = ui_create_operator_info_card(
         parent,
@@ -187,8 +206,8 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 
     if (cards->progress) {
         char pbuf[32];
-        if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%.0f %%", printer_progress * 100.0);
-        else snprintf(pbuf, sizeof(pbuf), "-- %%");
+        if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%.0f%%", printer_progress * 100.0);
+        else snprintf(pbuf, sizeof(pbuf), "--%%");
         lv_label_set_text(cards->progress, pbuf);
         lv_obj_set_style_text_color(cards->progress, progress_value_color(printer_progress), 0);
     }

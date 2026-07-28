@@ -6,6 +6,48 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+typedef struct {
+    lv_event_cb_t callback;
+    uint32_t long_press_tick;
+} bed_card_event_ctx_t;
+
+static void bed_card_event_cb(lv_event_t *e)
+{
+    if (!e) {
+        return;
+    }
+
+    bed_card_event_ctx_t *ctx =
+        (bed_card_event_ctx_t *)lv_event_get_user_data(e);
+
+    if (!ctx || !ctx->callback) {
+        return;
+    }
+
+    lv_event_code_t code = lv_event_get_code(e);
+
+    if (code == LV_EVENT_LONG_PRESSED) {
+        ctx->long_press_tick = lv_tick_get();
+        ctx->callback(e);
+        lv_event_stop_processing(e);
+        return;
+    }
+
+    if (code == LV_EVENT_CLICKED) {
+        uint32_t elapsed = lv_tick_get() - ctx->long_press_tick;
+
+        if (ctx->long_press_tick != 0 && elapsed < 1500U) {
+            ctx->long_press_tick = 0;
+            lv_event_stop_processing(e);
+            return;
+        }
+
+        ctx->long_press_tick = 0;
+        ctx->callback(e);
+    }
+}
 
 static lv_color_t temp_value_color(double temp, double target)
 {
@@ -162,20 +204,46 @@ void ui_printer_info_cards_create(
         lv_obj_t *box =
             lv_obj_get_parent(cards->bed);
 
-        lv_obj_add_flag(
-            box,
-            LV_OBJ_FLAG_CLICKABLE);
+        bed_card_event_ctx_t *ctx =
+            calloc(1, sizeof(*ctx));
 
-        lv_obj_add_event_cb(
-            box,
-            bed_cb,
-            LV_EVENT_CLICKED,
-            NULL);
-        lv_obj_add_event_cb(
-            box,
-            bed_cb,
-            LV_EVENT_LONG_PRESSED,
-            NULL);
+        if (ctx) {
+            ctx->callback = bed_cb;
+
+            lv_obj_add_flag(
+                box,
+                LV_OBJ_FLAG_CLICKABLE);
+
+            lv_obj_add_event_cb(
+                box,
+                bed_card_event_cb,
+                LV_EVENT_CLICKED,
+                ctx);
+            lv_obj_add_event_cb(
+                box,
+                bed_card_event_cb,
+                LV_EVENT_LONG_PRESSED,
+                ctx);
+        } else {
+            /*
+             * Safe fallback: preserve normal BED-card behavior if the
+             * small event context cannot be allocated.
+             */
+            lv_obj_add_flag(
+                box,
+                LV_OBJ_FLAG_CLICKABLE);
+
+            lv_obj_add_event_cb(
+                box,
+                bed_cb,
+                LV_EVENT_CLICKED,
+                NULL);
+            lv_obj_add_event_cb(
+                box,
+                bed_cb,
+                LV_EVENT_LONG_PRESSED,
+                NULL);
+        }
     }
 
     if (cards->part_fan && part_fan_cb) {

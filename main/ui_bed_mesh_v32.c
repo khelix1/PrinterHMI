@@ -12,7 +12,25 @@
 #define CW 720
 #define CH 360
 #define VALUE_CAP ((size_t)BED_MESH_MAX_ROWS*BED_MESH_MAX_COLS)
-typedef struct{lv_obj_t*popup,*canvas,*stats;uint16_t*buf;float*values;bed_mesh_snapshot_t mesh;float yaw,pitch,zoom,zscale;lv_point_t last;bool drag;ui_bed_mesh_command_cb_t command;} ui_t;
+typedef struct {
+    lv_obj_t *popup;
+    lv_obj_t *canvas;
+    lv_obj_t *stats;
+    uint16_t *buf;
+    float *values;
+    bed_mesh_snapshot_t mesh;
+    float yaw;
+    float pitch;
+    float zoom;
+    float zscale;
+    float pinch_base_zoom;
+    uint32_t pinch_last_render_tick;
+    lv_point_t last;
+    lv_indev_t *gesture_indev;
+    bool drag;
+    bool pinch_active;
+    ui_bed_mesh_command_cb_t command;
+} ui_t;
 typedef struct{float x,y,z,sx,sy,d;} vertex_t;
 typedef struct{uint16_t a,b,c;float d,z;} tri_t;
 static ui_t s;
@@ -39,13 +57,179 @@ static void render(void){
 static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,"No active bed mesh. Calibrate or load a profile.");return;}char b[256];snprintf(b,sizeof(b),"PROFILE %s   GRID %u x %u   LOW %+.3f mm   HIGH %+.3f mm   RANGE %.3f mm   Z %.0fx%s",s.mesh.profile_name,s.mesh.cols,s.mesh.rows,s.mesh.minimum,s.mesh.maximum,s.mesh.range,s.zscale,s.mesh.truncated?"   TRUNCATED":"");lv_label_set_text(s.stats,b);}
 void ui_bed_mesh_v32_refresh(void){if(!s.popup)return;if(!s.values)s.values=alloc_psram_first(VALUE_CAP,sizeof(float));if(!s.values||!bed_mesh_controller_snapshot(&s.mesh,s.values,VALUE_CAP)){memset(&s.mesh,0,sizeof(s.mesh));stats();if(s.canvas)lv_canvas_fill_bg(s.canvas,UI_CARD,LV_OPA_COVER);return;}stats();render();}
 static void close_cb(lv_event_t*e){(void)e;ui_bed_mesh_v32_close();}static void reset_cb(lv_event_t*e){(void)e;s.yaw=-.72f;s.pitch=.88f;s.zoom=1;s.zscale=20;stats();render();}static void plus_cb(lv_event_t*e){(void)e;s.zoom=fminf(3.5f,s.zoom*1.15f);render();}static void minus_cb(lv_event_t*e){(void)e;s.zoom=fmaxf(.45f,s.zoom/1.15f);render();}static void calibrate_cb(lv_event_t*e){(void)e;if(s.command)s.command("BED_MESH_CALIBRATE");}
-static void canvas_cb(lv_event_t*e){lv_event_code_t code=lv_event_get_code(e);lv_indev_t*i=lv_indev_active();if(!i)return;if(code==LV_EVENT_PRESSED){lv_indev_get_point(i,&s.last);s.drag=true;}else if(code==LV_EVENT_PRESSING&&s.drag){lv_point_t p;lv_indev_get_point(i,&p);s.yaw-=(p.x-s.last.x)*.012f;s.pitch-=(p.y-s.last.y)*.01f;if(s.pitch<.15f)s.pitch=.15f;if(s.pitch>1.45f)s.pitch=1.45f;s.last=p;render();}else if(code==LV_EVENT_RELEASED||code==LV_EVENT_PRESS_LOST)s.drag=false;
+static void canvas_cb(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_active();
+
+    if (!indev) {
+        return;
+    }
+
 #if LV_USE_GESTURE_RECOGNITION
- else if(code==LV_EVENT_GESTURE){lv_indev_gesture_type_t type=lv_event_get_gesture_type(e);ESP_LOGI("BED_MESH","GESTURE event type=%d",(int)type);if(type==LV_INDEV_GESTURE_PINCH){float scale=lv_event_get_pinch_scale(e);ESP_LOGI("BED_MESH","PINCH scale=%.3f",(double)scale);if(scale>.01f){s.zoom*=scale;if(s.zoom<.45f)s.zoom=.45f;if(s.zoom>3.5f)s.zoom=3.5f;render();}}else if(type==LV_INDEV_GESTURE_ROTATE){s.yaw+=lv_event_get_rotation(e);render();}}
+    if (code == LV_EVENT_GESTURE) {
+        lv_indev_gesture_type_t type =
+            lv_event_get_gesture_type(e);
+
+        if (type == LV_INDEV_GESTURE_PINCH) {
+            lv_indev_gesture_state_t state =
+                lv_event_get_gesture_state(
+                    e,
+                    LV_INDEV_GESTURE_PINCH);
+
+            if (state == LV_INDEV_GESTURE_STATE_RECOGNIZED) {
+                if (!s.pinch_active) {
+                    s.pinch_base_zoom = s.zoom;
+                    s.pinch_last_render_tick = 0;
+                    s.pinch_active = true;
+                    s.drag = false;
+                }
+
+                float raw_scale = lv_event_get_pinch_scale(e);
+
+                if (raw_scale > 0.01f) {
+                    /*
+                     * Reduce sensitivity while keeping the zoom direction
+                     * natural. A 20% finger-distance change becomes a 12%
+                     * zoom change.
+                     */
+                    float adjusted_scale =
+                        1.0f + ((raw_scale - 1.0f) * 0.60f);
+                    float target_zoom =
+                        s.pinch_base_zoom * adjusted_scale;
+
+                    if (target_zoom < 0.45f) {
+                        target_zoom = 0.45f;
+                    }
+                    if (target_zoom > 3.5f) {
+                        target_zoom = 3.5f;
+                    }
+
+                    /*
+                     * Low-pass filtering removes GT911 coordinate jitter.
+                     * Keep the state current even when a redraw is skipped.
+                     */
+                    float delta = target_zoom - s.zoom;
+
+                    if (fabsf(delta) < 0.002f) {
+                        s.zoom = target_zoom;
+                    } else {
+                        s.zoom += delta * 0.45f;
+                    }
+
+                    uint32_t now = lv_tick_get();
+
+                    if (s.pinch_last_render_tick == 0 ||
+                        now - s.pinch_last_render_tick >= 33U) {
+                        s.pinch_last_render_tick = now;
+                        render();
+                    }
+                }
+            } else if (state == LV_INDEV_GESTURE_STATE_ENDED) {
+                /*
+                 * Always draw the final filtered value so throttling cannot
+                 * leave the canvas one event behind.
+                 */
+                render();
+                s.pinch_base_zoom = s.zoom;
+                s.pinch_last_render_tick = 0;
+                s.pinch_active = false;
+                s.drag = false;
+            }
+
+            return;
+        }
+
+        /*
+         * Native two-finger rotation is intentionally disabled while this
+         * popup is open. One-finger drag remains the rotation control.
+         */
+        return;
+    }
 #endif
+
+    if (code == LV_EVENT_PRESSED) {
+        lv_indev_get_point(indev, &s.last);
+        s.drag = !s.pinch_active;
+    } else if (code == LV_EVENT_PRESSING &&
+               s.drag &&
+               !s.pinch_active) {
+        lv_point_t point;
+        lv_indev_get_point(indev, &point);
+
+        s.yaw -= (point.x - s.last.x) * 0.012f;
+        s.pitch -= (point.y - s.last.y) * 0.01f;
+
+        if (s.pitch < 0.15f) {
+            s.pitch = 0.15f;
+        }
+        if (s.pitch > 1.45f) {
+            s.pitch = 1.45f;
+        }
+
+        s.last = point;
+        render();
+    } else if (code == LV_EVENT_RELEASED ||
+               code == LV_EVENT_PRESS_LOST) {
+        s.drag = false;
+    }
 }
-bool ui_bed_mesh_v32_is_open(void){return s.popup!=NULL;}void ui_bed_mesh_v32_close(void){if(s.popup)lv_obj_delete(s.popup);if(s.buf)heap_caps_free(s.buf);if(s.values)heap_caps_free(s.values);memset(&s,0,sizeof(s));}
-void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command){ui_bed_mesh_v32_close();s.command=command;s.yaw=-.72f;s.pitch=.88f;s.zoom=1;s.zscale=20;s.popup=lv_obj_create(lv_layer_top());lv_obj_set_size(s.popup,950,540);lv_obj_center(s.popup);lv_obj_clear_flag(s.popup,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_style_bg_color(s.popup,UI_BG,0);lv_obj_set_style_bg_opa(s.popup,LV_OPA_COVER,0);lv_obj_set_style_border_color(s.popup,UI_BORDER_BRIGHT,0);lv_obj_set_style_border_width(s.popup,2,0);lv_obj_set_style_radius(s.popup,18,0);lv_obj_set_style_pad_all(s.popup,18,0);
+bool ui_bed_mesh_v32_is_open(void)
+{
+    return s.popup != NULL;
+}
+
+void ui_bed_mesh_v32_close(void)
+{
+#if LV_USE_GESTURE_RECOGNITION
+    if (s.gesture_indev) {
+        /*
+         * Restore LVGL 9.5 defaults when leaving this specialized viewer.
+         */
+        lv_indev_set_pinch_up_threshold(s.gesture_indev, 1.50f);
+        lv_indev_set_pinch_down_threshold(s.gesture_indev, 0.75f);
+        lv_indev_set_rotation_rad_threshold(s.gesture_indev, 0.20f);
+    }
+#endif
+
+    if (s.popup) {
+        lv_obj_delete(s.popup);
+    }
+    if (s.buf) {
+        heap_caps_free(s.buf);
+    }
+    if (s.values) {
+        heap_caps_free(s.values);
+    }
+
+    memset(&s, 0, sizeof(s));
+}
+
+void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
+{
+    ui_bed_mesh_v32_close();
+    s.command = command;
+    s.yaw = -0.72f;
+    s.pitch = 0.88f;
+    s.zoom = 1.0f;
+    s.zscale = 20.0f;
+
+#if LV_USE_GESTURE_RECOGNITION
+    s.gesture_indev = lv_indev_active();
+
+    if (s.gesture_indev) {
+        /*
+         * LVGL 9.5 defaults require a 1.50x/0.75x distance change before a
+         * pinch is recognized. Recognize at 1.04x/0.96x instead and prevent
+         * the competing native rotation recognizer from winning first.
+         */
+        lv_indev_set_pinch_up_threshold(s.gesture_indev, 1.04f);
+        lv_indev_set_pinch_down_threshold(s.gesture_indev, 0.96f);
+        lv_indev_set_rotation_rad_threshold(s.gesture_indev, 3.20f);
+    }
+#endif
+
+    s.popup=lv_obj_create(lv_layer_top());lv_obj_set_size(s.popup,950,540);lv_obj_center(s.popup);lv_obj_clear_flag(s.popup,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_style_bg_color(s.popup,UI_BG,0);lv_obj_set_style_bg_opa(s.popup,LV_OPA_COVER,0);lv_obj_set_style_border_color(s.popup,UI_BORDER_BRIGHT,0);lv_obj_set_style_border_width(s.popup,2,0);lv_obj_set_style_radius(s.popup,18,0);lv_obj_set_style_pad_all(s.popup,18,0);
  lv_obj_t*title=lv_label_create(s.popup);lv_label_set_text(title,"BED MESH 3D");ui_apply_text_title(title);lv_obj_align(title,LV_ALIGN_TOP_LEFT,0,0);s.stats=lv_label_create(s.popup);ui_apply_text_body(s.stats);lv_obj_set_style_text_color(s.stats,UI_TEXT_DIM,0);lv_obj_set_width(s.stats,900);lv_obj_align(s.stats,LV_ALIGN_TOP_LEFT,0,38);
  s.buf=alloc_psram_first((size_t)CW*CH,sizeof(uint16_t));if(s.buf){s.canvas=lv_canvas_create(s.popup);lv_canvas_set_buffer(s.canvas,s.buf,CW,CH,LV_COLOR_FORMAT_RGB565);lv_obj_align(s.canvas,LV_ALIGN_TOP_LEFT,0,82);lv_obj_add_flag(s.canvas,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(s.canvas,canvas_cb,LV_EVENT_ALL,NULL);}lv_obj_t*hint=lv_label_create(s.popup);lv_label_set_text(hint,"DRAG TO ROTATE   •   PINCH TO ZOOM   •   LONG-PRESS BED CARD TO OPEN");ui_apply_text_caption(hint);lv_obj_set_style_text_color(hint,UI_TEXT_DIM,0);lv_obj_align(hint,LV_ALIGN_BOTTOM_LEFT,0,-2);
  lv_obj_t*close=ui_button_create(s.popup,UI_BUTTON_CLOSE,"CLOSE");lv_obj_set_size(close,110,42);lv_obj_align(close,LV_ALIGN_TOP_RIGHT,0,-4);lv_obj_add_event_cb(close,close_cb,LV_EVENT_CLICKED,NULL);lv_obj_t*reset=ui_button_create(s.popup,UI_BUTTON_OUTLINED,"RESET VIEW");lv_obj_set_size(reset,132,42);lv_obj_align(reset,LV_ALIGN_BOTTOM_RIGHT,0,0);lv_obj_add_event_cb(reset,reset_cb,LV_EVENT_CLICKED,NULL);lv_obj_t*plus=ui_button_create(s.popup,UI_BUTTON_OUTLINED,"+");lv_obj_set_size(plus,52,42);lv_obj_align(plus,LV_ALIGN_BOTTOM_RIGHT,-142,0);lv_obj_add_event_cb(plus,plus_cb,LV_EVENT_CLICKED,NULL);lv_obj_t*minus=ui_button_create(s.popup,UI_BUTTON_OUTLINED,"-");lv_obj_set_size(minus,52,42);lv_obj_align(minus,LV_ALIGN_BOTTOM_RIGHT,-202,0);lv_obj_add_event_cb(minus,minus_cb,LV_EVENT_CLICKED,NULL);lv_obj_t*cal=ui_button_create(s.popup,UI_BUTTON_PRIMARY,"CALIBRATE");lv_obj_set_size(cal,130,42);lv_obj_align(cal,LV_ALIGN_BOTTOM_RIGHT,-264,0);lv_obj_add_event_cb(cal,calibrate_cb,LV_EVENT_CLICKED,NULL);ui_bed_mesh_v32_refresh();}

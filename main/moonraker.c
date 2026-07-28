@@ -15,7 +15,6 @@ static moonraker_state_t g_moonraker_state;
 static moonraker_exclude_state_t *g_moonraker_exclude_state = NULL;
 static moonraker_filament_state_t
     *g_moonraker_filament_state = NULL;
-static StaticSemaphore_t s_state_mutex_buffer;
 static SemaphoreHandle_t s_state_mutex = NULL;
 
 
@@ -37,8 +36,9 @@ static void state_unlock(void)
 
 void moonraker_module_init(void)
 {
-    s_state_mutex =
-        xSemaphoreCreateMutexStatic(&s_state_mutex_buffer);
+    if (!s_state_mutex) {
+        s_state_mutex = xSemaphoreCreateMutex();
+    }
 
     bed_mesh_controller_init();
 

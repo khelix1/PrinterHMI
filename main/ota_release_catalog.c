@@ -47,7 +47,7 @@ static void ensure_lock(void)
     if (!s_lock) {
         /*
          * Create this only when Remote Builds is first opened. Keeping the
-         * StaticSemaphore_t out of .bss preserves scarce startup RAM.
+         * Heap-backed synchronization avoids consuming permanent .bss storage.
          */
         s_lock = xSemaphoreCreateMutexWithCaps(
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);

@@ -16,7 +16,6 @@ typedef struct {
     size_t capacity;
 } mesh_state_t;
 static mesh_state_t s;
-static StaticSemaphore_t mutex_buf;
 static SemaphoreHandle_t mutex;
 static void lock(void){ if(mutex) xSemaphoreTake(mutex, portMAX_DELAY); }
 static void unlock(void){ if(mutex) xSemaphoreGive(mutex); }
@@ -34,9 +33,19 @@ static bool read_xy(cJSON *a,double *x,double *y){
     if(!cJSON_IsNumber(jx)||!cJSON_IsNumber(jy)) return false;
     *x=jx->valuedouble; *y=jy->valuedouble; return true;
 }
-void bed_mesh_controller_init(void){
-    if(!mutex) mutex=xSemaphoreCreateMutexStatic(&mutex_buf);
-    lock(); memset(&s,0,sizeof(s)); unlock();
+void bed_mesh_controller_init(void)
+{
+    if (!mutex) {
+        mutex = xSemaphoreCreateMutex();
+    }
+
+    if (!mutex) {
+        return;
+    }
+
+    lock();
+    memset(&s, 0, sizeof(s));
+    unlock();
 }
 void bed_mesh_controller_reset(void){
     lock(); s.valid=false; s.rows=s.cols=0; s.profile_name[0]=0; unlock();

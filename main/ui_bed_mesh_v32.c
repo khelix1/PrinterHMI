@@ -7,6 +7,7 @@
 #include "bed_mesh_controller.h"
 #include "esp_heap_caps.h"
 #include "ui_button.h"
+#include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #define CW 720
@@ -16,6 +17,7 @@ typedef struct {
     lv_obj_t *popup;
     lv_obj_t *canvas;
     lv_obj_t *stats;
+    lv_obj_t *calibrate_confirm;
     uint16_t *buf;
     float *values;
     bed_mesh_snapshot_t mesh;
@@ -56,7 +58,126 @@ static void render(void){
 }
 static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,"No active bed mesh. Calibrate or load a profile.");return;}char b[256];snprintf(b,sizeof(b),"PROFILE %s   GRID %u x %u   LOW %+.3f mm   HIGH %+.3f mm   RANGE %.3f mm   Z %.0fx%s",s.mesh.profile_name,s.mesh.cols,s.mesh.rows,s.mesh.minimum,s.mesh.maximum,s.mesh.range,s.zscale,s.mesh.truncated?"   TRUNCATED":"");lv_label_set_text(s.stats,b);}
 void ui_bed_mesh_v32_refresh(void){if(!s.popup)return;if(!s.values)s.values=alloc_psram_first(VALUE_CAP,sizeof(float));if(!s.values||!bed_mesh_controller_snapshot(&s.mesh,s.values,VALUE_CAP)){memset(&s.mesh,0,sizeof(s.mesh));stats();if(s.canvas)lv_canvas_fill_bg(s.canvas,UI_CARD,LV_OPA_COVER);return;}stats();render();}
-static void close_cb(lv_event_t*e){(void)e;ui_bed_mesh_v32_close();}static void reset_cb(lv_event_t*e){(void)e;s.yaw=-.72f;s.pitch=.88f;s.zoom=1;s.zscale=20;stats();render();}static void plus_cb(lv_event_t*e){(void)e;s.zoom=fminf(3.5f,s.zoom*1.15f);render();}static void minus_cb(lv_event_t*e){(void)e;s.zoom=fmaxf(.45f,s.zoom/1.15f);render();}static void calibrate_cb(lv_event_t*e){(void)e;if(s.command)s.command("BED_MESH_CALIBRATE");}
+static void close_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_bed_mesh_v32_close();
+}
+
+static void reset_cb(lv_event_t *e)
+{
+    (void)e;
+    s.yaw = -0.72f;
+    s.pitch = 0.88f;
+    s.zoom = 1.0f;
+    s.zscale = 20.0f;
+    stats();
+    render();
+}
+
+static void plus_cb(lv_event_t *e)
+{
+    (void)e;
+    s.zoom = fminf(3.5f, s.zoom * 1.15f);
+    render();
+}
+
+static void minus_cb(lv_event_t *e)
+{
+    (void)e;
+    s.zoom = fmaxf(0.45f, s.zoom / 1.15f);
+    render();
+}
+
+static void close_calibrate_confirm_cb(lv_event_t *e)
+{
+    (void)e;
+
+    if (s.calibrate_confirm) {
+        lv_obj_t *popup = s.calibrate_confirm;
+        s.calibrate_confirm = NULL;
+        lv_obj_delete(popup);
+    }
+}
+
+static void confirm_calibrate_cb(lv_event_t *e)
+{
+    (void)e;
+
+    /*
+     * Preserve the command callback before closing the modal. The mesh
+     * viewer remains open so its live snapshot can refresh after probing.
+     */
+    ui_bed_mesh_command_cb_t command = s.command;
+    close_calibrate_confirm_cb(NULL);
+
+    if (command) {
+        command("BED_MESH_CALIBRATE");
+    }
+}
+
+static void calibrate_cb(lv_event_t *e)
+{
+    (void)e;
+
+    if (s.calibrate_confirm) {
+        lv_obj_move_foreground(s.calibrate_confirm);
+        return;
+    }
+
+    /*
+     * Calibration belongs to the bed-mesh viewer, while all modal geometry
+     * and styling comes from the shared popup subsystem.
+     */
+    s.calibrate_confirm =
+        ui_popup_create(
+            s.popup ? s.popup : lv_screen_active(),
+            500,
+            280,
+            UI_POPUP_DANGER);
+
+    if (!s.calibrate_confirm) {
+        return;
+    }
+
+    ui_popup_add_title(
+        s.calibrate_confirm,
+        "START BED MESH?",
+        true,
+        4);
+    ui_popup_add_header_divider(
+        s.calibrate_confirm,
+        44);
+    ui_popup_add_body(
+        s.calibrate_confirm,
+        "This will move the toolhead across the bed and probe multiple "
+        "points.\n\nMake sure the bed is clear and the printer is ready.",
+        24,
+        70,
+        452);
+    ui_popup_add_standard_footer_divider(
+        s.calibrate_confirm);
+
+    ui_popup_add_footer_action(
+        s.calibrate_confirm,
+        UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_LEFT " BACK",
+        160,
+        UI_POPUP_FOOTER_LEFT,
+        close_calibrate_confirm_cb,
+        NULL,
+        NULL);
+
+    ui_popup_add_footer_action(
+        s.calibrate_confirm,
+        UI_POPUP_ACTION_DANGER,
+        LV_SYMBOL_PLAY " START",
+        190,
+        UI_POPUP_FOOTER_RIGHT,
+        confirm_calibrate_cb,
+        NULL,
+        NULL);
+}
 static void canvas_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -181,6 +302,12 @@ bool ui_bed_mesh_v32_is_open(void)
 
 void ui_bed_mesh_v32_close(void)
 {
+    /*
+     * The shared confirmation is a top-layer sibling, not a child of the
+     * mesh viewer. Close it first so no modal surface can outlive its owner.
+     */
+    close_calibrate_confirm_cb(NULL);
+
 #if LV_USE_GESTURE_RECOGNITION
     if (s.gesture_indev) {
         /*

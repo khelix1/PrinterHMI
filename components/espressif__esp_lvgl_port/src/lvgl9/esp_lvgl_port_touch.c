@@ -147,31 +147,6 @@ static void lvgl_port_touchpad_read(lv_indev_t *indev_drv, lv_indev_data_t *data
         touches[i].timestamp = esp_timer_get_time() / 1000;
     }
 
-    /*
-     * Temporary multitouch diagnostics. Log only when the reported contact
-     * count changes so normal touch polling does not flood the serial output.
-     */
-    static uint8_t last_touch_cnt = UINT8_MAX;
-
-    if (touch_cnt != last_touch_cnt) {
-        last_touch_cnt = touch_cnt;
-
-        if (touch_cnt >= 2) {
-            ESP_LOGI(
-                TAG,
-                "MULTITOUCH count=%u p0=(%u,%u id=%u) p1=(%u,%u id=%u)",
-                touch_cnt,
-                touch_data[0].x,
-                touch_data[0].y,
-                touch_data[0].track_id,
-                touch_data[1].x,
-                touch_data[1].y,
-                touch_data[1].track_id);
-        } else {
-            ESP_LOGI(TAG, "MULTITOUCH count=%u", touch_cnt);
-        }
-    }
-
     /* Pass touch data to LVGL gesture recognizers */
     lv_indev_gesture_recognizers_update(
         indev_drv,

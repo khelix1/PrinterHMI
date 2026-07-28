@@ -5,7 +5,27 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
-No changes yet.
+### Added
+
+- Added an interactive 3D bed-mesh viewer opened by long-pressing the Printer
+  page BED card.
+- Added drag rotation, pinch zoom, explicit zoom controls and view reset.
+- Added a shared modal safety confirmation before dispatching
+  `BED_MESH_CALIBRATE`.
+
+### Fixed
+
+- Corrected cumulative pinch scaling and tuned recognition thresholds for the
+  GT911 multitouch panel.
+- Smoothed pinch input, reduced zoom sensitivity, limited redraw frequency and
+  prevented native two-finger rotation from competing with pinch zoom.
+- Prevented a completed BED-card long press from also opening the normal bed
+  temperature popup.
+
+### Changed
+
+- Removed temporary multitouch contact logging after target-hardware
+  validation.
 
 ## [4.2.2] - 2026-07-26
 

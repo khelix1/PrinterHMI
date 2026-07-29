@@ -14,6 +14,8 @@
 #include "cJSON.h"
 #include "moonraker.h"
 #include "operator_event_log.h"
+#include "console_controller.h"
+#include "macro_controller.h"
 
 
 #define TAG "moon_live_ws"
@@ -367,6 +369,8 @@ static bool handle_object_list_response(
         ? cJSON_GetObjectItemCaseSensitive(result, "objects")
         : NULL;
 
+    macro_controller_update_from_objects(objects);
+
     static const char *candidates[MOONRAKER_MAX_HOTENDS] = {
         "extruder",
         "extruder1",
@@ -567,6 +571,12 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
     }
 
     if (handle_object_list_response(
+            s_message_buffer,
+            (size_t)payload_length)) {
+        return;
+    }
+
+    if (console_controller_ingest_websocket_json(
             s_message_buffer,
             (size_t)payload_length)) {
         return;

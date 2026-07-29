@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v4.2.2 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v5.0.0 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -37,8 +37,10 @@ flowchart TD
 ### Shell and pages
 
 `ui_shell` owns the persistent top status bar, navigation rail, clock and active
-printer identity. It routes seven pages: Dashboard, Drybox, Printer, Files,
-Network, Settings and Telemetry.
+printer identity. It routes ten pages in operator workflow order:
+Dashboard, Printer, Files, Bed Mesh, Macros, Console, Telemetry, Drybox,
+Network and Settings. Its persistent runtime pointer tables are allocated once
+in PSRAM after scheduler startup.
 
 Each page has a top-level UI owner. Larger pages delegate to components such as
 status banners, cards, previews, charts, action panels and popup controllers.
@@ -69,6 +71,10 @@ status banners, cards, previews, charts, action panels and popup controllers.
   discovery is presented inside printer profile Add/Edit.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
   `moonraker` and consumed through controllers.
+- `macro_controller` derives a bounded, alphabetized public-macro catalog from
+  Moonraker object discovery while excluding underscore-prefixed helpers.
+- `console_controller` retains bounded command and response history and
+  receives live `notify_gcode_response` WebSocket messages.
 
 ### Printer and files
 
@@ -80,6 +86,16 @@ status banners, cards, previews, charts, action panels and popup controllers.
   are separate modules.
 - Large image/message buffers prefer PSRAM. Rendered profile previews can be
   persisted on SD storage.
+
+### Bed Mesh, Macros and Console
+
+- `ui_bed_mesh_v32` owns the interactive 3D mesh page; the existing
+  `bed_mesh_controller` remains the source for profile snapshots and commands.
+- `ui_macros_v32` renders the discovered public-macro catalog through shared
+  themed controls and a modal execution confirmation.
+- `ui_console_v32` owns command entry and history presentation.
+- Macro catalogs, Console history, the Macros page context and shell pointer
+  tables use bounded permanent PSRAM-first allocation.
 
 ### Settings and persistence
 
@@ -119,6 +135,10 @@ startup marks the running image valid and cancels rollback.
   retired generation must be discarded.
 - DMA buffers must use DMA-capable memory; general large buffers should prefer
   PSRAM when latency permits.
+- Avoid adding sizeable static internal-RAM state. FreeRTOS creates its
+  statically configured timer task before `app_main()`, so long-lived UI and
+  controller contexts should be allocated permanently from PSRAM after the
+  scheduler starts.
 
 ## Source of truth
 

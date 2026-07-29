@@ -134,6 +134,10 @@ static void sntp_wait_task(void *arg);
 #include "ui_splash_v32.h"
 #include "ui_shell.h"
 #include "ui_telemetry_v32.h"
+#include "ui_console_v32.h"
+#include "console_controller.h"
+#include "ui_macros_v32.h"
+#include "macro_controller.h"
 #include "telemetry_history.h"
 #include "ui_printer_v32.h"
 #include "ui_printer_motion.h"
@@ -1592,7 +1596,8 @@ return;
         ui_network_v32_hide();
         hide_settings_tab();
         ui_drybox_v32_show();
-        ui_shell_set_active_nav(1);
+        ui_shell_set_active_nav(
+            UI_SHELL_PAGE_DRYBOX);
         return;
     }
 
@@ -1644,6 +1649,9 @@ static void printer_chooser_manage_bridge(lv_event_t *event)
 
 static void printer_chooser_open_from_topbar(void)
 {
+    ui_bed_mesh_v32_close();
+    ui_macros_v32_hide();
+    ui_console_v32_hide();
     ui_telemetry_v32_hide();
     ui_files_v32_hide();
     ui_printer_v32_hide();
@@ -1667,27 +1675,23 @@ void ui_shell_page_action(ui_shell_page_t page)
 
     switch (page) {
     case UI_SHELL_PAGE_DASHBOARD:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
         ui_telemetry_v32_hide();
         ui_files_v32_hide();
         ui_printer_v32_hide();
         ui_drybox_v32_hide();
         ui_network_v32_hide();
         hide_settings_tab();
-
         ui_dashboard_v32_create();
         dashboard_restore_active_profile_preview();
         return;
 
-    case UI_SHELL_PAGE_DRYBOX:
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
-        ui_drybox_v32_show();
-        return;
-
     case UI_SHELL_PAGE_PRINTER:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
         ui_telemetry_v32_hide();
         ui_files_v32_hide();
         ui_drybox_v32_hide();
@@ -1697,20 +1701,86 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_FILES:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
         ui_telemetry_v32_hide();
         ui_printer_v32_hide();
         ui_drybox_v32_hide();
         ui_network_v32_hide();
         hide_settings_tab();
-    ui_files_v32_set_callbacks(
-        files_refresh_bridge,
-        files_select_bridge,
-        files_preview_bridge);
-    ui_files_v32_show();
-    app_files_reload();
-return;
+        ui_files_v32_set_callbacks(
+            files_refresh_bridge,
+            files_select_bridge,
+            files_preview_bridge);
+        ui_files_v32_show();
+        app_files_reload();
+        return;
+
+    case UI_SHELL_PAGE_BED_MESH:
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
+        ui_telemetry_v32_hide();
+        ui_files_v32_hide();
+        ui_printer_v32_hide();
+        ui_drybox_v32_hide();
+        ui_network_v32_hide();
+        hide_settings_tab();
+        ui_bed_mesh_v32_show(printer_popup_send_gcode_bridge);
+        return;
+
+    case UI_SHELL_PAGE_MACROS:
+        ui_bed_mesh_v32_close();
+        ui_console_v32_hide();
+        ui_telemetry_v32_hide();
+        ui_files_v32_hide();
+        ui_printer_v32_hide();
+        ui_drybox_v32_hide();
+        ui_network_v32_hide();
+        hide_settings_tab();
+        ui_macros_v32_show(moonraker_send_gcode);
+        return;
+
+    case UI_SHELL_PAGE_CONSOLE:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_telemetry_v32_hide();
+        ui_files_v32_hide();
+        ui_printer_v32_hide();
+        ui_drybox_v32_hide();
+        ui_network_v32_hide();
+        hide_settings_tab();
+        ui_console_v32_show(moonraker_send_gcode);
+        return;
+
+    case UI_SHELL_PAGE_TELEMETRY:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
+        ui_files_v32_hide();
+        ui_printer_v32_hide();
+        ui_drybox_v32_hide();
+        ui_network_v32_hide();
+        hide_settings_tab();
+        ui_telemetry_v32_show();
+        return;
+
+    case UI_SHELL_PAGE_DRYBOX:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
+        ui_telemetry_v32_hide();
+        ui_files_v32_hide();
+        ui_printer_v32_hide();
+        ui_network_v32_hide();
+        hide_settings_tab();
+        ui_drybox_v32_show();
+        return;
 
     case UI_SHELL_PAGE_NETWORK:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
         ui_telemetry_v32_hide();
         ui_files_v32_hide();
         ui_printer_v32_hide();
@@ -1720,22 +1790,15 @@ return;
         return;
 
     case UI_SHELL_PAGE_SETTINGS:
+        ui_bed_mesh_v32_close();
+        ui_macros_v32_hide();
+        ui_console_v32_hide();
         ui_telemetry_v32_hide();
         ui_files_v32_hide();
         ui_printer_v32_hide();
         ui_drybox_v32_hide();
         ui_network_v32_hide();
         show_settings_tab();
-        return;
-
-
-    case UI_SHELL_PAGE_TELEMETRY:
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
-        ui_telemetry_v32_show();
         return;
 
     default:
@@ -2006,11 +2069,6 @@ static void nozzle_card_event_cb(lv_event_t *e)
 static void bed_card_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-
-    if (code == LV_EVENT_LONG_PRESSED) {
-        ui_bed_mesh_v32_show(printer_popup_send_gcode_bridge);
-        return;
-    }
 
     if (code != LV_EVENT_CLICKED) return;
 
@@ -3783,6 +3841,9 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     operator_event_log_init();
+    console_controller_init();
+    macro_controller_init();
+    ui_macros_v32_init();
     operator_event_log_add(
         OPERATOR_EVENT_INFO,
         "Controller started; reset reason %d",

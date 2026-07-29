@@ -12,6 +12,18 @@ Capture the reset reason, application version, OTA slot/state, PSRAM result,
 display initialization, Wi-Fi address, SNTP result, SD mount and Moonraker
 connection. Redact credentials, tokens and private addresses before sharing.
 
+## Boot asserts before `app_main()`
+
+If the log reports `vApplicationGetTimerTaskMemory` with
+`pxTCBBufferTemp != NULL`, the image exhausted or fragmented internal startup
+RAM before the FreeRTOS timer task was created. This is not a PSRAM-capacity
+failure because it occurs before `app_main()` can allocate runtime contexts.
+
+Compare the new and known-good linker maps and `heap_init` ranges. Move
+long-lived non-DMA UI/controller state into bounded permanent PSRAM
+allocations performed after scheduler startup. Do not disable FreeRTOS static
+allocation; ESP-Hosted depends on static task creation.
+
 ## Device remains on splash
 
 1. Wait long enough to distinguish slow network startup from a frozen LVGL

@@ -1,18 +1,19 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v4.2.2 firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v5.0.0 firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
 The current release supports up to four Moonraker printer profiles, live
 printer and drybox status, file browsing with thumbnails and metadata,
-telemetry, print controls, exclude-object control, persistent display and
+telemetry, print controls, exclude-object control, a dedicated 3D Bed Mesh
+workspace, detected Klipper macros, a live console, persistent display and
 timezone settings, runtime themes, and OTA firmware updates.
 
 ## Status
 
-- Firmware version: `4.2.2`
+- Firmware version: `5.0.0`
 - Target: `esp32p4`
 - Known-good ESP-IDF: `5.4.4`
 - LVGL: `9.5.0` as locked by `dependencies.lock`
@@ -31,6 +32,10 @@ publishing repository history.
 - Live switch and motion filament-sensor status with multi-sensor detail
 - Moonraker exclude-object selection and confirmation
 - Files page with search, row thumbnails, long-press preview and metadata
+- Dedicated Bed Mesh page with color height surface, rear reference planes,
+  origin markers, statistics, calibration, profile management and multitouch
+- Detected public Klipper macros with confirmation before execution
+- Live command console with bounded history and response severity colors
 - Multi-printer profile selection for as many as four Moonraker instances
 - Drybox status and PLA/PETG/hold program controls
 - Auto-scaling combined temperature and humidity telemetry
@@ -45,7 +50,7 @@ publishing repository history.
 
 ## Interface on Hardware
 
-PrinterHMI v4.2.2 running on the JC1060P470C-I/W ESP32-P4 panel.
+PrinterHMI v5.0.0 running on the JC1060P470C-I/W ESP32-P4 panel.
 These photographs show the interface operating on the target hardware.
 
 <!-- PRINTERHMI_HARDWARE_GALLERY_V1 -->

@@ -84,6 +84,17 @@ Active-print layers normally come from `print_stats.info`. When slicer layer
 statistics are absent, PrinterHMI estimates layers from file `object_height`,
 `layer_height` and print progress metadata.
 
+## Bed Mesh profiles and detected macros
+
+Bed Mesh profiles are owned by Klipper, not PrinterHMI NVS. The Bed Mesh page
+reads the active profile list, can request calibration, and uses Klipper
+`SAVE_CONFIG` semantics when a profile change must persist.
+
+The Macros page is generated from Moonraker `printer.objects.list`. Public
+`gcode_macro` objects are displayed alphabetically; names beginning with an
+underscore are treated as internal helpers and hidden. Macro discovery and
+history are runtime state and are not persisted in NVS.
+
 ## Factory reset
 
 Factory reset erases NVS and reboots. This removes saved Wi-Fi, Moonraker,

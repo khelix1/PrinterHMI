@@ -43,6 +43,14 @@ The generated dependency lock file currently contains machine-specific absolute 
 
 This should be made portable before introducing automated CI or distributing the repository for general development.
 
+## Internal startup-RAM margin
+
+FreeRTOS creates the statically configured timer task before `app_main()`.
+Small increases in internal `.bss` can therefore expose an early
+`vApplicationGetTimerTaskMemory` allocation failure. v5 moves the new shell
+and Macros page contexts to permanent post-scheduler PSRAM allocations, but
+release builds must continue checking the memory map and cold boot.
+
 ## Continuous Integration
 
 GitHub Actions (or an equivalent CI system) has not yet been implemented.

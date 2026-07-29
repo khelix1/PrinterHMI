@@ -1559,15 +1559,73 @@ bool moonraker_send_gcode_script(const char *host,
         return false;
     }
 
-    char body[160];
-    int body_len = snprintf(body,
-                            sizeof(body),
-                            "{\"script\":\"%s\"}",
-                            cmd);
+    /*
+     * Console commands can contain quotes, backslashes, or line breaks.
+     * Build valid JSON in a bounded stack buffer instead of interpolating
+     * the command directly into the request body.
+     */
+    char body[640];
+    size_t used = 0;
+    const char *prefix = "{\"script\":\"";
+    const char *suffix = "\"}";
+    size_t prefix_length = strlen(prefix);
 
-    if (body_len < 0 || (size_t)body_len >= sizeof(body)) {
+    if (prefix_length >= sizeof(body)) {
         return false;
     }
+
+    memcpy(body, prefix, prefix_length);
+    used = prefix_length;
+
+    for (const unsigned char *cursor =
+             (const unsigned char *)cmd;
+         *cursor;
+         ++cursor) {
+        const char *escape = NULL;
+        char plain[2] = {(char)*cursor, '\0'};
+
+        switch (*cursor) {
+        case '\\':
+            escape = "\\\\";
+            break;
+        case '"':
+            escape = "\\\"";
+            break;
+        case '\n':
+            escape = "\\n";
+            break;
+        case '\r':
+            escape = "\\r";
+            break;
+        case '\t':
+            escape = "\\t";
+            break;
+        default:
+            if (*cursor < 0x20) {
+                return false;
+            }
+            escape = plain;
+            break;
+        }
+
+        size_t escape_length = strlen(escape);
+        if (escape_length >= sizeof(body) - used) {
+            return false;
+        }
+
+        memcpy(body + used, escape, escape_length);
+        used += escape_length;
+    }
+
+    size_t suffix_length = strlen(suffix);
+    if (suffix_length >= sizeof(body) - used) {
+        return false;
+    }
+
+    memcpy(body + used, suffix, suffix_length);
+    used += suffix_length;
+    body[used] = '\0';
+    int body_len = (int)used;
 
     esp_http_client_config_t config = {
         .url = url,

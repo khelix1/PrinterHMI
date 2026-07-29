@@ -77,7 +77,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v4.2.2.
+- `partitions.csv` is the only supported partition layout for v5.0.0.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy
@@ -101,7 +101,9 @@ idf.py size-files
 ```
 
 Treat new compiler warnings, partition overflows, internal-memory regressions
-and bootloader-size regressions as release blockers.
+and bootloader-size regressions as release blockers. For v5 and later, compare
+the startup `.bss`/internal-RAM map and confirm the image passes
+`vApplicationGetTimerTaskMemory()` before accepting a build.
 
 ## Non-portable lockfile note
 

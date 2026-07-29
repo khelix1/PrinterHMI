@@ -10,8 +10,9 @@
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
-#define CW 720
-#define CH 360
+#include "ui_page_geometry_v32.h"
+#define CW 620
+#define CH 340
 #define VALUE_CAP ((size_t)BED_MESH_MAX_ROWS*BED_MESH_MAX_COLS)
 typedef struct {
     lv_obj_t *popup;
@@ -808,12 +809,6 @@ static void surface_grid_cb(lv_event_t *e)
     render();
 }
 
-static void close_cb(lv_event_t *e)
-{
-    (void)e;
-    ui_bed_mesh_v32_close();
-}
-
 static void reset_cb(lv_event_t *e)
 {
     (void)e;
@@ -1142,10 +1137,10 @@ static void confirmed_profile_command(
     ui_bed_mesh_command_cb_t send_command = s.command;
 
     /*
-     * Close all viewer-owned modal surfaces before SAVE_CONFIG restarts
-     * Klipper. The local command buffer remains valid for both requests.
+     * Close the viewer-owned modal surfaces before SAVE_CONFIG restarts
+     * Klipper, while keeping the dedicated Bed Mesh page in place.
      */
-    ui_bed_mesh_v32_close();
+    close_profile_popup_cb(NULL);
     send_command(command);
     send_command("SAVE_CONFIG");
 }
@@ -1783,10 +1778,8 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
 
     if (s.gesture_indev) {
         /*
-         * LVGL 9.5 defaults require a 1.50x/0.75x distance change before a
-         * pinch is recognized. Recognize at 1.02x/0.98x instead so zoom
-         * engages with minimal finger travel, while keeping the competing
-         * native rotation recognizer from winning first.
+         * Recognize pinch with minimal finger travel and keep native
+         * two-finger rotation from competing with pan and pinch.
          */
         lv_indev_set_pinch_up_threshold(s.gesture_indev, 1.02f);
         lv_indev_set_pinch_down_threshold(s.gesture_indev, 0.98f);
@@ -1794,16 +1787,27 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
     }
 #endif
 
-    s.popup =
-        ui_popup_create(
-            lv_screen_active(),
-            950,
-            540,
-            UI_POPUP_STANDARD);
-
+    /*
+     * Bed Mesh is a first-class shell destination. Keep the existing
+     * viewer owner but host it in the standard application page frame.
+     */
+    s.popup = lv_obj_create(lv_screen_active());
     if (!s.popup) {
         return;
     }
+
+    lv_obj_set_size(
+        s.popup,
+        UI_PAGE_ROOT_WIDTH,
+        UI_PAGE_ROOT_HEIGHT);
+    lv_obj_set_pos(
+        s.popup,
+        UI_PAGE_ROOT_X,
+        UI_PAGE_ROOT_Y);
+    lv_obj_clear_flag(
+        s.popup,
+        LV_OBJ_FLAG_SCROLLABLE);
+    ui_apply_root_style(s.popup);
 
     ui_popup_add_title(
         s.popup,
@@ -1818,9 +1822,9 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         ui_popup_add_caption(
             s.popup,
             "",
-            24,
+            20,
             58,
-            902);
+            814);
 
     s.buf =
         alloc_psram_first(
@@ -1837,7 +1841,7 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
             LV_COLOR_FORMAT_RGB565);
         lv_obj_set_pos(
             s.canvas,
-            24,
+            20,
             98);
         lv_obj_add_flag(
             s.canvas,
@@ -1854,10 +1858,10 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
             s.popup,
             UI_POPUP_ACTION_SECONDARY,
             "SURFACE GRID OFF",
-            170,
+            174,
             46,
             LV_ALIGN_TOP_RIGHT,
-            -24,
+            -20,
             98,
             surface_grid_cb,
             NULL,
@@ -1868,21 +1872,11 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         s.popup);
     ui_popup_add_caption(
         s.popup,
-        "DRAG ROTATE   •   2-FINGER PAN   •   PINCH ZOOM",
-        24,
-        497,
-        350);
+        "DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM",
+        20,
+        493,
+        272);
 
-    ui_popup_add_close_button(
-        s.popup,
-        110,
-        42,
-        LV_ALIGN_TOP_RIGHT,
-        -24,
-        8,
-        UI_BUTTON_CLOSE,
-        close_cb,
-        NULL);
     ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
@@ -1890,7 +1884,7 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         132,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -24,
+        -20,
         -12,
         reset_cb,
         NULL,
@@ -1902,7 +1896,7 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -166,
+        -162,
         -12,
         plus_cb,
         NULL,
@@ -1914,7 +1908,7 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -228,
+        -224,
         -12,
         minus_cb,
         NULL,
@@ -1926,7 +1920,7 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         130,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -290,
+        -286,
         -12,
         calibrate_cb,
         NULL,
@@ -1938,7 +1932,7 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         140,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -430,
+        -426,
         -12,
         profiles_cb,
         NULL,

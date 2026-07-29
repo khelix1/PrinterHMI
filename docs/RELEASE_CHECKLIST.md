@@ -35,7 +35,15 @@
 - [ ] Warm reboot succeeds.
 - [ ] Full power cycle succeeds.
 - [ ] Startup has no repeated splash flashing.
+- [ ] Startup passes `vApplicationGetTimerTaskMemory()` and reaches
+      `main_task: Calling app_main()`.
+- [ ] All ten sidebar destinations fit, highlight and open.
 - [ ] Navigation, themes and modal popups pass.
+- [ ] Bed Mesh rotation, pinch, two-finger pan, grid, origins, calibration and
+      profile management pass.
+- [ ] Public macros are detected, helper macros are hidden and execution
+      requires confirmation.
+- [ ] Console command history, live responses and severity colors pass.
 - [ ] Wi-Fi, SNTP, Moonraker HTTP/WebSocket and multi-printer switching pass.
 - [ ] Printer controls, Files, previews, Drybox and Telemetry pass.
 - [ ] Settings persist and factory-reset behavior is understood.

@@ -23,9 +23,13 @@ idf_component_register(
         "ui_toast_v32.c"
         "operator_event_log.c"
         "ui_event_history_popup.c"
+        "console_controller.c"
+        "macro_controller.c"
 
         # Shell and splash
         "ui_shell.c"
+        "ui_console_v32.c"
+        "ui_macros_v32.c"
         "ui_splash_v32.c"
         "ui_logo_assets.c"
 

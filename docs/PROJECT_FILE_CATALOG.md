@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v4.2.2 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v5.0.0 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -24,7 +24,9 @@ when ownership or build membership changes.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_shell` | Persistent top bar, navigation, clock and active printer |
+| `ui_shell` | Persistent top bar, ten-destination navigation, clock and active printer; pointer state is permanently PSRAM-backed |
+| `ui_console_v32` | Console page, command entry and bounded history presentation |
+| `ui_macros_v32` | Detected public-macro page and run confirmation |
 | `ui_splash_v32` | Startup splash state and progress |
 | `ui_logo_assets` | Compiled PrinterHMI logo assets |
 
@@ -47,6 +49,14 @@ when ownership or build membership changes.
 | `ui_printer_popups` | Temperature, fan, cancel and exclude-object interactions |
 | `printer_controller`, `printer_ui_controller` | Printer policy and UI command routing |
 | `printer_file_controller`, `printer_files` | Selected-file policy and file metadata parsing |
+
+## Bed Mesh, Macros and Console
+
+| Modules | Ownership |
+| --- | --- |
+| `ui_bed_mesh_v32`, `bed_mesh_controller` | Interactive 3D mesh, calibration, profile snapshots and profile commands |
+| `macro_controller` | Bounded public Klipper macro discovery and sorting |
+| `console_controller` | Bounded command/response history and response classification |
 
 ## Files and thumbnails
 

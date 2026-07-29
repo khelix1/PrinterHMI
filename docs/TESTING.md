@@ -22,6 +22,8 @@ Requirements:
 
 ## Startup and persistence
 
+- Cold power-on passes FreeRTOS timer-task creation and reaches
+  `main_task: Calling app_main()` without rollback.
 - Cold power-on reaches the printer chooser/dashboard without repeated splash flashing.
 - A single accepted initial panel appearance is distinguished from repeated flashes.
 - Warm reboot clears the splash.
@@ -33,7 +35,9 @@ Requirements:
 ## Display and interaction
 
 - Touch coordinates align across all screen edges.
-- Dashboard, Drybox, Printer, Files, Network, Settings and Telemetry open.
+- Dashboard, Printer, Files, Bed Mesh, Macros, Console, Telemetry, Drybox,
+  Network and Settings open.
+- All ten sidebar buttons fit without overlap and follow the documented order.
 - Persistent status bar and navigation remain aligned.
 - Every popup blocks interaction with content behind it.
 - Popup footer buttons are visible, aligned and restore interaction on close.
@@ -54,6 +58,22 @@ Requirements:
 
 Never run destructive printer commands without a safe machine state and an
 operator present.
+
+## Bed Mesh, Macros and Console
+
+- Bed Mesh renders the active profile as a solid height-colored surface.
+- Surface lines toggle independently from the rear X/Y/Z reference planes.
+- Minimum, maximum and range values match the mesh data.
+- Lower-left mesh origin and rear-plane X/Y zero markers agree.
+- One-finger drag rotates, pinch zoom responds promptly and two-finger drag
+  pans without reversing direction or fighting another gesture.
+- Calibration and profile Save/Remove paths use confirmation and recover after
+  Klipper restart.
+- Public macros appear alphabetically; underscore-prefixed helpers do not.
+- Running a safe macro requires confirmation and is recorded in Console
+  history.
+- Known commands show normal responses, warnings remain amber and unknown
+  commands render red.
 
 ## Files and previews
 

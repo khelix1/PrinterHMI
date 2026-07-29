@@ -5,27 +5,45 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-28
+
 ### Added
 
-- Added an interactive 3D bed-mesh viewer opened by long-pressing the Printer
-  page BED card.
-- Added drag rotation, pinch zoom, explicit zoom controls and view reset.
-- Added a shared modal safety confirmation before dispatching
-  `BED_MESH_CALIBRATE`.
-
-### Fixed
-
-- Corrected cumulative pinch scaling and tuned recognition thresholds for the
-  GT911 multitouch panel.
-- Smoothed pinch input, reduced zoom sensitivity, limited redraw frequency and
-  prevented native two-finger rotation from competing with pinch zoom.
-- Prevented a completed BED-card long press from also opening the normal bed
-  temperature popup.
+- Added Bed Mesh as a dedicated sidebar page with a solid height-colored 3D
+  surface, optional surface grid, rear X/Y/Z reference planes, origin markers
+  and minimum, maximum and range statistics.
+- Added drag rotation, responsive pinch zoom and two-finger graph panning.
+- Added Bed Mesh calibration and detected profile management.
+- Added a dedicated Console page with bounded command/response history,
+  JSON-safe transport and response severity classification.
+- Added automatic discovery of public Klipper macros with helper-macro
+  filtering, execution confirmation and Console history integration.
 
 ### Changed
 
-- Removed temporary multitouch contact logging after target-hardware
-  validation.
+- Reordered the sidebar into Dashboard, Printer, Files, Bed Mesh, Macros,
+  Console, Telemetry, Drybox, Network and Settings.
+- Replaced the BED-card long-press entry point with a first-class Bed Mesh
+  destination.
+- Routed the new pages through shared themes, semantic buttons, modal popups,
+  standard page geometry and existing Moonraker transport.
+- Moved persistent Macros page and shell state into PSRAM-backed contexts
+  allocated after scheduler startup.
+
+### Fixed
+
+- Corrected Bed Mesh pinch direction, sensitivity, redraw pacing and gesture
+  competition.
+- Corrected mesh origin placement, surface-line visibility and rear reference
+  grid placement.
+- Prevented overlapping profile-name copies during profile sorting.
+- Protected FreeRTOS timer-task creation from the internal startup-RAM
+  regression introduced by static Macros and sidebar state.
+
+### Validation
+
+- Added v5-specific build, startup, sidebar, Bed Mesh, Macros and Console
+  release gates.
 
 ## [4.2.2] - 2026-07-26
 

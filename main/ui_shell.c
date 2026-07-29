@@ -5,26 +5,79 @@
 
 #include "esp_wifi.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
 
-static lv_obj_t *shell_top_bar = NULL;
+static const char TAG[] = "ui_shell";
 
-static lv_obj_t *s_shell_printer_button = NULL;
-static lv_obj_t *s_shell_title_label = NULL;
-static ui_shell_printer_switch_cb_t
-    s_printer_switch_callback = NULL;
-static lv_obj_t *shell_clock_label = NULL;
-static lv_obj_t *shell_topbar_wifi_bars[4] = {0};
-static lv_obj_t *shell_topbar_eta_label = NULL;
-static lv_obj_t *shell_nav_rail = NULL;
-static lv_obj_t *shell_nav_buttons[UI_SHELL_PAGE_COUNT] = {0};
-static lv_timer_t *s_clock_timer = NULL;
+typedef struct {
+    lv_obj_t *top_bar;
+    lv_obj_t *printer_button;
+    lv_obj_t *title_label;
+    ui_shell_printer_switch_cb_t printer_switch_callback;
+    lv_obj_t *clock_label;
+    lv_obj_t *wifi_bars[4];
+    lv_obj_t *eta_label;
+    lv_obj_t *nav_rail;
+    lv_obj_t *nav_buttons[UI_SHELL_PAGE_COUNT];
+    lv_timer_t *clock_timer;
+} ui_shell_state_t;
 
-static const char *TAG = "ui_shell";
+/*
+ * This context is allocated once after the scheduler starts and remains
+ * allocated for the application lifetime. Only s_shell occupies startup
+ * internal RAM.
+ */
+static ui_shell_state_t *s_shell = NULL;
+
+#define shell_top_bar             (s_shell->top_bar)
+#define s_shell_printer_button    (s_shell->printer_button)
+#define s_shell_title_label       (s_shell->title_label)
+#define s_printer_switch_callback (s_shell->printer_switch_callback)
+#define shell_clock_label         (s_shell->clock_label)
+#define shell_topbar_wifi_bars    (s_shell->wifi_bars)
+#define shell_topbar_eta_label    (s_shell->eta_label)
+#define shell_nav_rail            (s_shell->nav_rail)
+#define shell_nav_buttons         (s_shell->nav_buttons)
+#define s_clock_timer             (s_shell->clock_timer)
+
+
+static bool shell_state_init(void)
+{
+    if (s_shell) {
+        return true;
+    }
+
+    s_shell = heap_caps_calloc(
+        1,
+        sizeof(*s_shell),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+    if (s_shell) {
+        ESP_LOGI(
+            TAG,
+            "Shell state allocated permanently in PSRAM: %u bytes",
+            (unsigned)sizeof(*s_shell));
+        return true;
+    }
+
+    s_shell = heap_caps_calloc(
+        1,
+        sizeof(*s_shell),
+        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+    if (!s_shell) {
+        ESP_LOGE(TAG, "Unable to allocate shell state");
+        return false;
+    }
+
+    ESP_LOGW(TAG, "Shell state using internal RAM fallback");
+    return true;
+}
 
 static void shell_printer_switch_event_cb(lv_event_t *event)
 {
@@ -69,6 +122,10 @@ void ui_shell_refresh_clock(void)
 
 void ui_shell_create(void)
 {
+    if (!shell_state_init()) {
+        return;
+    }
+
     if (shell_top_bar) {
         ui_shell_raise_topbar();
         return;
@@ -257,14 +314,21 @@ void ui_shell_create_nav(void)
         const char *text;
     } shell_nav_item_t;
 
-    static const shell_nav_item_t nav[] = {
+    /*
+     * Operator order follows the normal print-cell workflow:
+     * primary work, printer setup, diagnostics, then auxiliary/system.
+     */
+    const shell_nav_item_t nav[] = {
         { LV_SYMBOL_HOME,     "Dashboard" },
-        { LV_SYMBOL_SETTINGS, "Drybox" },
         { LV_SYMBOL_LIST,     "Printer" },
         { LV_SYMBOL_FILE,     "Files" },
+        { LV_SYMBOL_IMAGE,    "Bed Mesh" },
+        { LV_SYMBOL_PLAY,     "Macros" },
+        { LV_SYMBOL_EDIT,     "Console" },
+        { LV_SYMBOL_CHARGE,   "Telemetry" },
+        { LV_SYMBOL_LOOP,     "Drybox" },
         { LV_SYMBOL_WIFI,     "Network" },
-        { LV_SYMBOL_SETTINGS, "Settings" },
-        { LV_SYMBOL_CHARGE,   "Telemetry" }
+        { LV_SYMBOL_SETTINGS, "Settings" }
     };
 
     for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {
@@ -274,7 +338,7 @@ void ui_shell_create_nav(void)
                 0,
                 0,
                 150,
-                48,
+                44,
                 nav[i].icon,
                 nav[i].text);
 
@@ -297,7 +361,7 @@ void ui_shell_create_nav(void)
             button,
             LV_ALIGN_TOP_MID,
             0,
-            16 + i * 58);
+            8 + i * 50);
 
         lv_obj_add_event_cb(
             button,

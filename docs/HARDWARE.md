@@ -2,7 +2,7 @@
 
 ## Supported target
 
-PrinterHMI v4.2.2 targets the JC1060P470C-I/W operator panel built around the
+PrinterHMI v5.0.0 targets the JC1060P470C-I/W operator panel built around the
 ESP32-P4.
 
 | Function | Hardware |
@@ -57,8 +57,10 @@ The card is mounted at `/sdcard`. Thumbnail cache files are stored beneath
 
 PSRAM is enabled for instruction/rodata placement and general allocation.
 PrinterHMI explicitly prefers PSRAM for large Moonraker and WebSocket buffers,
-thumbnail data and rendered previews. Display DMA buffers remain internal and
-DMA-capable as required by the BSP.
+thumbnail data and rendered previews. Console history, macro catalogs, the
+Macros page context and persistent shell pointer tables are also PSRAM-first.
+Their allocations occur after scheduler startup. Display DMA buffers remain
+internal and DMA-capable as required by the BSP.
 
 ## Flash partitions
 

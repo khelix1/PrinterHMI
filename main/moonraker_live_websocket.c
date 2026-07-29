@@ -16,6 +16,7 @@
 #include "operator_event_log.h"
 #include "console_controller.h"
 #include "macro_controller.h"
+#include "device_catalog_controller.h"
 
 
 #define TAG "moon_live_ws"
@@ -370,6 +371,7 @@ static bool handle_object_list_response(
         : NULL;
 
     macro_controller_update_from_objects(objects);
+    device_catalog_controller_update_from_objects(objects);
 
     static const char *candidates[MOONRAKER_MAX_HOTENDS] = {
         "extruder",
@@ -601,6 +603,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_READY:
         /* A Klippy restart invalidates the old object subscription. */
+        device_catalog_controller_reset();
         s_last_status_update_us = 0;
         s_subscribed = false;
         s_subscription_ready = false;
@@ -623,6 +626,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         break;
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED:
+        device_catalog_controller_reset();
         s_last_status_update_us = 0;
         s_subscribed = false;
         ESP_LOGW(TAG, "WS_KLIPPY_DISCONNECTED generation=%u",
@@ -662,6 +666,7 @@ static void websocket_event_handler(
         break;
 
     case WEBSOCKET_EVENT_DISCONNECTED:
+        device_catalog_controller_reset();
         s_connected = false;
         s_subscribed = false;
         s_subscribe_pending = false;
@@ -699,6 +704,7 @@ static void websocket_event_handler(
         break;
 
     case WEBSOCKET_EVENT_CLOSED:
+        device_catalog_controller_reset();
         s_connected = false;
         s_subscribed = false;
         s_subscribe_pending = false;
@@ -725,6 +731,7 @@ static void destroy_client(void)
     s_last_status_update_us = 0;
     s_message_generation = 0;
     __atomic_store_n(&s_file_change_pending, false, __ATOMIC_RELEASE);
+    device_catalog_controller_reset();
 
     if (!client) return;
 

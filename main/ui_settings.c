@@ -541,6 +541,7 @@ void ui_settings_show_page(
     const char *sd_card_text,
     const char *storage_text,
     lv_event_cb_t ota_cb,
+    lv_event_cb_t network_cb,
     ui_settings_theme_rebuild_cb_t theme_rebuild_cb)
 {
     s_theme_rebuild_cb = theme_rebuild_cb;
@@ -673,6 +674,29 @@ void ui_settings_show_page(
     const int section_gap = ui_theme_density_metric(10, 14, 18);
     const int first_row_y = 48;
     int section_y = 0;
+
+    /*
+     * Connections
+     */
+    const int connections_height =
+        first_row_y + action_height + 6;
+
+    lv_obj_t *connections = ui_settings_section_create(
+        content,
+        "CONNECTIONS",
+        section_y,
+        connections_height);
+
+    ui_settings_section_add_action_row(
+        connections,
+        "Network & Moonraker",
+        "Wi-Fi, active printer connection and discovery settings",
+        "OPEN NETWORK",
+        first_row_y,
+        network_cb,
+        false);
+
+    section_y += connections_height + section_gap;
 
     /*
      * Firmware and updates

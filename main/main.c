@@ -133,11 +133,14 @@ static void sntp_wait_task(void *arg);
 #include "timezone_config.h"
 #include "ui_splash_v32.h"
 #include "ui_shell.h"
+#include "ui_devices_v32.h"
+#include "ui_calibration_v32.h"
 #include "ui_telemetry_v32.h"
 #include "ui_console_v32.h"
 #include "console_controller.h"
 #include "ui_macros_v32.h"
 #include "macro_controller.h"
+#include "device_catalog_controller.h"
 #include "telemetry_history.h"
 #include "ui_printer_v32.h"
 #include "ui_printer_motion.h"
@@ -195,13 +198,131 @@ void ui_shell_raise(void)
 }
 
 
+/*
+ * These application-lifetime text buffers used to occupy internal .bss
+ * before the FreeRTOS scheduler started. Keep only this owner pointer in
+ * startup internal RAM; allocate the bounded context permanently in PSRAM
+ * from app_main().
+ */
+typedef struct {
+    char sd_status[128];
+    char wifi_status[128];
+    char moonraker_status[160];
+    char selected_wifi_password[65];
+    char saved_wifi_ssid[33];
+    char saved_wifi_password[65];
+    char network_scan_status[512];
+    char selected_wifi_ssid[33];
+    char printer_state[32];
+    char printer_file[160];
+    char dash_thumb_render_file[160];
+    char last_dashboard_print_state[32];
+    char connected_wifi_ssid[33];
+} app_runtime_buffers_t;
+
+static app_runtime_buffers_t *s_app_buffers = NULL;
+
+#define sd_status \
+    (s_app_buffers->sd_status)
+#define wifi_status \
+    (s_app_buffers->wifi_status)
+#define moonraker_status \
+    (s_app_buffers->moonraker_status)
+#define ui_network_tools_selected_wifi_password \
+    (s_app_buffers->selected_wifi_password)
+#define saved_wifi_ssid \
+    (s_app_buffers->saved_wifi_ssid)
+#define saved_wifi_password \
+    (s_app_buffers->saved_wifi_password)
+#define ui_network_tools_network_scan_status \
+    (s_app_buffers->network_scan_status)
+#define ui_network_tools_selected_wifi_ssid \
+    (s_app_buffers->selected_wifi_ssid)
+/*
+ * Use pointer aliases for these two buffers instead of macros. Their names
+ * also exist as fields in Moonraker/UI structs, and object-like macros would
+ * incorrectly expand member access such as state.printer_state.
+ */
+static char *printer_state = NULL;
+static char *printer_file = NULL;
+#define dash_thumb_render_file \
+    (s_app_buffers->dash_thumb_render_file)
+#define last_dashboard_print_state \
+    (s_app_buffers->last_dashboard_print_state)
+#define connected_wifi_ssid \
+    (s_app_buffers->connected_wifi_ssid)
+
+
+static bool app_runtime_buffers_init(void)
+{
+    if (s_app_buffers) {
+        return true;
+    }
+
+    s_app_buffers = heap_caps_calloc(
+        1,
+        sizeof(*s_app_buffers),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+    if (s_app_buffers) {
+        ESP_LOGI(
+            TAG,
+            "Application buffers allocated permanently in PSRAM: %u bytes",
+            (unsigned)sizeof(*s_app_buffers));
+    } else {
+        s_app_buffers = heap_caps_calloc(
+            1,
+            sizeof(*s_app_buffers),
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+        if (!s_app_buffers) {
+            ESP_LOGE(
+                TAG,
+                "Unable to allocate application runtime buffers");
+            return false;
+        }
+
+        ESP_LOGW(
+            TAG,
+            "Application buffers using internal RAM fallback");
+    }
+
+    printer_state =
+        s_app_buffers->printer_state;
+    printer_file =
+        s_app_buffers->printer_file;
+
+    snprintf(
+        sd_status,
+        sizeof(sd_status),
+        "SD: not mounted");
+
+    snprintf(
+        moonraker_status,
+        sizeof(moonraker_status),
+        "Moonraker: waiting for WiFi...");
+
+    snprintf(
+        ui_network_tools_network_scan_status,
+        sizeof(ui_network_tools_network_scan_status),
+        "WiFi scan: not run");
+
+    snprintf(
+        printer_state,
+        sizeof(s_app_buffers->printer_state),
+        "--");
+
+    snprintf(
+        printer_file,
+        sizeof(s_app_buffers->printer_file),
+        "--");
+
+    return true;
+}
+
+
 static bool sd_card_ok = false;
 static bool sd_mount_attempted = false;
-static char sd_status[128] = "SD: not mounted";
-
-static char wifi_status[128] = "";
-
-static char moonraker_status[160] = "Moonraker: waiting for WiFi...";
 static lv_obj_t *printer_panel = NULL;
 
 static ui_printer_layout_v32_t printer_layout = {0};
@@ -220,11 +341,6 @@ static lv_obj_t *drybox_panel = NULL;
 static lv_obj_t *network_selected_ssid_label = NULL;
 static lv_obj_t *network_password_ta = NULL;
 static lv_obj_t *network_keyboard = NULL;
-static char ui_network_tools_selected_wifi_password[65] = "";
-static char saved_wifi_ssid[33] = "";
-static char saved_wifi_password[65] = "";
-static char ui_network_tools_network_scan_status[512] = "WiFi scan: not run";
-static char ui_network_tools_selected_wifi_ssid[33] = "";
 static lv_obj_t *drybox_banner_label = NULL;
 static lv_obj_t *drybox_air_label = NULL;
 static lv_obj_t *drybox_center_label = NULL;
@@ -250,8 +366,6 @@ static lv_obj_t *printer_state_label = NULL;
 static lv_obj_t *printer_file_label = NULL;
 static lv_obj_t *printer_active_file_box = NULL;
 static lv_obj_t *printer_active_file_label = NULL;
-static char printer_state[32] = "--";
-static char printer_file[160] = "--";
 static lv_obj_t *printer_progress_label = NULL;
 static lv_obj_t *printer_tuning_label = NULL;
 static lv_obj_t *printer_fan_label = NULL;
@@ -297,12 +411,10 @@ static volatile bool dash_thumb_render_running = false;
 static volatile bool dash_thumb_render_ready = false;
 static volatile bool dash_thumb_render_failed = false;
 static lv_timer_t *dash_thumb_render_timer = NULL;
-static char dash_thumb_render_file[160] = "";
 static int dash_thumb_render_profile_index = -1;
 static uint32_t dash_thumb_render_generation = 0;
 #define DASH_THUMB_CANVAS_W 286
 #define DASH_THUMB_CANVAS_H 215
-static char last_dashboard_print_state[32] = "";
 
 #define MOONRAKER_API_KEY ""
 
@@ -342,7 +454,6 @@ static esp_ip4_addr_t s_ip = {0};
 static bool s_got_ip = false;
 static bool s_wifi_credentials_configured = false;
 static bool s_wifi_transport_ready = false;
-static char connected_wifi_ssid[33] = "";
 
 
 static void ota_confirm_running_app_valid(void)
@@ -474,12 +585,12 @@ static void reset_active_printer_runtime_state(void)
 
     safe_copy(
         printer_state,
-        sizeof(printer_state),
+        sizeof(s_app_buffers->printer_state),
         "--");
 
     safe_copy(
         printer_file,
-        sizeof(printer_file),
+        sizeof(s_app_buffers->printer_file),
         "No file");
 
     last_dashboard_print_state[0] = '\0';
@@ -926,17 +1037,17 @@ static bool moonraker_get_live_objects(void)
 //             live_fan_speed, live_heater_power ? 1 : 0);
 
     json_find_string(strstr(s_moonraker_objects, "\"print_stats\"") ? strstr(s_moonraker_objects, "\"print_stats\"") : s_moonraker_objects,
-                     "state", printer_state, sizeof(printer_state));
+                     "state", printer_state, sizeof(s_app_buffers->printer_state));
 
     json_find_string(strstr(s_moonraker_objects, "\"print_stats\"") ? strstr(s_moonraker_objects, "\"print_stats\"") : s_moonraker_objects,
-                     "filename", printer_file, sizeof(printer_file));
+                     "filename", printer_file, sizeof(s_app_buffers->printer_file));
 
     if (strlen(printer_state) == 0) {
-        safe_copy(printer_state, sizeof(printer_state), "--");
+        safe_copy(printer_state, sizeof(s_app_buffers->printer_state), "--");
     }
 
     if (strlen(printer_file) == 0) {
-        safe_copy(printer_file, sizeof(printer_file), "No file");
+        safe_copy(printer_file, sizeof(s_app_buffers->printer_file), "No file");
     }
     /*
      * Use virtual_sdcard.progress as the authoritative completion value.
@@ -1647,9 +1758,11 @@ static void printer_chooser_manage_bridge(lv_event_t *event)
 
 
 
-static void printer_chooser_open_from_topbar(void)
+static void app_hide_operator_pages(void)
 {
     ui_bed_mesh_v32_close();
+    ui_calibration_v32_hide();
+    ui_devices_v32_hide();
     ui_macros_v32_hide();
     ui_console_v32_hide();
     ui_telemetry_v32_hide();
@@ -1658,6 +1771,37 @@ static void printer_chooser_open_from_topbar(void)
     ui_drybox_v32_hide();
     ui_network_v32_hide();
     hide_settings_tab();
+}
+
+
+static void devices_open_telemetry_bridge(void)
+{
+    app_hide_operator_pages();
+    ui_telemetry_v32_show();
+    ui_shell_set_active_nav(UI_SHELL_PAGE_DEVICES);
+}
+
+
+static void calibration_open_bed_mesh_bridge(void)
+{
+    ui_shell_set_active_nav(UI_SHELL_PAGE_BED_MESH);
+    ui_shell_page_action(UI_SHELL_PAGE_BED_MESH);
+}
+
+
+static void settings_open_network_bridge(lv_event_t *event)
+{
+    (void)event;
+
+    app_hide_operator_pages();
+    ui_network_v32_show();
+    ui_shell_set_active_nav(UI_SHELL_PAGE_SETTINGS);
+}
+
+
+static void printer_chooser_open_from_topbar(void)
+{
+    app_hide_operator_pages();
 
     ui_printer_chooser_v32_show(
         printer_chooser_select_bridge,
@@ -1672,43 +1816,19 @@ void ui_shell_page_action(ui_shell_page_t page)
 {
     /* Every sidebar destination closes the explicit printer chooser. */
     ui_printer_chooser_v32_hide();
+    app_hide_operator_pages();
 
     switch (page) {
     case UI_SHELL_PAGE_DASHBOARD:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_dashboard_v32_create();
         dashboard_restore_active_profile_preview();
         return;
 
     case UI_SHELL_PAGE_PRINTER:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_printer_v32_show();
         return;
 
     case UI_SHELL_PAGE_FILES:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_files_v32_set_callbacks(
             files_refresh_bridge,
             files_select_bridge,
@@ -1718,86 +1838,32 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_BED_MESH:
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_bed_mesh_v32_show(printer_popup_send_gcode_bridge);
         return;
 
+    case UI_SHELL_PAGE_CALIBRATION:
+        ui_calibration_v32_show(
+            calibration_open_bed_mesh_bridge);
+        return;
+
+    case UI_SHELL_PAGE_DEVICES:
+        ui_devices_v32_show(
+            devices_open_telemetry_bridge);
+        return;
+
     case UI_SHELL_PAGE_MACROS:
-        ui_bed_mesh_v32_close();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_macros_v32_show(moonraker_send_gcode);
         return;
 
     case UI_SHELL_PAGE_CONSOLE:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_console_v32_show(moonraker_send_gcode);
         return;
 
-    case UI_SHELL_PAGE_TELEMETRY:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
-        ui_telemetry_v32_show();
-        return;
-
     case UI_SHELL_PAGE_DRYBOX:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_network_v32_hide();
-        hide_settings_tab();
         ui_drybox_v32_show();
         return;
 
-    case UI_SHELL_PAGE_NETWORK:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        hide_settings_tab();
-        ui_network_v32_show();
-        return;
-
     case UI_SHELL_PAGE_SETTINGS:
-        ui_bed_mesh_v32_close();
-        ui_macros_v32_hide();
-        ui_console_v32_hide();
-        ui_telemetry_v32_hide();
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_drybox_v32_hide();
-        ui_network_v32_hide();
         show_settings_tab();
         return;
 
@@ -1874,8 +1940,8 @@ static void moonraker_sync_legacy_from_state(void)
     s_drybox_active_program =
         (ui_drybox_program_v32_t)state.drybox_active_program;
 
-    safe_copy(printer_state, sizeof(printer_state), state.printer_state);
-    safe_copy(printer_file, sizeof(printer_file), state.printer_file);
+    safe_copy(printer_state, sizeof(s_app_buffers->printer_state), state.printer_state);
+    safe_copy(printer_file, sizeof(s_app_buffers->printer_file), state.printer_file);
 }
 
 
@@ -2540,6 +2606,7 @@ static void show_settings_tab(void)
         sd_card_ok ? "Mounted" : "Not mounted",
         storage_text,
         ota_open_popup_cb,
+        settings_open_network_bridge,
         app_theme_changed);
 }
 
@@ -3833,6 +3900,10 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "BOOT_RESET_REASON=%d", esp_reset_reason());
 
+    if (!app_runtime_buffers_init()) {
+        return;
+    }
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -3843,6 +3914,7 @@ void app_main(void)
     operator_event_log_init();
     console_controller_init();
     macro_controller_init();
+    device_catalog_controller_init();
     ui_macros_v32_init();
     operator_event_log_add(
         OPERATOR_EVENT_INFO,

@@ -25,9 +25,12 @@ idf_component_register(
         "ui_event_history_popup.c"
         "console_controller.c"
         "macro_controller.c"
+        "device_catalog_controller.c"
 
         # Shell and splash
         "ui_shell.c"
+        "ui_devices_v32.c"
+        "ui_calibration_v32.c"
         "ui_console_v32.c"
         "ui_macros_v32.c"
         "ui_splash_v32.c"

@@ -323,11 +323,11 @@ void ui_shell_create_nav(void)
         { LV_SYMBOL_LIST,     "Printer" },
         { LV_SYMBOL_FILE,     "Files" },
         { LV_SYMBOL_IMAGE,    "Bed Mesh" },
+        { LV_SYMBOL_REFRESH,  "Calibration" },
+        { LV_SYMBOL_CHARGE,   "Devices" },
         { LV_SYMBOL_PLAY,     "Macros" },
         { LV_SYMBOL_EDIT,     "Console" },
-        { LV_SYMBOL_CHARGE,   "Telemetry" },
         { LV_SYMBOL_LOOP,     "Drybox" },
-        { LV_SYMBOL_WIFI,     "Network" },
         { LV_SYMBOL_SETTINGS, "Settings" }
     };
 

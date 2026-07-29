@@ -14,6 +14,17 @@
 
 static const char *TAG = "LVGL";
 
+/*
+ * Optional application observer for raw two-point centroid handling.
+ * The weak symbol keeps the reusable port independent from PrinterHMI.
+ */
+void printerhmi_bed_mesh_multitouch_update(
+    uint8_t count,
+    int32_t x0,
+    int32_t y0,
+    int32_t x1,
+    int32_t y1) __attribute__((weak));
+
 /*******************************************************************************
 * Types definitions
 *******************************************************************************/
@@ -128,6 +139,30 @@ static void lvgl_port_touchpad_read(lv_indev_t *indev_drv, lv_indev_data_t *data
 
     /* Read data from touch controller */
     ESP_ERROR_CHECK(esp_lcd_touch_get_data(touch_ctx->handle, touch_data, &touch_cnt, CONFIG_ESP_LCD_TOUCH_MAX_POINTS));
+
+
+    if (printerhmi_bed_mesh_multitouch_update) {
+        int32_t x0 = 0;
+        int32_t y0 = 0;
+        int32_t x1 = 0;
+        int32_t y1 = 0;
+
+        if (touch_cnt > 0) {
+            x0 = (int32_t)(touch_ctx->scale.x * touch_data[0].x);
+            y0 = (int32_t)(touch_ctx->scale.y * touch_data[0].y);
+        }
+        if (touch_cnt > 1) {
+            x1 = (int32_t)(touch_ctx->scale.x * touch_data[1].x);
+            y1 = (int32_t)(touch_ctx->scale.y * touch_data[1].y);
+        }
+
+        printerhmi_bed_mesh_multitouch_update(
+            touch_cnt > 2 ? 2 : touch_cnt,
+            x0,
+            y0,
+            x1,
+            y1);
+    }
 
 #if (CONFIG_ESP_LCD_TOUCH_MAX_POINTS > 1 && CONFIG_LV_USE_GESTURE_RECOGNITION)
     // Number of touch points which need to be constantly updated inside gesture recognizers

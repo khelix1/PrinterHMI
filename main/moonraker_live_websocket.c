@@ -333,7 +333,7 @@ static bool build_subscription(
         !append_subscription_object(
             &used,
             "bed_mesh",
-            "[\"profile_name\",\"mesh_min\",\"mesh_max\",\"probed_matrix\",\"mesh_matrix\"]")) {
+            "[\"profile_name\",\"profiles\",\"mesh_min\",\"mesh_max\",\"probed_matrix\",\"mesh_matrix\"]")) {
         return false;
     }
 

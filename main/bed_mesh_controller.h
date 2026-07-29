@@ -6,6 +6,8 @@
 #define BED_MESH_MAX_ROWS 33
 #define BED_MESH_MAX_COLS 33
 #define BED_MESH_PROFILE_NAME_MAX 64
+#define BED_MESH_MAX_PROFILES 16
+typedef char bed_mesh_profile_name_t[BED_MESH_PROFILE_NAME_MAX];
 typedef struct {
     bool valid;
     bool truncated;
@@ -14,9 +16,16 @@ typedef struct {
     double mesh_min_x, mesh_min_y, mesh_max_x, mesh_max_y;
     double minimum, maximum, average, range;
     char profile_name[BED_MESH_PROFILE_NAME_MAX];
+    size_t profile_count;
+    const bed_mesh_profile_name_t *profile_names;
     const float *values;
 } bed_mesh_snapshot_t;
 void bed_mesh_controller_init(void);
 void bed_mesh_controller_reset(void);
 bool bed_mesh_controller_merge_status(cJSON *status);
-bool bed_mesh_controller_snapshot(bed_mesh_snapshot_t *out, float *values, size_t values_capacity);
+bool bed_mesh_controller_snapshot(
+    bed_mesh_snapshot_t *out,
+    float *values,
+    size_t values_capacity,
+    bed_mesh_profile_name_t *profile_names,
+    size_t profile_capacity);

@@ -137,6 +137,14 @@ bool ui_theme_motion_enabled(void);
 #define UI_TELEMETRY_BED_TRACE     ui_theme_color(0xFFCF66, 0xF6C453, 0xFFD166)
 #define UI_TELEMETRY_HUMIDITY      ui_theme_color(0xA679FF, 0xC994E8, 0xE56BFF)
 
+
+/* Bed-mesh 3D plot */
+#define UI_BED_MESH_BG          ui_theme_color(0x050D16, 0x15100C, 0x02040D)
+#define UI_BED_MESH_WIREFRAME   ui_theme_color(0xD2ECFF, 0xFFE1C2, 0xD9FAFF)
+#define UI_BED_MESH_LOW         ui_theme_color(0x168AAD, 0x4F86A6, 0x5C91FF)
+#define UI_BED_MESH_LEVEL       ui_theme_color(0x30D5C8, 0x55C2B8, 0x38E8FF)
+#define UI_BED_MESH_HIGH        ui_theme_color(0xE45B5B, 0xF06A66, 0xFF4FA3)
+
 /* Semantic state colors */
 #define UI_OK                   ui_theme_color(0x09743D, 0x2F7D5A, 0x087B6B)
 #define UI_OK_BRIGHT            ui_theme_color(0x70E000, 0x6DD39E, 0x35FFC6)

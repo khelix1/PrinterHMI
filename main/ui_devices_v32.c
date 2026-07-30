@@ -15,7 +15,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
-#define DEVICE_FILTER_COUNT 7
+#define DEVICE_FILTER_COUNT 8
 #define DEVICE_UI_MAX_VISIBLE 48
 
 typedef enum {
@@ -25,13 +25,18 @@ typedef enum {
     DEVICE_FILTER_POWER,
     DEVICE_FILTER_SENSOR,
     DEVICE_FILTER_OUTPUT,
-    DEVICE_FILTER_MOTION
+    DEVICE_FILTER_MOTION,
+    DEVICE_FILTER_OTHER
 } device_filter_t;
 
 typedef struct {
     lv_obj_t *root;
     lv_obj_t *banner_status;
     lv_obj_t *list;
+    lv_obj_t *pagination_label;
+    lv_obj_t *previous_button;
+    lv_obj_t *next_button;
+    lv_obj_t *filter_strip;
     lv_obj_t *filter_buttons[DEVICE_FILTER_COUNT];
     lv_obj_t *value_labels[DEVICE_UI_MAX_VISIBLE];
     size_t value_catalog_indices[DEVICE_UI_MAX_VISIBLE];
@@ -39,6 +44,8 @@ typedef struct {
     lv_timer_t *refresh_timer;
     ui_devices_open_telemetry_cb_t open_telemetry;
     device_filter_t filter;
+    size_t page_index;
+    size_t page_count;
     uint32_t rendered_generation;
 } ui_devices_state_t;
 
@@ -140,6 +147,7 @@ static const char *filter_name(
         "SENSOR",
         "OUTPUT",
         "MOTION",
+        "OTHER",
     };
 
     return filter < DEVICE_FILTER_COUNT
@@ -349,12 +357,17 @@ static void update_live_values(void)
                 sizeof(value))) {
             lv_label_set_text(label, value);
             ui_apply_label_bright(label);
+        } else if (device.live_value_valid) {
+            lv_label_set_text(
+                label,
+                device.live_value);
+            ui_apply_label_bright(label);
         } else {
             lv_label_set_text(
                 label,
                 device.kind == DEVICE_KIND_OTHER
                     ? "DISCOVERED"
-                    : "LIVE DATA NEXT");
+                    : "WAITING FOR DATA");
             ui_apply_label_dim(label);
         }
     }
@@ -497,6 +510,92 @@ static void add_device_card(
 }
 
 
+static void update_pagination_controls(
+    size_t matching_count)
+{
+    if (!s_devices) {
+        return;
+    }
+
+    size_t page_count = matching_count == 0
+        ? 1
+        : (matching_count + DEVICE_UI_MAX_VISIBLE - 1) /
+            DEVICE_UI_MAX_VISIBLE;
+
+    if (s_devices->page_index >= page_count) {
+        s_devices->page_index = page_count - 1;
+    }
+
+    s_devices->page_count = page_count;
+
+    bool has_previous =
+        matching_count > 0 && s_devices->page_index > 0;
+    bool has_next =
+        matching_count > 0 &&
+        s_devices->page_index + 1 < page_count;
+
+    if (s_devices->previous_button) {
+        if (has_previous) {
+            lv_obj_clear_state(
+                s_devices->previous_button,
+                LV_STATE_DISABLED);
+        } else {
+            lv_obj_add_state(
+                s_devices->previous_button,
+                LV_STATE_DISABLED);
+        }
+    }
+
+    if (s_devices->next_button) {
+        if (has_next) {
+            lv_obj_clear_state(
+                s_devices->next_button,
+                LV_STATE_DISABLED);
+        } else {
+            lv_obj_add_state(
+                s_devices->next_button,
+                LV_STATE_DISABLED);
+        }
+    }
+
+    if (!s_devices->pagination_label) {
+        return;
+    }
+
+    if (matching_count == 0) {
+        lv_label_set_text(
+            s_devices->pagination_label,
+            "NO MATCHING DEVICES");
+        return;
+    }
+
+    size_t first =
+        s_devices->page_index * DEVICE_UI_MAX_VISIBLE + 1;
+    size_t last =
+        first + DEVICE_UI_MAX_VISIBLE - 1;
+
+    if (last > matching_count) {
+        last = matching_count;
+    }
+
+    char text[64];
+
+    lv_snprintf(
+        text,
+        sizeof(text),
+        "PAGE %u / %u     %u-%u OF %u",
+        (unsigned)(s_devices->page_index + 1),
+        (unsigned)page_count,
+        (unsigned)first,
+        (unsigned)last,
+        (unsigned)matching_count);
+
+    lv_label_set_text(
+        s_devices->pagination_label,
+        text);
+}
+
+
 static void render_catalog(void)
 {
     if (!s_devices || !s_devices->root || !s_devices->list) {
@@ -558,36 +657,33 @@ static void render_catalog(void)
             waiting,
             LV_TEXT_ALIGN_CENTER,
             0);
+        s_devices->page_index = 0;
+        update_pagination_controls(0);
         return;
     }
 
-    size_t visible = 0;
     size_t matching = 0;
 
+    /*
+     * Count first so page bounds can be clamped after a filter or printer
+     * change without ever constructing more than 48 LVGL cards.
+     */
     for (size_t index = 0;
          index < status.stored_count;
          ++index) {
         device_descriptor_t device;
 
-        if (!device_catalog_controller_get(
+        if (device_catalog_controller_get(
                 index,
-                &device) ||
-            !filter_matches(
+                &device) &&
+            filter_matches(
                 s_devices->filter,
                 device.kind)) {
-            continue;
-        }
-
-        ++matching;
-
-        if (visible < DEVICE_UI_MAX_VISIBLE) {
-            add_device_card(
-                &device,
-                index,
-                visible);
-            ++visible;
+            ++matching;
         }
     }
+
+    update_pagination_controls(matching);
 
     if (matching == 0) {
         lv_obj_t *empty = devices_label(
@@ -603,24 +699,37 @@ static void render_catalog(void)
             empty,
             LV_TEXT_ALIGN_CENTER,
             0);
-    } else if (matching > visible) {
-        char message[80];
+    } else {
+        size_t first_match =
+            s_devices->page_index * DEVICE_UI_MAX_VISIBLE;
+        size_t matching_index = 0;
+        size_t visible = 0;
 
-        lv_snprintf(
-            message,
-            sizeof(message),
-            "Showing %u of %u matching objects",
-            (unsigned)visible,
-            (unsigned)matching);
+        for (size_t index = 0;
+             index < status.stored_count &&
+             visible < DEVICE_UI_MAX_VISIBLE;
+             ++index) {
+            device_descriptor_t device;
 
-        devices_label(
-            s_devices->list,
-            message,
-            UI_FONT_CAPTION,
-            UI_TEXT_DIM,
-            14,
-            (int)((visible + 1) / 2) * 102,
-            760);
+            if (!device_catalog_controller_get(
+                    index,
+                    &device) ||
+                !filter_matches(
+                    s_devices->filter,
+                    device.kind)) {
+                continue;
+            }
+
+            if (matching_index++ < first_match) {
+                continue;
+            }
+
+            add_device_card(
+                &device,
+                index,
+                visible);
+            ++visible;
+        }
     }
 
     s_devices->rendered_generation =
@@ -652,6 +761,36 @@ static void devices_refresh_timer_cb(
 }
 
 
+static void devices_page_event_cb(
+    lv_event_t *event)
+{
+    if (!s_devices ||
+        lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    intptr_t direction =
+        (intptr_t)lv_event_get_user_data(event);
+
+    if (direction < 0) {
+        if (s_devices->page_index == 0) {
+            return;
+        }
+
+        --s_devices->page_index;
+    } else {
+        if (s_devices->page_index + 1 >=
+            s_devices->page_count) {
+            return;
+        }
+
+        ++s_devices->page_index;
+    }
+
+    render_catalog();
+}
+
+
 static void devices_filter_event_cb(
     lv_event_t *event)
 {
@@ -670,6 +809,17 @@ static void devices_filter_event_cb(
 
     s_devices->filter =
         (device_filter_t)selected;
+    s_devices->page_index = 0;
+
+    lv_obj_t *selected_button =
+        s_devices->filter_buttons[selected];
+
+    if (selected_button) {
+        lv_obj_scroll_to_view(
+            selected_button,
+            LV_ANIM_ON);
+    }
+
     render_catalog();
 }
 
@@ -778,11 +928,40 @@ void ui_devices_v32_show(
             NULL);
     }
 
+    s_devices->filter_strip = lv_obj_create(
+        s_devices->root);
+
+    lv_obj_set_size(
+        s_devices->filter_strip,
+        800,
+        42);
+    lv_obj_set_pos(
+        s_devices->filter_strip,
+        20,
+        122);
+    lv_obj_set_scroll_dir(
+        s_devices->filter_strip,
+        LV_DIR_HOR);
+    lv_obj_set_scrollbar_mode(
+        s_devices->filter_strip,
+        LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_all(
+        s_devices->filter_strip,
+        0,
+        0);
+    lv_obj_set_style_border_width(
+        s_devices->filter_strip,
+        0,
+        0);
+    ui_apply_surface_role(
+        s_devices->filter_strip,
+        UI_SURFACE_TRANSPARENT);
+
     for (size_t index = 0;
          index < DEVICE_FILTER_COUNT;
          ++index) {
         lv_obj_t *button = ui_button_create(
-            s_devices->root,
+            s_devices->filter_strip,
             index == 0
                 ? UI_BUTTON_PRIMARY
                 : UI_BUTTON_OUTLINED,
@@ -795,11 +974,16 @@ void ui_devices_v32_show(
         s_devices->filter_buttons[index] =
             button;
 
+        /*
+         * Use the original compact target size. Eight complete catalog
+         * categories now extend beyond the viewport and remain reachable by
+         * horizontal swipe.
+         */
         lv_obj_set_size(button, 108, 38);
         lv_obj_set_pos(
             button,
-            20 + (int)index * 115,
-            124);
+            (int)index * 115,
+            0);
 
         lv_obj_add_event_cb(
             button,
@@ -814,7 +998,7 @@ void ui_devices_v32_show(
     lv_obj_set_size(
         s_devices->list,
         800,
-        324);
+        282);
     lv_obj_set_pos(
         s_devices->list,
         20,
@@ -832,6 +1016,62 @@ void ui_devices_v32_show(
     ui_apply_surface_role(
         s_devices->list,
         UI_SURFACE_TRANSPARENT);
+
+    s_devices->previous_button = ui_button_create(
+        s_devices->root,
+        UI_BUTTON_OUTLINED,
+        LV_SYMBOL_LEFT " PREVIOUS");
+
+    if (s_devices->previous_button) {
+        lv_obj_set_size(
+            s_devices->previous_button,
+            132,
+            36);
+        lv_obj_set_pos(
+            s_devices->previous_button,
+            20,
+            466);
+        lv_obj_add_event_cb(
+            s_devices->previous_button,
+            devices_page_event_cb,
+            LV_EVENT_CLICKED,
+            (void *)(intptr_t)-1);
+    }
+
+    s_devices->pagination_label = devices_label(
+        s_devices->root,
+        "PAGE 1 / 1",
+        UI_FONT_CAPTION,
+        UI_TEXT_BRIGHT,
+        176,
+        476,
+        488);
+
+    lv_obj_set_style_text_align(
+        s_devices->pagination_label,
+        LV_TEXT_ALIGN_CENTER,
+        0);
+
+    s_devices->next_button = ui_button_create(
+        s_devices->root,
+        UI_BUTTON_OUTLINED,
+        "NEXT " LV_SYMBOL_RIGHT);
+
+    if (s_devices->next_button) {
+        lv_obj_set_size(
+            s_devices->next_button,
+            132,
+            36);
+        lv_obj_set_pos(
+            s_devices->next_button,
+            688,
+            466);
+        lv_obj_add_event_cb(
+            s_devices->next_button,
+            devices_page_event_cb,
+            LV_EVENT_CLICKED,
+            (void *)(intptr_t)1);
+    }
 
     s_devices->filter = DEVICE_FILTER_ALL;
     s_devices->rendered_generation = UINT32_MAX;
@@ -863,7 +1103,13 @@ void ui_devices_v32_hide(void)
     s_devices->root = NULL;
     s_devices->banner_status = NULL;
     s_devices->list = NULL;
+    s_devices->pagination_label = NULL;
+    s_devices->previous_button = NULL;
+    s_devices->next_button = NULL;
+    s_devices->filter_strip = NULL;
     s_devices->visible_count = 0;
+    s_devices->page_index = 0;
+    s_devices->page_count = 0;
     s_devices->rendered_generation = 0;
 
     for (size_t index = 0;

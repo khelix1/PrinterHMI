@@ -95,6 +95,87 @@ static device_kind_t classify_object(
 }
 
 
+bool device_catalog_controller_subscription_fields(
+    const char *object_name,
+    const char **fields_out)
+{
+    if (fields_out) {
+        *fields_out = NULL;
+    }
+
+    if (!object_name || !object_name[0] || !fields_out) {
+        return false;
+    }
+
+    /*
+     * These objects already belong to the proven core subscription. Keeping
+     * them out here prevents duplicate JSON keys and preserves their existing
+     * specialized state handling.
+     */
+    if (strcmp(object_name, "heater_bed") == 0 ||
+        strcmp(object_name, "fan") == 0 ||
+        strcmp(object_name, "toolhead") == 0 ||
+        starts_with(object_name, "extruder") ||
+        starts_with(object_name, "filament_switch_sensor ") ||
+        starts_with(object_name, "filament_motion_sensor ") ||
+        strcmp(object_name, "temperature_sensor drybox_center") == 0 ||
+        strcmp(object_name, "sht3x drybox_env") == 0 ||
+        strcmp(object_name, "heater_generic drybox_heater") == 0 ||
+        strcmp(object_name, "fan_generic drybox_fan") == 0) {
+        return false;
+    }
+
+    if (starts_with(object_name, "heater_generic ")) {
+        *fields_out = "[\"temperature\",\"target\",\"power\"]";
+        return true;
+    }
+
+    if (starts_with(object_name, "temperature_fan ")) {
+        *fields_out =
+            "[\"temperature\",\"target\",\"speed\",\"rpm\"]";
+        return true;
+    }
+
+    if (starts_with(object_name, "fan_generic ") ||
+        starts_with(object_name, "controller_fan ") ||
+        starts_with(object_name, "heater_fan ")) {
+        *fields_out = "[\"speed\",\"rpm\"]";
+        return true;
+    }
+
+    if (starts_with(object_name, "temperature_sensor ")) {
+        *fields_out = "[\"temperature\"]";
+        return true;
+    }
+
+    if (starts_with(object_name, "bme280") ||
+        starts_with(object_name, "bme680") ||
+        starts_with(object_name, "htu21d") ||
+        starts_with(object_name, "sht3x") ||
+        starts_with(object_name, "aht10")) {
+        *fields_out =
+            "[\"temperature\",\"humidity\",\"pressure\",\"gas\"]";
+        return true;
+    }
+
+    if (starts_with(object_name, "output_pin ") ||
+        starts_with(object_name, "pwm_tool ") ||
+        starts_with(object_name, "servo ")) {
+        *fields_out = "[\"value\"]";
+        return true;
+    }
+
+    if (starts_with(object_name, "led ") ||
+        starts_with(object_name, "neopixel ") ||
+        starts_with(object_name, "dotstar ")) {
+        *fields_out = "[\"color_data\"]";
+        return true;
+    }
+
+    return false;
+}
+
+
 static bool kind_is_controllable(
     device_kind_t kind)
 {
@@ -224,6 +305,297 @@ static void store_object_locked(
 }
 
 
+static bool status_number(
+    const cJSON *object,
+    const char *field,
+    double *output)
+{
+    const cJSON *item = cJSON_IsObject(object)
+        ? cJSON_GetObjectItemCaseSensitive(object, field)
+        : NULL;
+
+    if (!cJSON_IsNumber(item) || !output) {
+        return false;
+    }
+
+    *output = item->valuedouble;
+    return true;
+}
+
+
+static double status_percent(double value)
+{
+    return value >= 0.0 && value <= 1.01
+        ? value * 100.0
+        : value;
+}
+
+
+static bool format_generic_status_value(
+    const device_descriptor_t *device,
+    const cJSON *object,
+    char *output,
+    size_t output_size)
+{
+    if (!device || !cJSON_IsObject(object) ||
+        !output || output_size == 0) {
+        return false;
+    }
+
+    double temperature = 0.0;
+    double target = 0.0;
+    double power = 0.0;
+    double speed = 0.0;
+    double rpm = 0.0;
+    double humidity = 0.0;
+    double pressure = 0.0;
+    double value = 0.0;
+
+    bool has_temperature =
+        status_number(object, "temperature", &temperature);
+    bool has_target =
+        status_number(object, "target", &target);
+    bool has_power =
+        status_number(object, "power", &power);
+    bool has_speed =
+        status_number(object, "speed", &speed);
+    bool has_rpm =
+        status_number(object, "rpm", &rpm);
+    bool has_humidity =
+        status_number(object, "humidity", &humidity);
+    bool has_pressure =
+        status_number(object, "pressure", &pressure);
+    bool has_value =
+        status_number(object, "value", &value);
+
+    if (has_temperature && has_target) {
+        snprintf(
+            output,
+            output_size,
+            "%.1f / %.1f C",
+            temperature,
+            target);
+        return true;
+    }
+
+    if (has_temperature && has_humidity) {
+        snprintf(
+            output,
+            output_size,
+            "%.1f C  %.0f%% RH",
+            temperature,
+            humidity);
+        return true;
+    }
+
+    if (has_temperature) {
+        snprintf(
+            output,
+            output_size,
+            "%.1f C",
+            temperature);
+        return true;
+    }
+
+    if (has_speed && has_rpm) {
+        snprintf(
+            output,
+            output_size,
+            "%.0f%%  %.0f RPM",
+            status_percent(speed),
+            rpm);
+        return true;
+    }
+
+    if (has_speed) {
+        snprintf(
+            output,
+            output_size,
+            "%.0f%%",
+            status_percent(speed));
+        return true;
+    }
+
+    if (has_power) {
+        snprintf(
+            output,
+            output_size,
+            "%.0f%% POWER",
+            status_percent(power));
+        return true;
+    }
+
+    if (has_humidity) {
+        snprintf(
+            output,
+            output_size,
+            "%.0f%% RH",
+            humidity);
+        return true;
+    }
+
+    if (has_pressure) {
+        snprintf(
+            output,
+            output_size,
+            "%.1f HPA",
+            pressure);
+        return true;
+    }
+
+    if (has_value) {
+        snprintf(
+            output,
+            output_size,
+            value >= 0.0 && value <= 1.01
+                ? "%.0f%%"
+                : "%.2f",
+            value >= 0.0 && value <= 1.01
+                ? value * 100.0
+                : value);
+        return true;
+    }
+
+    const cJSON *colors =
+        cJSON_GetObjectItemCaseSensitive(object, "color_data");
+
+    if (cJSON_IsArray(colors)) {
+        int count = cJSON_GetArraySize(colors);
+        snprintf(
+            output,
+            output_size,
+            "%d LED%s",
+            count,
+            count == 1 ? "" : "S");
+        return true;
+    }
+
+    const cJSON *state =
+        cJSON_GetObjectItemCaseSensitive(object, "state");
+
+    if (cJSON_IsString(state) && state->valuestring) {
+        snprintf(
+            output,
+            output_size,
+            "%.*s",
+            DEVICE_CATALOG_VALUE_TEXT_MAX - 1,
+            state->valuestring);
+        return true;
+    }
+
+    if (cJSON_IsBool(state)) {
+        snprintf(
+            output,
+            output_size,
+            "%s",
+            cJSON_IsTrue(state) ? "ON" : "OFF");
+        return true;
+    }
+
+    return false;
+}
+
+
+bool device_catalog_controller_merge_status(
+    const struct cJSON *status)
+{
+    if (!s_store || !cJSON_IsObject(status)) {
+        return false;
+    }
+
+    bool received_value = false;
+    bool changed = false;
+    const cJSON *object = NULL;
+
+    cJSON_ArrayForEach(object, status) {
+        if (!object->string ||
+            !object->string[0] ||
+            !cJSON_IsObject(object)) {
+            continue;
+        }
+
+        device_descriptor_t device;
+        bool found = false;
+
+        portENTER_CRITICAL(&s_lock);
+
+        for (size_t index = 0;
+             index < s_store->status.stored_count;
+             ++index) {
+            if (strcmp(
+                    s_store->devices[index].object_name,
+                    object->string) == 0) {
+                device = s_store->devices[index];
+                found = true;
+                break;
+            }
+        }
+
+        portEXIT_CRITICAL(&s_lock);
+
+        if (!found) {
+            continue;
+        }
+
+        char formatted[DEVICE_CATALOG_VALUE_TEXT_MAX];
+
+        if (!format_generic_status_value(
+                &device,
+                object,
+                formatted,
+                sizeof(formatted))) {
+            continue;
+        }
+
+        received_value = true;
+        portENTER_CRITICAL(&s_lock);
+
+        for (size_t index = 0;
+             index < s_store->status.stored_count;
+             ++index) {
+            device_descriptor_t *destination =
+                &s_store->devices[index];
+
+            if (strcmp(
+                    destination->object_name,
+                    object->string) != 0) {
+                continue;
+            }
+
+            if (!destination->live_value_valid ||
+                strcmp(
+                    destination->live_value,
+                    formatted) != 0) {
+                snprintf(
+                    destination->live_value,
+                    sizeof(destination->live_value),
+                    "%s",
+                    formatted);
+                destination->live_value_valid = true;
+                changed = true;
+            }
+
+            break;
+        }
+
+        portEXIT_CRITICAL(&s_lock);
+    }
+
+    if (changed) {
+        portENTER_CRITICAL(&s_lock);
+        ++s_store->status.value_generation;
+
+        if (s_store->status.value_generation == 0) {
+            s_store->status.value_generation = 1;
+        }
+
+        portEXIT_CRITICAL(&s_lock);
+    }
+
+    return received_value;
+}
+
+
 bool device_catalog_controller_init(void)
 {
     if (s_store) {
@@ -268,10 +640,14 @@ void device_catalog_controller_reset(void)
 
     uint32_t generation =
         s_store->status.generation + 1;
+    uint32_t value_generation =
+        s_store->status.value_generation + 1;
 
     memset(s_store, 0, sizeof(*s_store));
     s_store->status.generation =
         generation ? generation : 1;
+    s_store->status.value_generation =
+        value_generation ? value_generation : 1;
 
     portEXIT_CRITICAL(&s_lock);
 }
@@ -288,12 +664,16 @@ void device_catalog_controller_update_from_objects(
 
     uint32_t generation =
         s_store->status.generation + 1;
+    uint32_t value_generation =
+        s_store->status.value_generation + 1;
 
     memset(s_store, 0, sizeof(*s_store));
     s_store->status.discovered =
         cJSON_IsArray(objects);
     s_store->status.generation =
         generation ? generation : 1;
+    s_store->status.value_generation =
+        value_generation ? value_generation : 1;
 
     if (cJSON_IsArray(objects)) {
         const cJSON *entry = NULL;

@@ -140,7 +140,9 @@ static void sntp_wait_task(void *arg);
 #include "console_controller.h"
 #include "ui_macros_v32.h"
 #include "macro_controller.h"
+#include "printer_action_resolver.h"
 #include "device_catalog_controller.h"
+#include "calibration_session_controller.h"
 #include "telemetry_history.h"
 #include "ui_printer_v32.h"
 #include "ui_printer_motion.h"
@@ -1371,7 +1373,7 @@ static void moonraker_live_poll_tasklet(void)
     }
 }
 
-static bool moonraker_send_gcode(const char *cmd)
+static bool moonraker_send_gcode_http(const char *cmd)
 {
     if (!s_got_ip || !cmd || !cmd[0]) {
         safe_copy(moonraker_status,
@@ -1433,6 +1435,52 @@ static bool moonraker_send_gcode(const char *cmd)
         toast_detail);
 
     return false;
+}
+
+
+static bool moonraker_send_gcode_raw(
+    const char *command)
+{
+    if (!command || !command[0]) {
+        return false;
+    }
+
+    if (moonraker_live_websocket_send_gcode(
+            command)) {
+        return true;
+    }
+
+    return moonraker_send_gcode_http(command);
+}
+
+
+static bool moonraker_send_gcode(
+    const char *requested)
+{
+    printer_action_resolution_t resolution;
+
+    if (!printer_action_resolver_resolve(
+            requested,
+            &resolution)) {
+        return false;
+    }
+
+    if (resolution.macro_used &&
+        strcmp(requested, resolution.command) != 0) {
+        console_controller_add(
+            CONSOLE_ENTRY_SYSTEM,
+            "Using printer macro %s for %s",
+            resolution.command,
+            requested);
+        ESP_LOGI(
+            TAG,
+            "ACTION_MACRO requested=%.96s resolved=%s",
+            requested,
+            resolution.command);
+    }
+
+    return moonraker_send_gcode_raw(
+        resolution.command);
 }
 
 void ui_printer_v32_create(void);
@@ -1843,7 +1891,8 @@ void ui_shell_page_action(ui_shell_page_t page)
 
     case UI_SHELL_PAGE_CALIBRATION:
         ui_calibration_v32_show(
-            calibration_open_bed_mesh_bridge);
+            calibration_open_bed_mesh_bridge,
+            moonraker_send_gcode);
         return;
 
     case UI_SHELL_PAGE_DEVICES:
@@ -1852,11 +1901,21 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_MACROS:
-        ui_macros_v32_show(moonraker_send_gcode);
+        /*
+         * The operator explicitly selected this detected macro. Preserve its
+         * exact catalog name instead of resolving it as another action.
+         */
+        ui_macros_v32_show(
+            moonraker_send_gcode_raw);
         return;
 
     case UI_SHELL_PAGE_CONSOLE:
-        ui_console_v32_show(moonraker_send_gcode);
+        /*
+         * Console is intentionally literal. It still uses asynchronous
+         * WebSocket dispatch, but never rewrites operator-entered G-code.
+         */
+        ui_console_v32_show(
+            moonraker_send_gcode_raw);
         return;
 
     case UI_SHELL_PAGE_DRYBOX:
@@ -3915,6 +3974,7 @@ void app_main(void)
     console_controller_init();
     macro_controller_init();
     device_catalog_controller_init();
+    calibration_session_controller_init();
     ui_macros_v32_init();
     operator_event_log_add(
         OPERATOR_EVENT_INFO,

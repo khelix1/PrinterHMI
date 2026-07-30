@@ -7,6 +7,7 @@
 #include "esp_heap_caps.h"
 #include "cJSON.h"
 #include "bed_mesh_controller.h"
+#include "device_catalog_controller.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -757,7 +758,10 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         return MOONRAKER_WEBSOCKET_MESSAGE_IGNORED;
     }
 
-    int updates = 0;
+    int updates =
+        device_catalog_controller_merge_status(status)
+            ? 1
+            : 0;
     double value = 0.0;
 
     state_lock();

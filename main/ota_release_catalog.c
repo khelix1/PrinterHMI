@@ -1,4 +1,5 @@
 #include "ota_release_catalog.h"
+#include "network_activity_controller.h"
 
 #include "cJSON.h"
 #include "esp_app_desc.h"
@@ -514,8 +515,14 @@ static void release_catalog_task(void *argument)
         "User-Agent",
         "PrinterHMI");
 
-    esp_err_t result = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
+    esp_err_t result = ESP_ERR_INVALID_STATE;
+    int status = 0;
+
+    if (network_activity_controller_try_begin_shared()) {
+        result = esp_http_client_perform(client);
+        status = esp_http_client_get_status_code(client);
+        network_activity_controller_end_shared();
+    }
     esp_http_client_cleanup(client);
 
     if (result != ESP_OK || status != 200) {

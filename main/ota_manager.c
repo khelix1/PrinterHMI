@@ -2,6 +2,7 @@
 
 #include "ui_ota_popup.h"
 #include "operator_event_log.h"
+#include "network_activity_controller.h"
 
 #include "esp_err.h"
 #include "esp_crt_bundle.h"
@@ -236,6 +237,35 @@ static void update_task(void *arg)
     s_bytes_read = 0;
     s_content_length = 0;
 
+    esp_https_ota_handle_t ota_handle = NULL;
+    esp_err_t result = ESP_FAIL;
+
+    set_state("Preparing Network...", 5);
+
+    /* Block new shared HTTP work and wait for existing requests plus the
+     * persistent Moonraker WebSocket to drain before starting TLS.
+     */
+    int elapsed_ms = 0;
+    for (; elapsed_ms < 20000; elapsed_ms += 50) {
+        if (s_cancel_requested) {
+            goto cancelled;
+        }
+
+        if (network_activity_controller_exclusive_ready()) {
+            break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    if (!network_activity_controller_exclusive_ready()) {
+        result = ESP_ERR_TIMEOUT;
+        goto failed;
+    }
+
+    /* Allow the final SDIO/TCP teardown traffic to settle before OTA. */
+    vTaskDelay(pdMS_TO_TICKS(1500));
+
     set_state("Checking Server...", 10);
 
     esp_http_client_config_t http_config = {
@@ -257,9 +287,7 @@ static void update_task(void *arg)
         .http_config = &http_config,
     };
 
-    esp_https_ota_handle_t ota_handle = NULL;
-    esp_err_t result =
-        esp_https_ota_begin(&ota_config, &ota_handle);
+    result = esp_https_ota_begin(&ota_config, &ota_handle);
 
     if (result != ESP_OK) {
         if (s_cancel_requested) {
@@ -346,6 +374,7 @@ failed:
         "Firmware update failed: %s",
         esp_err_to_name(result));
 
+    network_activity_controller_release_exclusive();
     s_task_running = false;
     vTaskDelete(NULL);
     return;
@@ -373,6 +402,7 @@ cancelled:
         OPERATOR_EVENT_WARNING,
         "Firmware update cancelled safely");
 
+    network_activity_controller_release_exclusive();
     s_task_running = false;
     s_cancel_complete = true;
     vTaskDelete(NULL);
@@ -388,6 +418,8 @@ bool ota_manager_start(const char *url)
              sizeof(s_task_url),
              "%s",
              url);
+
+    network_activity_controller_request_exclusive();
 
     s_cancel_requested = false;
     s_cancel_complete = false;
@@ -415,6 +447,7 @@ bool ota_manager_start(const char *url)
         NULL);
 
     if (result != pdPASS) {
+        network_activity_controller_release_exclusive();
         s_task_running = false;
         s_cancel_allowed = false;
         set_state("Unable to start OTA task.", 0);

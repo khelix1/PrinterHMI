@@ -3,8 +3,12 @@
 #include <ctype.h>
 #include <string.h>
 
+#include "cJSON.h"
 #include "device_catalog_controller.h"
 #include "macro_controller.h"
+
+static bool s_axis_twist_command_available;
+static uint32_t s_command_generation;
 
 
 static bool starts_with(
@@ -16,6 +20,48 @@ static bool starts_with(
     }
 
     return strncmp(text, prefix, strlen(prefix)) == 0;
+}
+
+
+bool calibration_capability_controller_merge_status(
+    const struct cJSON *status)
+{
+    const cJSON *gcode = cJSON_IsObject(status)
+        ? cJSON_GetObjectItemCaseSensitive(status, "gcode")
+        : NULL;
+    const cJSON *commands = cJSON_IsObject(gcode)
+        ? cJSON_GetObjectItemCaseSensitive(gcode, "commands")
+        : NULL;
+
+    if (!cJSON_IsObject(commands)) {
+        return false;
+    }
+
+    bool available = cJSON_HasObjectItem(
+        commands,
+        "AXIS_TWIST_COMPENSATION_CALIBRATE");
+    __atomic_store_n(
+        &s_axis_twist_command_available,
+        available,
+        __ATOMIC_RELEASE);
+    __atomic_add_fetch(
+        &s_command_generation,
+        1,
+        __ATOMIC_ACQ_REL);
+    return true;
+}
+
+
+void calibration_capability_controller_reset(void)
+{
+    __atomic_store_n(
+        &s_axis_twist_command_available,
+        false,
+        __ATOMIC_RELEASE);
+    __atomic_add_fetch(
+        &s_command_generation,
+        1,
+        __ATOMIC_ACQ_REL);
 }
 
 
@@ -81,6 +127,10 @@ void calibration_capability_controller_snapshot(
     output->discovered = device_status.discovered;
     output->device_generation = device_status.generation;
     output->macro_generation = macro_status.generation;
+    output->command_generation =
+        __atomic_load_n(
+            &s_command_generation,
+            __ATOMIC_ACQUIRE);
 
     for (size_t index = 0;
          index < device_status.stored_count;
@@ -146,6 +196,12 @@ void calibration_capability_controller_snapshot(
             output->bltouch ||
             output->load_cell_probe;
     }
+
+    output->axis_twist =
+        output->axis_twist ||
+        __atomic_load_n(
+            &s_axis_twist_command_available,
+            __ATOMIC_ACQUIRE);
 
     for (size_t index = 0;
          index < macro_status.count;

@@ -6,6 +6,22 @@ Completed work is intentionally removed from this list so it remains an accurate
 
 ---
 
+
+# Network Transport
+
+## ESP-Hosted compatibility pin
+
+**Status:** Mitigated and release-gated
+
+The ESP32-P4 host component and ESP32-C6 firmware are pinned to ESP-Hosted
+2.12.8. Mixing host and co-processor releases can produce RPC timeouts or
+transport instability. A guarded CMake hook keeps host TX in byte mode and RX
+in block mode whenever managed components are regenerated.
+
+Do not update ESP-IDF, ESP-Hosted or the C6 firmware independently. Treat a
+transport-stack update as a matched platform migration and repeat the Devices,
+WebSocket, OTA, reboot and power-cycle test matrix.
+
 # Display Limitations
 
 ## Initial panel appearance

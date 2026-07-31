@@ -1,4 +1,5 @@
 #include "moonraker_live_transport.h"
+#include "network_activity_controller.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -144,8 +145,14 @@ bool moonraker_live_transport_fetch(
             api_key);
     }
 
-    esp_err_t error = esp_http_client_perform(client);
-    int status_code = esp_http_client_get_status_code(client);
+    esp_err_t error = ESP_ERR_INVALID_STATE;
+    int status_code = 0;
+
+    if (network_activity_controller_try_begin_shared()) {
+        error = esp_http_client_perform(client);
+        status_code = esp_http_client_get_status_code(client);
+        network_activity_controller_end_shared();
+    }
 
     if (http_status_out) {
         *http_status_out = status_code;

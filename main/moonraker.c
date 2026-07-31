@@ -1,4 +1,5 @@
 #include "moonraker.h"
+#include "network_activity_controller.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +8,7 @@
 #include "esp_heap_caps.h"
 #include "cJSON.h"
 #include "bed_mesh_controller.h"
+#include "calibration_capability_controller.h"
 #include "device_catalog_controller.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -762,6 +764,10 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         device_catalog_controller_merge_status(status)
             ? 1
             : 0;
+
+    if (calibration_capability_controller_merge_status(status)) {
+        ++updates;
+    }
     double value = 0.0;
 
     state_lock();
@@ -1280,8 +1286,14 @@ static bool moonraker_http_get_raw(
             api_key);
     }
 
-    esp_err_t err =
-        esp_http_client_perform(client);
+    if (!network_activity_controller_try_begin_shared()) {
+        esp_http_client_cleanup(client);
+        if (err_out) *err_out = ESP_ERR_INVALID_STATE;
+        return false;
+    }
+
+    esp_err_t err = esp_http_client_perform(client);
+    network_activity_controller_end_shared();
 
     int code =
         esp_http_client_get_status_code(client);
@@ -1656,7 +1668,14 @@ bool moonraker_send_gcode_script(const char *host,
                                    body,
                                    body_len);
 
+    if (!network_activity_controller_try_begin_shared()) {
+        esp_http_client_cleanup(client);
+        if (err_out) *err_out = ESP_ERR_INVALID_STATE;
+        return false;
+    }
+
     esp_err_t err = esp_http_client_perform(client);
+    network_activity_controller_end_shared();
     int code = esp_http_client_get_status_code(client);
 
     esp_http_client_cleanup(client);
@@ -1716,7 +1735,14 @@ bool moonraker_start_print_file(const char *host,
 
     esp_http_client_set_post_field(client, body, strlen(body));
 
+    if (!network_activity_controller_try_begin_shared()) {
+        esp_http_client_cleanup(client);
+        if (err_out) *err_out = ESP_ERR_INVALID_STATE;
+        return false;
+    }
+
     esp_err_t err = esp_http_client_perform(client);
+    network_activity_controller_end_shared();
     int code = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
 

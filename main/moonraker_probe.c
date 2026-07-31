@@ -1,4 +1,5 @@
 #include "moonraker_probe.h"
+#include "network_activity_controller.h"
 
 #include "esp_err.h"
 #include "esp_http_client.h"
@@ -95,8 +96,13 @@ bool moonraker_probe_host(const char *host, int port)
         return false;
     }
 
-    esp_err_t err =
-        esp_http_client_perform(client);
+    if (!network_activity_controller_try_begin_shared()) {
+        esp_http_client_cleanup(client);
+        return false;
+    }
+
+    esp_err_t err = esp_http_client_perform(client);
+    network_activity_controller_end_shared();
 
     int code =
         esp_http_client_get_status_code(client);

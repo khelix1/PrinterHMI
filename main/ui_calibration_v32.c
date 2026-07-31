@@ -86,6 +86,7 @@ typedef struct {
     uint32_t session_generation;
     uint32_t device_generation;
     uint32_t macro_generation;
+    uint32_t command_generation;
 } ui_calibration_state_t;
 
 static const char TAG[] = "ui_calibration";
@@ -267,6 +268,130 @@ static void set_card(
 }
 
 
+static void set_action_label(
+    lv_obj_t *button,
+    const char *text)
+{
+    lv_obj_t *label = button
+        ? lv_obj_get_child(button, 0)
+        : NULL;
+
+    if (label) {
+        lv_label_set_text(label, text ? text : "");
+    }
+}
+
+
+static void layout_bed_geometry_actions(
+    const calibration_capabilities_t *capabilities)
+{
+    if (!s_calibration || !capabilities) {
+        return;
+    }
+
+    lv_obj_t *buttons[] = {
+        s_calibration->bed_mesh_button,
+        s_calibration->screws_tilt_button,
+        s_calibration->gantry_level_button,
+        s_calibration->axis_twist_button,
+    };
+    bool visible[] = {
+        capabilities->bed_mesh,
+        capabilities->screws_tilt,
+        capabilities->z_tilt ||
+            capabilities->quad_gantry_level,
+        capabilities->axis_twist,
+    };
+    lv_obj_t *visible_buttons[4] = {0};
+    size_t count = 0;
+
+    for (size_t index = 0;
+         index < sizeof(buttons) / sizeof(buttons[0]);
+         ++index) {
+        if (buttons[index] && visible[index]) {
+            visible_buttons[count++] = buttons[index];
+        }
+    }
+
+    if (count == 0) {
+        return;
+    }
+
+    set_action_label(
+        s_calibration->bed_mesh_button,
+        "BED MESH");
+
+    for (size_t index = 0; index < count; ++index) {
+        lv_obj_set_size(
+            visible_buttons[index],
+            110,
+            38);
+    }
+
+    if (count == 1) {
+        lv_obj_align(
+            visible_buttons[0],
+            LV_ALIGN_BOTTOM_LEFT,
+            16,
+            -12);
+    } else if (count == 2) {
+        lv_obj_align(
+            visible_buttons[0],
+            LV_ALIGN_BOTTOM_LEFT,
+            16,
+            -12);
+        lv_obj_align(
+            visible_buttons[1],
+            LV_ALIGN_BOTTOM_RIGHT,
+            -16,
+            -12);
+    } else if (count == 3) {
+        lv_obj_align(
+            visible_buttons[0],
+            LV_ALIGN_BOTTOM_LEFT,
+            16,
+            -12);
+        lv_obj_align(
+            visible_buttons[1],
+            LV_ALIGN_BOTTOM_MID,
+            0,
+            -12);
+        lv_obj_align(
+            visible_buttons[2],
+            LV_ALIGN_BOTTOM_RIGHT,
+            -16,
+            -12);
+    } else {
+        if (s_calibration->bed.summary) {
+            lv_label_set_text(
+                s_calibration->bed.summary,
+                "BED GEOMETRY TOOLS READY");
+        }
+
+        lv_obj_align(
+            visible_buttons[0],
+            LV_ALIGN_BOTTOM_LEFT,
+            16,
+            -58);
+        lv_obj_align(
+            visible_buttons[1],
+            LV_ALIGN_BOTTOM_RIGHT,
+            -16,
+            -58);
+        lv_obj_align(
+            visible_buttons[2],
+            LV_ALIGN_BOTTOM_LEFT,
+            16,
+            -12);
+        lv_obj_align(
+            visible_buttons[3],
+            LV_ALIGN_BOTTOM_RIGHT,
+            -16,
+            -12);
+    }
+}
+
+
 static void refresh_capabilities(void)
 {
     if (!s_calibration || !s_calibration->root) {
@@ -367,6 +492,8 @@ static void refresh_capabilities(void)
             capabilities.device_generation;
         s_calibration->macro_generation =
             capabilities.macro_generation;
+        s_calibration->command_generation =
+            capabilities.command_generation;
         return;
     }
 
@@ -471,6 +598,8 @@ static void refresh_capabilities(void)
                 LV_OBJ_FLAG_HIDDEN);
         }
     }
+
+    layout_bed_geometry_actions(&capabilities);
 
     if (s_calibration->bed.status) {
         if (capabilities.bed_mesh ||
@@ -660,6 +789,8 @@ static void refresh_capabilities(void)
         capabilities.device_generation;
     s_calibration->macro_generation =
         capabilities.macro_generation;
+    s_calibration->command_generation =
+        capabilities.command_generation;
 }
 
 
@@ -2829,7 +2960,9 @@ static void calibration_refresh_timer_cb(
     if (capabilities.device_generation !=
             s_calibration->device_generation ||
         capabilities.macro_generation !=
-            s_calibration->macro_generation) {
+            s_calibration->macro_generation ||
+        capabilities.command_generation !=
+            s_calibration->command_generation) {
         refresh_capabilities();
     }
 

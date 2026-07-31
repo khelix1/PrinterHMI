@@ -5,6 +5,29 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-07-31
+
+### Fixed
+
+- Matched the ESP-Hosted P4 component and C6 firmware at 2.12.8.
+- Stabilized Devices and OTA transitions by retaining one capability-aware
+  WebSocket subscription and quiescing competing network activity before OTA.
+- Preserved TX byte transfers with RX block transfers to avoid intermittent
+  unrecoverable SDIO timeout resets.
+- Added boot diagnostics for the ESP32-C6 co-processor firmware version.
+
+### Build
+
+- Added a guarded CMake hook that reapplies the tested ESP-Hosted transfer
+  mode after managed-component regeneration.
+- Kept the known-good ESP-IDF 5.4.4 and 40 MHz four-bit SDIO configuration.
+
+### Validation
+
+- Verified repeated Devices-to-OTA cycles, successful OTA completion and
+  reboot with matching ESP-Hosted 2.12.8 host and co-processor versions.
+
+
 ## [5.1.0] - 2026-07-31
 
 ### Added

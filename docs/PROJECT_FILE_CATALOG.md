@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v5.1.0 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v5.1.1 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator

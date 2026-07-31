@@ -100,6 +100,7 @@ idf_component_register(
         "printer_preview_cache_v32.c"
         "printer_profile_preview_worker_v32.c"
         "printer_preview_store_v32.c"
+        "network_activity_controller.c"
         "network_status_controller.c"
         "network_wifi_scan.c"
         "moonraker.c"

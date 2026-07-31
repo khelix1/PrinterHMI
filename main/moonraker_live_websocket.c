@@ -17,10 +17,12 @@
 #include "console_controller.h"
 #include "macro_controller.h"
 #include "device_catalog_controller.h"
+#include "calibration_capability_controller.h"
 
 
 #define TAG "moon_live_ws"
 #define WS_RETRY_INTERVAL_US 3000000LL
+#define WS_REBIND_SETTLE_US 1500000LL
 #define WS_MESSAGE_MAX_BYTES (128 * 1024)
 #define WS_SUBSCRIPTION_CAPACITY (16 * 1024)
 #define WS_COMMAND_CAPACITY 1024
@@ -42,10 +44,20 @@ static size_t s_message_capacity = 0;
 static uint32_t s_message_generation = 0;
 
 static uint32_t s_generation = 0;
+static uint32_t s_accepted_generation = 0;
 static int64_t s_retry_after_us = 0;
 static char s_host[128] = "";
 static char s_api_key[160] = "";
 static char s_uri[256] = "";
+
+typedef enum {
+    WS_REBIND_IDLE = 0,
+    WS_REBIND_QUIESCE,
+    WS_REBIND_REOPEN_WAIT,
+} websocket_rebind_phase_t;
+
+static websocket_rebind_phase_t s_rebind_phase = WS_REBIND_IDLE;
+static int64_t s_rebind_after_us = 0;
 
 
 static char *s_subscription = NULL;
@@ -431,6 +443,7 @@ static bool build_subscription(
 
     if (!append_subscription_text(
             &used,
+            "\"gcode\":[\"commands\"],"
             "\"toolhead\":null}},"
             "\"id\":1002}")) {
         return false;
@@ -934,6 +947,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_READY:
         /* A Klippy restart invalidates the old object subscription. */
         device_catalog_controller_reset();
+        calibration_capability_controller_reset();
         s_last_status_update_us = 0;
         s_subscribed = false;
         s_subscription_ready = false;
@@ -957,6 +971,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED:
         device_catalog_controller_reset();
+        calibration_capability_controller_reset();
         s_last_status_update_us = 0;
         s_subscribed = false;
         ESP_LOGW(TAG, "WS_KLIPPY_DISCONNECTED generation=%u",
@@ -979,8 +994,24 @@ static void websocket_event_handler(
     int32_t event_id,
     void *event_data)
 {
-    (void)handler_argument;
     (void)event_base;
+
+    esp_websocket_client_handle_t event_client =
+        (esp_websocket_client_handle_t)handler_argument;
+    bool current_owner =
+        event_client &&
+        event_client == s_client &&
+        s_generation == __atomic_load_n(
+            &s_accepted_generation,
+            __ATOMIC_ACQUIRE);
+
+    if ((esp_websocket_event_id_t)event_id !=
+            WEBSOCKET_EVENT_BEFORE_CONNECT &&
+        !current_owner) {
+        ESP_LOGW(TAG, "WS_STALE_CLIENT_EVENT discarded id=%ld",
+                 (long)event_id);
+        return;
+    }
 
     switch ((esp_websocket_event_id_t)event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
@@ -997,6 +1028,7 @@ static void websocket_event_handler(
 
     case WEBSOCKET_EVENT_DISCONNECTED:
         device_catalog_controller_reset();
+        calibration_capability_controller_reset();
         s_connected = false;
         s_subscribed = false;
         s_subscribe_pending = false;
@@ -1012,13 +1044,8 @@ static void websocket_event_handler(
         esp_websocket_event_data_t *data =
             (esp_websocket_event_data_t *)event_data;
 
-        /* WS_REBIND_CLIENT_IDENTITY_GUARD
-         * stop() may deliver a final queued frame from the retiring client.
-         * Generation alone cannot reject it until the replacement endpoint
-         * has been installed, so require exact client ownership as well.
-         */
-        if (!data || data->client != s_client) {
-            ESP_LOGW(TAG, "WS_STALE_CLIENT_EVENT discarded");
+        if (!data || data->client != event_client) {
+            ESP_LOGW(TAG, "WS_INVALID_CLIENT_EVENT discarded");
             break;
         }
 
@@ -1035,6 +1062,7 @@ static void websocket_event_handler(
 
     case WEBSOCKET_EVENT_CLOSED:
         device_catalog_controller_reset();
+        calibration_capability_controller_reset();
         s_connected = false;
         s_subscribed = false;
         s_subscribe_pending = false;
@@ -1049,7 +1077,6 @@ static void websocket_event_handler(
     }
 }
 
-
 static void destroy_client(void)
 {
     esp_websocket_client_handle_t client = s_client;
@@ -1062,6 +1089,7 @@ static void destroy_client(void)
     s_message_generation = 0;
     __atomic_store_n(&s_file_change_pending, false, __ATOMIC_RELEASE);
     device_catalog_controller_reset();
+    calibration_capability_controller_reset();
 
     if (!client) return;
 
@@ -1081,7 +1109,41 @@ void moonraker_live_websocket_stop(void)
     s_api_key[0] = '\0';
     s_uri[0] = '\0';
     s_generation = 0;
+    __atomic_store_n(&s_accepted_generation, 0, __ATOMIC_RELEASE);
     s_retry_after_us = 0;
+    s_rebind_phase = WS_REBIND_IDLE;
+    s_rebind_after_us = 0;
+}
+
+
+void moonraker_live_websocket_prepare_profile_change(
+    uint32_t configuration_generation)
+{
+    if (!s_client || configuration_generation == s_generation) return;
+
+    __atomic_store_n(
+        &s_accepted_generation,
+        configuration_generation,
+        __ATOMIC_RELEASE);
+
+    s_connected = false;
+    s_subscribed = false;
+    s_subscribe_pending = false;
+    s_last_status_update_us = 0;
+    moonraker_state_set_connection(false, false);
+
+    s_rebind_phase = WS_REBIND_QUIESCE;
+    s_rebind_after_us = esp_timer_get_time() + WS_REBIND_SETTLE_US;
+
+    ESP_LOGI(TAG, "WS_REBIND_QUIESCE generation=%u->%u",
+             (unsigned)s_generation,
+             (unsigned)configuration_generation);
+}
+
+
+bool moonraker_live_websocket_rebinding(void)
+{
+    return s_rebind_phase != WS_REBIND_IDLE;
 }
 
 
@@ -1199,6 +1261,10 @@ static bool create_client(
     copy_text(s_host, sizeof(s_host), host);
     copy_text(s_api_key, sizeof(s_api_key), api_key);
     s_generation = generation;
+    __atomic_store_n(
+        &s_accepted_generation,
+        generation,
+        __ATOMIC_RELEASE);
 
     /* A replacement connection is not fresh until it merges its own first
      * subscription status message.
@@ -1224,7 +1290,7 @@ static bool create_client(
         s_client,
         WEBSOCKET_EVENT_ANY,
         websocket_event_handler,
-        NULL);
+        s_client);
 
     if (error != ESP_OK) {
         ESP_LOGE(TAG, "WS event registration failed: %s",
@@ -1265,6 +1331,41 @@ void moonraker_live_websocket_tasklet(
         return;
     }
 
+    int64_t now = esp_timer_get_time();
+
+    if (s_rebind_phase != WS_REBIND_IDLE) {
+        uint32_t accepted = __atomic_load_n(
+            &s_accepted_generation,
+            __ATOMIC_ACQUIRE);
+
+        if (accepted != configuration_generation) {
+            __atomic_store_n(
+                &s_accepted_generation,
+                configuration_generation,
+                __ATOMIC_RELEASE);
+            s_rebind_phase = WS_REBIND_QUIESCE;
+            s_rebind_after_us = now + WS_REBIND_SETTLE_US;
+        }
+
+        if (now < s_rebind_after_us) return;
+
+        if (s_rebind_phase == WS_REBIND_QUIESCE) {
+            ESP_LOGI(TAG, "WS_REBIND_RETIRE generation=%u",
+                     (unsigned)s_generation);
+            destroy_client();
+            s_retry_after_us = 0;
+            s_rebind_phase = WS_REBIND_REOPEN_WAIT;
+            s_rebind_after_us = esp_timer_get_time() +
+                WS_REBIND_SETTLE_US;
+            return;
+        }
+
+        ESP_LOGI(TAG, "WS_REBIND_REOPEN generation=%u",
+                 (unsigned)configuration_generation);
+        s_rebind_phase = WS_REBIND_IDLE;
+        s_rebind_after_us = 0;
+    }
+
     bool endpoint_changed =
         s_client &&
         (s_generation != configuration_generation ||
@@ -1276,11 +1377,10 @@ void moonraker_live_websocket_tasklet(
                  (unsigned)configuration_generation,
                  s_host,
                  host);
-        destroy_client();
-        s_retry_after_us = 0;
+        moonraker_live_websocket_prepare_profile_change(
+            configuration_generation);
+        return;
     }
-
-    int64_t now = esp_timer_get_time();
 
     if (!s_client) {
         if (now < s_retry_after_us) return;
@@ -1321,7 +1421,6 @@ void moonraker_live_websocket_tasklet(
         }
     }
 }
-
 
 bool moonraker_live_websocket_connected(void)
 {

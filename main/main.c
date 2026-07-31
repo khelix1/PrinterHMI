@@ -166,6 +166,7 @@ static void sntp_wait_task(void *arg);
 #include "printer_profile_preview_worker_v32.h"
 #include "printer_preview_store_v32.h"
 #include "network_status_controller.h"
+#include "network_activity_controller.h"
 #include "ui_network_tools.h"
 #include "moonraker_discovery.h"
 #include "moonraker_probe.h"
@@ -803,6 +804,25 @@ static void wifi_prepare_transport(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_LOGI(TAG, "Using WIFI_INIT_CONFIG_DEFAULT P4+C6 hosted path");
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+
+    /* PrinterHMI ESP-Hosted co-processor version audit. */
+    esp_hosted_coprocessor_fwver_t hosted_fwver = {0};
+    esp_err_t hosted_fwver_err =
+        esp_hosted_get_coprocessor_fwversion(&hosted_fwver);
+    if (hosted_fwver_err == ESP_OK) {
+        ESP_LOGI(
+            TAG,
+            "ESP-Hosted co-processor firmware: %u.%u.%u",
+            (unsigned)hosted_fwver.major1,
+            (unsigned)hosted_fwver.minor1,
+            (unsigned)hosted_fwver.patch1);
+    } else {
+        ESP_LOGW(
+            TAG,
+            "ESP-Hosted co-processor firmware query failed: %s",
+            esp_err_to_name(hosted_fwver_err));
+    }
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
@@ -1505,6 +1525,9 @@ static void printer_profiles_active_changed_bridge(void)
     /* FAILURE_STATE_POLISH_V1 */
     ui_printer_popups_close_all();
 
+    moonraker_live_websocket_prepare_profile_change(
+        moonraker_config_generation());
+
     reset_preview_state_for_host_change();
     reset_active_printer_runtime_state();
     dashboard_restore_active_profile_preview();
@@ -1934,7 +1957,10 @@ void ui_shell_page_action(ui_shell_page_t page)
 
 static void printer_thumb_cleanup_for_popup_close(void)
 {
-    thumbnail_manager_v32_set_task_running(false);
+    /* The download worker exclusively owns its running flag. Closing the
+     * popup must not make a still-running worker appear idle and permit a
+     * second overlapping thumbnail transfer.
+     */
     thumbnail_manager_v32_mark_pending();
 
     thumb_poll_timer = NULL;
@@ -3808,6 +3834,7 @@ static void init_sd_card_storage(void)
 static void hmi_runtime_task(void *arg)
 {
     (void)arg;
+    bool ota_network_quiet = false;
 
     while (1) {
         if (s_sta_netif) {
@@ -3825,20 +3852,40 @@ static void hmi_runtime_task(void *arg)
             }
         }
 
-        /* MOONRAKER_WEBSOCKET_PHASE2
-         * Observe the active profile over a persistent subscription while
-         * the proven HTTP poller remains authoritative.
-         */
-        moonraker_live_websocket_tasklet(
-            s_got_ip,
-            moonraker_config_host(),
-            moonraker_config_port(),
-            MOONRAKER_API_KEY,
-            moonraker_config_generation());
+        bool exclusive_network =
+            network_activity_controller_exclusive_requested();
 
-        moonraker_live_poll_tasklet();
-        printer_profile_preview_worker_v32_poll_one(
-            MOONRAKER_API_KEY);
+        if (exclusive_network) {
+            if (!ota_network_quiet) {
+                ESP_LOGI(TAG, "OTA_NETWORK_QUIESCE begin");
+                moonraker_live_websocket_stop();
+                network_activity_controller_set_persistent_quiet(true);
+                ota_network_quiet = true;
+            }
+        } else {
+            if (ota_network_quiet) {
+                ESP_LOGI(TAG, "OTA_NETWORK_QUIESCE end");
+                network_activity_controller_set_persistent_quiet(false);
+                ota_network_quiet = false;
+            }
+
+            /* MOONRAKER_WEBSOCKET_PHASE2
+             * Observe the active profile over a persistent subscription while
+             * the proven HTTP poller remains authoritative.
+             */
+            moonraker_live_websocket_tasklet(
+                s_got_ip,
+                moonraker_config_host(),
+                moonraker_config_port(),
+                MOONRAKER_API_KEY,
+                moonraker_config_generation());
+
+            if (!moonraker_live_websocket_rebinding()) {
+                moonraker_live_poll_tasklet();
+                printer_profile_preview_worker_v32_poll_one(
+                    MOONRAKER_API_KEY);
+            }
+        }
         /* BOOT_PREVIEW_PROFILE_STORE_ONLY
          * Reboot restoration is profile-indexed and endpoint-validated.
          * The legacy global last-file cache must not publish into whichever

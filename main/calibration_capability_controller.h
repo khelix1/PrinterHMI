@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct cJSON;
+
 typedef struct {
     bool discovered;
 
@@ -30,11 +32,23 @@ typedef struct {
 
     uint32_t device_generation;
     uint32_t macro_generation;
+    uint32_t command_generation;
 } calibration_capabilities_t;
 
 /*
+ * Merges command capabilities reported by Klipper's gcode status object.
+ * Returns true when the supplied status contained a usable command catalog.
+ */
+bool calibration_capability_controller_merge_status(
+    const struct cJSON *status);
+
+/* Invalidates command capabilities during disconnect or Klipper restart. */
+void calibration_capability_controller_reset(void);
+
+/*
  * Derives calibration capabilities from the permanent device and macro
- * catalogs. This controller is stateless and performs no command dispatch.
+ * catalogs plus the last synchronized Klipper command catalog. This
+ * controller performs no command dispatch.
  */
 void calibration_capability_controller_snapshot(
     calibration_capabilities_t *output);

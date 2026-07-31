@@ -39,8 +39,11 @@
       `main_task: Calling app_main()`.
 - [ ] All ten sidebar destinations fit, highlight and open.
 - [ ] Navigation, themes and modal popups pass.
+- [ ] Calibration workflows, guided probing and SAVE_CONFIG confirmations pass.
 - [ ] Bed Mesh rotation, pinch, two-finger pan, grid, origins, calibration and
       profile management pass.
+- [ ] Devices filters, pagination, live values and Telemetry navigation pass.
+- [ ] `tools/audit/v5_feature_architecture_audit.sh` passes.
 - [ ] Public macros are detected, helper macros are hidden and execution
       requires confirmation.
 - [ ] Console command history, live responses and severity colors pass.

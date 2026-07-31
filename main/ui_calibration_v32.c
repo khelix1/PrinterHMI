@@ -7,6 +7,9 @@
 
 #include "calibration_capability_controller.h"
 #include "calibration_session_controller.h"
+#include "ui_calibration_motion.h"
+#include "ui_calibration_manual_probe.h"
+#include "ui_calibration_pressure_advance.h"
 #include "console_controller.h"
 #include "device_catalog_controller.h"
 #include "macro_controller.h"
@@ -36,9 +39,11 @@ typedef struct {
     lv_obj_t *bed_mesh_button;
     lv_obj_t *screws_tilt_button;
     lv_obj_t *gantry_level_button;
+    lv_obj_t *axis_twist_button;
     lv_obj_t *pid_tune_button;
     lv_obj_t *probe_z_button;
     lv_obj_t *custom_calibration_button;
+    lv_obj_t *axis_twist_popup;
     lv_obj_t *screws_popup;
     lv_obj_t *gantry_level_popup;
     lv_obj_t *pid_popup;
@@ -48,7 +53,6 @@ typedef struct {
     lv_obj_t *apply_restart_button;
     lv_obj_t *save_confirm_popup;
     lv_obj_t *probe_popup;
-    lv_obj_t *probe_status_label;
     lv_obj_t *custom_popup;
     lv_obj_t *screws_results_label;
     calibration_card_refs_t bed;
@@ -61,6 +65,7 @@ typedef struct {
     bool screws_home_required;
     bool gantry_home_required;
     bool gantry_use_qgl;
+    bool axis_twist_home_required;
     char pid_object_names[PID_HEATER_MAX]
                          [DEVICE_CATALOG_OBJECT_NAME_MAX];
     char pid_display_names[PID_HEATER_MAX]
@@ -319,11 +324,26 @@ static void refresh_capabilities(void)
                 LV_OBJ_FLAG_HIDDEN);
         }
 
+        if (s_calibration->axis_twist_button) {
+            lv_obj_add_flag(
+                s_calibration->axis_twist_button,
+                LV_OBJ_FLAG_HIDDEN);
+        }
+
         if (s_calibration->pid_tune_button) {
             lv_obj_add_flag(
                 s_calibration->pid_tune_button,
                 LV_OBJ_FLAG_HIDDEN);
         }
+
+        ui_calibration_pressure_advance_refresh(
+            false,
+            false);
+
+        ui_calibration_motion_refresh(
+            false,
+            false,
+            false);
 
         if (s_calibration->probe_z_button) {
             lv_obj_add_flag(
@@ -440,11 +460,24 @@ static void refresh_capabilities(void)
         }
     }
 
+    if (s_calibration->axis_twist_button) {
+        if (capabilities.axis_twist) {
+            lv_obj_clear_flag(
+                s_calibration->axis_twist_button,
+                LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(
+                s_calibration->axis_twist_button,
+                LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     if (s_calibration->bed.status) {
         if (capabilities.bed_mesh ||
             capabilities.screws_tilt ||
             capabilities.z_tilt ||
-            capabilities.quad_gantry_level) {
+            capabilities.quad_gantry_level ||
+            capabilities.axis_twist) {
             lv_obj_add_flag(
                 s_calibration->bed.status,
                 LV_OBJ_FLAG_HIDDEN);
@@ -478,6 +511,11 @@ static void refresh_capabilities(void)
         motion,
         motion_count,
         0);
+
+    ui_calibration_motion_refresh(
+        true,
+        capabilities.input_shaper,
+        capabilities.accelerometer);
 
     char thermal[176] = "";
     size_t thermal_count = 0;
@@ -527,6 +565,25 @@ static void refresh_capabilities(void)
         } else {
             lv_obj_add_flag(
                 s_calibration->pid_tune_button,
+                LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    ui_calibration_pressure_advance_refresh(
+        true,
+        capabilities.pressure_advance);
+
+    if (s_calibration->thermal.status) {
+        if (capabilities.hotend_pid ||
+            capabilities.bed_pid ||
+            capabilities.generic_heater_pid ||
+            capabilities.pressure_advance) {
+            lv_obj_add_flag(
+                s_calibration->thermal.status,
+                LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(
+                s_calibration->thermal.status,
                 LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -1940,7 +1997,6 @@ static void close_probe_popup(void)
     if (s_calibration->probe_popup) {
         lv_obj_t *popup = s_calibration->probe_popup;
         s_calibration->probe_popup = NULL;
-        s_calibration->probe_status_label = NULL;
         lv_obj_delete(popup);
     }
 }
@@ -1999,7 +2055,7 @@ static void abort_probe_calibration_cb(
     bool sent =
         s_calibration->send_gcode &&
         s_calibration->send_gcode(command);
-    close_probe_popup();
+    ui_calibration_manual_probe_hide();
     close_calibration_results_popup();
     calibration_session_controller_reset();
 
@@ -2029,7 +2085,7 @@ static void accept_probe_calibration_cb(
         s_calibration->send_gcode &&
         s_calibration->send_gcode(command);
 
-    close_probe_popup();
+    ui_calibration_manual_probe_hide();
 
     if (!sent) {
         calibration_session_controller_mark_error(
@@ -2046,90 +2102,14 @@ static void accept_probe_calibration_cb(
 
 static void show_probe_adjustment_popup(void)
 {
-    if (!s_calibration) {
-        return;
-    }
-
-    close_probe_popup();
-    s_calibration->probe_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            700,
-            480,
-            UI_POPUP_STANDARD);
-
-    if (!s_calibration->probe_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->probe_popup,
+    ui_calibration_manual_probe_show(
         "PROBE / Z OFFSET",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->probe_popup,
-        48);
-    s_calibration->probe_status_label =
-        ui_popup_add_body(
-            s_calibration->probe_popup,
-            "Use TESTZ steps to move the nozzle toward (-) or away from (+) the bed.\\n"
-            "Use a paper test, then ACCEPT only when the offset is correct.",
-            28,
-            68,
-            644);
-
-    static const char *labels[] = {
-        "-1.0", "-0.1", "-0.05",
-        "+0.05", "+0.1", "+1.0",
-    };
-    static const char *commands[] = {
-        "TESTZ Z=-1.0",
-        "TESTZ Z=-0.1",
-        "TESTZ Z=-0.05",
-        "TESTZ Z=0.05",
-        "TESTZ Z=0.1",
-        "TESTZ Z=1.0",
-    };
-
-    for (size_t index = 0;
-         index < sizeof(labels) / sizeof(labels[0]);
-         ++index) {
-        int row = (int)(index / 3);
-        int column = (int)(index % 3);
-        ui_popup_add_action_at(
-            s_calibration->probe_popup,
-            UI_POPUP_ACTION_CHOICE,
-            labels[index],
-            54 + column * 205,
-            190 + row * 62,
-            180,
-            48,
-            send_probe_step_cb,
-            (void *)commands[index],
-            NULL);
-    }
-
-    ui_popup_add_standard_footer_divider(
-        s_calibration->probe_popup);
-    ui_popup_add_footer_action(
-        s_calibration->probe_popup,
-        UI_POPUP_ACTION_DANGER,
-        "ABORT",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        abort_probe_calibration_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->probe_popup,
-        UI_POPUP_ACTION_CONFIRM,
+        "Use TESTZ steps to move the nozzle toward (-) or away from (+) the bed.\n"
+        "Use a paper test, then ACCEPT only when the offset is correct.",
         "ACCEPT",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        accept_probe_calibration_cb,
-        NULL,
-        NULL);
+        send_probe_step_cb,
+        abort_probe_calibration_cb,
+        accept_probe_calibration_cb);
 }
 
 
@@ -2542,6 +2522,297 @@ static void custom_calibration_button_cb(
 }
 
 
+
+
+static void close_axis_twist_popup(void)
+{
+    if (!s_calibration) {
+        return;
+    }
+
+    if (s_calibration->axis_twist_popup) {
+        lv_obj_t *popup =
+            s_calibration->axis_twist_popup;
+        s_calibration->axis_twist_popup = NULL;
+        lv_obj_delete(popup);
+    }
+}
+
+
+static void close_axis_twist_popup_cb(
+    lv_event_t *event)
+{
+    (void)event;
+    close_axis_twist_popup();
+}
+
+
+static void send_axis_twist_step_cb(
+    lv_event_t *event)
+{
+    if (!s_calibration || !event) {
+        return;
+    }
+
+    const char *command =
+        (const char *)lv_event_get_user_data(event);
+
+    if (!command || !command[0] ||
+        !calibration_action_ready(
+            "Axis Twist calibration")) {
+        return;
+    }
+
+    console_controller_add_command(command);
+    bool sent =
+        s_calibration->send_gcode &&
+        s_calibration->send_gcode(command);
+
+    if (!sent) {
+        calibration_session_controller_mark_error(
+            "Moonraker did not accept the Axis Twist TESTZ command.");
+        ui_toast_v32_show(
+            UI_STATUS_DANGER,
+            "AXIS TWIST MOVE FAILED",
+            "Moonraker did not accept the TESTZ command.");
+    }
+}
+
+
+static void abort_axis_twist_calibration_cb(
+    lv_event_t *event)
+{
+    (void)event;
+
+    if (!s_calibration) {
+        return;
+    }
+
+    static const char command[] = "ABORT";
+    console_controller_add_command(command);
+    bool sent =
+        s_calibration->send_gcode &&
+        s_calibration->send_gcode(command);
+
+    ui_calibration_manual_probe_hide();
+    close_calibration_results_popup();
+    calibration_session_controller_reset();
+
+    ui_toast_v32_show(
+        sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
+        sent ? "AXIS TWIST ABORTED" : "ABORT FAILED",
+        sent
+            ? "No Axis Twist values were saved."
+            : "Moonraker did not accept ABORT.");
+}
+
+
+static void accept_axis_twist_point_cb(
+    lv_event_t *event)
+{
+    (void)event;
+
+    if (!s_calibration ||
+        !calibration_action_ready(
+            "Axis Twist calibration")) {
+        return;
+    }
+
+    static const char command[] = "ACCEPT";
+    console_controller_add_command(command);
+    bool sent =
+        s_calibration->send_gcode &&
+        s_calibration->send_gcode(command);
+
+    if (!sent) {
+        calibration_session_controller_mark_error(
+            "Moonraker did not accept the Axis Twist sample.");
+        return;
+    }
+
+    ui_calibration_manual_probe_set_status(
+        "Point accepted. Klipper is moving to the next sample.\n"
+        "When movement stops, repeat the paper test and adjust TESTZ.");
+}
+
+
+static void show_axis_twist_adjustment_popup(void)
+{
+    ui_calibration_manual_probe_show(
+        "AXIS TWIST CALIBRATION",
+        "At each Klipper sample point, use a paper test and TESTZ to set the nozzle height.\n"
+        "Press ACCEPT for every point. The controls remain available until Klipper completes the sequence.",
+        "ACCEPT POINT",
+        send_axis_twist_step_cb,
+        abort_axis_twist_calibration_cb,
+        accept_axis_twist_point_cb);
+}
+
+
+static void run_axis_twist_calibration_cb(
+    lv_event_t *event)
+{
+    (void)event;
+
+    if (!s_calibration ||
+        !calibration_action_ready(
+            "Axis Twist calibration")) {
+        return;
+    }
+
+    const char *command =
+        s_calibration->axis_twist_home_required
+            ? "G28\nAXIS_TWIST_COMPENSATION_CALIBRATE"
+            : "AXIS_TWIST_COMPENSATION_CALIBRATE";
+    uint32_t start_sequence =
+        console_controller_latest_sequence();
+
+    calibration_session_controller_begin(
+        CALIBRATION_SESSION_AXIS_TWIST,
+        start_sequence);
+    console_controller_add_command(command);
+    bool sent =
+        s_calibration->send_gcode &&
+        s_calibration->send_gcode(command);
+
+    close_axis_twist_popup();
+
+    if (!sent) {
+        calibration_session_controller_mark_error(
+            "Moonraker did not accept AXIS_TWIST_COMPENSATION_CALIBRATE.");
+        show_calibration_results_popup(
+            "AXIS TWIST RESULTS",
+            "Axis Twist calibration could not be started.");
+        refresh_calibration_results();
+        return;
+    }
+
+    show_axis_twist_adjustment_popup();
+}
+
+
+static void axis_twist_button_cb(
+    lv_event_t *event)
+{
+    (void)event;
+
+    if (!s_calibration ||
+        !calibration_action_ready(
+            "Axis Twist calibration")) {
+        return;
+    }
+
+    calibration_capabilities_t capabilities;
+    calibration_capability_controller_snapshot(
+        &capabilities);
+    if (!capabilities.axis_twist) {
+        return;
+    }
+
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    s_calibration->axis_twist_home_required =
+        !strchr(state.homed_axes, 'x') ||
+        !strchr(state.homed_axes, 'y') ||
+        !strchr(state.homed_axes, 'z');
+
+    close_axis_twist_popup();
+    s_calibration->axis_twist_popup =
+        ui_popup_create(
+            lv_layer_top(),
+            630,
+            400,
+            UI_POPUP_STANDARD);
+
+    if (!s_calibration->axis_twist_popup) {
+        return;
+    }
+
+    ui_popup_add_title(
+        s_calibration->axis_twist_popup,
+        "START AXIS TWIST CALIBRATION?",
+        false,
+        4);
+    ui_popup_add_header_divider(
+        s_calibration->axis_twist_popup,
+        48);
+
+    char body[440];
+    lv_snprintf(
+        body,
+        sizeof(body),
+        "Klipper will probe and request a manual paper measurement at several points across the X axis.%s\n\n"
+        "Clear the bed and motion area. Nothing is saved until Apply & Restart is confirmed.",
+        s_calibration->axis_twist_home_required
+            ? " XYZ is not homed, so homing will run first."
+            : "");
+    ui_popup_add_body(
+        s_calibration->axis_twist_popup,
+        body,
+        28,
+        76,
+        574);
+    ui_popup_add_standard_footer_divider(
+        s_calibration->axis_twist_popup);
+    ui_popup_add_footer_action(
+        s_calibration->axis_twist_popup,
+        UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_LEFT " BACK",
+        170,
+        UI_POPUP_FOOTER_LEFT,
+        close_axis_twist_popup_cb,
+        NULL,
+        NULL);
+    ui_popup_add_footer_action(
+        s_calibration->axis_twist_popup,
+        UI_POPUP_ACTION_CONFIRM,
+        LV_SYMBOL_PLAY " START",
+        180,
+        UI_POPUP_FOOTER_RIGHT,
+        run_axis_twist_calibration_cb,
+        NULL,
+        NULL);
+}
+
+
+static void refresh_axis_twist_session(void)
+{
+    if (!s_calibration ||
+        !ui_calibration_manual_probe_is_visible()) {
+        return;
+    }
+
+    calibration_session_snapshot_t snapshot;
+    calibration_session_controller_snapshot(
+        &snapshot);
+
+    if (snapshot.kind !=
+            CALIBRATION_SESSION_AXIS_TWIST) {
+        return;
+    }
+
+    if (snapshot.status == CALIBRATION_SESSION_ERROR) {
+        ui_calibration_manual_probe_hide();
+        show_calibration_results_popup(
+            "AXIS TWIST RESULTS",
+            "Klipper reported an Axis Twist calibration error.");
+        refresh_calibration_results();
+        return;
+    }
+
+    if (snapshot.status ==
+            CALIBRATION_SESSION_RESULTS &&
+        snapshot.completed &&
+        snapshot.save_available) {
+        ui_calibration_manual_probe_hide();
+        show_calibration_results_popup(
+            "AXIS TWIST RESULTS",
+            "Klipper completed the Axis Twist calibration.");
+        refresh_calibration_results();
+    }
+}
+
+
 static void calibration_refresh_timer_cb(
     lv_timer_t *timer)
 {
@@ -2563,6 +2834,7 @@ static void calibration_refresh_timer_cb(
     }
 
     refresh_screws_results();
+    refresh_axis_twist_session();
     refresh_calibration_results();
 }
 
@@ -2673,7 +2945,7 @@ void ui_calibration_v32_show(
         if (s_calibration->bed_mesh_button) {
             lv_obj_set_size(
                 s_calibration->bed_mesh_button,
-                110,
+                82,
                 38);
             lv_obj_align(
                 s_calibration->bed_mesh_button,
@@ -2694,17 +2966,17 @@ void ui_calibration_v32_show(
             ui_button_create(
                 bed,
                 UI_BUTTON_OUTLINED,
-                "SCREWS TILT");
+                "SCREWS");
 
         if (s_calibration->screws_tilt_button) {
             lv_obj_set_size(
                 s_calibration->screws_tilt_button,
-                110,
+                82,
                 38);
             lv_obj_align(
                 s_calibration->screws_tilt_button,
-                LV_ALIGN_BOTTOM_MID,
-                0,
+                LV_ALIGN_BOTTOM_LEFT,
+                108,
                 -12);
             lv_obj_add_event_cb(
                 s_calibration->screws_tilt_button,
@@ -2725,12 +2997,12 @@ void ui_calibration_v32_show(
         if (s_calibration->gantry_level_button) {
             lv_obj_set_size(
                 s_calibration->gantry_level_button,
-                110,
+                82,
                 38);
             lv_obj_align(
                 s_calibration->gantry_level_button,
-                LV_ALIGN_BOTTOM_RIGHT,
-                -16,
+                LV_ALIGN_BOTTOM_LEFT,
+                200,
                 -12);
             lv_obj_add_event_cb(
                 s_calibration->gantry_level_button,
@@ -2741,14 +3013,49 @@ void ui_calibration_v32_show(
                 s_calibration->gantry_level_button,
                 LV_OBJ_FLAG_HIDDEN);
         }
+
+        s_calibration->axis_twist_button =
+            ui_button_create(
+                bed,
+                UI_BUTTON_OUTLINED,
+                "TWIST");
+
+        if (s_calibration->axis_twist_button) {
+            lv_obj_set_size(
+                s_calibration->axis_twist_button,
+                82,
+                38);
+            lv_obj_align(
+                s_calibration->axis_twist_button,
+                LV_ALIGN_BOTTOM_LEFT,
+                292,
+                -12);
+            lv_obj_add_event_cb(
+                s_calibration->axis_twist_button,
+                axis_twist_button_cb,
+                LV_EVENT_CLICKED,
+                NULL);
+            lv_obj_add_flag(
+                s_calibration->axis_twist_button,
+                LV_OBJ_FLAG_HIDDEN);
+        }
     }
 
-    calibration_card(
+    lv_obj_t *motion = calibration_card(
         s_calibration->root,
         "MOTION",
         430,
         126,
         &s_calibration->motion);
+
+    if (motion) {
+        ui_calibration_motion_create(
+            motion,
+            s_calibration->send_gcode,
+            calibration_action_ready,
+            show_calibration_results_popup,
+            refresh_calibration_results);
+    }
 
     lv_obj_t *thermal = calibration_card(
         s_calibration->root,
@@ -2783,6 +3090,11 @@ void ui_calibration_v32_show(
                 s_calibration->pid_tune_button,
                 LV_OBJ_FLAG_HIDDEN);
         }
+
+        ui_calibration_pressure_advance_create(
+            thermal,
+            s_calibration->send_gcode,
+            calibration_action_ready);
     }
 
     lv_obj_t *probe = calibration_card(
@@ -2872,8 +3184,12 @@ void ui_calibration_v32_hide(void)
     close_screws_popup();
     close_gantry_level_popup();
     close_pid_popup();
+    ui_calibration_pressure_advance_hide();
     close_probe_popup();
     close_custom_popup();
+    ui_calibration_motion_hide();
+    close_axis_twist_popup();
+    ui_calibration_manual_probe_hide();
     close_calibration_results_popup();
 
     if (s_calibration->root) {
@@ -2885,13 +3201,16 @@ void ui_calibration_v32_hide(void)
     s_calibration->bed_mesh_button = NULL;
     s_calibration->screws_tilt_button = NULL;
     s_calibration->gantry_level_button = NULL;
+    s_calibration->axis_twist_button = NULL;
     s_calibration->pid_tune_button = NULL;
     s_calibration->probe_z_button = NULL;
     s_calibration->custom_calibration_button = NULL;
+    s_calibration->axis_twist_popup = NULL;
     s_calibration->send_gcode = NULL;
     s_calibration->screws_home_required = false;
     s_calibration->gantry_home_required = false;
     s_calibration->gantry_use_qgl = false;
+    s_calibration->axis_twist_home_required = false;
     s_calibration->pid_heater_count = 0;
     s_calibration->pid_selected_index = 0;
     s_calibration->pid_target = 0;

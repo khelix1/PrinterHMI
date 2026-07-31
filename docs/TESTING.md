@@ -59,8 +59,14 @@ Requirements:
 Never run destructive printer commands without a safe machine state and an
 operator present.
 
-## Bed Mesh, Macros and Console
+## Calibration, Bed Mesh, Devices, Macros and Console
 
+- PID, Input Shaper, Axis Twist, Z Tilt, Pressure Advance, Probe Z and custom
+  calibration paths open the intended workflow and preserve Back behavior.
+- Guided manual-probe controls update session state and require confirmation
+  before SAVE_CONFIG.
+- Devices filters, horizontal filter scrolling, pagination and automatic
+  visible-value refresh remain responsive with multiple hotends.
 - Bed Mesh renders the active profile as a solid height-colored surface.
 - Surface lines toggle independently from the rear X/Y/Z reference planes.
 - Minimum, maximum and range values match the mesh data.

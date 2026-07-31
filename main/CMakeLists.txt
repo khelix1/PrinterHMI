@@ -27,8 +27,13 @@ idf_component_register(
         "macro_controller.c"
         "printer_action_resolver.c"
         "device_catalog_controller.c"
+        "ui_devices_live_values.c"
+        "ui_devices_catalog_view.c"
         "calibration_capability_controller.c"
         "calibration_session_controller.c"
+        "ui_calibration_motion.c"
+        "ui_calibration_manual_probe.c"
+        "ui_calibration_pressure_advance.c"
 
         # Shell and splash
         "ui_shell.c"
@@ -67,6 +72,9 @@ idf_component_register(
         "printer_file_controller.c"
         "printer_files.c"
         "bed_mesh_controller.c"
+        "ui_bed_mesh_gestures.c"
+        "ui_bed_mesh_renderer.c"
+        "ui_bed_mesh_profiles.c"
         "ui_bed_mesh_v32.c"
 
         # Files

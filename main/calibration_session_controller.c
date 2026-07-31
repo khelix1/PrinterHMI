@@ -288,6 +288,22 @@ static bool generic_result_relevant(
                    message,
                    "shaper");
 
+    case CALIBRATION_SESSION_RESONANCE_TEST:
+        return contains_case_insensitive(
+                   message,
+                   "resonance") ||
+            contains_case_insensitive(
+                   message,
+                   "data written");
+
+    case CALIBRATION_SESSION_ACCELEROMETER_CHECK:
+        return contains_case_insensitive(
+                   message,
+                   "axes noise") ||
+            contains_case_insensitive(
+                   message,
+                   "noise for");
+
     case CALIBRATION_SESSION_AXIS_TWIST:
         return contains_case_insensitive(
                    message,

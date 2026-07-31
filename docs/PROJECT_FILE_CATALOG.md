@@ -50,11 +50,24 @@ when ownership or build membership changes.
 | `printer_controller`, `printer_ui_controller` | Printer policy and UI command routing |
 | `printer_file_controller`, `printer_files` | Selected-file policy and file metadata parsing |
 
-## Bed Mesh, Macros and Console
+## Calibration, Bed Mesh, Devices, Macros and Console
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_bed_mesh_v32`, `bed_mesh_controller` | Interactive 3D mesh, calibration, profile snapshots and profile commands |
+| `ui_calibration_v32` | Calibration page composition and workflow routing |
+| `ui_calibration_motion` | Input Shaper, Axis Twist and Z Tilt workflows |
+| `ui_calibration_pressure_advance` | Pressure Advance workflow |
+| `ui_calibration_manual_probe` | Shared guided manual-probe controls |
+| `calibration_capability_controller`, `calibration_session_controller` | Calibration availability, progress and command policy |
+| `ui_bed_mesh_v32` | Bed Mesh page composition and calibration entry |
+| `ui_bed_mesh_gestures`, `ui_bed_mesh_view` | Orbit, pan, pinch and shared view transform |
+| `ui_bed_mesh_renderer` | RGB565 height surface, grids, axes and origin rendering |
+| `ui_bed_mesh_profiles` | Profile list, Load, Save As, Remove and SAVE_CONFIG confirmations |
+| `bed_mesh_controller` | Active mesh and profile snapshots |
+| `ui_devices_v32` | Devices page composition and Telemetry bridge |
+| `ui_devices_catalog_view` | Filters, cards, pagination and refresh timer |
+| `ui_devices_live_values` | Visible Moonraker device-value translation |
+| `device_catalog_controller` | Object discovery, classification and bounded catalog state |
 | `macro_controller` | Bounded public Klipper macro discovery and sorting |
 | `console_controller` | Bounded command/response history and response classification |
 
@@ -120,6 +133,7 @@ when ownership or build membership changes.
 | `components/espressif__esp32_p4_function_ev_board/` | Local board/display/touch support |
 | `common_components/bsp_extra/` | Project-specific BSP extensions |
 | `tools/audit/public_tree_audit.sh` | Public-tree safety validation |
+| `tools/audit/v5_feature_architecture_audit.sh` | v5 module ownership and build-membership validation |
 | `tools/end_of_night_checkpoint.sh` | Build, push and nightly publication |
 
 Files ending in `.bak_*`, generated build output and managed-component copies

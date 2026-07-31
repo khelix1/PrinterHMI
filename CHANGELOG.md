@@ -5,6 +5,37 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-07-31
+
+### Added
+
+- Added a capability-aware Calibration workspace with guided PID, Input
+  Shaper, Axis Twist, Z Tilt, Pressure Advance, Probe Z and custom workflows.
+- Added shared manual-probe controls, calibration session tracking and
+  confirmation before persistent SAVE_CONFIG operations.
+- Added a capability-aware Devices catalog with category filters, pagination
+  and synchronized live values.
+- Added printer-action resolution and a repeatable v5 feature-architecture
+  ownership audit.
+
+### Changed
+
+- Split Calibration into page composition, motion, Pressure Advance and
+  manual-probe modules.
+- Split Bed Mesh into page composition, gestures, rendering and profile
+  controls.
+- Split Devices into page composition, catalog view, live-value adapter and
+  controller layers.
+- Preserved the existing Console and Macros page/controller boundaries.
+
+### Validation
+
+- Verified incremental and final ESP-IDF 5.4.4 builds on the target firmware
+  tree.
+- Verified Calibration, Bed Mesh, Devices, Console and Macros on the target
+  panel.
+- Verified architecture, version, public-tree and firmware identity audits.
+
 ## [5.0.0] - 2026-07-28
 
 ### Added

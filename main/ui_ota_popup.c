@@ -112,6 +112,17 @@ void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
             100,
             0);
 
+    if (s_progress_bar) {
+        /* HTTP chunks can advance the integer target several points at once.
+         * Let LVGL interpolate each exact target without changing the
+         * reported percentage or downloaded byte counts.
+         */
+        lv_obj_set_style_anim_duration(
+            s_progress_bar,
+            250,
+            0);
+    }
+
     s_progress_bytes_label =
         ui_popup_add_progress_detail(
             s_progress_popup,
@@ -177,8 +188,12 @@ void ui_ota_progress_pump(const char *status_text,
                 : status);
     }
 
-    if (s_progress_bar)
-        lv_bar_set_value(s_progress_bar, percent, LV_ANIM_OFF);
+    if (s_progress_bar) {
+        lv_bar_set_value(
+            s_progress_bar,
+            percent,
+            LV_ANIM_ON);
+    }
 
     if (s_progress_pct_label) {
         char pct[16];

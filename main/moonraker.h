@@ -127,6 +127,38 @@ typedef struct {
     char printer_file[256];
 } moonraker_state_t;
 
+/*
+ * One complete sample produced by the legacy HTTP polling fallback.
+ * Keeping this transport payload separate from moonraker_state_t prevents
+ * the fallback from overwriting capability, toolhead, and WebSocket-owned
+ * fields when it publishes a sample.
+ */
+typedef struct {
+    double chamber_temp;
+    double air_temp;
+    double humidity;
+    double heater_target;
+    bool heater_on;
+    double drybox_fan_speed;
+    double part_fan_speed;
+    double speed_factor;
+    double flow_factor;
+    double live_velocity;
+    double live_flow;
+    double nozzle_temp;
+    double nozzle_target;
+    double bed_temp;
+    double bed_target;
+    double progress;
+    double print_duration;
+    int current_layer;
+    int total_layer;
+    bool live_data_ok;
+    bool moonraker_ok;
+    const char *printer_state;
+    const char *printer_file;
+} moonraker_http_fallback_update_t;
+
 #define MOONRAKER_EXCLUDE_MAX_OBJECTS 48
 #define MOONRAKER_EXCLUDE_NAME_MAX 96
 #define MOONRAKER_EXCLUDE_MAX_POLYGON_POINTS 64
@@ -219,31 +251,8 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     const char *json,
     size_t length);
 
-void moonraker_state_update_from_legacy(
-    double chamber_temp,
-    double air_temp,
-    double humidity,
-    double heater_target,
-    bool heater_on,
-    double drybox_fan_speed,
-    double part_fan_speed,
-    double speed_factor,
-    double flow_factor,
-    double live_velocity,
-    double live_flow,
-    double nozzle_temp,
-    double nozzle_target,
-    double bed_temp,
-    double bed_target,
-    double progress,
-    double print_duration,
-    int current_layer,
-    int total_layer,
-    bool live_data_ok,
-    bool moonraker_ok,
-    const char *printer_state,
-    const char *printer_file
-);
+void moonraker_state_publish_http_fallback(
+    const moonraker_http_fallback_update_t *update);
 
 esp_err_t moonraker_http_event_handler(esp_http_client_event_t *evt);
 

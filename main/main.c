@@ -1212,30 +1212,32 @@ static bool moonraker_get_live_objects(void)
 
     s_live_data_ok = true;
     
-    moonraker_state_update_from_legacy(
-        live_chamber_temp,
-        live_air_temp,
-        live_humidity,
-        live_heater_target,
-        live_heater_power,
-        live_fan_speed,
-        printer_part_fan_speed,
-        printer_speed_factor,
-        printer_flow_factor,
-        printer_live_velocity,
-        printer_live_flow,
-        printer_nozzle_temp,
-        printer_nozzle_target,
-        printer_bed_temp,
-        printer_bed_target,
-        printer_progress,
-        printer_print_duration,
-        printer_current_layer,
-        printer_total_layer,
-        s_live_data_ok,
-        true,
-        printer_state,
-        printer_file);
+    moonraker_state_publish_http_fallback(
+        &(moonraker_http_fallback_update_t) {
+            .chamber_temp = live_chamber_temp,
+            .air_temp = live_air_temp,
+            .humidity = live_humidity,
+            .heater_target = live_heater_target,
+            .heater_on = live_heater_power,
+            .drybox_fan_speed = live_fan_speed,
+            .part_fan_speed = printer_part_fan_speed,
+            .speed_factor = printer_speed_factor,
+            .flow_factor = printer_flow_factor,
+            .live_velocity = printer_live_velocity,
+            .live_flow = printer_live_flow,
+            .nozzle_temp = printer_nozzle_temp,
+            .nozzle_target = printer_nozzle_target,
+            .bed_temp = printer_bed_temp,
+            .bed_target = printer_bed_target,
+            .progress = printer_progress,
+            .print_duration = printer_print_duration,
+            .current_layer = printer_current_layer,
+            .total_layer = printer_total_layer,
+            .live_data_ok = s_live_data_ok,
+            .moonraker_ok = true,
+            .printer_state = printer_state,
+            .printer_file = printer_file,
+        });
 
     moonraker_state_set_drybox_programs(
         (int)s_drybox_selected_program,

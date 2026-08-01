@@ -407,67 +407,54 @@ void moonraker_state_configure_hotends(
 }
 
 
-void moonraker_state_update_from_legacy(
-    double chamber_temp,
-    double air_temp,
-    double humidity,
-    double heater_target,
-    bool heater_on,
-    double drybox_fan_speed,
-    double part_fan_speed,
-    double speed_factor,
-    double flow_factor,
-    double live_velocity,
-    double live_flow,
-    double nozzle_temp,
-    double nozzle_target,
-    double bed_temp,
-    double bed_target,
-    double progress,
-    double print_duration,
-    int current_layer,
-    int total_layer,
-    bool live_data_ok,
-    bool moonraker_ok,
-    const char *printer_state,
-    const char *printer_file
-)
+void moonraker_state_publish_http_fallback(
+    const moonraker_http_fallback_update_t *update)
 {
+    if (!update) return;
+
     state_lock();
-    g_moonraker_state.chamber_temp = chamber_temp;
-    g_moonraker_state.air_temp = air_temp;
-    g_moonraker_state.humidity = humidity;
-    g_moonraker_state.heater_target = heater_target;
-    g_moonraker_state.heater_on = heater_on;
-    g_moonraker_state.drybox_fan_speed = drybox_fan_speed;
-    g_moonraker_state.part_fan_speed = part_fan_speed;
-    g_moonraker_state.speed_factor = speed_factor;
-    g_moonraker_state.flow_factor = flow_factor;
-    g_moonraker_state.live_velocity = live_velocity;
-    g_moonraker_state.live_flow = live_flow;
-    g_moonraker_state.nozzle_temp = nozzle_temp;
-    g_moonraker_state.nozzle_target = nozzle_target;
+    g_moonraker_state.chamber_temp = update->chamber_temp;
+    g_moonraker_state.air_temp = update->air_temp;
+    g_moonraker_state.humidity = update->humidity;
+    g_moonraker_state.heater_target = update->heater_target;
+    g_moonraker_state.heater_on = update->heater_on;
+    g_moonraker_state.drybox_fan_speed = update->drybox_fan_speed;
+    g_moonraker_state.part_fan_speed = update->part_fan_speed;
+    g_moonraker_state.speed_factor = update->speed_factor;
+    g_moonraker_state.flow_factor = update->flow_factor;
+    g_moonraker_state.live_velocity = update->live_velocity;
+    g_moonraker_state.live_flow = update->live_flow;
+    g_moonraker_state.nozzle_temp = update->nozzle_temp;
+    g_moonraker_state.nozzle_target = update->nozzle_target;
 
     /*
      * The HTTP fallback currently queries the conventional primary
      * extruder. Preserve that result in the capability-aware state.
      */
     if (g_moonraker_state.hotend_count > 0) {
-        g_moonraker_state.hotends[0].temperature = nozzle_temp;
-        g_moonraker_state.hotends[0].target = nozzle_target;
+        g_moonraker_state.hotends[0].temperature =
+            update->nozzle_temp;
+        g_moonraker_state.hotends[0].target =
+            update->nozzle_target;
     }
 
-    g_moonraker_state.bed_temp = bed_temp;
-    g_moonraker_state.bed_target = bed_target;
-    g_moonraker_state.progress = progress;
-    g_moonraker_state.print_duration = print_duration;
-    g_moonraker_state.current_layer = current_layer;
-    g_moonraker_state.total_layer = total_layer;
-    g_moonraker_state.live_data_ok = live_data_ok;
-    g_moonraker_state.moonraker_ok = moonraker_ok;
+    g_moonraker_state.bed_temp = update->bed_temp;
+    g_moonraker_state.bed_target = update->bed_target;
+    g_moonraker_state.progress = update->progress;
+    g_moonraker_state.print_duration = update->print_duration;
+    g_moonraker_state.current_layer = update->current_layer;
+    g_moonraker_state.total_layer = update->total_layer;
+    g_moonraker_state.live_data_ok = update->live_data_ok;
+    g_moonraker_state.moonraker_ok = update->moonraker_ok;
 
-    mr_safe_copy(g_moonraker_state.printer_state, sizeof(g_moonraker_state.printer_state), printer_state);
-    mr_safe_copy(g_moonraker_state.printer_file, sizeof(g_moonraker_state.printer_file), printer_file);
+    mr_safe_copy(
+        g_moonraker_state.printer_state,
+        sizeof(g_moonraker_state.printer_state),
+        update->printer_state);
+    mr_safe_copy(
+        g_moonraker_state.printer_file,
+        sizeof(g_moonraker_state.printer_file),
+        update->printer_file);
     state_unlock();
 }
 

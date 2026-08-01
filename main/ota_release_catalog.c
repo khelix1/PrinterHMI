@@ -20,7 +20,7 @@
 
 #define RELEASE_API_URL \
     "https://api.github.com/repos/khelix1/PrinterHMI_v3_2/releases?per_page=30"
-#define RELEASE_RESPONSE_MAX (128U * 1024U)
+#define RELEASE_RESPONSE_MAX (256U * 1024U)
 
 typedef struct {
     ota_release_entry_t entries[OTA_RELEASE_CATALOG_MAX];
@@ -107,6 +107,12 @@ static void catalog_fail(const char *message)
     s_state = OTA_RELEASE_CATALOG_ERROR;
     s_task_running = false;
     unlock_catalog();
+
+    ESP_LOGE(
+        TAG,
+        "Release catalog failed: %s",
+        message ? message : "unknown error");
+
 }
 
 
@@ -463,6 +469,12 @@ static void release_catalog_task(void *argument)
 {
     (void)argument;
 
+    /* OTA CATALOG SHARED; FIRMWARE DOWNLOAD EXCLUSIVE
+     * Catalog HTTPS is serialized with other short HTTP work. The actual
+     * firmware transfer remains the only OTA operation that retires the
+     * persistent WebSocket and owns the network exclusively.
+     */
+
     release_catalog_t *catalog =
         psram_calloc(1, sizeof(*catalog));
     char *response =
@@ -543,7 +555,7 @@ static void release_catalog_task(void *argument)
     if (capture.overflow) {
         free(catalog);
         free(response);
-        catalog_fail("GitHub response exceeded 128 KiB");
+        catalog_fail("GitHub response exceeded 256 KiB");
         vTaskDeleteWithCaps(NULL);
         return;
     }

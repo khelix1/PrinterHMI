@@ -43,12 +43,10 @@ require_text CMakeLists.txt \
     'set(PROJECT_VER "${PRINTERHMI_VERSION}")'
 require_text CMakeLists.txt \
     "CMAKE_CONFIGURE_DEPENDS"
-require_text CMakeLists.txt \
-    "PrinterHMIHostedPatch.cmake"
 require_text main/idf_component.yml \
-    'espressif/esp_hosted: "2.12.8"'
-[[ -s cmake/PrinterHMIHostedPatch.cmake ]] || {
-    echo "ERROR: reproducible ESP-Hosted SDIO patch is missing" >&2
+    'espressif/esp_hosted: "2.9.3"'
+[[ ! -e cmake/PrinterHMIHostedPatch.cmake ]] || {
+    echo "ERROR: obsolete ESP-Hosted 2.12.8 patch remains" >&2
     exit 1
 }
 

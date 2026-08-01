@@ -2,7 +2,7 @@
 dependencies:
   espressif/esp_websocket_client: "^1.7.0"
   espressif/esp_wifi_remote: "*"
-  espressif/esp_hosted: "2.12.8"
+  espressif/esp_hosted: "2.9.3"
   espressif/esp_lcd_jd9165:
     override_path: "../components/espressif__esp_lcd_jd9165"
   espressif/esp_lvgl_port:

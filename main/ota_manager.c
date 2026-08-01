@@ -414,12 +414,16 @@ bool ota_manager_start(const char *url)
         return false;
     }
 
+    if (!network_activity_controller_request_exclusive()) {
+        ESP_LOGW(TAG, "another exclusive network operation is active");
+        set_state("Network is busy. Try again.", 0);
+        return false;
+    }
+
     snprintf(s_task_url,
              sizeof(s_task_url),
              "%s",
              url);
-
-    network_activity_controller_request_exclusive();
 
     s_cancel_requested = false;
     s_cancel_complete = false;

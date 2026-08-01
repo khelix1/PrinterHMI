@@ -1684,6 +1684,10 @@ static void ota_popup_start_bridge(const char *url)
      */
     if (!ota_manager_start(url)) {
         ESP_LOGE(TAG, "OTA: unable to start update");
+        ui_toast_v32_show(
+            UI_STATUS_DANGER,
+            "OTA NOT STARTED",
+            "Another network operation is active. Try again.");
         return;
     }
 
@@ -2457,6 +2461,16 @@ static void ui_network_tools_wifi_ssid_selected_cb(lv_event_t *e)
 /* BEGIN LEGACY NETWORK BLOCK */
 static void ui_network_tools_wifi_scan_now(void)
 {
+    if (!network_activity_controller_request_exclusive()) {
+        safe_copy(
+            ui_network_tools_network_scan_status,
+            sizeof(ui_network_tools_network_scan_status),
+            "NETWORK BUSY - TRY AGAIN");
+        ui_network_v32_set_scan_status(
+            ui_network_tools_network_scan_status);
+        return;
+    }
+
     safe_copy(
         ui_network_tools_network_scan_status,
         sizeof(ui_network_tools_network_scan_status),
@@ -2465,11 +2479,29 @@ static void ui_network_tools_wifi_scan_now(void)
     ui_network_v32_set_scan_status(
         ui_network_tools_network_scan_status);
 
-    /*
-     * Draw the in-page scan state before starting the blocking scan.
-     */
+    /* Draw the state while the runtime retires WebSocket/background HTTP. */
     lv_refr_now(NULL);
-    vTaskDelay(pdMS_TO_TICKS(250));
+
+    int elapsed_ms = 0;
+    for (; elapsed_ms < 20000; elapsed_ms += 50) {
+        if (network_activity_controller_exclusive_ready()) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    if (!network_activity_controller_exclusive_ready()) {
+        safe_copy(
+            ui_network_tools_network_scan_status,
+            sizeof(ui_network_tools_network_scan_status),
+            "SCAN WAIT TIMEOUT");
+        ui_network_v32_set_scan_status(
+            ui_network_tools_network_scan_status);
+        network_activity_controller_release_exclusive();
+        return;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(750));
 
     wifi_scan_config_t scan_config = {0};
 
@@ -2488,7 +2520,7 @@ static void ui_network_tools_wifi_scan_now(void)
         ui_network_v32_set_scan_status(
             ui_network_tools_network_scan_status);
 
-        return;
+        goto scan_finished;
     }
 
     uint16_t ap_count = 0;
@@ -2505,7 +2537,7 @@ static void ui_network_tools_wifi_scan_now(void)
         ui_network_v32_set_scan_status(
             ui_network_tools_network_scan_status);
 
-        return;
+        goto scan_finished;
     }
 
     if (ap_count == 0) {
@@ -2517,7 +2549,7 @@ static void ui_network_tools_wifi_scan_now(void)
         ui_network_v32_set_scan_status(
             ui_network_tools_network_scan_status);
 
-        return;
+        goto scan_finished;
     }
 
     wifi_ap_record_t aps[8];
@@ -2543,7 +2575,7 @@ static void ui_network_tools_wifi_scan_now(void)
         ui_network_v32_set_scan_status(
             ui_network_tools_network_scan_status);
 
-        return;
+        goto scan_finished;
     }
 
     ui_network_v32_render_scan_results(
@@ -2551,6 +2583,9 @@ static void ui_network_tools_wifi_scan_now(void)
         visible_count,
         (unsigned)ap_count,
         ui_network_tools_wifi_ssid_selected_cb);
+
+scan_finished:
+    network_activity_controller_release_exclusive();
 }
 
 

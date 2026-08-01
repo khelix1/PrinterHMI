@@ -43,5 +43,3 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 add_compile_options(-Wformat=2)
 project(PrinterHMI)
-
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/PrinterHMIHostedPatch.cmake")

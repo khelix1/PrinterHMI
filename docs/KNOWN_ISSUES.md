@@ -13,14 +13,20 @@ Completed work is intentionally removed from this list so it remains an accurate
 
 **Status:** Mitigated and release-gated
 
-The ESP32-P4 host component and ESP32-C6 firmware are pinned to ESP-Hosted
-2.12.8. Mixing host and co-processor releases can produce RPC timeouts or
-transport instability. A guarded CMake hook keeps host TX in byte mode and RX
-in block mode whenever managed components are regenerated.
+The ESP32-P4 host component is pinned to ESP-Hosted 2.9.3 while the installed
+ESP32-C6 co-processor firmware remains at 2.12.8. ESP-Hosted 2.12.8 on the P4
+reproduced intermittent `sdmmc_send_cmd` timeout 0x107 failures followed by an
+`Unrecoverable host sdio state` restart. The 2.9.3 P4 host restored stable
+operation with the existing C6 firmware.
 
-Do not update ESP-IDF, ESP-Hosted or the C6 firmware independently. Treat a
-transport-stack update as a matched platform migration and repeat the Devices,
-WebSocket, OTA, reboot and power-cycle test matrix.
+The upstream transport defect remains open. Do not update the P4 host pin,
+ESP-IDF or C6 firmware as a routine dependency refresh. Treat any transport
+change as a platform migration and repeat the idle, multi-printer, Devices,
+WebSocket, Network, OTA, reboot and power-cycle test matrix.
+
+Short HTTP operations are serialized. Wi-Fi scans and firmware downloads use
+exclusive network ownership; GitHub release browsing remains shared so it can
+drain before a firmware update begins.
 
 # Display Limitations
 

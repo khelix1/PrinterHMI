@@ -5,6 +5,27 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [5.1.2] - 2026-07-31
+
+### Fixed
+
+- Replaced the unstable ESP-Hosted 2.12.8 P4 host component with the verified
+  2.9.3 host while retaining the installed ESP32-C6 2.12.8 firmware.
+- Serialized short HTTP transactions and reserved exclusive network ownership
+  for Wi-Fi scans and actual firmware downloads.
+- Prevented the GitHub release catalog from blocking Custom URL OTA startup.
+- Expanded the PSRAM-backed GitHub release response buffer from 128 KiB to
+  256 KiB so the growing stable and nightly catalog is not discarded.
+- Added visible release-catalog and OTA-start failure diagnostics.
+
+### Validation
+
+- Verified sustained WebSocket operation, inactive-printer health polling,
+  chooser updates and repeated active-printer switching without an
+  unrecoverable SDIO restart.
+- Verified Devices, Stable OTA, Nightly OTA and Custom URL OTA workflows on
+  the target panel.
+
 ## [5.1.1] - 2026-07-31
 
 ### Fixed

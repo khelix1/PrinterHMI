@@ -9,13 +9,27 @@ static uint32_t s_activity_state;
 static bool s_persistent_quiet;
 
 
-void network_activity_controller_request_exclusive(void)
+bool network_activity_controller_request_exclusive(void)
 {
-    __atomic_store_n(&s_persistent_quiet, false, __ATOMIC_RELEASE);
-    __atomic_fetch_or(
+    uint32_t current = __atomic_load_n(
         &s_activity_state,
-        NETWORK_EXCLUSIVE_BIT,
-        __ATOMIC_ACQ_REL);
+        __ATOMIC_ACQUIRE);
+
+    while ((current & NETWORK_EXCLUSIVE_BIT) == 0) {
+        uint32_t requested = current | NETWORK_EXCLUSIVE_BIT;
+
+        if (__atomic_compare_exchange_n(
+                &s_activity_state,
+                &current,
+                requested,
+                false,
+                __ATOMIC_ACQ_REL,
+                __ATOMIC_ACQUIRE)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 
@@ -43,12 +57,15 @@ bool network_activity_controller_try_begin_shared(void)
         &s_activity_state,
         __ATOMIC_ACQUIRE);
 
-    while ((current & NETWORK_EXCLUSIVE_BIT) == 0 &&
-           (current & NETWORK_SHARED_MASK) != NETWORK_SHARED_MASK) {
+    /* ESP-Hosted SDIO is most reliable when short HTTP transactions do not
+     * overlap. A shared owner may coexist with the persistent WebSocket, but
+     * never with another shared HTTP owner.
+     */
+    while (current == 0) {
         if (__atomic_compare_exchange_n(
                 &s_activity_state,
                 &current,
-                current + 1,
+                UINT32_C(1),
                 false,
                 __ATOMIC_ACQ_REL,
                 __ATOMIC_ACQUIRE)) {

@@ -409,11 +409,12 @@ bool thumbnail_manager_v32_download_ram(const char *host,
     uint8_t *buf = NULL;
     size_t len = 0;
 
-    if (!moonraker_fetch_thumbnail_encoded(host,
-                                           port,
-                                           enc,
-                                           &buf,
-                                           &len)) {
+    if (!moonraker_fetch_thumbnail_encoded_quiet(
+            host,
+            port,
+            enc,
+            &buf,
+            &len)) {
         ESP_LOGW(TAG, "THUMB fetch failed");
         return false;
     }

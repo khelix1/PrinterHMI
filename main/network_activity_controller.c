@@ -2,6 +2,9 @@
 
 #include <stdint.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #define NETWORK_EXCLUSIVE_BIT UINT32_C(0x80000000)
 #define NETWORK_SHARED_MASK   UINT32_C(0x7fffffff)
 
@@ -30,6 +33,28 @@ bool network_activity_controller_request_exclusive(void)
     }
 
     return false;
+}
+
+
+bool network_activity_controller_acquire_exclusive(uint32_t timeout_ms)
+{
+    if (!network_activity_controller_request_exclusive()) {
+        return false;
+    }
+
+    TickType_t started = xTaskGetTickCount();
+    TickType_t timeout = pdMS_TO_TICKS(timeout_ms);
+
+    while (!network_activity_controller_exclusive_ready()) {
+        if ((xTaskGetTickCount() - started) >= timeout) {
+            network_activity_controller_release_exclusive();
+            return false;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(25));
+    }
+
+    return true;
 }
 
 

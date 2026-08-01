@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /*
  * Coordinates short-lived exclusive network operations such as OTA.
@@ -9,6 +10,7 @@
  */
 /* Returns false when another exclusive operation already owns the network. */
 bool network_activity_controller_request_exclusive(void);
+bool network_activity_controller_acquire_exclusive(uint32_t timeout_ms);
 void network_activity_controller_release_exclusive(void);
 bool network_activity_controller_exclusive_requested(void);
 

@@ -303,3 +303,10 @@ bool moonraker_fetch_thumbnail_encoded(const char *host,
                                        const char *encoded_thumb_path,
                                        uint8_t **out_buf,
                                        size_t *out_len);
+
+bool moonraker_fetch_thumbnail_encoded_quiet(
+    const char *host,
+    int port,
+    const char *encoded_thumb_path,
+    uint8_t **out_buf,
+    size_t *out_len);

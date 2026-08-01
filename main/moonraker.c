@@ -12,6 +12,7 @@
 #include "device_catalog_controller.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 #include <limits.h>
 static moonraker_state_t g_moonraker_state;
@@ -1205,7 +1206,8 @@ static bool moonraker_http_get_raw(
     size_t buffer_size,
     size_t *captured_size,
     int *http_code,
-    esp_err_t *err_out)
+    esp_err_t *err_out,
+    bool exclusive_owned)
 {
     if (captured_size) {
         *captured_size = 0;
@@ -1286,14 +1288,18 @@ static bool moonraker_http_get_raw(
             api_key);
     }
 
-    if (!network_activity_controller_try_begin_shared()) {
-        esp_http_client_cleanup(client);
-        if (err_out) *err_out = ESP_ERR_INVALID_STATE;
-        return false;
+    if (!exclusive_owned) {
+        if (!network_activity_controller_try_begin_shared()) {
+            esp_http_client_cleanup(client);
+            if (err_out) *err_out = ESP_ERR_INVALID_STATE;
+            return false;
+        }
     }
 
     esp_err_t err = esp_http_client_perform(client);
-    network_activity_controller_end_shared();
+    if (!exclusive_owned) {
+        network_activity_controller_end_shared();
+    }
 
     int code =
         esp_http_client_get_status_code(client);
@@ -1339,7 +1345,8 @@ static bool moonraker_http_get_text(
         body_sz,
         &captured_size,
         http_code,
-        err_out);
+        err_out,
+        false);
 }
 
 
@@ -1410,11 +1417,13 @@ bool moonraker_fetch_print_stats(const char *host,
 
 
 
-bool moonraker_fetch_thumbnail_encoded(const char *host,
-                                       int port,
-                                       const char *encoded_thumb_path,
-                                       uint8_t **out_buf,
-                                       size_t *out_len)
+static bool moonraker_fetch_thumbnail_encoded_internal(
+    const char *host,
+    int port,
+    const char *encoded_thumb_path,
+    uint8_t **out_buf,
+    size_t *out_len,
+    bool exclusive_owned)
 {
     if (!out_buf || !out_len) {
         return false;
@@ -1475,7 +1484,8 @@ bool moonraker_fetch_thumbnail_encoded(const char *host,
         max_len,
         &captured_size,
         &http_code,
-        &err);
+        &err,
+        exclusive_owned);
 
     if (!ok || captured_size < 16) {
         heap_caps_free(buf);
@@ -1486,6 +1496,52 @@ bool moonraker_fetch_thumbnail_encoded(const char *host,
     *out_len = captured_size;
 
     return true;
+}
+
+
+bool moonraker_fetch_thumbnail_encoded(
+    const char *host,
+    int port,
+    const char *encoded_thumb_path,
+    uint8_t **out_buf,
+    size_t *out_len)
+{
+    return moonraker_fetch_thumbnail_encoded_internal(
+        host,
+        port,
+        encoded_thumb_path,
+        out_buf,
+        out_len,
+        false);
+}
+
+
+bool moonraker_fetch_thumbnail_encoded_quiet(
+    const char *host,
+    int port,
+    const char *encoded_thumb_path,
+    uint8_t **out_buf,
+    size_t *out_len)
+{
+    if (!network_activity_controller_acquire_exclusive(5000)) {
+        return false;
+    }
+
+    /* Let the final WebSocket teardown traffic drain before the larger
+     * selected-file thumbnail transfer begins.
+     */
+    vTaskDelay(pdMS_TO_TICKS(250));
+
+    bool ok = moonraker_fetch_thumbnail_encoded_internal(
+        host,
+        port,
+        encoded_thumb_path,
+        out_buf,
+        out_len,
+        true);
+
+    network_activity_controller_release_exclusive();
+    return ok;
 }
 
 

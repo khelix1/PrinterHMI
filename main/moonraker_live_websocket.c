@@ -22,7 +22,11 @@
 
 #define TAG "moon_live_ws"
 #define WS_RETRY_INTERVAL_US 3000000LL
-#define WS_REBIND_SETTLE_US 1500000LL
+/* Profile changes remain owned by the network task. Once that task observes
+ * the new generation, retire and reopen during the same pass as v5.0 did.
+ * v5.1.2 generation fencing still rejects every event from the old client.
+ */
+#define WS_REBIND_SETTLE_US 0LL
 #define WS_MESSAGE_MAX_BYTES (128 * 1024)
 #define WS_SUBSCRIPTION_CAPACITY (16 * 1024)
 #define WS_COMMAND_CAPACITY 1024
@@ -1357,7 +1361,11 @@ void moonraker_live_websocket_tasklet(
             s_rebind_phase = WS_REBIND_REOPEN_WAIT;
             s_rebind_after_us = esp_timer_get_time() +
                 WS_REBIND_SETTLE_US;
-            return;
+
+            /* With a zero settle interval, continue through REOPEN_WAIT in
+             * this same network-task pass. Teardown never moves into the UI
+             * callback, and the accepted-generation fence remains active.
+             */
         }
 
         ESP_LOGI(TAG, "WS_REBIND_REOPEN generation=%u",

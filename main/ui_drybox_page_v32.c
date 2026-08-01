@@ -754,12 +754,9 @@ static void build_program_panel(
 
 bool ui_drybox_page_v32_create(
     ui_drybox_page_v32_t *page,
-    ui_drybox_page_info_factory_cb_t info_factory,
     ui_drybox_page_action_cb_t action_cb,
     ui_drybox_page_banner_text_cb_t banner_text_cb)
 {
-    (void)info_factory;
-
     if (!page || !action_cb || !banner_text_cb) {
         return false;
     }

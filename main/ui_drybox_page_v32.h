@@ -2,17 +2,11 @@
 
 #include <stdbool.h>
 #include "lvgl.h"
+#include "ui_drybox_v32.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef lv_obj_t *(*ui_drybox_page_info_factory_cb_t)(
-    lv_obj_t *parent,
-    const char *title,
-    const char *value,
-    int x,
-    int y);
 
 typedef void (*ui_drybox_page_action_cb_t)(
     const char *command,
@@ -31,13 +25,6 @@ typedef struct {
     lv_obj_t *fan_label;
 } ui_drybox_page_v32_t;
 
-typedef enum {
-    UI_DRYBOX_PROGRAM_NONE = 0,
-    UI_DRYBOX_PROGRAM_PLA,
-    UI_DRYBOX_PROGRAM_PETG,
-    UI_DRYBOX_PROGRAM_HOLD
-} ui_drybox_program_v32_t;
-
 typedef struct {
     const char *banner_text;
     float air_temp;
@@ -52,7 +39,6 @@ typedef struct {
 
 bool ui_drybox_page_v32_create(
     ui_drybox_page_v32_t *page,
-    ui_drybox_page_info_factory_cb_t info_factory,
     ui_drybox_page_action_cb_t action_cb,
     ui_drybox_page_banner_text_cb_t banner_text_cb);
 

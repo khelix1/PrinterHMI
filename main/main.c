@@ -172,7 +172,6 @@ static void sntp_wait_task(void *arg);
 #include "moonraker_probe.h"
 #include "network_wifi_scan.h"
 #include "ui_drybox_v32.h"
-#include "ui_drybox_page_v32.h"
 #include "ui_files_v32.h"
 #include "ui_thumbnail_v32.h"
 #include "ui_toast_v32.h"
@@ -338,21 +337,9 @@ static volatile int printer_thumb_target = THUMB_TARGET_LIVE;
 
 static lv_timer_t *thumb_poll_timer = NULL;
 
-static lv_obj_t *drybox_panel = NULL;
-
-
 static lv_obj_t *network_selected_ssid_label = NULL;
 static lv_obj_t *network_password_ta = NULL;
 static lv_obj_t *network_keyboard = NULL;
-static lv_obj_t *drybox_banner_label = NULL;
-static lv_obj_t *drybox_air_label = NULL;
-static lv_obj_t *drybox_center_label = NULL;
-static lv_obj_t *drybox_humidity_label = NULL;
-static lv_obj_t *drybox_target_label = NULL;
-static lv_obj_t *drybox_heater_label = NULL;
-static lv_obj_t *drybox_fan_label = NULL;
-
-
 /*
  * Drybox program selection is application state, not inferred from
  * heater activity or banner text.
@@ -487,32 +474,6 @@ static const char *network_banner_text(void)
     if (!s_got_ip) return "NETWORK OFFLINE";
     if (s_moonraker_ok) return "NETWORK LINKED";
     return "WIFI CONNECTED";
-}
-
-static const char *drybox_banner_text(void)
-{
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
-
-    const moonraker_capabilities_t *capabilities =
-        &state.capabilities;
-
-    bool drybox_available =
-        capabilities->has_drybox_center_sensor ||
-        capabilities->has_drybox_environment_sensor ||
-        capabilities->has_drybox_heater ||
-        capabilities->has_drybox_fan ||
-        capabilities->has_drybox_macros;
-
-    if (capabilities->discovered &&
-        !drybox_available) {
-        return "DRYBOX UNAVAILABLE";
-    }
-
-    if (!s_live_data_ok) return "DRYBOX OFFLINE";
-    if (live_heater_power) return "DRYBOX HEATING";
-    if (live_humidity > 0.0 && live_humidity < 20.0) return "DRYBOX READY";
-    return "DRYBOX MONITORING";
 }
 
 static const char *printer_banner_text(void);
@@ -1506,10 +1467,6 @@ static bool moonraker_send_gcode(
 void ui_printer_v32_create(void);
 /* BEGIN LEGACY PRINTER PAGE BLOCK */
 void ui_printer_v32_destroy(void);
-void legacy_create_drybox_tab(void);
-void legacy_cleanup_drybox_tab(void);
-void legacy_refresh_drybox_tab(void);
-
 static void ui_network_tools_wifi_scan_now(void);
 static void scan_moonraker_now(void);
 static void moonraker_discovery_selected_bridge(const char *host);
@@ -1973,8 +1930,6 @@ static void printer_thumb_cleanup_for_popup_close(void)
     printer_thumb_box = NULL;
     printer_thumb_view = NULL;
 }
-
-/* END LEGACY DRYBOX BLOCK */
 
 static void close_printer_file_detail_popup(void);
 void ui_files_v32_destroy(void)
@@ -2794,166 +2749,7 @@ static void app_theme_changed(void)
 
 /* END LEGACY NETWORK BLOCK */
 
-/* BEGIN LEGACY DRYBOX BLOCK */
-static lv_obj_t *drybox_info_factory_bridge(
-    lv_obj_t *parent,
-    const char *title,
-    const char *value,
-    int x,
-    int y)
-{
-    return make_printer_info(
-        parent,
-        title,
-        value,
-        x,
-        y);
-}
 
-static void drybox_page_action_bridge(
-    const char *command,
-    lv_event_t *event)
-{
-    if (!command) {
-        return;
-    }
-
-    if (strcmp(command, "DRY_STATUS") == 0) {
-        dashboard_dry_status_event_cb(event);
-        return;
-    }
-
-    /*
-     * Update the UI state immediately when the operator chooses a
-     * program. Moonraker telemetry continues to own heater, fan,
-     * temperature, humidity, and online status.
-     */
-    if (strcmp(command, "DRY_PLA") == 0) {
-        s_drybox_selected_program =
-            UI_DRYBOX_PROGRAM_PLA;
-        s_drybox_active_program =
-            UI_DRYBOX_PROGRAM_PLA;
-    } else if (strcmp(command, "DRY_PETG") == 0) {
-        s_drybox_selected_program =
-            UI_DRYBOX_PROGRAM_PETG;
-        s_drybox_active_program =
-            UI_DRYBOX_PROGRAM_PETG;
-    } else if (strcmp(command, "DRY_HOLD") == 0) {
-        s_drybox_active_program =
-            UI_DRYBOX_PROGRAM_HOLD;
-    } else if (strcmp(command, "DRY_RESUME") == 0) {
-        s_drybox_active_program =
-            s_drybox_selected_program;
-    } else if (strcmp(command, "DRY_STOP") == 0) {
-        s_drybox_active_program =
-            UI_DRYBOX_PROGRAM_NONE;
-    }
-
-    moonraker_send_gcode(command);
-
-    /*
-     * Refresh immediately so button highlighting responds to the tap
-     * instead of waiting for the next live-data refresh.
-     */
-    ui_drybox_v32_refresh();
-}
-
-
-void legacy_refresh_drybox_tab(void)
-{
-    ui_drybox_page_v32_t page = {
-        .panel = drybox_panel,
-        .banner_label = drybox_banner_label,
-        .air_label = drybox_air_label,
-        .center_label = drybox_center_label,
-        .humidity_label = drybox_humidity_label,
-        .target_label = drybox_target_label,
-        .heater_label = drybox_heater_label,
-        .fan_label = drybox_fan_label,
-    };
-
-    ui_drybox_page_v32_state_t state = {
-        .banner_text = drybox_banner_text(),
-        .air_temp = live_air_temp,
-        .center_temp = live_chamber_temp,
-        .humidity = live_humidity,
-        .heater_target = live_heater_target,
-        .heater_on = live_heater_power,
-        .fan_speed = live_fan_speed,
-        .active_program = s_drybox_active_program,
-    };
-
-    ui_drybox_page_v32_refresh(
-        &page,
-        &state);
-}
-
-
-void legacy_cleanup_drybox_tab(void)
-{
-    ui_drybox_page_v32_t page = {
-        .panel = drybox_panel,
-        .banner_label = drybox_banner_label,
-        .air_label = drybox_air_label,
-        .center_label = drybox_center_label,
-        .humidity_label = drybox_humidity_label,
-        .target_label = drybox_target_label,
-        .heater_label = drybox_heater_label,
-        .fan_label = drybox_fan_label,
-    };
-
-    ui_drybox_page_v32_cleanup(&page);
-
-    drybox_panel = page.panel;
-    drybox_banner_label = page.banner_label;
-    drybox_air_label = page.air_label;
-    drybox_center_label = page.center_label;
-    drybox_humidity_label = page.humidity_label;
-    drybox_target_label = page.target_label;
-    drybox_heater_label = page.heater_label;
-    drybox_fan_label = page.fan_label;
-
-    ui_shell_raise_topbar();
-    ui_shell_raise_nav();
-}
-
-
-void legacy_create_drybox_tab(void)
-{
-    ui_drybox_page_v32_t page = {
-        .panel = drybox_panel,
-        .banner_label = drybox_banner_label,
-        .air_label = drybox_air_label,
-        .center_label = drybox_center_label,
-        .humidity_label = drybox_humidity_label,
-        .target_label = drybox_target_label,
-        .heater_label = drybox_heater_label,
-        .fan_label = drybox_fan_label,
-    };
-
-    if (!ui_drybox_page_v32_create(
-            &page,
-            drybox_info_factory_bridge,
-            drybox_page_action_bridge,
-            drybox_banner_text)) {
-        ESP_LOGE(TAG, "Drybox page creation failed");
-        return;
-    }
-
-    drybox_panel = page.panel;
-    drybox_banner_label = page.banner_label;
-    drybox_air_label = page.air_label;
-    drybox_center_label = page.center_label;
-    drybox_humidity_label = page.humidity_label;
-    drybox_target_label = page.target_label;
-    drybox_heater_label = page.heater_label;
-    drybox_fan_label = page.fan_label;
-
-    ui_drybox_v32_refresh();
-}
-
-
-/* END LEGACY DRYBOX BLOCK */
 
 static void close_printer_file_detail_popup(void)
 {
@@ -3750,6 +3546,9 @@ static void build_drybox_dashboard(void)
 
     /* Top bar now belongs to ui_shell. */
     ui_shell_create();
+    ui_drybox_v32_set_callbacks(
+        moonraker_send_gcode,
+        dashboard_dry_status_event_cb);
     ui_shell_set_printer_switch_callback(
         printer_chooser_open_from_topbar);
 

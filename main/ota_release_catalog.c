@@ -469,10 +469,8 @@ static void release_catalog_task(void *argument)
 {
     (void)argument;
 
-    /* OTA CATALOG SHARED; FIRMWARE DOWNLOAD EXCLUSIVE
-     * Catalog HTTPS is serialized with other short HTTP work. The actual
-     * firmware transfer remains the only OTA operation that retires the
-     * persistent WebSocket and owns the network exclusively.
+    /* The catalog is a large TLS response. Give it the same exclusive
+     * transport ownership as firmware OTA so it never overlaps Moonraker.
      */
 
     release_catalog_t *catalog =
@@ -530,12 +528,22 @@ static void release_catalog_task(void *argument)
     esp_err_t result = ESP_ERR_INVALID_STATE;
     int status = 0;
 
-    if (network_activity_controller_try_begin_shared()) {
-        result = esp_http_client_perform(client);
-        status = esp_http_client_get_status_code(client);
-        network_activity_controller_end_shared();
+    if (!network_activity_controller_acquire_exclusive(20000)) {
+        esp_http_client_cleanup(client);
+        free(catalog);
+        free(response);
+        catalog_fail("Network did not become ready for release catalog");
+        vTaskDeleteWithCaps(NULL);
+        return;
     }
+
+    /* Let WebSocket teardown traffic drain before starting GitHub TLS. */
+    vTaskDelay(pdMS_TO_TICKS(750));
+
+    result = esp_http_client_perform(client);
+    status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
+    network_activity_controller_release_exclusive();
 
     if (result != ESP_OK || status != 200) {
         char message[128];

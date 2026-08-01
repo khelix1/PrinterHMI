@@ -145,6 +145,10 @@ static void update_live_preview(
     const moonraker_state_t *state,
     const dashboard_runtime_context_t *context)
 {
+    if (!context->preview_network_ready) {
+        return;
+    }
+
     thumbnail_preview_coordinator_v32_context_t preview = {
         .printer_state = state->printer_state,
         .printer_file = state->printer_file,

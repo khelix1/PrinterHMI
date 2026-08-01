@@ -31,6 +31,9 @@ void moonraker_live_websocket_prepare_profile_change(
 /* True while Moonraker network workers must remain quiet for a safe rebind. */
 bool moonraker_live_websocket_rebinding(void);
 
+/* True whenever a WebSocket client owns or is opening a transport socket. */
+bool moonraker_live_websocket_transport_active(void);
+
 bool moonraker_live_websocket_connected(void);
 bool moonraker_live_websocket_subscribed(void);
 bool moonraker_live_websocket_fresh(int64_t maximum_age_us);

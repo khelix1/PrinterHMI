@@ -1151,6 +1151,12 @@ bool moonraker_live_websocket_rebinding(void)
 }
 
 
+bool moonraker_live_websocket_transport_active(void)
+{
+    return s_client != NULL;
+}
+
+
 static bool send_identify(void)
 {
     if (!s_client || !s_connected) return false;

@@ -31,6 +31,8 @@ typedef struct {
     char *last_print_state;
     size_t last_print_state_size;
 
+    bool preview_network_ready;
+
     dashboard_runtime_void_cb_t set_live_target;
     dashboard_runtime_void_cb_t free_thumbnail;
     dashboard_runtime_metadata_cb_t build_metadata;

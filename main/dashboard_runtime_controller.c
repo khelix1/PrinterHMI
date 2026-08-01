@@ -33,8 +33,7 @@ static lv_color_t temp_value_color(double temp, double target)
 }
 
 static const char *dashboard_print_state_text(
-    const moonraker_state_t *state,
-    bool moonraker_ok)
+    const moonraker_state_t *state)
 {
     const char *text =
         printer_controller_status_text(state->printer_state);
@@ -43,7 +42,7 @@ static const char *dashboard_print_state_text(
         return text;
     }
 
-    return moonraker_ok ? "CONNECTED" : "OFFLINE";
+    return state->moonraker_ok ? "CONNECTED" : "OFFLINE";
 }
 
 static void update_status_cards(
@@ -139,9 +138,7 @@ static void update_status_cards(
         remaining);
 
     ui_dashboard_status_v32_set_print_state(
-        dashboard_print_state_text(
-            state,
-            context->moonraker_ok));
+        dashboard_print_state_text(state));
 }
 
 static void update_live_preview(
@@ -193,9 +190,7 @@ static void update_print_complete_cleanup(
     const dashboard_runtime_context_t *context)
 {
     const char *now_state =
-        dashboard_print_state_text(
-            state,
-            context->moonraker_ok);
+        dashboard_print_state_text(state);
 
     if (context->last_print_state &&
         ((strcmp(context->last_print_state, "PRINTING") == 0 ||
@@ -245,6 +240,7 @@ static void update_print_complete_cleanup(
 }
 
 static void update_environment_cards(
+    const moonraker_state_t *state,
     const dashboard_runtime_context_t *context)
 {
     char buffer[64];
@@ -254,7 +250,7 @@ static void update_environment_cards(
             buffer,
             sizeof(buffer),
             "%.1f C",
-            context->air_temp);
+            state->air_temp);
         lv_label_set_text(context->chamber_label, buffer);
     }
 
@@ -263,7 +259,7 @@ static void update_environment_cards(
             buffer,
             sizeof(buffer),
             "%.1f %%RH",
-            context->humidity);
+            state->humidity);
         lv_label_set_text(context->humidity_label, buffer);
     }
 
@@ -272,14 +268,14 @@ static void update_environment_cards(
             buffer,
             sizeof(buffer),
             "Heat %.0f C",
-            context->heater_target);
+            state->heater_target);
         lv_label_set_text(context->target_rh_label, buffer);
     }
 
     if (context->heater_label) {
         lv_label_set_text(
             context->heater_label,
-            context->heater_on ? "ON" : "OFF");
+            state->heater_on ? "ON" : "OFF");
     }
 
     if (context->fan_label) {
@@ -287,14 +283,14 @@ static void update_environment_cards(
             buffer,
             sizeof(buffer),
             "%.0f %%",
-            context->fan_speed);
+            state->drybox_fan_speed);
         lv_label_set_text(context->fan_label, buffer);
     }
 
     if (context->moonraker_label) {
         lv_label_set_text(
             context->moonraker_label,
-            context->live_data_ok
+            state->live_data_ok
                 ? "linked"
                 : "not linked");
     }
@@ -313,5 +309,5 @@ void dashboard_runtime_controller_tick(
     update_status_cards(&state, context);
     update_live_preview(&state, context);
     update_print_complete_cleanup(&state, context);
-    update_environment_cards(context);
+    update_environment_cards(&state, context);
 }

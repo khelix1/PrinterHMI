@@ -1939,56 +1939,6 @@ void ui_files_v32_destroy(void)
 }
 
 
-static void moonraker_sync_legacy_from_state(void)
-{
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
-
-    live_chamber_temp = state.chamber_temp;
-    live_air_temp = state.air_temp;
-    live_humidity = state.humidity;
-    live_heater_target = state.heater_target;
-    live_heater_power = state.heater_on;
-    live_fan_speed = state.drybox_fan_speed;
-    printer_part_fan_speed = state.part_fan_speed;
-    printer_speed_factor = state.speed_factor;
-    printer_flow_factor = state.flow_factor;
-    printer_live_velocity = state.live_velocity;
-    printer_live_flow = state.live_flow;
-    printer_nozzle_temp = state.nozzle_temp;
-    printer_nozzle_target = state.nozzle_target;
-    printer_bed_temp = state.bed_temp;
-    printer_bed_target = state.bed_target;
-    printer_progress = state.progress;
-    printer_print_duration = state.print_duration;
-    printer_current_layer = state.current_layer;
-    printer_total_layer = state.total_layer;
-
-    printer_layer_result_t resolved_layers =
-        printer_layer_resolver_resolve(
-            printer_current_layer,
-            printer_total_layer,
-            printer_current_z,
-            printer_meta_object_height,
-            printer_meta_layer_height,
-            state.progress);
-
-    printer_current_layer = resolved_layers.current;
-    printer_total_layer = resolved_layers.total;
-
-    s_live_data_ok = state.live_data_ok;
-    s_moonraker_ok = state.moonraker_ok;
-
-    s_drybox_selected_program =
-        (ui_drybox_program_v32_t)state.drybox_selected_program;
-    s_drybox_active_program =
-        (ui_drybox_program_v32_t)state.drybox_active_program;
-
-    safe_copy(printer_state, sizeof(s_app_buffers->printer_state), state.printer_state);
-    safe_copy(printer_file, sizeof(s_app_buffers->printer_file), state.printer_file);
-}
-
-
 static void ota_ui_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
@@ -2000,7 +1950,6 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 {
     int64_t ui_refresh_t0 = esp_timer_get_time();
 
-    moonraker_sync_legacy_from_state();
     files_page_controller_process_live_notification();
 
     (void)timer;
@@ -2011,6 +1960,15 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     moonraker_filament_state_t filament_state;
     moonraker_filament_state_snapshot(
         &filament_state);
+
+    printer_layer_result_t resolved_layers =
+        printer_layer_resolver_resolve(
+            telemetry_state.current_layer,
+            telemetry_state.total_layer,
+            printer_current_z,
+            printer_meta_object_height,
+            printer_meta_layer_height,
+            telemetry_state.progress);
 
     ui_telemetry_v32_refresh(
         &telemetry_state,
@@ -2039,26 +1997,28 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 
         .info_cards = &printer_info_cards,
 
-        .banner_text = printer_banner_text(),
-        .printer_state = printer_state,
-        .printer_file = printer_file,
+        .banner_text = printer_controller_machine_banner_text(
+            telemetry_state.printer_state,
+            telemetry_state.moonraker_ok),
+        .printer_state = telemetry_state.printer_state,
+        .printer_file = telemetry_state.printer_file,
         .selected_preview_file = thumbnail_session_v32_selected_file(),
 
-        .live_velocity = printer_live_velocity,
-        .live_flow = printer_live_flow,
-        .speed_factor = printer_speed_factor,
-        .flow_factor = printer_flow_factor,
-        .current_layer = printer_current_layer,
-        .total_layer = printer_total_layer,
+        .live_velocity = telemetry_state.live_velocity,
+        .live_flow = telemetry_state.live_flow,
+        .speed_factor = telemetry_state.speed_factor,
+        .flow_factor = telemetry_state.flow_factor,
+        .current_layer = resolved_layers.current,
+        .total_layer = resolved_layers.total,
         .metadata_object_height = printer_meta_object_height,
         .metadata_layer_height = printer_meta_layer_height,
-        .progress = printer_progress,
-        .nozzle_temp = printer_nozzle_temp,
-        .nozzle_target = printer_nozzle_target,
-        .bed_temp = printer_bed_temp,
-        .bed_target = printer_bed_target,
-        .part_fan_speed = printer_part_fan_speed,
-        .print_duration = printer_print_duration,
+        .progress = telemetry_state.progress,
+        .nozzle_temp = telemetry_state.nozzle_temp,
+        .nozzle_target = telemetry_state.nozzle_target,
+        .bed_temp = telemetry_state.bed_temp,
+        .bed_target = telemetry_state.bed_target,
+        .part_fan_speed = telemetry_state.part_fan_speed,
+        .print_duration = telemetry_state.print_duration,
 
         .moonraker_ok = telemetry_state.moonraker_ok,
         .live_data_ok = telemetry_state.live_data_ok,
@@ -2077,10 +2037,11 @@ ui_drybox_v32_refresh();
     ui_settings_refresh();
 
 
-    dashboard_live_controller_push_banner(s_moonraker_ok);
+    dashboard_live_controller_push_banner(
+        telemetry_state.moonraker_ok);
     dashboard_live_controller_push_machine();
     ui_command_bar_v32_update(
-        printer_state,
+        telemetry_state.printer_state,
         moonraker_exclude_objects_available());
 
     int64_t ui_refresh_dt = esp_timer_get_time() - ui_refresh_t0;
@@ -2094,6 +2055,9 @@ static void dashboard_dry_status_event_cb(lv_event_t *e)
 {
     (void)e;
 
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+
     char body[512];
     snprintf(body, sizeof(body),
              "DRYBOX LIVE STATUS\n\n"
@@ -2105,13 +2069,13 @@ static void dashboard_dry_status_event_cb(lv_event_t *e)
              "Heater:      %s\n"
              "Moonraker:   %s\n"
              "IP:          " IPSTR,
-             live_air_temp,
-             live_chamber_temp,
-             live_humidity,
-             live_heater_target,
-             live_fan_speed,
-             live_heater_power ? "ON" : "OFF",
-             s_live_data_ok ? "linked" : "not linked",
+             state.air_temp,
+             state.chamber_temp,
+             state.humidity,
+             state.heater_target,
+             state.drybox_fan_speed,
+             state.heater_on ? "ON" : "OFF",
+             state.live_data_ok ? "linked" : "not linked",
              IP2STR(&s_ip));
 
     ui_dashboard_v32_status_popup_show("DRYBOX LIVE STATUS", body);
@@ -2120,7 +2084,11 @@ static void dashboard_dry_status_event_cb(lv_event_t *e)
 
 static const char *printer_banner_text(void)
 {
-    return printer_controller_machine_banner_text(printer_state, s_moonraker_ok);
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    return printer_controller_machine_banner_text(
+        state.printer_state,
+        state.moonraker_ok);
 }
 
 
@@ -2154,7 +2122,7 @@ static void part_fan_card_event_cb(lv_event_t *e)
 
     ui_printer_popups_show_part_fan(
         printer_popup_send_gcode_bridge,
-        printer_part_fan_speed);
+        state.part_fan_speed);
 }
 
 static void nozzle_card_event_cb(lv_event_t *e)
@@ -2171,8 +2139,8 @@ static void nozzle_card_event_cb(lv_event_t *e)
     } else {
         ui_printer_popups_show_nozzle(
             printer_popup_send_gcode_bridge,
-            printer_nozzle_temp,
-            printer_nozzle_target);
+            state.nozzle_temp,
+            state.nozzle_target);
     }
 }
 
@@ -2192,8 +2160,8 @@ static void bed_card_event_cb(lv_event_t *e)
 
     ui_printer_popups_show_bed(
         printer_popup_send_gcode_bridge,
-        printer_bed_temp,
-        printer_bed_target);
+        state.bed_temp,
+        state.bed_target);
 }
 
 
@@ -3223,7 +3191,10 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
         thumbnail_manager_v32_image_dsc(),
         0);
 
-    if (!printer_controller_is_live_state(printer_state)) {
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+
+    if (!printer_controller_is_live_state(state.printer_state)) {
         /*
          * Publish the selected file to the profile-owned preview cache even
          * while Dashboard is not instantiated. Files owns the selection
@@ -3245,8 +3216,8 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
 
         if (published) {
             ui_printer_v32_preview_show(
-                printer_state,
-                printer_file,
+                state.printer_state,
+                state.printer_file,
                 thumbnail_session_v32_selected_file());
         }
     }
@@ -3410,10 +3381,20 @@ void app_files_reload(void)
 
 void ui_printer_v32_create(void)
 {
-    bool printer_is_live = printer_controller_is_live_state(printer_state);
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
 
-    if (printer_is_live && printer_file[0] && strcmp(thumbnail_session_v32_selected_file(), printer_file) != 0) {
-        safe_copy(thumbnail_session_v32_selected_file(), thumbnail_session_v32_selected_file_size(), printer_file);
+    bool printer_is_live =
+        printer_controller_is_live_state(state.printer_state);
+
+    if (printer_is_live && state.printer_file[0] &&
+        strcmp(
+            thumbnail_session_v32_selected_file(),
+            state.printer_file) != 0) {
+        safe_copy(
+            thumbnail_session_v32_selected_file(),
+            thumbnail_session_v32_selected_file_size(),
+            state.printer_file);
         thumbnail_session_v32_selected_thumbnail_path()[0] = 0;
         ui_dashboard_v32_thumb_canvas_file()[0] = 0;
         ui_printer_v32_preview_reset();
@@ -3468,8 +3449,8 @@ void ui_printer_v32_create(void)
         &printer_flow_label,
         &printer_filament_label,
         filament_sensor_banner_event_cb,
-        printer_speed_factor,
-        printer_flow_factor,
+        state.speed_factor,
+        state.flow_factor,
         moonraker_send_gcode);
     ui_printer_info_cards_create(printer_layout.status_panel,
                                  &printer_info_cards,
@@ -3509,8 +3490,8 @@ void ui_printer_v32_create(void)
     printer_cancel_btn = printer_actions.cancel;
 
     ui_printer_v32_preview_show(
-        printer_state,
-        printer_file,
+        state.printer_state,
+        state.printer_file,
         thumbnail_session_v32_selected_file());
     lv_obj_set_pos(divider, 20, 345);
     lv_obj_set_style_bg_color(divider, UI_BORDER_SOFT, 0);
@@ -3533,7 +3514,7 @@ void ui_printer_v32_create(void)
         printer_object_btn,
         printer_cancel_btn,
         moonraker_exclude_objects_available(),
-        printer_state);
+        state.printer_state);
 }
 /* END LEGACY PRINTER PAGE BLOCK */
 
@@ -3735,18 +3716,9 @@ static void hmi_runtime_task(void *arg)
 
             dashboard_runtime_controller_tick(
         &(dashboard_runtime_context_t) {
-            .moonraker_ok = s_moonraker_ok,
-            .live_data_ok = s_live_data_ok,
-
             .current_z = printer_current_z,
             .meta_object_height = printer_meta_object_height,
             .meta_layer_height = printer_meta_layer_height,
-
-            .air_temp = live_air_temp,
-            .humidity = live_humidity,
-            .heater_target = live_heater_target,
-            .heater_on = live_heater_power,
-            .fan_speed = live_fan_speed,
 
             .nozzle_label = dash_nozzle_label,
             .bed_label = dash_bed_label,

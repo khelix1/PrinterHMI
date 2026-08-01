@@ -12,18 +12,9 @@ typedef void (*dashboard_runtime_metadata_cb_t)(
     size_t out_size);
 
 typedef struct {
-    bool moonraker_ok;
-    bool live_data_ok;
-
     double current_z;
     double meta_object_height;
     double meta_layer_height;
-
-    double air_temp;
-    double humidity;
-    double heater_target;
-    bool heater_on;
-    double fan_speed;
 
     lv_obj_t *nozzle_label;
     lv_obj_t *bed_label;

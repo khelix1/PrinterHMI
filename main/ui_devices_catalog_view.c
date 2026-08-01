@@ -12,7 +12,7 @@
 #include "ui_widgets.h"
 
 #define DEVICE_FILTER_COUNT 8
-#define DEVICE_UI_MAX_VISIBLE 48
+#define DEVICE_UI_MAX_VISIBLE 12
 
 typedef enum {
     DEVICE_FILTER_ALL = 0,
@@ -411,7 +411,8 @@ static void render_catalog(void)
 
     /*
      * Count first so page bounds can be clamped after a filter or printer
-     * change without ever constructing more than 48 LVGL cards.
+     * change without ever constructing more than 12 LVGL cards. Two full
+     * viewports keep scrolling useful while bounding first-render latency.
      */
     for (size_t index = 0;
          index < status.stored_count;

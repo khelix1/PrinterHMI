@@ -176,6 +176,34 @@ bool device_catalog_controller_subscription_fields(
 }
 
 
+bool device_catalog_controller_has_live_value_source(
+    const char *object_name)
+{
+    if (!object_name || !object_name[0]) {
+        return false;
+    }
+
+    /* Values for these objects already come from PrinterHMI's core state. */
+    if (strcmp(object_name, "heater_bed") == 0 ||
+        strcmp(object_name, "fan") == 0 ||
+        strcmp(object_name, "toolhead") == 0 ||
+        starts_with(object_name, "extruder") ||
+        starts_with(object_name, "filament_switch_sensor ") ||
+        starts_with(object_name, "filament_motion_sensor ") ||
+        strcmp(object_name, "temperature_sensor drybox_center") == 0 ||
+        strcmp(object_name, "sht3x drybox_env") == 0 ||
+        strcmp(object_name, "heater_generic drybox_heater") == 0 ||
+        strcmp(object_name, "fan_generic drybox_fan") == 0) {
+        return true;
+    }
+
+    const char *fields = NULL;
+    return device_catalog_controller_subscription_fields(
+        object_name,
+        &fields);
+}
+
+
 static bool kind_is_controllable(
     device_kind_t kind)
 {

@@ -63,6 +63,10 @@ bool device_catalog_controller_subscription_fields(
     const char *object_name,
     const char **fields_out);
 
+/* True when the object is expected to produce a displayed runtime value. */
+bool device_catalog_controller_has_live_value_source(
+    const char *object_name);
+
 /*
  * Merges generic device values from the already-parsed Moonraker status
  * object. Structure generation is unchanged, so the Devices page preserves

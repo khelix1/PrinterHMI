@@ -268,11 +268,15 @@ void ui_devices_live_values_update(void)
                 device.live_value);
             ui_apply_label_bright(label);
         } else {
+            bool expects_live_value =
+                device_catalog_controller_has_live_value_source(
+                    device.object_name);
+
             lv_label_set_text(
                 label,
-                device.kind == DEVICE_KIND_OTHER
-                    ? "DISCOVERED"
-                    : "WAITING FOR DATA");
+                expects_live_value
+                    ? "WAITING FOR DATA"
+                    : "DISCOVERED");
             ui_apply_label_dim(label);
         }
     }

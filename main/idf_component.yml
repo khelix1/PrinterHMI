@@ -1,12 +1,28 @@
 ## IDF Component Manager Manifest File
 dependencies:
   espressif/esp_websocket_client: "^1.7.0"
-  espressif/esp_wifi_remote: "*"
-  espressif/esp_hosted: "2.9.3"
+
+  espressif/esp_hosted:
+    version: "3.0.5"
+
+  espressif/esp_wifi_remote:
+    version: "1.5.3"
+
   espressif/esp_lcd_jd9165:
     override_path: "../components/espressif__esp_lcd_jd9165"
+
   espressif/esp_lvgl_port:
     override_path: "../components/espressif__esp_lvgl_port"
+
+  espressif/cjson: "1.7.19~2"
+
+  espressif/esp_codec_dev: "^1.6.2"
+
+  espressif/usb: "^1.5.0"
+
   lvgl/lvgl:
     version: "9.5.0"
     public: true
+
+  idf:
+    version: ">=6.0,<6.1"

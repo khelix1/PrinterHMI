@@ -434,11 +434,11 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config, bsp_l
     ESP_LOGI(TAG, "Install JD9165 LCD control panel");
 
 #if CONFIG_BSP_LCD_COLOR_FORMAT_RGB888
-    //esp_lcd_dpi_panel_config_t dpi_config = EK79007_1024_600_PANEL_60HZ_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB888);
-    esp_lcd_dpi_panel_config_t dpi_config = JD9165_1024_600_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB888);
+    //esp_lcd_dpi_panel_config_t dpi_config = EK79007_1024_600_PANEL_60HZ_CONFIG(LCD_COLOR_FMT_RGB888);
+    esp_lcd_dpi_panel_config_t dpi_config = JD9165_1024_600_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_FMT_RGB888);
 #else
-    //esp_lcd_dpi_panel_config_t dpi_config = EK79007_1024_600_PANEL_60HZ_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB565);
-    esp_lcd_dpi_panel_config_t dpi_config = JD9165_1024_600_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB565);
+    //esp_lcd_dpi_panel_config_t dpi_config = EK79007_1024_600_PANEL_60HZ_CONFIG(LCD_COLOR_FMT_RGB565);
+    esp_lcd_dpi_panel_config_t dpi_config = JD9165_1024_600_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_FMT_RGB565);
 #endif
     dpi_config.num_fbs = CONFIG_BSP_LCD_DPI_BUFFER_NUMS;
 
@@ -456,15 +456,16 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config, bsp_l
     };
    // ESP_GOTO_ON_ERROR(esp_lcd_new_panel_ek79007(io, &lcd_dev_config, &disp_panel), err, TAG, "New LCD panel EK79007 failed");
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_jd9165(io, &lcd_dev_config, &disp_panel), err, TAG, "New LCD panel JD9165 failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_dpi_panel_enable_dma2d(disp_panel), err, TAG, "Enable LCD DMA2D failed");
     ESP_GOTO_ON_ERROR(esp_lcd_panel_reset(disp_panel), err, TAG, "LCD panel reset failed");
     ESP_GOTO_ON_ERROR(esp_lcd_panel_init(disp_panel), err, TAG, "LCD panel init failed");
 #else
     // create ILI9881C control panel
     ESP_LOGI(TAG, "Install ILI9881C LCD control panel");
 #if CONFIG_BSP_LCD_COLOR_FORMAT_RGB888
-    esp_lcd_dpi_panel_config_t dpi_config = ILI9881C_800_1280_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB888);
+    esp_lcd_dpi_panel_config_t dpi_config = ILI9881C_800_1280_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_FMT_RGB888);
 #else
-    esp_lcd_dpi_panel_config_t dpi_config = ILI9881C_800_1280_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB565);
+    esp_lcd_dpi_panel_config_t dpi_config = ILI9881C_800_1280_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_FMT_RGB565);
 #endif
     dpi_config.num_fbs = CONFIG_BSP_LCD_DPI_BUFFER_NUMS;
 

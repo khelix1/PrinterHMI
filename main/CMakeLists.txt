@@ -147,7 +147,7 @@ idf_component_register(
         esp_event
         esp_netif
         esp_http_client
-        json
+        espressif__cjson
         espressif__esp_websocket_client
         espressif__esp_wifi_remote
 

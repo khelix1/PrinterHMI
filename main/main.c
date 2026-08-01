@@ -607,10 +607,10 @@ static const char *wifi_reason_name(uint8_t reason)
     switch (reason) {
         case WIFI_REASON_AUTH_EXPIRE: return "AUTH_EXPIRE";
         case WIFI_REASON_AUTH_LEAVE: return "AUTH_LEAVE";
-        case WIFI_REASON_ASSOC_EXPIRE: return "ASSOC_EXPIRE";
+        case WIFI_REASON_DISASSOC_DUE_TO_INACTIVITY: return "ASSOC_EXPIRE";
         case WIFI_REASON_ASSOC_TOOMANY: return "ASSOC_TOOMANY";
-        case WIFI_REASON_NOT_AUTHED: return "NOT_AUTHED";
-        case WIFI_REASON_NOT_ASSOCED: return "NOT_ASSOCED";
+        case WIFI_REASON_CLASS2_FRAME_FROM_NONAUTH_STA: return "NOT_AUTHED";
+        case WIFI_REASON_CLASS3_FRAME_FROM_NONASSOC_STA: return "NOT_ASSOCED";
         case WIFI_REASON_ASSOC_LEAVE: return "ASSOC_LEAVE";
         case WIFI_REASON_ASSOC_NOT_AUTHED: return "ASSOC_NOT_AUTHED";
         case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT: return "4WAY_HANDSHAKE_TIMEOUT";

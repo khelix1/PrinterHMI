@@ -403,6 +403,11 @@ static volatile bool dash_thumb_render_failed = false;
 static lv_timer_t *dash_thumb_render_timer = NULL;
 static int dash_thumb_render_profile_index = -1;
 static uint32_t dash_thumb_render_generation = 0;
+
+/* Require several fresh WebSocket cycles before starting live-preview HTTP. */
+static volatile bool s_live_transport_ready = false;
+static unsigned s_live_transport_stable_cycles = 0;
+
 #define DASH_THUMB_CANVAS_W 286
 #define DASH_THUMB_CANVAS_H 215
 
@@ -509,6 +514,9 @@ static void reset_active_printer_runtime_state(void)
     moonraker_poll_reset();
     moonraker_state_reset();
     telemetry_history_reset();
+
+    s_live_transport_ready = false;
+    s_live_transport_stable_cycles = 0;
 
     s_moonraker_code = 0;
     s_moonraker_ok = false;
@@ -1307,9 +1315,18 @@ static void moonraker_live_poll_tasklet(void)
         return;
     }
 
-    if (websocket_was_authoritative) {
-        ESP_LOGW(TAG, "LIVE_TRANSPORT HTTP fallback");
+    /* Never overlap the persistent WebSocket client with fallback HTTP.
+     * ESP-Hosted 2.9.x can reset the P4 when both sockets transmit together.
+     */
+    if (moonraker_live_websocket_transport_active()) {
+        if (websocket_was_authoritative) {
+            ESP_LOGW(TAG, "LIVE_TRANSPORT waiting for WebSocket refresh");
+        }
+        websocket_was_authoritative = false;
+        return;
     }
+
+    ESP_LOGW(TAG, "LIVE_TRANSPORT HTTP fallback without WebSocket client");
     websocket_was_authoritative = false;
 
     moonraker_poll_result_t result =
@@ -1761,6 +1778,15 @@ static void app_theme_changed(void);
 
 static void printer_chooser_select_bridge(int profile_index)
 {
+    if (network_activity_controller_exclusive_requested() ||
+        thumbnail_manager_v32_task_running()) {
+        ui_toast_v32_show(
+            UI_STATUS_DANGER,
+            "NETWORK SETTLING",
+            "Wait for the current preview or network operation to finish.");
+        return;
+    }
+
     int previous = moonraker_config_active_profile_index();
 
     if (!moonraker_config_select_profile(profile_index)) {
@@ -3674,14 +3700,14 @@ static void hmi_runtime_task(void *arg)
 
         if (exclusive_network) {
             if (!ota_network_quiet) {
-                ESP_LOGI(TAG, "OTA_NETWORK_QUIESCE begin");
+                ESP_LOGI(TAG, "NETWORK_EXCLUSIVE_QUIESCE begin");
                 moonraker_live_websocket_stop();
                 network_activity_controller_set_persistent_quiet(true);
                 ota_network_quiet = true;
             }
         } else {
             if (ota_network_quiet) {
-                ESP_LOGI(TAG, "OTA_NETWORK_QUIESCE end");
+                ESP_LOGI(TAG, "NETWORK_EXCLUSIVE_QUIESCE end");
                 network_activity_controller_set_persistent_quiet(false);
                 ota_network_quiet = false;
             }
@@ -3697,11 +3723,28 @@ static void hmi_runtime_task(void *arg)
                 MOONRAKER_API_KEY,
                 moonraker_config_generation());
 
+            bool websocket_fresh =
+                moonraker_live_websocket_fresh(3000000LL);
+
+            if (websocket_fresh) {
+                if (s_live_transport_stable_cycles < 4) {
+                    ++s_live_transport_stable_cycles;
+                }
+            } else {
+                s_live_transport_stable_cycles = 0;
+            }
+
+            s_live_transport_ready =
+                s_live_transport_stable_cycles >= 4;
+
             if (!moonraker_live_websocket_rebinding()) {
                 moonraker_live_poll_tasklet();
-                printer_profile_preview_worker_v32_poll_one(
-                    MOONRAKER_API_KEY);
             }
+
+            /* Inactive-printer previews remain SD-cache backed. Continuous
+             * background HTTP probing alongside the active WebSocket caused
+             * the reproducible ESP-Hosted SDIO timeout during switching.
+             */
         }
         /* BOOT_PREVIEW_PROFILE_STORE_ONLY
          * Reboot restoration is profile-indexed and endpoint-validated.
@@ -3737,6 +3780,9 @@ static void hmi_runtime_task(void *arg)
             .last_print_state = last_dashboard_print_state,
             .last_print_state_size =
                 sizeof(last_dashboard_print_state),
+
+            .preview_network_ready =
+                s_live_transport_ready,
 
             .set_live_target =
                 thumbnail_preview_coordinator_v32_set_live_target,

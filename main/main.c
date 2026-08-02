@@ -31,6 +31,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
@@ -3588,12 +3589,12 @@ static void build_drybox_dashboard(void)
 #define JC1060_SD_D2  GPIO_NUM_41
 #define JC1060_SD_D3  GPIO_NUM_42
 
-static esp_err_t sdmmc_host_init_dummy(void)
-{
-    return ESP_OK;
-}
-
-static esp_err_t sdmmc_host_deinit_dummy(void)
+/*
+ * ESP-Hosted creates the shared SDMMC controller for slot 1.
+ * The removable card adds slot 0 without recreating that controller.
+ * IDF6's default per-slot deinit callback remains intact.
+ */
+static esp_err_t sdmmc_host_init_existing_controller(void)
 {
     return ESP_OK;
 }
@@ -3612,11 +3613,30 @@ static void init_sd_card_storage(void)
     sdmmc_card_t *card = NULL;
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     host.slot = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+    host.init = sdmmc_host_init_existing_controller;
 
-    /* ESP-Hosted already initializes the SDMMC peripheral. */
-    host.init = sdmmc_host_init_dummy;
-    host.deinit = sdmmc_host_deinit_dummy;
+    sd_pwr_ctrl_ldo_config_t ldo_config = {
+        .ldo_chan_id = 4,
+    };
+    sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
+
+    esp_err_t ret =
+        sd_pwr_ctrl_new_on_chip_ldo(
+            &ldo_config,
+            &pwr_ctrl_handle);
+
+    if (ret != ESP_OK) {
+        snprintf(sd_status,
+                 sizeof(sd_status),
+                 "SD: power failed %s",
+                 esp_err_to_name(ret));
+        ESP_LOGW(TAG, "%s", sd_status);
+        return;
+    }
+
+    host.pwr_ctrl_handle = pwr_ctrl_handle;
+    ESP_LOGI(TAG, "SD LDO channel 4 enabled");
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     slot_config.clk = JC1060_SD_CLK;
@@ -3631,7 +3651,12 @@ static void init_sd_card_storage(void)
     ESP_LOGI(TAG, "SD mount start /sdcard GPIO clk=%d cmd=%d d0=%d",
              JC1060_SD_CLK, JC1060_SD_CMD, JC1060_SD_D0);
 
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    ret = esp_vfs_fat_sdmmc_mount(
+        "/sdcard",
+        &host,
+        &slot_config,
+        &mount_config,
+        &card);
 
     if (ret != ESP_OK) {
         snprintf(sd_status, sizeof(sd_status), "SD: mount failed %s", esp_err_to_name(ret));
@@ -3962,6 +3987,12 @@ void app_main(void)
     app_splash_locked(ui_splash_v32_wifi_starting);
 
     /* Start WiFi after dashboard is visible. Touch scaling fix remains in BSP. */
+    if (!sd_mount_attempted) {
+        sd_mount_attempted = true;
+        ESP_LOGI(TAG, "SD mount before WiFi traffic");
+        init_sd_card_storage();
+    }
+
     ESP_LOGI(TAG, "Starting WiFi after display/touch/dashboard");
     wifi_init_sta();
 

@@ -156,5 +156,6 @@ idf_component_register(
         mbedtls
         fatfs
         sdmmc
+        esp_driver_sdmmc
         espressif__esp_lcd_jd9165
 )

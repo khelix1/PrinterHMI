@@ -3739,12 +3739,9 @@ static void hmi_runtime_task(void *arg)
 
             if (!moonraker_live_websocket_rebinding()) {
                 moonraker_live_poll_tasklet();
+                printer_profile_preview_worker_v32_poll_one(
+                    MOONRAKER_API_KEY);
             }
-
-            /* Inactive-printer previews remain SD-cache backed. Continuous
-             * background HTTP probing alongside the active WebSocket caused
-             * the reproducible ESP-Hosted SDIO timeout during switching.
-             */
         }
         /* BOOT_PREVIEW_PROFILE_STORE_ONLY
          * Reboot restoration is profile-indexed and endpoint-validated.

@@ -16,6 +16,13 @@ bool network_activity_controller_exclusive_requested(void);
 
 /* Shared HTTP operations drain before an exclusive owner may begin. */
 bool network_activity_controller_try_begin_shared(void);
+
+/*
+ * Waits for ownership of the serialized short-HTTP lane. This distinguishes
+ * temporary contention from an actual connection failure without allowing
+ * shared work to overlap an exclusive operation.
+ */
+bool network_activity_controller_acquire_shared(uint32_t timeout_ms);
 void network_activity_controller_end_shared(void);
 
 /* The runtime owner reports when its persistent transport is fully retired. */

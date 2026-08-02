@@ -5,6 +5,15 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Changed
+
+- Modernized Moonraker discovery with the shared modal popup, themed status,
+  scrollable list, selectable-row and semantic footer-action components.
+- Moved candidate geometry and endpoint-data lifetime fully into the discovery
+  view so the scan task remains independent of popup layout.
+- Discover Moonraker endpoints on ports 7125 through 7128 and guarantee that
+  every counted endpoint is published to the result list.
+
 ## [6.0.1] - 2026-08-02
 
 ### Added

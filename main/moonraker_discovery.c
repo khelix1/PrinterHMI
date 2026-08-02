@@ -15,6 +15,13 @@
 
 static lv_obj_t *s_popup = NULL;
 static lv_obj_t *s_status_label = NULL;
+static lv_obj_t *s_results_list = NULL;
+static size_t s_candidate_count = 0;
+
+typedef struct {
+    char host[32];
+    int port;
+} moonraker_discovery_endpoint_t;
 
 static char s_status[512] = "Moonraker scan: not run";
 
@@ -48,12 +55,21 @@ static void candidate_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-    const char *host =
-        (const char *)lv_event_get_user_data(e);
+    const moonraker_discovery_endpoint_t *endpoint =
+        (const moonraker_discovery_endpoint_t *)
+            lv_event_get_user_data(e);
 
-    if (host && s_select_cb) {
-        s_select_cb(host);
+    if (endpoint && s_select_cb) {
+        s_select_cb(endpoint->host, endpoint->port);
     }
+}
+
+
+static void candidate_data_deleted_cb(lv_event_t *e)
+{
+    if (!e || lv_event_get_code(e) != LV_EVENT_DELETE) return;
+
+    free(lv_event_get_user_data(e));
 }
 
 
@@ -65,9 +81,21 @@ static bool host_already_seen(char seen[][32], int seen_count, const char *host)
     return false;
 }
 
+static bool moonraker_discovery_add_candidate(
+    const char *host,
+    int port);
+
+
 static void scan_task(void *arg)
 {
     (void)arg;
+
+    static const int ports[] = {
+        7125,
+        7126,
+        7127,
+        7128,
+    };
 
     uint8_t a = esp_ip4_addr1(&s_scan_ip);
     uint8_t b = esp_ip4_addr2(&s_scan_ip);
@@ -77,19 +105,22 @@ static void scan_task(void *arg)
     char seen[96][32];
     int seen_count = 0;
     int found_count = 0;
-    int y = 115;
 
     char msg[512];
-    snprintf(msg, sizeof(msg),
-             "Scanning for Moonraker on port 7125...\n"
-             "Close cancels discovery.\n");
+    snprintf(
+        msg,
+        sizeof(msg),
+        "Scanning %u.%u.%u.x on ports 7125-7128. Close cancels discovery.",
+        a,
+        b,
+        c);
     moonraker_discovery_set_status(msg);
 
     int candidates[96];
     int cand_count = 0;
 
-    /* Fast useful guesses first */
-    candidates[cand_count++] = 1;      /* gateway/router area */
+    /* Fast useful guesses first. */
+    candidates[cand_count++] = 1;
     candidates[cand_count++] = 100;
     candidates[cand_count++] = 101;
     candidates[cand_count++] = 110;
@@ -106,12 +137,12 @@ static void scan_task(void *arg)
         }
     }
 
-    /* Broader but still limited fallback */
+    /* Broader but still limited fallback. */
     for (int d = 2; d <= 254 && cand_count < 96; d += 5) {
         candidates[cand_count++] = d;
     }
 
-    for (int i = 0; i < cand_count; i++) {
+    for (int i = 0; i < cand_count && found_count < 8; i++) {
         if (moonraker_discovery_is_cancelled()) break;
 
         int d = candidates[i];
@@ -126,34 +157,53 @@ static void scan_task(void *arg)
             seen_count++;
         }
 
-        snprintf(msg, sizeof(msg),
-                 "Scanning for Moonraker on port 7125...\n"
-                 "Checking %s\n"
-                 "Found: %d\n\n"
-                 "Close cancels discovery.",
-                 host, found_count);
-        moonraker_discovery_set_status(msg);
+        for (size_t port_index = 0;
+             port_index < sizeof(ports) / sizeof(ports[0]) &&
+             found_count < 8;
+             ++port_index) {
+            if (moonraker_discovery_is_cancelled()) break;
 
-        if (moonraker_probe_host(host, 7125)) {
-            found_count++;
+            int port = ports[port_index];
 
-            if (!moonraker_discovery_is_cancelled() &&
-                moonraker_discovery_is_open() &&
-                bsp_display_lock(50)) {
-                moonraker_discovery_add_candidate(host, y);
-                bsp_display_unlock();
-            }
-
-            y += 58;
-
-            snprintf(msg, sizeof(msg),
-                     "Found Moonraker candidates:\n"
-                     "%d found so far.\n\n"
-                     "Tap one to save it. Close cancels discovery.",
-                     found_count);
+            snprintf(
+                msg,
+                sizeof(msg),
+                "Checking %s:%d   |   %d found",
+                host,
+                port,
+                found_count);
             moonraker_discovery_set_status(msg);
 
-            if (found_count >= 8) break;
+            if (!moonraker_probe_host(host, port)) continue;
+
+            bool published = false;
+
+            while (!moonraker_discovery_is_cancelled() &&
+                   moonraker_discovery_is_open()) {
+                if (bsp_display_lock(100)) {
+                    published = moonraker_discovery_add_candidate(
+                        host,
+                        port);
+                    bsp_display_unlock();
+                    break;
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+
+            if (!published) {
+                break;
+            }
+
+            found_count++;
+
+            snprintf(
+                msg,
+                sizeof(msg),
+                "%d Moonraker endpoint%s found. Select one below.",
+                found_count,
+                found_count == 1 ? "" : "s");
+            moonraker_discovery_set_status(msg);
         }
 
         vTaskDelay(pdMS_TO_TICKS(15));
@@ -161,17 +211,21 @@ static void scan_task(void *arg)
 
     if (!moonraker_discovery_is_cancelled()) {
         if (found_count == 0) {
-            snprintf(msg, sizeof(msg),
-                     "No Moonraker found.\n"
-                     "Checked smart targets on %u.%u.%u.x:7125.\n\n"
-                     "Try TEST MOONRAKER or check host IP.",
-                     a, b, c);
+            snprintf(
+                msg,
+                sizeof(msg),
+                "No Moonraker endpoints found on %u.%u.%u.x ports "
+                "7125-7128. Verify the printer address and try again.",
+                a,
+                b,
+                c);
         } else {
-            snprintf(msg, sizeof(msg),
-                     "Moonraker discovery complete.\n"
-                     "%d candidate(s) found.\n\n"
-                     "Tap one to save it.",
-                     found_count);
+            snprintf(
+                msg,
+                sizeof(msg),
+                "Discovery complete   |   %d endpoint%s found",
+                found_count,
+                found_count == 1 ? "" : "s");
         }
         moonraker_discovery_set_status(msg);
     }
@@ -202,43 +256,56 @@ void moonraker_discovery_show(
         return;
     }
 
-    s_popup =
-        ui_popup_create(
-            lv_screen_active(),
-            860,
-            540,
-            UI_POPUP_STANDARD);
+    s_popup = ui_popup_create(
+        lv_layer_top(),
+        860,
+        540,
+        UI_POPUP_STANDARD);
 
-    if (!s_popup) {
+    if (!s_popup) return;
+
+    ui_popup_add_title(
+        s_popup,
+        LV_SYMBOL_WIFI " DISCOVER MOONRAKER",
+        false,
+        8);
+
+    ui_popup_add_header_divider(s_popup, 48);
+
+    s_status_label = ui_popup_add_status_label(
+        s_popup,
+        s_status,
+        24,
+        58,
+        812);
+
+    if (s_status_label) {
+        lv_obj_set_height(s_status_label, 44);
+    }
+
+    ui_popup_add_caption(
+        s_popup,
+        "SELECT A DISCOVERED HOST TO FILL THE PRINTER PROFILE",
+        24,
+        106,
+        812);
+
+    s_results_list = ui_popup_add_list(
+        s_popup,
+        24,
+        132,
+        812,
+        324);
+
+    if (!s_status_label || !s_results_list) {
+        lv_obj_delete(s_popup);
+        s_popup = NULL;
+        s_status_label = NULL;
+        s_results_list = NULL;
         return;
     }
 
-    lv_obj_t *title =
-        ui_popup_add_title(
-            s_popup,
-            "MOONRAKER HOSTS",
-            false,
-            4);
-
-    if (title) {
-        lv_obj_align(
-            title,
-            LV_ALIGN_TOP_LEFT,
-            25,
-            4);
-    }
-
-    ui_popup_add_header_divider(
-        s_popup,
-        48);
-
-    s_status_label =
-        ui_popup_add_status_label(
-            s_popup,
-            s_status,
-            18,
-            58,
-            800);
+    s_candidate_count = 0;
 
     ui_popup_add_standard_footer_divider(s_popup);
 
@@ -253,7 +320,6 @@ void moonraker_discovery_show(
         NULL);
 }
 
-
 void moonraker_discovery_set_status(const char *status_text)
 {
     if (!status_text) return;
@@ -267,41 +333,61 @@ void moonraker_discovery_set_status(const char *status_text)
 }
 
 
-void moonraker_discovery_add_candidate(
+static bool moonraker_discovery_add_candidate(
     const char *host,
-    int y)
+    int port)
 {
-    if (!s_popup || !host || !host[0]) return;
-
-    char row[80];
-    snprintf(row, sizeof(row), "%s : 7125", host);
-
-    /*
-     * Keep the existing copied user-data lifetime while delegating
-     * all candidate-row appearance to the popup theme.
-     */
-    char *host_copy = strdup(host);
-
-    if (!host_copy) {
-        return;
+    if (!s_results_list ||
+        !host ||
+        !host[0] ||
+        port <= 0 ||
+        port >= 65536) {
+        return false;
     }
 
-    lv_obj_t *button =
-        ui_popup_add_selectable_row(
-            s_popup,
-            row,
-            30,
-            y,
-            780,
-            52,
-            candidate_event_cb,
-            host_copy);
+    moonraker_discovery_endpoint_t *endpoint =
+        calloc(1, sizeof(*endpoint));
+
+    if (!endpoint) return false;
+
+    copy_text(endpoint->host, sizeof(endpoint->host), host);
+    endpoint->port = port;
+
+    char row[96];
+    snprintf(
+        row,
+        sizeof(row),
+        LV_SYMBOL_WIFI "  %s   |   PORT %d",
+        endpoint->host,
+        endpoint->port);
+
+    int32_t row_width = lv_obj_get_width(s_results_list) - 16;
+    if (row_width <= 0) row_width = 780;
+
+    lv_obj_t *button = ui_popup_add_selectable_row(
+        s_results_list,
+        row,
+        8,
+        8 + (int32_t)s_candidate_count * 60,
+        row_width,
+        52,
+        candidate_event_cb,
+        endpoint);
 
     if (!button) {
-        free(host_copy);
+        free(endpoint);
+        return false;
     }
-}
 
+    lv_obj_add_event_cb(
+        button,
+        candidate_data_deleted_cb,
+        LV_EVENT_DELETE,
+        endpoint);
+
+    s_candidate_count++;
+    return true;
+}
 
 bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
 {
@@ -344,6 +430,8 @@ void moonraker_discovery_close(void)
         lv_obj_delete(s_popup);
         s_popup = NULL;
         s_status_label = NULL;
+        s_results_list = NULL;
+        s_candidate_count = 0;
     }
 
     if (s_close_cb) {

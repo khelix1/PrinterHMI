@@ -102,6 +102,26 @@ bool network_activity_controller_try_begin_shared(void)
 }
 
 
+bool network_activity_controller_acquire_shared(uint32_t timeout_ms)
+{
+    TickType_t started = xTaskGetTickCount();
+    TickType_t timeout = pdMS_TO_TICKS(timeout_ms);
+
+    while (true) {
+        if (network_activity_controller_try_begin_shared()) {
+            return true;
+        }
+
+        if (timeout_ms == 0 ||
+            (xTaskGetTickCount() - started) >= timeout) {
+            return false;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+
 void network_activity_controller_end_shared(void)
 {
     __atomic_fetch_sub(&s_activity_state, 1, __ATOMIC_ACQ_REL);

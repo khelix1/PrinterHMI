@@ -1480,7 +1480,9 @@ void ui_printer_v32_create(void);
 void ui_printer_v32_destroy(void);
 static void ui_network_tools_wifi_scan_now(void);
 static void scan_moonraker_now(void);
-static void moonraker_discovery_selected_bridge(const char *host);
+static void moonraker_discovery_selected_bridge(
+    const char *host,
+    int port);
 
 static void ui_network_tools_open_wifi_scan_cb(lv_event_t *e)
 {
@@ -2523,9 +2525,10 @@ scan_finished:
 
 
 static void moonraker_discovery_selected_bridge(
-    const char *host)
+    const char *host,
+    int port)
 {
-    if (!host || !host[0]) {
+    if (!host || !host[0] || port <= 0 || port >= 65536) {
         return;
     }
 
@@ -2535,7 +2538,7 @@ static void moonraker_discovery_selected_bridge(
      */
     ui_printer_profiles_set_discovered_endpoint(
         host,
-        7125);
+        port);
 
     moonraker_discovery_close();
 }

@@ -84,7 +84,8 @@ bool moonraker_probe_host(const char *host, int port)
     esp_http_client_config_t config = {
         .url = url,
         .method = HTTP_METHOD_GET,
-        .timeout_ms = 350,
+        /* Allow the first local request to complete ARP and Hosted RPC. */
+        .timeout_ms = 650,
         .event_handler = probe_http_event_handler,
         .user_data = &capture,
     };
@@ -96,7 +97,12 @@ bool moonraker_probe_host(const char *host, int port)
         return false;
     }
 
-    if (!network_activity_controller_try_begin_shared()) {
+    /*
+     * Background HTTP ownership is contention, not evidence that this host
+     * is absent. Wait briefly for the serialized lane, then probe exactly
+     * once.
+     */
+    if (!network_activity_controller_acquire_shared(750)) {
         esp_http_client_cleanup(client);
         return false;
     }

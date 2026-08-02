@@ -4,7 +4,7 @@
 
 | Item | Version or setting |
 | --- | --- |
-| ESP-IDF | 5.4.4 |
+| ESP-IDF | 6.0.2 |
 | Target | `esp32p4` |
 | Compiler architecture | RISC-V |
 | Flash size | 16 MiB |
@@ -21,7 +21,7 @@ set. `main/idf_component.yml` declares direct component constraints.
 ## Prerequisites
 
 - Linux development host
-- ESP-IDF 5.4.4 installed through the supported Espressif installer
+- ESP-IDF 6.0.2 installed through the supported Espressif installer
 - USB access to the target's serial/download port
 - Git
 - Python environment supplied by ESP-IDF
@@ -29,16 +29,14 @@ set. `main/idf_component.yml` declares direct component constraints.
 ## Clean checkout build
 
 ```bash
-source "$IDF_PATH/export.sh"
 cd PrinterHMI_v3_2
-idf.py set-target esp32p4
-idf.py build
+./tools/build_idf6_hosted3.sh
 ```
 
 Expected application output:
 
 ```text
-build/PrinterHMI.bin
+build-idf6-hosted3/PrinterHMI.bin
 ```
 
 The first build resolves managed components. Do not commit
@@ -47,9 +45,8 @@ The first build resolves managed components. Do not commit
 ## Incremental build
 
 ```bash
-source "$IDF_PATH/export.sh"
 cd PrinterHMI_v3_2
-idf.py build
+./tools/build_idf6_hosted3.sh
 ```
 
 ## Fully clean rebuild
@@ -57,9 +54,9 @@ idf.py build
 Use ESP-IDF's supported clean action:
 
 ```bash
-idf.py fullclean
-idf.py set-target esp32p4
-idf.py build
+source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+idf.py -B build-idf6-hosted3 fullclean
+./tools/build_idf6_hosted3.sh
 ```
 
 `fullclean` deletes generated build output. It does not modify tracked source.
@@ -77,7 +74,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v5.1.2.
+- `partitions.csv` is the only supported partition layout for v6.0.0.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy

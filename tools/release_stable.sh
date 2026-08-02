@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V1
 expected_origin_repo="khelix1/PrinterHMI_v3_2"
-version="5.1.2"
+version="6.0.0"
 tag="v${version}"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -44,7 +44,7 @@ case "$origin_url" in
         ;;
 esac
 
-for command in idf.py gh sha256sum; do
+for command in gh sha256sum python3; do
     command -v "$command" >/dev/null 2>&1 || {
         echo "ERROR: required command not found: $command" >&2
         exit 1
@@ -102,10 +102,12 @@ if gh release view "$tag" --repo "$expected_origin_repo" >/dev/null 2>&1; then
 fi
 
 echo "Building PrinterHMI ${tag} from ${short_commit}..."
-idf.py build
+"$repo_dir/tools/build_idf6_hosted3.sh"
 
-firmware="$repo_dir/build/PrinterHMI.bin"
+firmware="$repo_dir/build-idf6-hosted3/PrinterHMI.bin"
 notes="$repo_dir/docs/releases/v${version}.md"
+transition_firmware="${PRINTERHMI_C6_TRANSITION_IMAGE:-$HOME/Downloads/PrinterHMI-hosted-transition/forward-host-2.9.3/p4-2.9.3-host-installs-c6-3.0.5-full-flash.bin}"
+transition_expected_sha256="f3ca32cb5d0cdd461198428496bcb7dd6e0439015fd96e3e0210d8d13f5a3bfa"
 
 [[ -s "$firmware" ]] || {
     echo "ERROR: firmware not found: $firmware" >&2
@@ -117,20 +119,41 @@ notes="$repo_dir/docs/releases/v${version}.md"
     exit 1
 }
 
+[[ -s "$transition_firmware" ]] || {
+    echo "ERROR: C6 transition image not found: $transition_firmware" >&2
+    exit 1
+}
+
+transition_actual_sha256="$(
+    sha256sum "$transition_firmware" | awk '{print $1}'
+)"
+
+[[ "$transition_actual_sha256" == "$transition_expected_sha256" ]] || {
+    echo "ERROR: C6 transition image checksum mismatch" >&2
+    echo "expected: $transition_expected_sha256" >&2
+    echo "actual:   $transition_actual_sha256" >&2
+    exit 1
+}
+
 asset_name="PrinterHMI-${tag}-ota.bin"
 checksum_name="${asset_name}.sha256"
+transition_name="PrinterHMI-${tag}-c6-3.0.5-transition-full-flash.bin"
+transition_checksum_name="${transition_name}.sha256"
 asset_dir="$(mktemp -d)"
 trap 'rm -rf "$asset_dir"' EXIT
 
 cp "$firmware" "$asset_dir/$asset_name"
+cp "$transition_firmware" "$asset_dir/$transition_name"
+
 (
     cd "$asset_dir"
     sha256sum "$asset_name" > "$checksum_name"
+    sha256sum "$transition_name" > "$transition_checksum_name"
 )
 
 echo "Stable release assets:"
-ls -lh "$asset_dir/$asset_name" "$asset_dir/$checksum_name"
-cat "$asset_dir/$checksum_name"
+ls -lh "$asset_dir/$asset_name" "$asset_dir/$checksum_name" "$asset_dir/$transition_name" "$asset_dir/$transition_checksum_name"
+cat "$asset_dir/$checksum_name" "$asset_dir/$transition_checksum_name"
 
 if ! git show-ref --verify --quiet "refs/tags/$tag"; then
     git tag -a "$tag" \
@@ -153,6 +176,8 @@ git fetch origin main --tags --quiet
 gh release create "$tag" \
     "$asset_dir/$asset_name" \
     "$asset_dir/$checksum_name" \
+    "$asset_dir/$transition_name" \
+    "$asset_dir/$transition_checksum_name" \
     --repo "$expected_origin_repo" \
     --verify-tag \
     --title "PrinterHMI ${tag}" \
@@ -175,6 +200,17 @@ grep -Fxq "$checksum_name" <<<"$release_assets" || {
     exit 1
 }
 
+grep -Fxq "$transition_name" <<<"$release_assets" || {
+    echo "ERROR: C6 transition image was not published" >&2
+    exit 1
+}
+
+grep -Fxq "$transition_checksum_name" <<<"$release_assets" || {
+    echo "ERROR: C6 transition checksum was not published" >&2
+    exit 1
+}
+
 echo "PASS: origin/main matches $short_commit"
 echo "PASS: stable release $tag published"
 echo "PASS: $asset_name and checksum published"
+echo "PASS: $transition_name and checksum published"

@@ -284,7 +284,6 @@ static void update_task(void *arg)
     }
 
     /* Allow the final SDIO/TCP teardown traffic to settle before OTA. */
-    vTaskDelay(pdMS_TO_TICKS(1500));
 
     set_state("Checking Server...", 10);
 
@@ -361,7 +360,6 @@ static void update_task(void *arg)
             OPERATOR_EVENT_INFO,
             "Firmware update completed; rebooting");
 
-        vTaskDelay(pdMS_TO_TICKS(500));
         esp_restart();
     }
 
@@ -395,7 +393,6 @@ failed:
         esp_err_to_name(result));
 
     if (network_owned) {
-        vTaskDelay(pdMS_TO_TICKS(500));
         network_activity_controller_release_exclusive();
     }
     s_task_running = false;
@@ -426,7 +423,6 @@ cancelled:
         "Firmware update cancelled safely");
 
     if (network_owned) {
-        vTaskDelay(pdMS_TO_TICKS(500));
         network_activity_controller_release_exclusive();
     }
     s_task_running = false;

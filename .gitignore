@@ -47,3 +47,4 @@ __pycache__/
 secrets.*
 credentials.*
 # END PRINTERHMI GENERATED IGNORES
+/build-idf6*/

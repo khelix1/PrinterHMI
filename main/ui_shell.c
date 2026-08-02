@@ -3,7 +3,6 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
-#include "esp_wifi.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 
@@ -21,6 +20,9 @@ typedef struct {
     ui_shell_printer_switch_cb_t printer_switch_callback;
     lv_obj_t *clock_label;
     lv_obj_t *wifi_bars[4];
+    bool wifi_signal_connected;
+    int wifi_signal_rssi;
+    int wifi_signal_bars;
     lv_obj_t *eta_label;
     lv_obj_t *nav_rail;
     lv_obj_t *nav_buttons[UI_SHELL_PAGE_COUNT];
@@ -181,6 +183,7 @@ void ui_shell_create(void)
         lv_obj_set_size(shell_topbar_wifi_bars[i], 5, 6 + (i * 4));
         ui_apply_surface_role(shell_topbar_wifi_bars[i], UI_SURFACE_INDICATOR);
         lv_obj_set_style_bg_color(shell_topbar_wifi_bars[i], UI_WIFI_INACTIVE, 0);
+        lv_obj_set_style_opa(shell_topbar_wifi_bars[i], LV_OPA_20, 0);
 
         lv_obj_align_to(shell_topbar_wifi_bars[i], shell_clock_label,
                         LV_ALIGN_OUT_LEFT_MID,
@@ -253,33 +256,62 @@ void ui_shell_set_active_nav(int idx)
 
 void ui_shell_update_status_icons(void)
 {
-    int rssi = -127;
+    if (!s_shell) return;
+
     int bars = 0;
 
-    wifi_ap_record_t ap = {0};
-    esp_err_t err = esp_wifi_sta_get_ap_info(&ap);
-    if (err == ESP_OK) {
-        rssi = ap.rssi;
+    if (s_shell->wifi_signal_connected) {
+        int rssi = s_shell->wifi_signal_rssi;
 
         if (rssi >= -55) bars = 4;
         else if (rssi >= -67) bars = 3;
         else if (rssi >= -75) bars = 2;
-        else bars = 1;
+        else if (rssi >= -85) bars = 1;
     }
 
     for (int i = 0; i < 4; i++) {
         if (!shell_topbar_wifi_bars[i]) continue;
 
-        lv_color_t c = UI_WIFI_INACTIVE;
+        lv_color_t color = UI_WIFI_INACTIVE;
 
         if (i < bars) {
-            if (bars >= 3) c = UI_OK_BRIGHT;
-            else if (bars == 2) c = UI_WARN;
-            else c = UI_DANGER_BRIGHT;
+            if (bars >= 3) color = UI_OK_BRIGHT;
+            else if (bars == 2) color = UI_WARN;
+            else color = UI_DANGER_BRIGHT;
         }
 
-        lv_obj_set_style_bg_color(shell_topbar_wifi_bars[i], c, 0);
+        lv_obj_set_style_bg_color(
+            shell_topbar_wifi_bars[i],
+            color,
+            0);
+
+        lv_obj_set_style_opa(
+            shell_topbar_wifi_bars[i],
+            i < bars ? LV_OPA_COVER : LV_OPA_20,
+            0);
     }
+
+    if (s_shell->wifi_signal_bars != bars) {
+        ESP_LOGI(
+            TAG,
+            "WiFi signal rssi=%d bars=%d",
+            s_shell->wifi_signal_connected
+                ? s_shell->wifi_signal_rssi
+                : -127,
+            bars);
+
+        s_shell->wifi_signal_bars = bars;
+    }
+}
+
+
+void ui_shell_set_wifi_signal(bool connected, int rssi)
+{
+    if (!s_shell) return;
+
+    s_shell->wifi_signal_connected = connected;
+    s_shell->wifi_signal_rssi = rssi;
+    ui_shell_update_status_icons();
 }
 
 static void shell_nav_btn_event_cb(lv_event_t *e)

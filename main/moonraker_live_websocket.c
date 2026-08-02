@@ -24,9 +24,8 @@
 #define WS_RETRY_INTERVAL_US 3000000LL
 /* Profile changes remain owned by the network task. Once that task observes
  * the new generation, retire and reopen during the same pass as v5.0 did.
- * v5.1.2 generation fencing still rejects every event from the old client.
+ * v6.0.0 generation fencing still rejects every event from the old client.
  */
-#define WS_REBIND_SETTLE_US 0LL
 #define WS_MESSAGE_MAX_BYTES (128 * 1024)
 #define WS_SUBSCRIPTION_CAPACITY (16 * 1024)
 #define WS_COMMAND_CAPACITY 1024
@@ -53,16 +52,6 @@ static int64_t s_retry_after_us = 0;
 static char s_host[128] = "";
 static char s_api_key[160] = "";
 static char s_uri[256] = "";
-
-typedef enum {
-    WS_REBIND_IDLE = 0,
-    WS_REBIND_QUIESCE,
-    WS_REBIND_REOPEN_WAIT,
-} websocket_rebind_phase_t;
-
-static websocket_rebind_phase_t s_rebind_phase = WS_REBIND_IDLE;
-static int64_t s_rebind_after_us = 0;
-
 
 static char *s_subscription = NULL;
 static size_t s_subscription_capacity = 0;
@@ -1115,8 +1104,6 @@ void moonraker_live_websocket_stop(void)
     s_generation = 0;
     __atomic_store_n(&s_accepted_generation, 0, __ATOMIC_RELEASE);
     s_retry_after_us = 0;
-    s_rebind_phase = WS_REBIND_IDLE;
-    s_rebind_after_us = 0;
 }
 
 
@@ -1125,35 +1112,15 @@ void moonraker_live_websocket_prepare_profile_change(
 {
     if (!s_client || configuration_generation == s_generation) return;
 
-    __atomic_store_n(
-        &s_accepted_generation,
-        configuration_generation,
-        __ATOMIC_RELEASE);
-
-    s_connected = false;
-    s_subscribed = false;
-    s_subscribe_pending = false;
-    s_last_status_update_us = 0;
-    moonraker_state_set_connection(false, false);
-
-    s_rebind_phase = WS_REBIND_QUIESCE;
-    s_rebind_after_us = esp_timer_get_time() + WS_REBIND_SETTLE_US;
-
-    ESP_LOGI(TAG, "WS_REBIND_QUIESCE generation=%u->%u",
+    ESP_LOGI(TAG, "WS_REBIND_IMMEDIATE generation=%u->%u",
              (unsigned)s_generation,
              (unsigned)configuration_generation);
-}
 
-
-bool moonraker_live_websocket_rebinding(void)
-{
-    return s_rebind_phase != WS_REBIND_IDLE;
-}
-
-
-bool moonraker_live_websocket_transport_active(void)
-{
-    return s_client != NULL;
+    /*
+     * Destroy the old endpoint before any request for the new profile starts.
+     * The next runtime tick creates the new client without a settle timer.
+     */
+    moonraker_live_websocket_stop();
 }
 
 
@@ -1342,43 +1309,6 @@ void moonraker_live_websocket_tasklet(
     }
 
     int64_t now = esp_timer_get_time();
-
-    if (s_rebind_phase != WS_REBIND_IDLE) {
-        uint32_t accepted = __atomic_load_n(
-            &s_accepted_generation,
-            __ATOMIC_ACQUIRE);
-
-        if (accepted != configuration_generation) {
-            __atomic_store_n(
-                &s_accepted_generation,
-                configuration_generation,
-                __ATOMIC_RELEASE);
-            s_rebind_phase = WS_REBIND_QUIESCE;
-            s_rebind_after_us = now + WS_REBIND_SETTLE_US;
-        }
-
-        if (now < s_rebind_after_us) return;
-
-        if (s_rebind_phase == WS_REBIND_QUIESCE) {
-            ESP_LOGI(TAG, "WS_REBIND_RETIRE generation=%u",
-                     (unsigned)s_generation);
-            destroy_client();
-            s_retry_after_us = 0;
-            s_rebind_phase = WS_REBIND_REOPEN_WAIT;
-            s_rebind_after_us = esp_timer_get_time() +
-                WS_REBIND_SETTLE_US;
-
-            /* With a zero settle interval, continue through REOPEN_WAIT in
-             * this same network-task pass. Teardown never moves into the UI
-             * callback, and the accepted-generation fence remains active.
-             */
-        }
-
-        ESP_LOGI(TAG, "WS_REBIND_REOPEN generation=%u",
-                 (unsigned)configuration_generation);
-        s_rebind_phase = WS_REBIND_IDLE;
-        s_rebind_after_us = 0;
-    }
 
     bool endpoint_changed =
         s_client &&

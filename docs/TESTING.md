@@ -6,9 +6,10 @@ acceptance environment.
 ## Build gate
 
 ```bash
-idf.py build
-idf.py size
-idf.py size-components
+./tools/build_idf6_hosted3.sh
+
+source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+idf.py -B build-idf6-hosted3 size size-components
 git diff --check
 ```
 

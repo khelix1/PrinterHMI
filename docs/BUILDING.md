@@ -39,8 +39,9 @@ Expected application output:
 build-idf6-hosted3/PrinterHMI.bin
 ```
 
-The first build resolves managed components. Do not commit
-`managed_components/` or `build/`.
+The first build resolves managed components and applies the two guarded
+v6 compatibility patches. Do not commit `managed_components/` or generated
+build directories.
 
 ## Incremental build
 

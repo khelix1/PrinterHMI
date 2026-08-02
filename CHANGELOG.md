@@ -5,6 +5,42 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-08-01
+
+### Changed
+
+- Migrated the ESP32-P4 application to ESP-IDF 6.0.2.
+- Upgraded the P4 host and ESP32-C6 co-processor to ESP-Hosted 3.0.5 with
+  RPC v2.
+- Upgraded ESP Wi-Fi Remote to 1.5.3.
+- Established `tools/build_idf6_hosted3.sh` as the canonical build path.
+- Restored the removable SD card on its native high-speed interface.
+
+### Fixed
+
+- Eliminated active-printer switching crashes and related OTA instability.
+- Removed obsolete network settling and readiness delays while retaining
+  WebSocket generation fencing and exclusive OTA ownership.
+- Prevented release-catalog traffic from overlapping an active OTA download.
+- Added the missing ESP-Hosted 3.0.5 host-side Wi-Fi RSSI RPC dispatch.
+- Added accurate live Wi-Fi signal bars to the top status area.
+
+### Build and migration
+
+- Added guarded, tracked compatibility patches for ESP-IDF 6.0.2 SDIO and
+  ESP-Hosted 3.0.5 RSSI dispatch.
+- Added a verified C6 3.0.5 USB transition image for devices upgrading from
+  the v5.1.2 C6 2.12.8 stack.
+- Updated stable and nightly publishing to use the reproducible IDF6 build.
+
+### Validation
+
+- Verified matching ESP-Hosted 3.0.5 versions, RPC v2 and 40 MHz four-bit
+  SDIO on the target panel.
+- Verified repeated printer switching during prints, chooser state, OTA,
+  SD-card mounting and live RSSI reporting.
+- Verified reboot, OTA validation and normal Moonraker WebSocket operation.
+
 ## [5.1.2] - 2026-07-31
 
 ### Fixed

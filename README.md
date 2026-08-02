@@ -82,15 +82,17 @@ These photographs show the interface operating on the target hardware.
 
 ## Quick start
 
-Install ESP-IDF 5.4.4, then:
+Install ESP-IDF 6.0.2, then:
 
 ```bash
-source "$IDF_PATH/export.sh"
 git clone https://github.com/khelix1/PrinterHMI_v3_2.git PrinterHMI_v3_2
 cd PrinterHMI_v3_2
-idf.py set-target esp32p4
-idf.py build
-idf.py -p /dev/ttyUSB0 flash monitor
+./tools/build_idf6_hosted3.sh
+
+source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+idf.py -B build-idf6-hosted3 \
+    -D SDKCONFIG="$PWD/sdkconfig.idf6" \
+    -p /dev/ttyUSB0 flash monitor
 ```
 
 Use the serial device appropriate for the workstation. Do not commit local

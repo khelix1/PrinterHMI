@@ -21,10 +21,10 @@
 
 ## Build
 
-- [ ] Clean ESP-IDF 5.4.4 build succeeds.
-- [ ] `dependencies.lock`, `sdkconfig` and `partitions.csv` diffs are intentional.
+- [ ] Canonical ESP-IDF 6.0.2/ESP-Hosted 3.0.5 build succeeds.
+- [ ] `dependencies.lock`, `sdkconfig.idf6` and `partitions.csv` diffs are intentional.
 - [ ] Application and bootloader size reports are saved.
-- [ ] `build/PrinterHMI.bin` SHA-256 is recorded.
+- [ ] `build-idf6-hosted3/PrinterHMI.bin` SHA-256 is recorded.
 
 ## Device verification
 
@@ -48,6 +48,8 @@
       requires confirmation.
 - [ ] Console command history, live responses and severity colors pass.
 - [ ] Wi-Fi, SNTP, Moonraker HTTP/WebSocket and multi-printer switching pass.
+- [ ] Host and C6 both report ESP-Hosted 3.0.5 with RPC v2.
+- [ ] Live Wi-Fi RSSI bars and native high-speed SD-card mounting pass.
 - [ ] Printer controls, Files, previews, Drybox and Telemetry pass.
 - [ ] Settings persist and factory-reset behavior is understood.
 - [ ] Release-candidate soak test passes.
@@ -56,14 +58,13 @@
 
 ```bash
 git status --short
-git tag -a vX.Y.Z -m "PrinterHMI vX.Y.Z"
-git push origin main --follow-tags
-sha256sum build/PrinterHMI.bin
+sha256sum build-idf6-hosted3/PrinterHMI.bin
+./tools/release_stable.sh
 ```
 
 - [ ] Annotated tag points to the tested commit.
-- [ ] `main` and tags are pushed to the private remote.
-- [ ] Release binary, checksum, partition table and test record are retained.
+- [ ] `main` and the annotated release tag are pushed to `origin`.
+- [ ] OTA binary, checksum, required C6 transition asset and test record are retained.
 - [ ] Nightly tag and firmware/checksum assets are verified when used.
 - [ ] A project-root `git archive` can be extracted and built.
 

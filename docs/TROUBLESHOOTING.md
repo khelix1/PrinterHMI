@@ -87,9 +87,12 @@ display startup or another path is disturbing the display/backlight.
 
 ## Build fails after dependency resolution
 
-- Confirm ESP-IDF 5.4.4 is active.
-- Review `dependencies.lock` and the local board-component path.
-- Run `idf.py fullclean`, then set the `esp32p4` target and rebuild.
+- Confirm `~/esp/esp-idf-v6.0.2` is the exact v6.0.2 Git checkout.
+- Run `./tools/build_idf6_hosted3.sh`; do not substitute a plain
+  `idf.py build`.
+- Confirm `sdkconfig.idf6` and `build-idf6-hosted3` are selected.
+- Confirm both guarded compatibility scripts report `PASS`.
+- Review `dependencies.lock` and the local board-component paths.
 - Do not delete tracked configuration files to solve an unexplained mismatch.
 
 ## Factory reset consequences

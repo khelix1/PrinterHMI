@@ -67,11 +67,13 @@ tested `main` branch it runs the public-tree audit, builds `PrinterHMI.bin`,
 creates its checksum, pushes `main`, creates a commit-specific nightly tag,
 publishes a GitHub prerelease and verifies the remote commit and both assets.
 
-It requires ESP-IDF 5.4.4 and an authenticated GitHub CLI:
+It requires ESP-IDF 6.0.2 at the standard project path and an
+authenticated GitHub CLI. The checkpoint invokes the canonical IDF6 build
+wrapper itself:
 
 ```bash
 gh auth status
-idf.py --version
+./tools/build_idf6_hosted3.sh
 ./tools/end_of_night_checkpoint.sh
 ```
 

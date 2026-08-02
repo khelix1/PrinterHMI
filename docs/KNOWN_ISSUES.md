@@ -9,24 +9,27 @@ Completed work is intentionally removed from this list so it remains an accurate
 
 # Network Transport
 
-## ESP-Hosted compatibility pin
+## ESP-Hosted 3.0.5 compatibility pin
 
 **Status:** Mitigated and release-gated
 
-The ESP32-P4 host component is pinned to ESP-Hosted 2.9.3 while the installed
-ESP32-C6 co-processor firmware remains at 2.12.8. ESP-Hosted 2.12.8 on the P4
-reproduced intermittent `sdmmc_send_cmd` timeout 0x107 failures followed by an
-`Unrecoverable host sdio state` restart. The 2.9.3 P4 host restored stable
-operation with the existing C6 firmware.
+The v6 platform is pinned to ESP-IDF 6.0.2, ESP-Hosted 3.0.5 on both the
+ESP32-P4 and ESP32-C6, and ESP Wi-Fi Remote 1.5.3. The link negotiates RPC v2
+over four-bit 40 MHz SDIO.
 
-The upstream transport defect remains open. Do not update the P4 host pin,
-ESP-IDF or C6 firmware as a routine dependency refresh. Treat any transport
-change as a platform migration and repeat the idle, multi-printer, Devices,
-WebSocket, Network, OTA, reboot and power-cycle test matrix.
+Two upstream compatibility corrections are part of the reproducible build:
+the official ESP-Hosted SDIO patch for ESP-IDF 6.0.2 and four missing host-side
+RSSI RPC dispatch entries in ESP-Hosted 3.0.5. Both patches are tracked and
+validated by `tools/build_idf6_hosted3.sh`.
 
-Short HTTP operations are serialized. Wi-Fi scans and firmware downloads use
-exclusive network ownership; GitHub release browsing remains shared so it can
-drain before a firmware update begins.
+Do not refresh ESP-IDF, ESP-Hosted, ESP Wi-Fi Remote or C6 firmware
+independently. Treat a transport change as a platform migration and repeat the
+idle, multi-printer, Devices, WebSocket, Network, OTA, SD-card, reboot and
+power-cycle test matrix.
+
+Active-printer changes retire the previous WebSocket immediately while
+generation fencing rejects stale events. Firmware downloads retain exclusive
+network ownership, and release-catalog traffic cannot overlap an active OTA.
 
 # Display Limitations
 

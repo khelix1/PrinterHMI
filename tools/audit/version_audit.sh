@@ -44,7 +44,15 @@ require_text CMakeLists.txt \
 require_text CMakeLists.txt \
     "CMAKE_CONFIGURE_DEPENDS"
 require_text main/idf_component.yml \
-    'espressif/esp_hosted: "2.9.3"'
+    '  espressif/esp_hosted:'
+require_text main/idf_component.yml \
+    '    version: "3.0.5"'
+require_text main/idf_component.yml \
+    '  espressif/esp_wifi_remote:'
+require_text main/idf_component.yml \
+    '    version: "1.5.3"'
+require_text main/idf_component.yml \
+    '    version: ">=6.0,<6.1"'
 [[ ! -e cmake/PrinterHMIHostedPatch.cmake ]] || {
     echo "ERROR: obsolete ESP-Hosted 2.12.8 patch remains" >&2
     exit 1

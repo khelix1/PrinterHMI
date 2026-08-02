@@ -224,7 +224,7 @@ else
 Commit: $local_commit
 Firmware identity: $nightly_tag
 Change: $commit_subject
-ESP-IDF: $(idf.py --version)
+ESP-IDF: v6.0.2 (canonical tools/build_idf6_hosted3.sh build)
 
 This is a development prerelease. Stable release assets remain immutable."
 fi

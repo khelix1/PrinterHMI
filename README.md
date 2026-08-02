@@ -1,7 +1,7 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v6.0.0 firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v6.0.1 firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
@@ -13,9 +13,9 @@ timezone settings, runtime themes, and OTA firmware updates.
 
 ## Status
 
-- Firmware version: `6.0.0`
+- Firmware version: `6.0.1`
 - Target: `esp32p4`
-- Known-good ESP-IDF: `5.4.4`
+- Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`
 - Display: JD9165, 1024 x 600, MIPI-DSI
 - Touch: GT911 over I2C
@@ -53,7 +53,7 @@ publishing repository history.
 
 ## Interface on Hardware
 
-PrinterHMI v6.0.0 running on the JC1060P470C-I/W ESP32-P4 panel.
+PrinterHMI v6.0.1 running on the JC1060P470C-I/W ESP32-P4 panel.
 These photographs show the interface operating on the target hardware.
 
 <!-- PRINTERHMI_HARDWARE_GALLERY_V1 -->
@@ -88,6 +88,9 @@ Install ESP-IDF 6.0.2, then:
 git clone https://github.com/khelix1/PrinterHMI_v3_2.git PrinterHMI_v3_2
 cd PrinterHMI_v3_2
 ./tools/build_idf6_hosted3.sh
+
+# Or build and package both the P4 and C6 firmware stack:
+./tools/build_v6_stack.sh
 
 source "$HOME/esp/esp-idf-v6.0.2/export.sh"
 idf.py -B build-idf6-hosted3 \

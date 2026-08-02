@@ -18,17 +18,18 @@ Replace `/dev/ttyUSB0` with the detected serial port. A full USB flash writes
 the bootloader, partition table, OTA metadata and application image according
 to ESP-IDF's generated flash arguments.
 
-## Migrating from v5.1.2
+## Matching P4 and C6 firmware
 
-PrinterHMI v6.0.0 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
-ESP32-C6 co-processor. A device whose C6 still runs 2.12.8 must first receive
-the release asset
-`PrinterHMI-v6.0.0-c6-3.0.5-transition-full-flash.bin` over USB.
+PrinterHMI v6.0.1 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
+ESP32-C6 co-processor. The complete release archive contains normal P4 OTA
+and full-flash images plus the matching C6 full-flash image.
 
-Allow the transition application to finish updating and restarting the C6
-before installing the normal v6.0.0 application. Confirm the startup log
-reports host 3.0.5, co-processor 3.0.5 and RPC v2. This transition is required
-only once; subsequent v6 updates use normal OTA.
+For a normal update where the C6 already runs 3.0.5, install only the P4 OTA
+image. For initial installation or C6 recovery, flash the C6 3.0.5 full image
+directly and then flash the normal P4 image. Confirm the startup log reports
+host 3.0.5, co-processor 3.0.5 and RPC v2.
+
+Both processors are built with the exact ESP-IDF 6.0.2 tag.
 
 ## OTA update
 
@@ -101,7 +102,7 @@ For each release retain:
 - Git commit and annotated tag
 - `PrinterHMI-vX.Y.Z-ota.bin`
 - SHA-256 checksum
-- C6 transition image and checksum when the hosted-network protocol changes
+- complete P4+C6 IDF6 stack archive and checksum
 - build date and toolchain version
 - partition table
 - test record

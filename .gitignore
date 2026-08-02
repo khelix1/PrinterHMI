@@ -48,3 +48,5 @@ secrets.*
 credentials.*
 # END PRINTERHMI GENERATED IGNORES
 /build-idf6*/
+/build-v6-stack/
+/dist/

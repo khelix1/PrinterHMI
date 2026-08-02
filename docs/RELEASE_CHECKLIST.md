@@ -21,10 +21,10 @@
 
 ## Build
 
-- [ ] Canonical ESP-IDF 6.0.2/ESP-Hosted 3.0.5 build succeeds.
+- [ ] Canonical ESP-IDF 6.0.2 P4+C6 stack build succeeds.
 - [ ] `dependencies.lock`, `sdkconfig.idf6` and `partitions.csv` diffs are intentional.
 - [ ] Application and bootloader size reports are saved.
-- [ ] `build-idf6-hosted3/PrinterHMI.bin` SHA-256 is recorded.
+- [ ] P4 OTA, P4 full-flash and C6 full-flash SHA-256 values are recorded.
 
 ## Device verification
 
@@ -58,15 +58,15 @@
 
 ```bash
 git status --short
-sha256sum build-idf6-hosted3/PrinterHMI.bin
+./tools/build_v6_stack.sh
 ./tools/release_stable.sh
 ```
 
 - [ ] Annotated tag points to the tested commit.
 - [ ] `main` and the annotated release tag are pushed to `origin`.
-- [ ] OTA binary, checksum, required C6 transition asset and test record are retained.
+- [ ] OTA binary, complete P4+C6 stack archive, checksums and test record are retained.
 - [ ] Nightly tag and firmware/checksum assets are verified when used.
-- [ ] A project-root `git archive` can be extracted and built.
+- [ ] A project-root `git archive` can run `./tools/build_v6_stack.sh --bootstrap`.
 
 ## Rollback preparation
 

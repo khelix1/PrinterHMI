@@ -5,6 +5,32 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-08-02
+
+### Added
+
+- Added a reproducible full-stack builder for the ESP32-P4 application and
+  matching ESP32-C6 ESP-Hosted 3.0.5 firmware.
+- Added normal P4 and C6 full-flash images, component images, an internal
+  manifest, flashing instructions and SHA-256 verification to one release
+  archive.
+- Added optional bootstrap installation of the exact ESP-IDF 6.0.2 tag.
+
+### Changed
+
+- Made ESP-IDF 6.0.2 the only active build toolchain for the current P4+C6
+  firmware stack.
+- Replaced the stable publisher's external transition-image dependency with
+  the newly built and verified IDF6 stack archive.
+
+### Validation
+
+- Built both processors from the current repository workflow.
+- Verified every packaged file and the outer archive against SHA-256 sums.
+- Verified byte-for-byte placement of the P4 application at `0x20000` and
+  the C6 application at `0x10000` in their full-flash images.
+
+
 ## [6.0.0] - 2026-08-01
 
 ### Changed

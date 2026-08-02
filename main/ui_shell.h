@@ -25,6 +25,7 @@ void ui_shell_create_nav(void);
 void ui_shell_raise_nav(void);
 void ui_shell_set_active_nav(int idx);
 void ui_shell_update_status_icons(void);
+void ui_shell_set_wifi_signal(bool connected, int rssi);
 void ui_shell_refresh_clock(void);
 
 /* Implemented by main.c during Phase 1. */

@@ -111,7 +111,7 @@ case "$nightly_reply" in
         ;;
 esac
 
-for command in idf.py gh sha256sum; do
+for command in gh sha256sum python3; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "ERROR: required command not found: $command" >&2
         exit 1
@@ -137,9 +137,9 @@ trap restore_stable_version EXIT
 printf '%s\n' "$nightly_tag" > "$repo_dir/version.txt"
 
 echo "Building nightly firmware identity ${nightly_tag}..."
-idf.py build
+"$repo_dir/tools/build_idf6_hosted3.sh"
 
-firmware="$repo_dir/build/PrinterHMI.bin"
+firmware="$repo_dir/build-idf6-hosted3/PrinterHMI.bin"
 
 if [[ ! -s "$firmware" ]]; then
     echo "ERROR: expected firmware not found: $firmware" >&2

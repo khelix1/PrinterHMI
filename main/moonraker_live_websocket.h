@@ -28,9 +28,6 @@ void moonraker_live_websocket_tasklet(
 void moonraker_live_websocket_prepare_profile_change(
     uint32_t configuration_generation);
 
-/* True while Moonraker network workers must remain quiet for a safe rebind. */
-bool moonraker_live_websocket_rebinding(void);
-
 bool moonraker_live_websocket_connected(void);
 bool moonraker_live_websocket_subscribed(void);
 bool moonraker_live_websocket_fresh(int64_t maximum_age_us);

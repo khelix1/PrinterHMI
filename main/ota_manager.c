@@ -239,14 +239,34 @@ static void update_task(void *arg)
 
     esp_https_ota_handle_t ota_handle = NULL;
     esp_err_t result = ESP_FAIL;
+    bool network_owned = false;
 
     set_state("Preparing Network...", 5);
 
-    /* Block new shared HTTP work and wait for existing requests plus the
-     * persistent Moonraker WebSocket to drain before starting TLS.
+    /* Queue behind a catalog, thumbnail, scan, or switch instead of failing
+     * OTA from the LVGL callback when another exclusive owner is finishing.
      */
-    int elapsed_ms = 0;
-    for (; elapsed_ms < 20000; elapsed_ms += 50) {
+    for (int elapsed_ms = 0;
+         elapsed_ms < 20000 && !network_owned;
+         elapsed_ms += 50) {
+        if (s_cancel_requested) {
+            goto cancelled;
+        }
+
+        network_owned =
+            network_activity_controller_request_exclusive();
+
+        if (!network_owned) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+    }
+
+    if (!network_owned) {
+        result = ESP_ERR_TIMEOUT;
+        goto failed;
+    }
+
+    for (int elapsed_ms = 0; elapsed_ms < 20000; elapsed_ms += 50) {
         if (s_cancel_requested) {
             goto cancelled;
         }
@@ -264,7 +284,6 @@ static void update_task(void *arg)
     }
 
     /* Allow the final SDIO/TCP teardown traffic to settle before OTA. */
-    vTaskDelay(pdMS_TO_TICKS(1500));
 
     set_state("Checking Server...", 10);
 
@@ -341,7 +360,6 @@ static void update_task(void *arg)
             OPERATOR_EVENT_INFO,
             "Firmware update completed; rebooting");
 
-        vTaskDelay(pdMS_TO_TICKS(500));
         esp_restart();
     }
 
@@ -374,7 +392,9 @@ failed:
         "Firmware update failed: %s",
         esp_err_to_name(result));
 
-    network_activity_controller_release_exclusive();
+    if (network_owned) {
+        network_activity_controller_release_exclusive();
+    }
     s_task_running = false;
     vTaskDelete(NULL);
     return;
@@ -402,7 +422,9 @@ cancelled:
         OPERATOR_EVENT_WARNING,
         "Firmware update cancelled safely");
 
-    network_activity_controller_release_exclusive();
+    if (network_owned) {
+        network_activity_controller_release_exclusive();
+    }
     s_task_running = false;
     s_cancel_complete = true;
     vTaskDelete(NULL);
@@ -411,12 +433,6 @@ cancelled:
 bool ota_manager_start(const char *url)
 {
     if (!url || !url[0] || s_task_running) {
-        return false;
-    }
-
-    if (!network_activity_controller_request_exclusive()) {
-        ESP_LOGW(TAG, "another exclusive network operation is active");
-        set_state("Network is busy. Try again.", 0);
         return false;
     }
 
@@ -451,7 +467,6 @@ bool ota_manager_start(const char *url)
         NULL);
 
     if (result != pdPASS) {
-        network_activity_controller_release_exclusive();
         s_task_running = false;
         s_cancel_allowed = false;
         set_state("Unable to start OTA task.", 0);

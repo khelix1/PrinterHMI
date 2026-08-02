@@ -469,10 +469,8 @@ static void release_catalog_task(void *argument)
 {
     (void)argument;
 
-    /* OTA CATALOG SHARED; FIRMWARE DOWNLOAD EXCLUSIVE
-     * Catalog HTTPS is serialized with other short HTTP work. The actual
-     * firmware transfer remains the only OTA operation that retires the
-     * persistent WebSocket and owns the network exclusively.
+    /* Catalog HTTPS is serialized with other short HTTP work.
+     * Only the firmware transfer requires exclusive network ownership.
      */
 
     release_catalog_t *catalog =

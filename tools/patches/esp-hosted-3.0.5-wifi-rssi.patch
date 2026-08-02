@@ -1,0 +1,55 @@
+--- a/host/features/eh_host_feat_wifi/include/eh_host_feat_wifi_v2_req_ids.inc
++++ b/host/features/eh_host_feat_wifi/include/eh_host_feat_wifi_v2_req_ids.inc
+@@ -50,5 +50,6 @@
+     case RPC_ID__Req_WifiGetBandMode:
+     case RPC_ID__Req_WifiScanGetApRecord:
+     case RPC_ID__Req_WifiApGetStaAid:
++    case RPC_ID__Req_WifiStaGetRssi:
+         return rpc_ext_v2_pick_req_wifi(msg_id);
+ #endif
+--- a/host/features/eh_host_feat_wifi/src/eh_host_feat_wifi_v2_req.c
++++ b/host/features/eh_host_feat_wifi/src/eh_host_feat_wifi_v2_req.c
+@@ -113,6 +113,9 @@
+ COMPOSE_REQ_EMPTY(compose_req_wifi_get_max_tx_power, RpcReqWifiGetMaxTxPower,
+                   req_get_wifi_max_tx_power,
+                   rpc__req__wifi_get_max_tx_power__init)
++COMPOSE_REQ_EMPTY(compose_req_wifi_sta_get_rssi, RpcReqWifiStaGetRssi,
++                  req_wifi_sta_get_rssi,
++                  rpc__req__wifi_sta_get_rssi__init)
+ 
+ static int compose_req_wifi_get_config(Rpc *rpc, const eh_rpc_ctrl_cmd_t *c,
+                                        alloc_track_t *trk)
+@@ -567,6 +570,7 @@
+     case RPC_ID__Req_WifiClearApList:  return compose_req_wifi_clear_ap_list;
+     case RPC_ID__Req_WifiRestore:      return compose_req_wifi_restore;
+     case RPC_ID__Req_WifiStaGetApInfo: return compose_req_sta_get_ap_info;
++    case RPC_ID__Req_WifiStaGetRssi:   return compose_req_wifi_sta_get_rssi;
+ 
+     case RPC_ID__Req_WifiSetCountryCode:return compose_req_set_country_code;
+     case RPC_ID__Req_WifiGetCountryCode:return compose_req_get_country_code;
+--- a/host/features/eh_host_feat_wifi/include/eh_host_feat_wifi_v2_resp_ids.inc
++++ b/host/features/eh_host_feat_wifi/include/eh_host_feat_wifi_v2_resp_ids.inc
+@@ -47,5 +47,6 @@
+ case RPC_ID__Resp_WifiGetBandMode:
+ case RPC_ID__Resp_WifiScanGetApRecord:
+ case RPC_ID__Resp_WifiApGetStaAid:
++case RPC_ID__Resp_WifiStaGetRssi:
+     return rpc_ext_v2_parse_resp_wifi(rpc, c);
+ #endif
+--- a/host/features/eh_host_feat_wifi/src/eh_host_feat_wifi_v2_resp_evt.c
++++ b/host/features/eh_host_feat_wifi/src/eh_host_feat_wifi_v2_resp_evt.c
+@@ -254,6 +254,14 @@
+         return 0;
+     }
+ 
++    case RPC_ID__Resp_WifiStaGetRssi:
++        if (!rpc->resp_wifi_sta_get_rssi) return -1;
++        c->resp_event_status =
++            rpc->resp_wifi_sta_get_rssi->resp;
++        c->u.wifi_mode.mode =
++            rpc->resp_wifi_sta_get_rssi->rssi;
++        return 0;
++
+     case RPC_ID__Resp_WifiSetCountryCode:
+         if (!rpc->resp_wifi_set_country_code) return -1;
+         c->resp_event_status = rpc->resp_wifi_set_country_code->resp;

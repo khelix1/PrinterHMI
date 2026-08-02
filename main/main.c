@@ -31,6 +31,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
@@ -403,6 +404,7 @@ static volatile bool dash_thumb_render_failed = false;
 static lv_timer_t *dash_thumb_render_timer = NULL;
 static int dash_thumb_render_profile_index = -1;
 static uint32_t dash_thumb_render_generation = 0;
+
 #define DASH_THUMB_CANVAS_W 286
 #define DASH_THUMB_CANVAS_H 215
 
@@ -444,6 +446,13 @@ static esp_ip4_addr_t s_ip = {0};
 static bool s_got_ip = false;
 static bool s_wifi_credentials_configured = false;
 static bool s_wifi_transport_ready = false;
+
+#define WIFI_RSSI_SAMPLE_INTERVAL_US 5000000LL
+
+static int64_t s_wifi_rssi_next_sample_us = 0;
+static int s_wifi_rssi_filtered = -127;
+static bool s_wifi_rssi_valid = false;
+static bool s_wifi_signal_dirty = true;
 
 
 static void ota_confirm_running_app_valid(void)
@@ -599,10 +608,10 @@ static const char *wifi_reason_name(uint8_t reason)
     switch (reason) {
         case WIFI_REASON_AUTH_EXPIRE: return "AUTH_EXPIRE";
         case WIFI_REASON_AUTH_LEAVE: return "AUTH_LEAVE";
-        case WIFI_REASON_ASSOC_EXPIRE: return "ASSOC_EXPIRE";
+        case WIFI_REASON_DISASSOC_DUE_TO_INACTIVITY: return "ASSOC_EXPIRE";
         case WIFI_REASON_ASSOC_TOOMANY: return "ASSOC_TOOMANY";
-        case WIFI_REASON_NOT_AUTHED: return "NOT_AUTHED";
-        case WIFI_REASON_NOT_ASSOCED: return "NOT_ASSOCED";
+        case WIFI_REASON_CLASS2_FRAME_FROM_NONAUTH_STA: return "NOT_AUTHED";
+        case WIFI_REASON_CLASS3_FRAME_FROM_NONASSOC_STA: return "NOT_ASSOCED";
         case WIFI_REASON_ASSOC_LEAVE: return "ASSOC_LEAVE";
         case WIFI_REASON_ASSOC_NOT_AUTHED: return "ASSOC_NOT_AUTHED";
         case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT: return "4WAY_HANDSHAKE_TIMEOUT";
@@ -1308,7 +1317,7 @@ static void moonraker_live_poll_tasklet(void)
     }
 
     if (websocket_was_authoritative) {
-        ESP_LOGW(TAG, "LIVE_TRANSPORT HTTP fallback");
+        ESP_LOGI(TAG, "LIVE_TRANSPORT HTTP bootstrap");
     }
     websocket_was_authoritative = false;
 
@@ -2426,7 +2435,6 @@ static void ui_network_tools_wifi_scan_now(void)
         return;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(750));
 
     wifi_scan_config_t scan_config = {0};
 
@@ -3562,12 +3570,12 @@ static void build_drybox_dashboard(void)
 #define JC1060_SD_D2  GPIO_NUM_41
 #define JC1060_SD_D3  GPIO_NUM_42
 
-static esp_err_t sdmmc_host_init_dummy(void)
-{
-    return ESP_OK;
-}
-
-static esp_err_t sdmmc_host_deinit_dummy(void)
+/*
+ * ESP-Hosted creates the shared SDMMC controller for slot 1.
+ * The removable card adds slot 0 without recreating that controller.
+ * IDF6's default per-slot deinit callback remains intact.
+ */
+static esp_err_t sdmmc_host_init_existing_controller(void)
 {
     return ESP_OK;
 }
@@ -3586,11 +3594,30 @@ static void init_sd_card_storage(void)
     sdmmc_card_t *card = NULL;
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     host.slot = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+    host.init = sdmmc_host_init_existing_controller;
 
-    /* ESP-Hosted already initializes the SDMMC peripheral. */
-    host.init = sdmmc_host_init_dummy;
-    host.deinit = sdmmc_host_deinit_dummy;
+    sd_pwr_ctrl_ldo_config_t ldo_config = {
+        .ldo_chan_id = 4,
+    };
+    sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
+
+    esp_err_t ret =
+        sd_pwr_ctrl_new_on_chip_ldo(
+            &ldo_config,
+            &pwr_ctrl_handle);
+
+    if (ret != ESP_OK) {
+        snprintf(sd_status,
+                 sizeof(sd_status),
+                 "SD: power failed %s",
+                 esp_err_to_name(ret));
+        ESP_LOGW(TAG, "%s", sd_status);
+        return;
+    }
+
+    host.pwr_ctrl_handle = pwr_ctrl_handle;
+    ESP_LOGI(TAG, "SD LDO channel 4 enabled");
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     slot_config.clk = JC1060_SD_CLK;
@@ -3605,7 +3632,12 @@ static void init_sd_card_storage(void)
     ESP_LOGI(TAG, "SD mount start /sdcard GPIO clk=%d cmd=%d d0=%d",
              JC1060_SD_CLK, JC1060_SD_CMD, JC1060_SD_D0);
 
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    ret = esp_vfs_fat_sdmmc_mount(
+        "/sdcard",
+        &host,
+        &slot_config,
+        &mount_config,
+        &card);
 
     if (ret != ESP_OK) {
         snprintf(sd_status, sizeof(sd_status), "SD: mount failed %s", esp_err_to_name(ret));
@@ -3648,6 +3680,67 @@ static void init_sd_card_storage(void)
 }
 
 
+
+static void wifi_signal_sample_tasklet(bool allow_remote_query)
+{
+    /*
+     * A valid IP is required before the top bar reports usable Wi-Fi.
+     * Clearing this state does not require an ESP-Hosted RPC transaction.
+     */
+    if (!s_got_ip) {
+        if (s_wifi_rssi_valid) {
+            s_wifi_rssi_valid = false;
+            s_wifi_rssi_filtered = -127;
+            s_wifi_signal_dirty = true;
+        }
+
+        s_wifi_rssi_next_sample_us = 0;
+        return;
+    }
+
+    /*
+     * OTA owns the transport exclusively. Preserve the last good reading
+     * instead of generating an unnecessary Wi-Fi RPC during the transfer.
+     */
+    if (!allow_remote_query) return;
+
+    int64_t now = esp_timer_get_time();
+    if (now < s_wifi_rssi_next_sample_us) return;
+
+    s_wifi_rssi_next_sample_us =
+        now + WIFI_RSSI_SAMPLE_INTERVAL_US;
+
+    int rssi = -127;
+    esp_err_t err = esp_wifi_sta_get_rssi(&rssi);
+
+    /*
+     * Zero is the Wi-Fi Remote unavailable/default value, not a legitimate
+     * RSSI measurement. A transient RPC failure preserves the previous
+     * reading; loss of IP clears it separately.
+     */
+    if (err != ESP_OK || rssi >= 0 || rssi < -127) {
+        return;
+    }
+
+    if (!s_wifi_rssi_valid) {
+        s_wifi_rssi_filtered = rssi;
+    } else {
+        /* Low-cost exponential smoothing: 2/3 previous, 1/3 new. */
+        s_wifi_rssi_filtered =
+            ((2 * s_wifi_rssi_filtered) + rssi) / 3;
+    }
+
+    s_wifi_rssi_valid = true;
+    s_wifi_signal_dirty = true;
+
+    ESP_LOGD(
+        TAG,
+        "WiFi RSSI raw=%d filtered=%d",
+        rssi,
+        s_wifi_rssi_filtered);
+}
+
+
 static void hmi_runtime_task(void *arg)
 {
     (void)arg;
@@ -3672,16 +3765,18 @@ static void hmi_runtime_task(void *arg)
         bool exclusive_network =
             network_activity_controller_exclusive_requested();
 
+        wifi_signal_sample_tasklet(!exclusive_network);
+
         if (exclusive_network) {
             if (!ota_network_quiet) {
-                ESP_LOGI(TAG, "OTA_NETWORK_QUIESCE begin");
+                ESP_LOGI(TAG, "NETWORK_EXCLUSIVE_QUIESCE begin");
                 moonraker_live_websocket_stop();
                 network_activity_controller_set_persistent_quiet(true);
                 ota_network_quiet = true;
             }
         } else {
             if (ota_network_quiet) {
-                ESP_LOGI(TAG, "OTA_NETWORK_QUIESCE end");
+                ESP_LOGI(TAG, "NETWORK_EXCLUSIVE_QUIESCE end");
                 network_activity_controller_set_persistent_quiet(false);
                 ota_network_quiet = false;
             }
@@ -3697,11 +3792,9 @@ static void hmi_runtime_task(void *arg)
                 MOONRAKER_API_KEY,
                 moonraker_config_generation());
 
-            if (!moonraker_live_websocket_rebinding()) {
-                moonraker_live_poll_tasklet();
-                printer_profile_preview_worker_v32_poll_one(
-                    MOONRAKER_API_KEY);
-            }
+            moonraker_live_poll_tasklet();
+            printer_profile_preview_worker_v32_poll_one(
+                MOONRAKER_API_KEY);
         }
         /* BOOT_PREVIEW_PROFILE_STORE_ONLY
          * Reboot restoration is profile-indexed and endpoint-validated.
@@ -3714,7 +3807,12 @@ static void hmi_runtime_task(void *arg)
                 lv_label_set_text(wifi_label, wifi_status);
             }
 
-            ui_shell_update_status_icons();
+            if (s_wifi_signal_dirty) {
+                ui_shell_set_wifi_signal(
+                    s_wifi_rssi_valid && s_got_ip,
+                    s_wifi_rssi_filtered);
+                s_wifi_signal_dirty = false;
+            }
 
             dashboard_runtime_controller_tick(
         &(dashboard_runtime_context_t) {
@@ -3738,6 +3836,9 @@ static void hmi_runtime_task(void *arg)
             .last_print_state_size =
                 sizeof(last_dashboard_print_state),
 
+            .preview_network_ready =
+                s_got_ip && !exclusive_network,
+
             .set_live_target =
                 thumbnail_preview_coordinator_v32_set_live_target,
             .free_thumbnail =
@@ -3751,7 +3852,7 @@ static void hmi_runtime_task(void *arg)
             bsp_display_unlock();
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1500));
+        vTaskDelay(pdMS_TO_TICKS(250));
     }
 }
 
@@ -3919,6 +4020,12 @@ void app_main(void)
     app_splash_locked(ui_splash_v32_wifi_starting);
 
     /* Start WiFi after dashboard is visible. Touch scaling fix remains in BSP. */
+    if (!sd_mount_attempted) {
+        sd_mount_attempted = true;
+        ESP_LOGI(TAG, "SD mount before WiFi traffic");
+        init_sd_card_storage();
+    }
+
     ESP_LOGI(TAG, "Starting WiFi after display/touch/dashboard");
     wifi_init_sta();
 

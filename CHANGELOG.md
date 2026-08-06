@@ -5,6 +5,27 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [6.0.3] - 2026-08-05
+
+### Added
+
+- Added a professional Settings > About PrinterHMI popup with live image
+  identity, software acknowledgements and creator credit for khelix.
+- Added precise shared Manual Probe controls for Probe/Z and Axis Twist:
+  symmetric TESTZ steps from 1.00 mm down to 0.005 mm.
+
+### Fixed
+
+- Stable and Nightly release selections now use their GitHub asset only for
+  that installation. They no longer replace the saved Custom OTA URL.
+
+### Validation
+
+- Built the ESP32-P4 firmware through `tools/build_idf6_hosted3.sh`.
+- Verified the About popup, Custom OTA URL persistence and fine TESTZ
+  controls on the target panel.
+
+
 ## [6.0.2] - 2026-08-05
 
 ### Added

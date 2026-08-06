@@ -4,7 +4,7 @@
 
 | Item | Version or setting |
 | --- | --- |
-| ESP-IDF | 6.0.2 |
+| ESP-IDF | 6.0.3 |
 | Target | `esp32p4` |
 | Compiler architecture | RISC-V |
 | Flash size | 16 MiB |
@@ -21,7 +21,7 @@ set. `main/idf_component.yml` declares direct component constraints.
 ## Prerequisites
 
 - Linux development host
-- ESP-IDF 6.0.2 installed through the supported Espressif installer
+- ESP-IDF 6.0.3 installed through the supported Espressif installer
 - USB access to the target's serial/download port
 - Git
 - Python environment supplied by ESP-IDF
@@ -55,7 +55,7 @@ cd PrinterHMI_v3_2
 Use ESP-IDF's supported clean action:
 
 ```bash
-source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+source "$HOME/esp/esp-idf-v6.0.3/export.sh"
 idf.py -B build-idf6-hosted3 fullclean
 ./tools/build_idf6_hosted3.sh
 ```
@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v6.0.2.
+- `partitions.csv` is the only supported partition layout for v6.0.3.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy

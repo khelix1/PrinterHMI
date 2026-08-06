@@ -23,6 +23,7 @@ idf_component_register(
         "ui_toast_v32.c"
         "operator_event_log.c"
         "ui_event_history_popup.c"
+        "ui_about_popup.c"
         "console_controller.c"
         "macro_controller.c"
         "printer_action_resolver.c"

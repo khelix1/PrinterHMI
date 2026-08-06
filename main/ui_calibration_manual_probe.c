@@ -66,14 +66,20 @@ bool ui_calibration_manual_probe_show(
             68,
             644);
 
+    /* Shared by Probe/Z and Axis Twist: coarse travel first, then
+     * 0.01 mm or 0.005 mm TESTZ steps for the final paper-contact pass. */
     static const char *labels[] = {
-        "-1.0", "-0.1", "-0.05",
-        "+0.05", "+0.1", "+1.0",
+        "-1.00", "-0.10", "-0.05", "-0.01", "-0.005",
+        "+0.005", "+0.01", "+0.05", "+0.10", "+1.00",
     };
     static const char *commands[] = {
         "TESTZ Z=-1.0",
         "TESTZ Z=-0.1",
         "TESTZ Z=-0.05",
+        "TESTZ Z=-0.01",
+        "TESTZ Z=-0.005",
+        "TESTZ Z=0.005",
+        "TESTZ Z=0.01",
         "TESTZ Z=0.05",
         "TESTZ Z=0.1",
         "TESTZ Z=1.0",
@@ -82,15 +88,15 @@ bool ui_calibration_manual_probe_show(
     for (size_t index = 0;
          index < sizeof(labels) / sizeof(labels[0]);
          ++index) {
-        int row = (int)(index / 3);
-        int column = (int)(index % 3);
+        int row = (int)(index / 5);
+        int column = (int)(index % 5);
         ui_popup_add_action_at(
             s_probe.popup,
             UI_POPUP_ACTION_CHOICE,
             labels[index],
-            54 + column * 205,
-            190 + row * 62,
-            180,
+            30 + column * 128,
+            188 + row * 56,
+            120,
             48,
             step_cb,
             (void *)commands[index],

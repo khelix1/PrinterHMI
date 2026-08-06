@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v6.0.2 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v6.0.3 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -57,7 +57,7 @@ when ownership or build membership changes.
 | `ui_calibration_v32` | Calibration page composition and workflow routing |
 | `ui_calibration_motion` | Input Shaper, Axis Twist and Z Tilt workflows |
 | `ui_calibration_pressure_advance` | Pressure Advance workflow |
-| `ui_calibration_manual_probe` | Shared guided manual-probe controls |
+| `ui_calibration_manual_probe` | Shared guided Probe/Z and Axis Twist TESTZ controls, including 0.005 mm fine steps |
 | `calibration_capability_controller`, `calibration_session_controller` | Calibration availability, progress and command policy |
 | `ui_bed_mesh_v32` | Bed Mesh page composition and calibration entry |
 | `ui_bed_mesh_gestures`, `ui_bed_mesh_view` | Orbit, pan, pinch and shared view transform |
@@ -116,7 +116,7 @@ when ownership or build membership changes.
 | `ui_settings`, `ui_settings_components` | Settings page and reusable settings rows |
 | `settings_system_info` | Runtime firmware, memory, network and storage information |
 | `timezone_config` | Persistent timezone presets and POSIX rule application |
-| `ui_settings_popups`, `ui_ota_popup` | Settings confirmations and cancellable OTA UI |
+| `ui_settings_popups`, `ui_about_popup`, `ui_ota_popup` | Settings confirmations, product/about information and cancellable OTA UI |
 | `ota_manager` | Persistent OTA URL, cancellable download task and reboot |
 
 ## Build and platform files

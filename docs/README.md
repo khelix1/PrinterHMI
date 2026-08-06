@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v6.0.2 behavior unless they are
+Documents in this directory describe current v6.0.3 behavior unless they are
 under `history/`.
 
 | Document | Purpose |
@@ -30,4 +30,4 @@ When implementation and documentation disagree, treat the implementation as
 evidence of a defect in one or the other. Resolve the mismatch in the same
 reviewed change rather than silently accepting drift.
 
-- [`FULL_STACK_BUILD.md`](FULL_STACK_BUILD.md) — reproducible ESP-IDF 6.0.2 P4 and C6 firmware build
+- [`FULL_STACK_BUILD.md`](FULL_STACK_BUILD.md) — reproducible ESP-IDF 6.0.3 P4 and C6 firmware build

@@ -39,7 +39,12 @@
       `main_task: Calling app_main()`.
 - [ ] All ten sidebar destinations fit, highlight and open.
 - [ ] Navigation, themes and modal popups pass.
+- [ ] Settings > About PrinterHMI shows the running image identity, credits
+      and a working Close action without clipping or overlap.
 - [ ] Calibration workflows, guided probing and SAVE_CONFIG confirmations pass.
+- [ ] Probe/Z and Axis Twist manual-probe controls provide symmetric 0.01 mm
+      and 0.005 mm TESTZ steps without overlapping the popup footer.
+- [ ] Stable and Nightly catalog installs preserve the saved Custom OTA URL.
 - [ ] Bed Mesh rotation, pinch, two-finger pan, grid, origins, calibration and
       profile management pass.
 - [ ] Devices filters, pagination, live values and Telemetry navigation pass.

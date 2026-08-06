@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v6.0.2 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v6.0.3 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -57,7 +57,8 @@ status banners, cards, previews, charts, action panels and popup controllers.
 - Existing screens are rebuilt after appearance changes so existing LVGL
   objects receive the newly selected theme.
 - `ui_popup` owns modal behavior; an open popup blocks interaction with the
-  interface beneath it.
+  interface beneath it. `ui_about_popup` is a focused Settings-owned
+  consumer of those shared popup primitives.
 
 ### Moonraker integration
 
@@ -94,8 +95,10 @@ status banners, cards, previews, charts, action panels and popup controllers.
 
 - `ui_calibration_v32` composes the calibration page.
   `ui_calibration_motion`, `ui_calibration_pressure_advance` and
-  `ui_calibration_manual_probe` own their focused workflows, while
-  `calibration_capability_controller` and `calibration_session_controller`
+  `ui_calibration_manual_probe` own their focused workflows. The shared
+  manual-probe surface provides coarse and 0.005 mm fine TESTZ steps for
+  both Probe/Z and Axis Twist, while `calibration_capability_controller`
+  and `calibration_session_controller`
   retain capability and session policy.
 - `ui_bed_mesh_v32` composes the 3D mesh page. Gesture recognition, rendering
   and profile dialogs belong to `ui_bed_mesh_gestures`,

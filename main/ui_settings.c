@@ -4,6 +4,7 @@
 #include "ui_settings_components.h"
 #include "ui_settings_backup_popup.h"
 #include "ui_event_history_popup.h"
+#include "ui_about_popup.h"
 #include "settings_system_info.h"
 #include "timezone_config.h"
 #include "theme_manager.h"
@@ -114,6 +115,13 @@ static void settings_event_history_cb(lv_event_t *event)
 {
     (void)event;
     ui_event_history_popup_show();
+}
+
+
+static void settings_about_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_about_popup_show();
 }
 
 
@@ -1035,6 +1043,29 @@ void ui_settings_show_page(
         "OPEN LAB",
         display_row_6,
         settings_theme_lab_cb,
+        false);
+
+    section_y += display_height + section_gap;
+
+    /*
+     * About
+     */
+    const int about_height =
+        first_row_y + action_height + 6;
+
+    lv_obj_t *about = ui_settings_section_create(
+        content,
+        "ABOUT",
+        section_y,
+        about_height);
+
+    ui_settings_section_add_action_row(
+        about,
+        "About PrinterHMI",
+        "Product information, software credits and acknowledgements",
+        "VIEW ABOUT",
+        first_row_y,
+        settings_about_cb,
         false);
 
     ui_settings_refresh();

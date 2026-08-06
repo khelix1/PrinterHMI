@@ -8,7 +8,7 @@ Build and flash through ESP-IDF:
 cd PrinterHMI_v3_2
 ./tools/build_idf6_hosted3.sh
 
-source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+source "$HOME/esp/esp-idf-v6.0.3/export.sh"
 idf.py -B build-idf6-hosted3 \
     -D SDKCONFIG="$PWD/sdkconfig.idf6" \
     -p /dev/ttyUSB0 flash monitor
@@ -20,7 +20,7 @@ to ESP-IDF's generated flash arguments.
 
 ## Matching P4 and C6 firmware
 
-PrinterHMI v6.0.2 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
+PrinterHMI v6.0.3 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
 ESP32-C6 co-processor. The complete release archive contains normal P4 OTA
 and full-flash images plus the matching C6 full-flash image.
 
@@ -29,7 +29,7 @@ image. For initial installation or C6 recovery, flash the C6 3.0.5 full image
 directly and then flash the normal P4 image. Confirm the startup log reports
 host 3.0.5, co-processor 3.0.5 and RPC v2.
 
-Both processors are built with the exact ESP-IDF 6.0.2 tag.
+Both processors are built with the exact ESP-IDF 6.0.3 tag.
 
 ## OTA update
 
@@ -43,9 +43,11 @@ Both processors are built with the exact ESP-IDF 6.0.2 tag.
 7. Otherwise, wait for completion and reboot.
 8. Confirm the firmware version, active OTA slot and core features.
 
-The OTA URL is persisted in NVS. The current manager accepts HTTP or HTTPS
-URLs, but server-certificate policy and image signing are not yet a complete
-production trust chain. Use a controlled network and server.
+The Custom OTA URL is persisted in NVS. Stable and Nightly catalog installs
+use their selected GitHub asset only for that one update and never replace the
+saved Custom OTA URL. The current manager accepts HTTP or HTTPS URLs, but
+server-certificate policy and image signing are not yet a complete production
+trust chain. Use a controlled network and server.
 
 ## Rollback behavior
 
@@ -73,7 +75,7 @@ Recovery procedure:
 cd PrinterHMI_v3_2
 ./tools/build_idf6_hosted3.sh
 
-source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+source "$HOME/esp/esp-idf-v6.0.3/export.sh"
 idf.py -B build-idf6-hosted3 \
     -D SDKCONFIG="$PWD/sdkconfig.idf6" \
     -p /dev/ttyUSB0 erase-flash

@@ -1653,32 +1653,48 @@ static void ui_network_v32_refresh_bridge(void)
         ui_network_tools_network_scan_status);
 }
 
-static void ota_popup_start_bridge(const char *url)
+static bool ota_start_url(const char *url, bool save_custom_url)
 {
     if (!url || !url[0]) {
-        return;
+        return false;
     }
 
     if (ota_manager_is_running()) {
         ESP_LOGW(TAG, "OTA: update already running");
-        return;
+        return false;
     }
 
-    /*
-     * ota_manager_start() copies the URL, creates the progress popup and
-     * flushes it before returning. Persist the URL afterward so an NVS write
-     * cannot leave the keyboard visible during the transition.
-     */
     if (!ota_manager_start(url)) {
         ESP_LOGE(TAG, "OTA: unable to start update");
         ui_toast_v32_show(
             UI_STATUS_DANGER,
             "OTA NOT STARTED",
             "Another network operation is active. Try again.");
-        return;
+        return false;
     }
 
-    ota_manager_set_url(url);
+    /*
+     * Only a URL explicitly entered in the Custom OTA editor becomes
+     * persistent operator configuration. Catalog assets are one-shot
+     * release URLs and must never replace that setting.
+     */
+    if (save_custom_url) {
+        ota_manager_set_url(url);
+    }
+
+    return true;
+}
+
+
+static void ota_popup_start_bridge(const char *url)
+{
+    (void)ota_start_url(url, true);
+}
+
+
+static void ota_catalog_start_bridge(const char *url)
+{
+    (void)ota_start_url(url, false);
 }
 
 static void ota_popup_remote_bridge(void);
@@ -1713,7 +1729,7 @@ static void ota_popup_remote_bridge(void)
      */
     ui_ota_popup_close();
     ui_ota_release_browser_show(
-        ota_popup_start_bridge,
+        ota_catalog_start_bridge,
         ota_open_custom_url_bridge);
 }
 
@@ -1723,7 +1739,7 @@ static void ota_open_popup_cb(lv_event_t *e)
     (void)e;
 
     ui_ota_release_browser_show(
-        ota_popup_start_bridge,
+        ota_catalog_start_bridge,
         ota_open_custom_url_bridge);
 }
 

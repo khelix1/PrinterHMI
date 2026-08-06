@@ -61,6 +61,16 @@ display startup or another path is disturbing the display/backlight.
 - Confirm Moonraker is listening on the expected interface and port.
 - Check local firewall and network isolation.
 - Switch away and back to the profile to force endpoint rebinding.
+- The interface should remain responsive while an endpoint is unavailable;
+  waiting for an unreachable endpoint is not expected to freeze touch input
+  or navigation.
+
+## A new print shows old progress or layer values
+
+A new job should begin at 0% and show unknown layer values until fresh
+Moonraker status arrives. If it instead inherits a prior job's percentage or
+layer number, capture the serial log and Moonraker `virtual_sdcard`,
+`print_stats` and `gcode_move` status for diagnosis.
 
 ## Clock is wrong
 

@@ -29,6 +29,9 @@ void moonraker_live_websocket_prepare_profile_change(
     uint32_t configuration_generation);
 
 bool moonraker_live_websocket_connected(void);
+
+/* A client exists and owns automatic reconnect attempts. */
+bool moonraker_live_websocket_running(void);
 bool moonraker_live_websocket_subscribed(void);
 bool moonraker_live_websocket_fresh(int64_t maximum_age_us);
 

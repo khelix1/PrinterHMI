@@ -5,14 +5,36 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
-### Changed
+## [6.0.2] - 2026-08-05
+
+### Added
 
 - Modernized Moonraker discovery with the shared modal popup, themed status,
-  scrollable list, selectable-row and semantic footer-action components.
-- Moved candidate geometry and endpoint-data lifetime fully into the discovery
-  view so the scan task remains independent of popup layout.
-- Discover Moonraker endpoints on ports 7125 through 7128 and guarantee that
-  every counted endpoint is published to the result list.
+  scrollable list, selectable rows and semantic footer actions.
+- Added discovery of Moonraker endpoints on ports 7125 through 7128 and
+  guaranteed every counted endpoint is published to the result list.
+- Added a confirmed `REMOVE SELECTED` action to Manage Printers. It removes
+  only the HMI's local profile, health state and cached preview; it never
+  changes Klipper, Moonraker or the physical printer.
+
+### Fixed
+
+- Kept the operator UI responsive while an active Moonraker WebSocket is
+  reconnecting by suppressing the synchronous HTTP fallback on the shell
+  runtime task and making reconnect/discovery sends non-blocking.
+- Moved inactive-printer preview and health HTTP work to its own
+  low-priority worker so an unreachable saved profile cannot stall touch or
+  page navigation.
+- Made `virtual_sdcard.progress` authoritative on the WebSocket path and
+  reset job-scoped progress, duration and layer state at each new print.
+  A newly started job can no longer inherit the previous job's percentage
+  or layer number while Moonraker status refreshes.
+
+### Validation
+
+- Built the ESP32-P4 firmware through `tools/build_idf6_hosted3.sh`.
+- Verified disconnected Moonraker handling, printer-profile removal and
+  fresh new-print progress/layer presentation on the target panel.
 
 ## [6.0.1] - 2026-08-02
 

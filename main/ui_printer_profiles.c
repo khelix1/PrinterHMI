@@ -6,9 +6,14 @@
 #include <string.h>
 
 #include "moonraker_config_controller.h"
+#include "printer_preview_cache_v32.h"
+#include "printer_preview_store_v32.h"
+#include "printer_profile_health.h"
 #include "ui_popup.h"
+#include "ui_printer_chooser_v32.h"
 
 static lv_obj_t *s_manager_popup = NULL;
+static lv_obj_t *s_delete_popup = NULL;
 static lv_obj_t *s_manager_list = NULL;
 static lv_obj_t *s_manager_status = NULL;
 static lv_obj_t *s_profile_rows[
@@ -50,6 +55,11 @@ static void editor_close(void)
 void ui_printer_profiles_close_all(void)
 {
     editor_close();
+
+    if (s_delete_popup) {
+        lv_obj_delete(s_delete_popup);
+    }
+    s_delete_popup = NULL;
 
     if (s_manager_popup) {
         lv_obj_delete(s_manager_popup);
@@ -229,6 +239,155 @@ static void manager_rebuild_rows(void)
     }
 
     manager_refresh_selection();
+}
+
+
+static void delete_close(void)
+{
+    if (s_delete_popup) {
+        lv_obj_delete(s_delete_popup);
+    }
+    s_delete_popup = NULL;
+}
+
+
+static void delete_cancel_cb(lv_event_t *event)
+{
+    (void)event;
+    delete_close();
+}
+
+
+static void delete_confirm_cb(lv_event_t *event)
+{
+    (void)event;
+
+    const moonraker_profile_t *profile =
+        moonraker_config_profile(s_selected_profile);
+
+    if (!profile || !profile->configured) {
+        delete_close();
+        manager_set_status("The selected printer is already empty.");
+        return;
+    }
+
+    bool active_removed =
+        s_selected_profile ==
+            moonraker_config_active_profile_index();
+
+    char removed_name[MOONRAKER_CONFIG_NAME_LENGTH];
+    strlcpy(removed_name, profile->name, sizeof(removed_name));
+
+    if (!moonraker_config_delete_profile(s_selected_profile)) {
+        delete_close();
+        manager_set_status("Unable to remove the selected printer.");
+        return;
+    }
+
+    printer_profile_health_set(s_selected_profile, true, false);
+    printer_preview_cache_v32_invalidate(s_selected_profile);
+    printer_preview_store_v32_invalidate(s_selected_profile);
+
+    s_selected_profile =
+        moonraker_config_active_profile_index();
+
+    delete_close();
+    manager_rebuild_rows();
+
+    if (active_removed && s_active_changed_cb) {
+        s_active_changed_cb();
+    } else {
+        ui_printer_chooser_v32_refresh();
+    }
+
+    char status[160];
+    snprintf(
+        status,
+        sizeof(status),
+        active_removed
+            ? "Removed %s. Active printer changed to %s."
+            : "Removed printer profile: %s.",
+        removed_name,
+        active_removed
+            ? moonraker_config_active_profile_name()
+            : "");
+    manager_set_status(status);
+}
+
+
+static void manager_delete_cb(lv_event_t *event)
+{
+    (void)event;
+
+    const moonraker_profile_t *profile =
+        moonraker_config_profile(s_selected_profile);
+
+    if (!profile || !profile->configured) {
+        manager_set_status("Select a configured printer to remove.");
+        return;
+    }
+
+    if (moonraker_config_profile_count() <= 1) {
+        manager_set_status(
+            "At least one profile is required. Edit this profile instead.");
+        return;
+    }
+
+    if (s_delete_popup) {
+        lv_obj_move_foreground(s_delete_popup);
+        return;
+    }
+
+    s_delete_popup = ui_popup_create(
+        lv_screen_active(),
+        640,
+        300,
+        UI_POPUP_DANGER);
+
+    if (!s_delete_popup) {
+        return;
+    }
+
+    ui_popup_add_title(
+        s_delete_popup,
+        "REMOVE PRINTER?",
+        true,
+        0);
+    ui_popup_add_header_divider(s_delete_popup, 44);
+
+    char message[256];
+    snprintf(
+        message,
+        sizeof(message),
+        "Remove %s from this panel?\n\nIts saved endpoint, health state and cached preview will be deleted.",
+        profile->name);
+
+    ui_popup_add_body(
+        s_delete_popup,
+        message,
+        28,
+        70,
+        584);
+
+    ui_popup_add_standard_footer_divider(s_delete_popup);
+    ui_popup_add_footer_action(
+        s_delete_popup,
+        UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_CLOSE " CANCEL",
+        260,
+        UI_POPUP_FOOTER_LEFT,
+        delete_cancel_cb,
+        NULL,
+        NULL);
+    ui_popup_add_footer_action(
+        s_delete_popup,
+        UI_POPUP_ACTION_DANGER,
+        LV_SYMBOL_TRASH " REMOVE",
+        260,
+        UI_POPUP_FOOTER_RIGHT,
+        delete_confirm_cb,
+        NULL,
+        NULL);
 }
 
 
@@ -665,7 +824,7 @@ void ui_printer_profiles_show(
         ui_popup_create(
             lv_screen_active(),
             760,
-            460,
+            520,
             UI_POPUP_STANDARD);
 
     if (!s_manager_popup) {
@@ -696,7 +855,19 @@ void ui_printer_profiles_show(
             "Select a printer profile.",
             24,
             316,
-            712);
+            440);
+
+    ui_popup_add_action_at(
+        s_manager_popup,
+        UI_POPUP_ACTION_DANGER,
+        LV_SYMBOL_TRASH " REMOVE SELECTED",
+        492,
+        328,
+        220,
+        48,
+        manager_delete_cb,
+        NULL,
+        NULL);
 
     ui_popup_add_standard_footer_divider(s_manager_popup);
 

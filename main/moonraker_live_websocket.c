@@ -314,6 +314,7 @@ static bool build_subscription(
             "\"print_stats\":null,"
             "\"motion_report\":null,"
             "\"display_status\":null,"
+            "\"virtual_sdcard\":null,"
             "\"gcode_move\":null,")) {
         return false;
     }
@@ -1157,7 +1158,7 @@ static bool send_identify(void)
         s_client,
         request,
         length,
-        pdMS_TO_TICKS(1000));
+        0);
 
     return sent == length;
 }
@@ -1177,7 +1178,7 @@ static bool send_object_list(void)
         s_client,
         request,
         length,
-        pdMS_TO_TICKS(1000));
+        0);
 
     if (sent != length) {
         ESP_LOGW(TAG, "WS object-list send failed: %d/%d", sent, length);
@@ -1199,7 +1200,7 @@ static bool send_subscription(void)
         s_client,
         s_subscription,
         length,
-        pdMS_TO_TICKS(1000));
+        0);
 
     if (sent != length) {
         ESP_LOGW(TAG, "WS subscription send failed: %d/%d", sent, length);
@@ -1369,6 +1370,12 @@ void moonraker_live_websocket_tasklet(
 bool moonraker_live_websocket_connected(void)
 {
     return s_connected;
+}
+
+
+bool moonraker_live_websocket_running(void)
+{
+    return s_client != NULL;
 }
 
 

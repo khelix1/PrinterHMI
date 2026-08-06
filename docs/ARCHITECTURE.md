@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v6.0.1 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v6.0.2 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -63,12 +63,15 @@ status banners, cards, previews, charts, action panels and popup controllers.
 
 - `moonraker_config_controller` owns up to four persistent printer profiles and
   a generation counter used to reject stale work.
-- `moonraker_live_websocket` subscribes to live Klipper objects and merges
-  status updates into synchronized Moonraker state.
+- `moonraker_live_websocket` subscribes to live Klipper objects, including
+  authoritative `virtual_sdcard` print progress, and merges updates into
+  synchronized Moonraker state. It owns non-blocking recovery while a
+  WebSocket is reconnecting.
 - `moonraker_poll` and `moonraker_live_transport` provide scheduled HTTP state
-  refresh and fallback behavior.
-- `moonraker_probe` and `moonraker_discovery` test and discover endpoints;
-  discovery is presented inside printer profile Add/Edit.
+  refresh and fallback behavior without competing with reconnect ownership.
+- `moonraker_probe` and `moonraker_discovery` test and discover endpoints on
+  ports 7125 through 7128; discovery is presented inside printer profile
+  Add/Edit.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
   `moonraker` and consumed through controllers.
 - `macro_controller` derives a bounded, alphabetized public-macro catalog from
@@ -142,7 +145,9 @@ startup marks the running image valid and cancels rollback.
 - LVGL objects may be accessed only from LVGL callbacks or while holding the
   BSP display lock.
 - Background HTTP, WebSocket, discovery, preview and OTA work must publish
-  results without directly mutating LVGL objects.
+  results without directly mutating LVGL objects. Inactive-profile preview
+  and health HTTP work belongs to its low-priority worker, never the shell
+  runtime task.
 - Active-printer configuration changes increment a generation. Results from a
   retired generation must be discarded.
 - DMA buffers must use DMA-capable memory; general large buffers should prefer

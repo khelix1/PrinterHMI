@@ -493,6 +493,24 @@ static bool json_number(
 }
 
 
+static bool print_state_is_active(const char *state)
+{
+    return state &&
+        (strcmp(state, "printing") == 0 ||
+         strcmp(state, "paused") == 0);
+}
+
+
+/* Called with state_lock held before merging a new print context. */
+static void reset_print_job_locked(void)
+{
+    g_moonraker_state.progress = 0.0;
+    g_moonraker_state.print_duration = 0.0;
+    g_moonraker_state.current_layer = -1;
+    g_moonraker_state.total_layer = -1;
+}
+
+
 static bool json_xy_array(
     cJSON *array,
     moonraker_exclude_point_t *out)
@@ -760,6 +778,48 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 
     state_lock();
 
+    /*
+     * Status updates can be partial.  When a new job enters PRINTING
+     * (or PAUSED), never let its first frame inherit progress/layer
+     * values from the previous job while Moonraker fills those fields.
+     * A changed filename also identifies a new job when a fast restart
+     * does not publish an intermediate standby state.
+     */
+    cJSON *incoming_print_stats =
+        cJSON_GetObjectItemCaseSensitive(status, "print_stats");
+    cJSON *incoming_state = cJSON_IsObject(incoming_print_stats)
+        ? cJSON_GetObjectItemCaseSensitive(
+            incoming_print_stats, "state")
+        : NULL;
+    cJSON *incoming_filename = cJSON_IsObject(incoming_print_stats)
+        ? cJSON_GetObjectItemCaseSensitive(
+            incoming_print_stats, "filename")
+        : NULL;
+
+    const char *next_state =
+        cJSON_IsString(incoming_state)
+            ? incoming_state->valuestring
+            : NULL;
+    const char *next_filename =
+        cJSON_IsString(incoming_filename)
+            ? incoming_filename->valuestring
+            : NULL;
+
+    bool next_active = print_state_is_active(next_state);
+    bool previous_active = print_state_is_active(
+        g_moonraker_state.printer_state);
+    bool filename_changed =
+        next_filename && next_filename[0] &&
+        strcmp(next_filename, g_moonraker_state.printer_file) != 0;
+
+    bool job_context_changed =
+        (next_active && (!previous_active || filename_changed)) ||
+        (!next_active && previous_active && next_state);
+
+    if (job_context_changed) {
+        reset_print_job_locked();
+    }
+
     cJSON *exclude_object = cJSON_GetObjectItemCaseSensitive(
         status, "exclude_object");
     if (cJSON_IsObject(exclude_object)) {
@@ -905,7 +965,19 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 
     MERGE_NUMBER("heater_bed", "temperature", bed_temp, 1.0);
     MERGE_NUMBER("heater_bed", "target", bed_target, 1.0);
-    MERGE_NUMBER("display_status", "progress", progress, 1.0);
+
+    /* virtual_sdcard is the actual file-position completion value.
+     * display_status is only the M73/slicer compatibility fallback and
+     * can retain the previous job's percentage at a new print start. */
+    cJSON *virtual_sdcard = cJSON_GetObjectItemCaseSensitive(
+        status, "virtual_sdcard");
+    if (json_number(virtual_sdcard, "progress", &value)) {
+        g_moonraker_state.progress = value;
+        ++updates;
+    } else {
+        MERGE_NUMBER("display_status", "progress", progress, 1.0);
+    }
+
     MERGE_NUMBER("print_stats", "print_duration", print_duration, 1.0);
 
 #undef MERGE_NUMBER
@@ -1032,13 +1104,22 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     cJSON *info = cJSON_IsObject(print_stats)
         ? cJSON_GetObjectItemCaseSensitive(print_stats, "info")
         : NULL;
-    if (json_number(info, "current_layer", &value)) {
-        g_moonraker_state.current_layer = (int)(value + 0.5);
-        ++updates;
-    }
-    if (json_number(info, "total_layer", &value)) {
-        g_moonraker_state.total_layer = (int)(value + 0.5);
-        ++updates;
+
+    /* A freshly started job at file position zero must not display the
+     * prior job's layer fields if Moonraker has not refreshed info yet. */
+    if (job_context_changed &&
+        g_moonraker_state.progress <= 0.001) {
+        g_moonraker_state.current_layer = -1;
+        g_moonraker_state.total_layer = -1;
+    } else {
+        if (json_number(info, "current_layer", &value)) {
+            g_moonraker_state.current_layer = (int)(value + 0.5);
+            ++updates;
+        }
+        if (json_number(info, "total_layer", &value)) {
+            g_moonraker_state.total_layer = (int)(value + 0.5);
+            ++updates;
+        }
     }
 
     if (updates > 0) {

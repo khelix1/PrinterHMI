@@ -10,6 +10,8 @@
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "moonraker.h"
 #include "moonraker_config_controller.h"
@@ -21,6 +23,14 @@
 #define PROFILE_PREVIEW_HEIGHT 215
 
 #define TAG "profile_preview_worker"
+
+
+#define PROFILE_PREVIEW_WORKER_STACK 6144
+#define PROFILE_PREVIEW_WORKER_INTERVAL_MS 1000
+#define PROFILE_PREVIEW_API_KEY_MAX 160
+
+static TaskHandle_t s_preview_worker_task = NULL;
+static char s_preview_worker_api_key[PROFILE_PREVIEW_API_KEY_MAX];
 
 
 static void url_encode(
@@ -67,6 +77,49 @@ static bool state_has_current_print(const char *state)
 void printer_profile_preview_worker_v32_reset(void)
 {
     /* Cursor and generation are owned by printer_profile_health. */
+}
+
+
+static void printer_profile_preview_worker_v32_task(void *arg)
+{
+    (void)arg;
+
+    while (true) {
+        printer_profile_preview_worker_v32_poll_one(
+            s_preview_worker_api_key);
+        vTaskDelay(
+            pdMS_TO_TICKS(PROFILE_PREVIEW_WORKER_INTERVAL_MS));
+    }
+}
+
+
+void printer_profile_preview_worker_v32_start(const char *api_key)
+{
+    if (s_preview_worker_task) {
+        return;
+    }
+
+    strlcpy(
+        s_preview_worker_api_key,
+        api_key ? api_key : "",
+        sizeof(s_preview_worker_api_key));
+
+    BaseType_t created = xTaskCreatePinnedToCore(
+        printer_profile_preview_worker_v32_task,
+        "profile_preview",
+        PROFILE_PREVIEW_WORKER_STACK,
+        NULL,
+        3,
+        &s_preview_worker_task,
+        0);
+
+    if (created != pdPASS) {
+        s_preview_worker_task = NULL;
+        ESP_LOGE(TAG, "Unable to start profile preview worker");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Inactive profile preview worker started");
 }
 
 

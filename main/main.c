@@ -1321,6 +1321,23 @@ static void moonraker_live_poll_tasklet(void)
     }
     websocket_was_authoritative = false;
 
+    /*
+     * esp_websocket_client owns reconnects once created.  Do not run the
+     * legacy synchronous HTTP fallback on the shell runtime task while
+     * that reconnect is pending: an unreachable Moonraker can otherwise
+     * hold this task for the HTTP timeout every poll interval.
+     */
+    if (moonraker_live_websocket_running()) {
+        s_moonraker_ok = false;
+        s_live_data_ok = false;
+        moonraker_state_set_connection(false, false);
+        safe_copy(
+            moonraker_status,
+            sizeof(moonraker_status),
+            "Moonraker: reconnecting...");
+        return;
+    }
+
     moonraker_poll_result_t result =
         moonraker_poll_run(
             esp_timer_get_time(),
@@ -3796,8 +3813,6 @@ static void hmi_runtime_task(void *arg)
                 moonraker_config_generation());
 
             moonraker_live_poll_tasklet();
-            printer_profile_preview_worker_v32_poll_one(
-                MOONRAKER_API_KEY);
         }
         /* BOOT_PREVIEW_PROFILE_STORE_ONLY
          * Reboot restoration is profile-indexed and endpoint-validated.
@@ -4070,6 +4085,10 @@ void app_main(void)
 
     if (rc != pdPASS) {
         ESP_LOGE(TAG, "Failed to start hmi_runtime task");
+    } else {
+        /* Inactive-profile HTTP checks may wait for unreachable hosts. */
+        printer_profile_preview_worker_v32_start(
+            MOONRAKER_API_KEY);
     }
 
     while (1) {

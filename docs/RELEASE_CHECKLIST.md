@@ -48,6 +48,12 @@
       requires confirmation.
 - [ ] Console command history, live responses and severity colors pass.
 - [ ] Wi-Fi, SNTP, Moonraker HTTP/WebSocket and multi-printer switching pass.
+- [ ] A disconnected active or inactive Moonraker profile leaves touch and
+      page navigation responsive while the connection recovers.
+- [ ] A new print starts at 0% with unknown layers until fresh Moonraker
+      job state arrives; it never inherits prior-job values.
+- [ ] Manage Printers removes a selected non-final profile only after
+      confirmation, without modifying Klipper or Moonraker.
 - [ ] Host and C6 both report ESP-Hosted 3.0.5 with RPC v2.
 - [ ] Live Wi-Fi RSSI bars and native high-speed SD-card mounting pass.
 - [ ] Printer controls, Files, previews, Drybox and Telemetry pass.

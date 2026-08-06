@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v6.0.1 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v6.0.2 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -88,7 +88,7 @@ when ownership or build membership changes.
 | `ui_network_v32`, `ui_network_tools` | Network page and Wi-Fi tools |
 | `ui_printer_profiles`, `ui_printer_chooser_v32` | Profile Add/Edit with discovery and startup chooser |
 | `printer_profile_health` | Per-profile reachability state |
-| `printer_preview_cache_v32`, `printer_profile_preview_worker_v32`, `printer_preview_store_v32` | Per-profile preview lifecycle |
+| `printer_preview_cache_v32`, `printer_profile_preview_worker_v32`, `printer_preview_store_v32` | Per-profile preview lifecycle; the low-priority worker owns inactive-profile HTTP health and preview requests |
 | `network_status_controller`, `network_wifi_scan` | Network state policy and scan service |
 | `moonraker` | HTTP requests, response parsing and synchronized printer state |
 | `moonraker_config_controller` | Persistent multi-printer configuration |

@@ -8,7 +8,8 @@
  * One bounded asynchronous verification for a manually entered endpoint.
  * It never edits or selects a printer profile.
  */
-bool moonraker_endpoint_test_start(const char *host, int port);
+bool moonraker_endpoint_test_start(
+    const char *host, int port, const char *api_key);
 bool moonraker_endpoint_test_busy(void);
 bool moonraker_endpoint_test_take_result(
     moonraker_probe_result_t *result,

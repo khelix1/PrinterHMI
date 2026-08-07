@@ -127,6 +127,35 @@ static bool valid_host(const char *host)
 }
 
 
+static bool valid_api_key(const char *api_key)
+{
+    if (!api_key || !api_key[0]) {
+        return true;
+    }
+
+    size_t length = strnlen(api_key, MOONRAKER_CONFIG_API_KEY_LENGTH);
+    if (length >= MOONRAKER_CONFIG_API_KEY_LENGTH) {
+        return false;
+    }
+
+    /* Moonraker-generated API keys are URL/JSON-safe opaque tokens. */
+    for (size_t index = 0; index < length; ++index) {
+        unsigned char character = (unsigned char)api_key[index];
+        bool alpha_numeric =
+            (character >= 'a' && character <= 'z') ||
+            (character >= 'A' && character <= 'Z') ||
+            (character >= '0' && character <= '9');
+
+        if (!alpha_numeric && character != '-' &&
+            character != '_' && character != '.') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 static bool valid_profile_index(int profile_index)
 {
     return profile_index >= 0 &&
@@ -253,9 +282,12 @@ static esp_err_t persist_profile(
                 ? 1
                 : 0);
 
-    if (error != ESP_OK ||
-        !profile ||
-        !profile->configured) {
+    if (error != ESP_OK || !profile || !profile->configured) {
+        profile_key(key, sizeof(key), profile_index, "key");
+        esp_err_t erase_error = nvs_erase_key(handle, key);
+        if (erase_error != ESP_OK && erase_error != ESP_ERR_NVS_NOT_FOUND) {
+            return erase_error;
+        }
         return error;
     }
 
@@ -291,16 +323,14 @@ static esp_err_t persist_profile(
         return error;
     }
 
-    profile_key(
-        key,
-        sizeof(key),
-        profile_index,
-        "port");
+    profile_key(key, sizeof(key), profile_index, "port");
+    error = nvs_set_i32(handle, key, profile->port);
+    if (error != ESP_OK) {
+        return error;
+    }
 
-    return nvs_set_i32(
-        handle,
-        key,
-        profile->port);
+    profile_key(key, sizeof(key), profile_index, "key");
+    return nvs_set_str(handle, key, profile->api_key);
 }
 
 
@@ -483,6 +513,16 @@ static bool load_profile(
             (int)loaded_port;
     }
 
+    size_t key_length = sizeof(loaded.api_key);
+    profile_key(key, sizeof(key), profile_index, "key");
+    if (nvs_get_str(handle, key, loaded.api_key, &key_length) != ESP_OK) {
+        loaded.api_key[0] = '\0';
+    }
+
+    if (!valid_api_key(loaded.api_key)) {
+        loaded.api_key[0] = '\0';
+    }
+
     if (!profile_valid(&loaded)) {
         clear_profile(
             &s_profiles[profile_index]);
@@ -647,8 +687,13 @@ const char *moonraker_config_host(void)
 
 int moonraker_config_port(void)
 {
-    return
-        s_profiles[s_active_profile].port;
+    return s_profiles[s_active_profile].port;
+}
+
+
+const char *moonraker_config_api_key(void)
+{
+    return s_profiles[s_active_profile].api_key;
 }
 
 
@@ -750,11 +795,13 @@ bool moonraker_config_save_profile(
     int profile_index,
     const char *name,
     const char *host,
-    int port)
+    int port,
+    const char *api_key)
 {
     if (!valid_profile_index(profile_index) ||
         !valid_host(host) ||
-        !valid_port(port)) {
+        !valid_port(port) ||
+        !valid_api_key(api_key)) {
         return false;
     }
 
@@ -782,6 +829,11 @@ bool moonraker_config_save_profile(
         updated.host,
         sizeof(updated.host),
         host);
+
+    copy_text(
+        updated.api_key,
+        sizeof(updated.api_key),
+        api_key);
 
     s_profiles[profile_index] =
         updated;
@@ -959,7 +1011,8 @@ bool moonraker_config_select_host(
         s_active_profile,
         moonraker_config_active_profile_name(),
         host,
-        port);
+        port,
+        s_profiles[s_active_profile].api_key);
 }
 
 
@@ -973,5 +1026,6 @@ bool moonraker_config_select_port(int port)
         s_active_profile,
         moonraker_config_active_profile_name(),
         moonraker_config_host(),
-        port);
+        port,
+        s_profiles[s_active_profile].api_key);
 }

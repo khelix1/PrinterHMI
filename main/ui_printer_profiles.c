@@ -24,7 +24,11 @@ static lv_obj_t *s_editor_popup = NULL;
 static lv_obj_t *s_editor_name = NULL;
 static lv_obj_t *s_editor_host = NULL;
 static lv_obj_t *s_editor_port = NULL;
+static lv_obj_t *s_editor_auth_popup = NULL;
+static lv_obj_t *s_editor_auth_key = NULL;
+static lv_obj_t *s_editor_auth_keyboard = NULL;
 static lv_obj_t *s_editor_keyboard = NULL;
+static char s_editor_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
 static lv_obj_t *s_editor_status = NULL;
 static lv_timer_t *s_editor_test_timer = NULL;
 
@@ -48,6 +52,13 @@ static void editor_close(void)
     s_editor_name = NULL;
     s_editor_host = NULL;
     s_editor_port = NULL;
+    if (s_editor_auth_popup) {
+        lv_obj_delete(s_editor_auth_popup);
+    }
+    s_editor_auth_popup = NULL;
+    s_editor_auth_key = NULL;
+    s_editor_auth_keyboard = NULL;
+    memset(s_editor_api_key, 0, sizeof(s_editor_api_key));
     s_editor_keyboard = NULL;
     if (s_editor_test_timer) {
         lv_timer_delete(s_editor_test_timer);
@@ -98,6 +109,9 @@ static void editor_cancel_cb(lv_event_t *event)
     (void)event;
     editor_close();
 }
+
+
+static void editor_auth_open_cb(lv_event_t *event);
 
 
 static void editor_discover_cb(lv_event_t *event)
@@ -537,6 +551,85 @@ static void editor_test_poll_cb(lv_timer_t *timer)
 }
 
 
+static void editor_auth_close(void)
+{
+    if (s_editor_auth_popup) {
+        lv_obj_delete(s_editor_auth_popup);
+    }
+    s_editor_auth_popup = NULL;
+    s_editor_auth_key = NULL;
+    s_editor_auth_keyboard = NULL;
+}
+
+
+static void editor_auth_cancel_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_auth_close();
+}
+
+
+static void editor_auth_save_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!s_editor_auth_key) {
+        return;
+    }
+
+    strlcpy(
+        s_editor_api_key,
+        lv_textarea_get_text(s_editor_auth_key),
+        sizeof(s_editor_api_key));
+    editor_auth_close();
+    editor_set_status(
+        s_editor_api_key[0]
+            ? "Moonraker API key ready. Use TEST, then SAVE."
+            : "Moonraker API key cleared. Trusted-client access remains enabled.");
+}
+
+
+static void editor_auth_open_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_editor_auth_popup) {
+        lv_obj_move_foreground(s_editor_auth_popup);
+        return;
+    }
+
+    s_editor_auth_popup = ui_popup_create(
+        lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
+    if (!s_editor_auth_popup) {
+        return;
+    }
+
+    ui_popup_add_title(s_editor_auth_popup, "MOONRAKER AUTHENTICATION", false, 0);
+    ui_popup_add_header_divider(s_editor_auth_popup, 44);
+    ui_popup_add_caption(s_editor_auth_popup, "API KEY (OPTIONAL)", 28, 70, 220);
+    ui_popup_add_status_label(
+        s_editor_auth_popup,
+        "Stored only on this panel; it is never shown in backups or logs.",
+        28, 112, 720);
+
+    s_editor_auth_key = ui_popup_add_textarea(
+        s_editor_auth_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 145,
+        true, true, MOONRAKER_CONFIG_API_KEY_LENGTH - 1,
+        "Leave blank for trusted Moonraker clients", s_editor_api_key, NULL);
+
+    s_editor_auth_keyboard = ui_popup_add_keyboard(
+        s_editor_auth_popup, s_editor_auth_key, 720, 230,
+        LV_ALIGN_TOP_MID, 0, 210, LV_KEYBOARD_MODE_TEXT_LOWER);
+
+    ui_popup_add_standard_footer_divider(s_editor_auth_popup);
+    ui_popup_add_action_at(
+        s_editor_auth_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL",
+        32, 500, 260, 48, editor_auth_cancel_cb, NULL, NULL);
+    ui_popup_add_action_at(
+        s_editor_auth_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " USE KEY",
+        508, 500, 260, 48, editor_auth_save_cb, NULL, NULL);
+    lv_obj_move_foreground(s_editor_auth_popup);
+}
+
+
 static void editor_test_cb(lv_event_t *event)
 {
     (void)event;
@@ -561,7 +654,8 @@ static void editor_test_cb(lv_event_t *event)
         return;
     }
 
-    if (!moonraker_endpoint_test_start(host, (int)port)) {
+    if (!moonraker_endpoint_test_start(
+            host, (int)port, s_editor_api_key)) {
         editor_set_status(
             moonraker_endpoint_test_busy()
                 ? "A connection test is already running."
@@ -635,7 +729,8 @@ static void editor_save_cb(
             s_editor_profile,
             name,
             host,
-            (int)port)) {
+            (int)port,
+            s_editor_api_key)) {
         editor_set_status(
             "Use a hostname or IPv4 address only; omit http://, paths and spaces.");
         return;
@@ -736,6 +831,11 @@ static void manager_edit_cb(
         profile->configured
             ? profile->port
             : 7125;
+
+    strlcpy(
+        s_editor_api_key,
+        profile && profile->configured ? profile->api_key : "",
+        sizeof(s_editor_api_key));
 
     char port_text[16];
 
@@ -838,23 +938,35 @@ static void manager_edit_cb(
             port_text,
             "0123456789");
 
+    ui_popup_add_action_at(
+        s_editor_popup,
+        UI_POPUP_ACTION_SECONDARY,
+        LV_SYMBOL_SETTINGS " AUTHENTICATION",
+        440,
+        175,
+        320,
+        48,
+        editor_auth_open_cb,
+        NULL,
+        NULL);
+
     s_editor_status =
         ui_popup_add_status_label(
             s_editor_popup,
             "Changes are saved to this printer profile.",
-            440,
-            179,
-            320);
+            28,
+            230,
+            720);
 
     s_editor_keyboard =
         ui_popup_add_keyboard(
             s_editor_popup,
             s_editor_name,
             720,
-            235,
+            230,
             LV_ALIGN_TOP_MID,
             0,
-            235,
+            270,
             LV_KEYBOARD_MODE_TEXT_LOWER);
 
     if (s_editor_name) {

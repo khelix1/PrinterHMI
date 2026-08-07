@@ -7,11 +7,14 @@
 #define MOONRAKER_CONFIG_MAX_PROFILES 4
 #define MOONRAKER_CONFIG_NAME_LENGTH  32
 #define MOONRAKER_CONFIG_HOST_LENGTH  64
+#define MOONRAKER_CONFIG_API_KEY_LENGTH 160
 
 typedef struct {
     bool configured;
     char name[MOONRAKER_CONFIG_NAME_LENGTH];
     char host[MOONRAKER_CONFIG_HOST_LENGTH];
+    /* Optional Moonraker API key. Never exported in SD backups. */
+    char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
     int port;
 } moonraker_profile_t;
 
@@ -29,6 +32,8 @@ bool moonraker_config_load(void);
  */
 const char *moonraker_config_host(void);
 int moonraker_config_port(void);
+/* Empty when this profile uses Moonraker trusted-client access. */
+const char *moonraker_config_api_key(void);
 
 /*
  * Active-profile information.
@@ -64,7 +69,8 @@ bool moonraker_config_save_profile(
     int profile_index,
     const char *name,
     const char *host,
-    int port);
+    int port,
+    const char *api_key);
 
 /*
  * Deletes a profile. Deleting the final profile restores Printer 1

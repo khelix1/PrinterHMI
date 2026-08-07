@@ -5,6 +5,13 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Added
+
+- Added optional per-printer Moonraker API-key authentication. API keys are
+  masked in the editor, used by HTTP and live WebSocket connections, excluded
+  from SD-card configuration backups and never written to event logs.
+
+
 ### Changed
 
 - Moonraker discovery now completes a full local IPv4 subnet scan, testing ports 7125 through 7128 with the proven one-address TCP probe. Once an address responds, all four ports are HTTP-verified serially so separate instances on the same host are not skipped. Discovery no longer samples addresses or stops after eight results.

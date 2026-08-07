@@ -187,6 +187,7 @@ static bool probe_get(
     const char *host,
     int port,
     const char *path,
+    const char *api_key,
     char *body,
     size_t body_size)
 {
@@ -219,6 +220,10 @@ static bool probe_get(
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (!client) {
         return false;
+    }
+
+    if (api_key && api_key[0]) {
+        esp_http_client_set_header(client, "X-Api-Key", api_key);
     }
 
     if (!network_activity_controller_acquire_shared(900)) {
@@ -275,9 +280,10 @@ static bool extract_json_string(
 }
 
 
-bool moonraker_probe_endpoint(
+bool moonraker_probe_endpoint_with_api_key(
     const char *host,
     int port,
+    const char *api_key,
     moonraker_probe_result_t *result)
 {
     if (!host || !host[0] || port <= 0 || port >= 65536) {
@@ -287,7 +293,7 @@ bool moonraker_probe_endpoint(
     moonraker_probe_result_t local = {0};
     char body[384];
 
-    if (!probe_get(host, port, "/server/info", body, sizeof(body)) ||
+    if (!probe_get(host, port, "/server/info", api_key, body, sizeof(body)) ||
         (!strstr(body, "klippy") &&
          !strstr(body, "moonraker") &&
          !strstr(body, "\"result\""))) {
@@ -302,7 +308,7 @@ bool moonraker_probe_endpoint(
         local.klippy_ready = true;
     }
 
-    if (probe_get(host, port, "/printer/info", body, sizeof(body))) {
+    if (probe_get(host, port, "/printer/info", api_key, body, sizeof(body))) {
         (void)extract_json_string(
             body, "hostname", local.identity, sizeof(local.identity));
         if (extract_json_string(
@@ -320,6 +326,15 @@ bool moonraker_probe_endpoint(
         *result = local;
     }
     return true;
+}
+
+
+bool moonraker_probe_endpoint(
+    const char *host,
+    int port,
+    moonraker_probe_result_t *result)
+{
+    return moonraker_probe_endpoint_with_api_key(host, port, NULL, result);
 }
 
 

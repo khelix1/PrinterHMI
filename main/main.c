@@ -408,7 +408,6 @@ static uint32_t dash_thumb_render_generation = 0;
 #define DASH_THUMB_CANVAS_W 286
 #define DASH_THUMB_CANVAS_H 215
 
-#define MOONRAKER_API_KEY ""
 
 static int s_moonraker_code = 0;
 static bool s_moonraker_ok = false;
@@ -896,7 +895,7 @@ static bool moonraker_get_live_objects(void)
     bool transport_ok = moonraker_live_transport_fetch(
         request_host,
         request_port,
-        MOONRAKER_API_KEY,
+        moonraker_config_api_key(),
         s_moonraker_objects,
         MOONRAKER_OBJECTS_CAPACITY,
         &live_http_status);
@@ -1401,7 +1400,7 @@ static bool moonraker_send_gcode_http(const char *cmd)
     bool ok = moonraker_send_gcode_script(
         moonraker_config_host(),
         moonraker_config_port(),
-        MOONRAKER_API_KEY,
+        moonraker_config_api_key(),
         cmd,
         &http_code,
         &err);
@@ -2786,7 +2785,7 @@ static void printer_file_detail_start_bridge(void)
         s_got_ip,
         moonraker_config_host(),
         moonraker_config_port(),
-        MOONRAKER_API_KEY,
+        moonraker_config_api_key(),
         moonraker_status,
         sizeof(moonraker_status),
         close_printer_file_detail_popup);
@@ -2804,7 +2803,7 @@ static void printer_build_metadata_text(
     bool metadata_ok = thumbnail_session_v32_build_metadata(
         moonraker_config_host(),
         moonraker_config_port(),
-        MOONRAKER_API_KEY,
+        moonraker_config_api_key(),
         file,
         out,
         out_size);
@@ -3386,7 +3385,7 @@ static void show_printer_file_detail_popup(void)
     if (!file_detail_loader_v32_start(
             moonraker_config_host(),
             moonraker_config_port(),
-            MOONRAKER_API_KEY,
+            moonraker_config_api_key(),
             thumbnail_session_v32_selected_file(),
             file_detail_ready_cb)) {
         ui_files_v32_update_detail_metadata(
@@ -3422,7 +3421,7 @@ void app_files_reload(void)
         sd_card_ok,
         moonraker_config_host(),
         moonraker_config_port(),
-        MOONRAKER_API_KEY);
+        moonraker_config_api_key());
 }
 
 
@@ -3829,7 +3828,7 @@ static void hmi_runtime_task(void *arg)
                 s_got_ip,
                 moonraker_config_host(),
                 moonraker_config_port(),
-                MOONRAKER_API_KEY,
+                moonraker_config_api_key(),
                 moonraker_config_generation());
 
             moonraker_live_poll_tasklet();
@@ -4108,7 +4107,7 @@ void app_main(void)
     } else {
         /* Inactive-profile HTTP checks may wait for unreachable hosts. */
         printer_profile_preview_worker_v32_start(
-            MOONRAKER_API_KEY);
+            moonraker_config_api_key());
     }
 
     while (1) {

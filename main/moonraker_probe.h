@@ -34,4 +34,11 @@ bool moonraker_probe_endpoint(
     int port,
     moonraker_probe_result_t *result);
 
+/* api_key is optional. Discovery always calls the unauthenticated form. */
+bool moonraker_probe_endpoint_with_api_key(
+    const char *host,
+    int port,
+    const char *api_key,
+    moonraker_probe_result_t *result);
+
 bool moonraker_probe_host(const char *host, int port);

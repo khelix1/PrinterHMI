@@ -10,6 +10,7 @@
 static TaskHandle_t s_task = NULL;
 static char s_host[MOONRAKER_CONFIG_HOST_LENGTH];
 static int s_port = 0;
+static char s_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
 static moonraker_probe_result_t s_result;
 static bool s_verified = false;
 static volatile bool s_result_ready = false;
@@ -20,7 +21,8 @@ static void endpoint_test_task(void *arg)
     (void)arg;
 
     moonraker_probe_result_t result = {0};
-    bool verified = moonraker_probe_endpoint(s_host, s_port, &result);
+    bool verified = moonraker_probe_endpoint_with_api_key(
+        s_host, s_port, s_api_key, &result);
 
     s_result = result;
     s_verified = verified;
@@ -31,13 +33,15 @@ static void endpoint_test_task(void *arg)
 }
 
 
-bool moonraker_endpoint_test_start(const char *host, int port)
+bool moonraker_endpoint_test_start(
+    const char *host, int port, const char *api_key)
 {
     if (!host || !host[0] || port <= 0 || port >= 65536 || s_task) {
         return false;
     }
 
     strlcpy(s_host, host, sizeof(s_host));
+    strlcpy(s_api_key, api_key ? api_key : "", sizeof(s_api_key));
     s_port = port;
     memset(&s_result, 0, sizeof(s_result));
     s_verified = false;

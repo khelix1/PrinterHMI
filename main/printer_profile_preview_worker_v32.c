@@ -10,10 +10,12 @@
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "moonraker.h"
+#include "moonraker_live_websocket.h"
 #include "moonraker_config_controller.h"
 #include "printer_profile_health.h"
 #include "printer_preview_cache_v32.h"
@@ -28,9 +30,15 @@
 #define PROFILE_PREVIEW_WORKER_STACK 6144
 #define PROFILE_PREVIEW_WORKER_INTERVAL_MS 1000
 #define PROFILE_PREVIEW_API_KEY_MAX 160
+/* A failed inactive endpoint is not useful work every scheduler pass. */
+#define PROFILE_PREVIEW_OFFLINE_RETRY_US (20LL * 1000 * 1000)
+/* One missed request receives a quick confirmation without returning to
+ * the old repeated-probe behavior for confirmed offline profiles. */
+#define PROFILE_PREVIEW_CONFIRM_RETRY_US (3LL * 1000 * 1000)
 
 static TaskHandle_t s_preview_worker_task = NULL;
 static char s_preview_worker_api_key[PROFILE_PREVIEW_API_KEY_MAX];
+static int64_t s_preview_retry_after_us[MOONRAKER_CONFIG_MAX_PROFILES];
 
 
 static void url_encode(
@@ -77,6 +85,7 @@ static bool state_has_current_print(const char *state)
 void printer_profile_preview_worker_v32_reset(void)
 {
     /* Cursor and generation are owned by printer_profile_health. */
+    memset(s_preview_retry_after_us, 0, sizeof(s_preview_retry_after_us));
 }
 
 
@@ -125,7 +134,26 @@ void printer_profile_preview_worker_v32_start(const char *api_key)
 
 void printer_profile_preview_worker_v32_poll_one(const char *api_key)
 {
+    /* The active endpoint owns recovery.  Inactive HTTP requests while
+     * that WebSocket reconnects only contend for ESP-Hosted transport and
+     * make an otherwise local UI feel stalled. */
+    if (moonraker_live_websocket_running() &&
+        !moonraker_live_websocket_connected()) {
+        return;
+    }
+
     int index = printer_profile_health_take_next_index();
+    if (index < 0) {
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+
+    if (index >= 0 &&
+        index < MOONRAKER_CONFIG_MAX_PROFILES &&
+        now < s_preview_retry_after_us[index]) {
+        return;
+    }
     uint32_t generation_before = moonraker_config_generation();
 
     if (index == moonraker_config_active_profile_index()) {
@@ -160,11 +188,26 @@ void printer_profile_preview_worker_v32_poll_one(const char *api_key)
 
     if (generation_before != moonraker_config_generation()) return;
 
-    printer_profile_health_set(index, true, online);
-
     if (!online) {
+        printer_profile_health_report_live_state(index, false, NULL);
+
+        /* Keep a previously-online profile in VERIFYING until a second
+         * failure confirms it. A confirmed offline profile returns to
+         * the low-pressure retry cadence. */
+        bool still_online = printer_profile_health_get(index, NULL);
+        s_preview_retry_after_us[index] = now +
+            (still_online
+                ? PROFILE_PREVIEW_CONFIRM_RETRY_US
+                : PROFILE_PREVIEW_OFFLINE_RETRY_US);
+        ESP_LOGD(
+            TAG,
+            "Profile %d %s; retry deferred",
+            index + 1,
+            still_online ? "verification pending" : "offline");
         return;
     }
+
+    s_preview_retry_after_us[index] = 0;
 
     char state[32] = "";
     char file[160] = "";
@@ -172,8 +215,44 @@ void printer_profile_preview_worker_v32_poll_one(const char *api_key)
     const char *print_stats = strstr(stats, "\"print_stats\"");
     if (!print_stats) print_stats = stats;
 
+    const char *webhooks = strstr(stats, "\"webhooks\"");
+    char klipper_state[32] = "";
+    if (webhooks) {
+        json_find_string(
+            webhooks, "state", klipper_state, sizeof(klipper_state));
+    }
+
+    /* Moonraker can answer even when Klipper has no MCU, is starting,
+     * or is shut down. That printer is not available to the operator. */
+    if (strcmp(klipper_state, "ready") != 0) {
+        bool fault =
+            strcmp(klipper_state, "shutdown") == 0 ||
+            strcmp(klipper_state, "error") == 0;
+
+        if (fault) {
+            printer_profile_health_set_live_state(
+                index, true, false, NULL);
+            s_preview_retry_after_us[index] =
+                now + PROFILE_PREVIEW_OFFLINE_RETRY_US;
+        } else {
+            printer_profile_health_set_verifying(index);
+            s_preview_retry_after_us[index] =
+                now + PROFILE_PREVIEW_CONFIRM_RETRY_US;
+        }
+
+        ESP_LOGI(
+            TAG,
+            "Profile %d Klipper is %s (%s)",
+            index + 1,
+            klipper_state[0] ? klipper_state : "unavailable",
+            fault ? "offline" : "verifying");
+        return;
+    }
+
     json_find_string(print_stats, "state", state, sizeof(state));
     json_find_string(print_stats, "filename", file, sizeof(file));
+
+    printer_profile_health_report_live_state(index, true, state);
 
     if (!state_has_current_print(state) || !file[0]) {
         return;

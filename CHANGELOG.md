@@ -5,6 +5,21 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Bound disconnected Moonraker WebSocket attempts to two seconds and
+  paused inactive-printer HTTP work while the active endpoint reconnects.
+- Added a 20-second cooldown after an inactive-printer failure so an
+  unavailable profile cannot repeatedly contend for hosted Wi-Fi.
+- Made a selected unavailable profile show `OFFLINE / RETRYING` immediately
+  instead of the ambiguous `CHECKING...` chooser state.
+- Preserved per-profile health across active-printer changes only when the
+  profile endpoint is unchanged. The serialized inactive-profile worker now
+  publishes each printer's current Moonraker print state to the chooser.
+- Expired inactive positive state after five seconds. One missed inactive
+  request now shows `VERIFYING...`; only a second confirmation failure
+  changes an already-online printer to `OFFLINE`.
+
 ## [6.0.3] - 2026-08-05
 
 ### Added

@@ -13,8 +13,18 @@ void ui_printer_profiles_show(
     ui_printer_profiles_active_changed_cb_t active_changed_cb,
     ui_printer_profiles_discover_cb_t discover_cb);
 
+/*
+ * Shows profile management.  An empty requested slot opens directly in the
+ * Add Printer editor; a negative index selects the active profile.
+ */
+void ui_printer_profiles_show_for_slot(
+    int profile_index,
+    ui_printer_profiles_active_changed_cb_t active_changed_cb,
+    ui_printer_profiles_discover_cb_t discover_cb);
+
 void ui_printer_profiles_set_discovered_endpoint(
     const char *host,
-    int port);
+    int port,
+    const char *identity);
 
 void ui_printer_profiles_close_all(void);

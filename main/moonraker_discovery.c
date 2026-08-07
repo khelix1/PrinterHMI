@@ -11,6 +11,7 @@
 #include "freertos/task.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static lv_obj_t *s_popup = NULL;
@@ -20,6 +21,8 @@ static size_t s_candidate_count = 0;
 
 typedef struct {
     char host[32];
+    char identity[MOONRAKER_PROBE_IDENTITY_LENGTH];
+    bool klippy_ready;
     int port;
 } moonraker_discovery_endpoint_t;
 
@@ -60,7 +63,10 @@ static void candidate_event_cb(lv_event_t *e)
             lv_event_get_user_data(e);
 
     if (endpoint && s_select_cb) {
-        s_select_cb(endpoint->host, endpoint->port);
+        s_select_cb(
+            endpoint->host,
+            endpoint->port,
+            endpoint->identity);
     }
 }
 
@@ -83,7 +89,8 @@ static bool host_already_seen(char seen[][32], int seen_count, const char *host)
 
 static bool moonraker_discovery_add_candidate(
     const char *host,
-    int port);
+    int port,
+    const moonraker_probe_result_t *probe);
 
 
 static void scan_task(void *arg)
@@ -157,24 +164,41 @@ static void scan_task(void *arg)
             seen_count++;
         }
 
+        bool open_ports[
+            sizeof(ports) / sizeof(ports[0])] = {0};
+
+        snprintf(
+            msg,
+            sizeof(msg),
+            "Checking %s on ports 7125-7128   |   %d found",
+            host,
+            found_count);
+        moonraker_discovery_set_status(msg);
+
+        /*
+         * Four non-blocking TCP attempts share one short wait, replacing four
+         * full HTTP timeouts on addresses where no printer exists.
+         */
+        int tcp_timeout_ms = found_count == 0 ? 450 : 220;
+        moonraker_probe_open_ports(
+            host,
+            ports,
+            sizeof(ports) / sizeof(ports[0]),
+            tcp_timeout_ms,
+            open_ports,
+            sizeof(open_ports) / sizeof(open_ports[0]));
+
         for (size_t port_index = 0;
              port_index < sizeof(ports) / sizeof(ports[0]) &&
              found_count < 8;
              ++port_index) {
             if (moonraker_discovery_is_cancelled()) break;
+            if (!open_ports[port_index]) continue;
 
             int port = ports[port_index];
 
-            snprintf(
-                msg,
-                sizeof(msg),
-                "Checking %s:%d   |   %d found",
-                host,
-                port,
-                found_count);
-            moonraker_discovery_set_status(msg);
-
-            if (!moonraker_probe_host(host, port)) continue;
+            moonraker_probe_result_t probe = {0};
+            if (!moonraker_probe_endpoint(host, port, &probe)) continue;
 
             bool published = false;
 
@@ -183,7 +207,8 @@ static void scan_task(void *arg)
                 if (bsp_display_lock(100)) {
                     published = moonraker_discovery_add_candidate(
                         host,
-                        port);
+                        port,
+                        &probe);
                     bsp_display_unlock();
                     break;
                 }
@@ -285,7 +310,7 @@ void moonraker_discovery_show(
 
     ui_popup_add_caption(
         s_popup,
-        "SELECT A DISCOVERED HOST TO FILL THE PRINTER PROFILE",
+        "SELECT A VERIFIED PRINTER. READY MEANS KLIPPER RESPONDED.",
         24,
         106,
         812);
@@ -335,7 +360,8 @@ void moonraker_discovery_set_status(const char *status_text)
 
 static bool moonraker_discovery_add_candidate(
     const char *host,
-    int port)
+    int port,
+    const moonraker_probe_result_t *probe)
 {
     if (!s_results_list ||
         !host ||
@@ -352,14 +378,21 @@ static bool moonraker_discovery_add_candidate(
 
     copy_text(endpoint->host, sizeof(endpoint->host), host);
     endpoint->port = port;
+    endpoint->klippy_ready = probe && probe->klippy_ready;
+    copy_text(
+        endpoint->identity,
+        sizeof(endpoint->identity),
+        probe && probe->identity[0] ? probe->identity : "Moonraker");
 
-    char row[96];
+    char row[160];
     snprintf(
         row,
         sizeof(row),
-        LV_SYMBOL_WIFI "  %s   |   PORT %d",
+        LV_SYMBOL_WIFI "  %s  |  %s:%d  |  %s",
+        endpoint->identity,
         endpoint->host,
-        endpoint->port);
+        endpoint->port,
+        endpoint->klippy_ready ? "READY" : "MOONRAKER");
 
     int32_t row_width = lv_obj_get_width(s_results_list) - 16;
     if (row_width <= 0) row_width = 780;

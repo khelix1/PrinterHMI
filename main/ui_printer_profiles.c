@@ -544,7 +544,8 @@ static void editor_save_cb(
 
 void ui_printer_profiles_set_discovered_endpoint(
     const char *host,
-    int port)
+    int port,
+    const char *identity)
 {
     if (!s_editor_popup ||
         !s_editor_host ||
@@ -572,8 +573,29 @@ void ui_printer_profiles_set_discovered_endpoint(
         s_editor_port,
         port_text);
 
+    /*
+     * The reported hostname is a suggestion for a fresh profile only.
+     * Discovery never overwrites an operator's existing custom name.
+     */
+    if (identity && identity[0] && s_editor_name) {
+        char default_name[MOONRAKER_CONFIG_NAME_LENGTH];
+        snprintf(
+            default_name,
+            sizeof(default_name),
+            "Printer %d",
+            s_editor_profile + 1);
+
+        const char *current_name =
+            lv_textarea_get_text(s_editor_name);
+
+        if (!current_name || !current_name[0] ||
+            strcmp(current_name, default_name) == 0) {
+            lv_textarea_set_text(s_editor_name, identity);
+        }
+    }
+
     editor_set_status(
-        "Moonraker discovered. Review the profile and press SAVE.");
+        "Verified Moonraker endpoint selected. Review the name and press SAVE.");
 }
 
 
@@ -923,4 +945,45 @@ void ui_printer_profiles_show(
 
     lv_obj_move_foreground(
         s_manager_popup);
+}
+
+
+void ui_printer_profiles_show_for_slot(
+    int profile_index,
+    ui_printer_profiles_active_changed_cb_t active_changed_cb,
+    ui_printer_profiles_discover_cb_t discover_cb)
+{
+    ui_printer_profiles_show(active_changed_cb, discover_cb);
+
+    if (!s_manager_popup) {
+        return;
+    }
+
+    if (profile_index < 0 ||
+        profile_index >= MOONRAKER_CONFIG_MAX_PROFILES) {
+        return;
+    }
+
+    s_selected_profile = profile_index;
+    manager_rebuild_rows();
+
+    const moonraker_profile_t *profile =
+        moonraker_config_profile(profile_index);
+
+    if (!profile || !profile->configured) {
+        /* Empty chooser cards should not make an operator select the slot
+         * a second time before entering the profile details. */
+        manager_edit_cb(NULL);
+        return;
+    }
+
+    char status[160];
+    snprintf(
+        status,
+        sizeof(status),
+        "Selected %s  |  %s:%d",
+        profile->name,
+        profile->host,
+        profile->port);
+    manager_set_status(status);
 }

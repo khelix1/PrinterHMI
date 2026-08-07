@@ -51,6 +51,14 @@ static void apply_status_style(lv_obj_t *label, bool configured, bool online)
 }
 
 
+static void manage_clicked_cb(lv_event_t *event)
+{
+    (void)event;
+
+    if (s_manage_cb) s_manage_cb(-1);
+}
+
+
 static void card_clicked_cb(lv_event_t *event)
 {
     int index = (int)(intptr_t)lv_event_get_user_data(event);
@@ -60,7 +68,8 @@ static void card_clicked_cb(lv_event_t *event)
     const moonraker_profile_t *profile = moonraker_config_profile(index);
 
     if (!profile || !profile->configured) {
-        if (s_manage_cb) s_manage_cb(event);
+        /* An empty card is an explicit add-printer entry point. */
+        if (s_manage_cb) s_manage_cb(index);
         return;
     }
 
@@ -384,7 +393,7 @@ void ui_printer_chooser_v32_show(
         if (s_manage_cb) {
             lv_obj_add_event_cb(
                 manage,
-                s_manage_cb,
+                manage_clicked_cb,
                 LV_EVENT_CLICKED,
                 NULL);
         }

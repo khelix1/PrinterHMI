@@ -5,6 +5,14 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Changed
+
+- Empty printer slots now open directly into the matching Add Printer form.
+- Moonraker discovery identifies verified candidates by printer hostname when
+  available, pre-fills fresh profile names, marks Klipper readiness, and uses
+  bounded batched TCP port checks before HTTP verification.
+
+
 ## [6.0.4] - 2026-08-07
 
 ### Fixed

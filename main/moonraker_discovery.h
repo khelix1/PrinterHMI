@@ -7,7 +7,8 @@
 typedef void (*moonraker_discovery_close_cb_t)(void);
 typedef void (*moonraker_discovery_select_cb_t)(
     const char *host,
-    int port);
+    int port,
+    const char *identity);
 
 /*
  * Moonraker discovery owns the complete discovery workflow:

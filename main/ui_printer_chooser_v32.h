@@ -3,7 +3,7 @@
 #include "lvgl.h"
 
 typedef void (*ui_printer_chooser_select_cb_t)(int profile_index);
-typedef void (*ui_printer_chooser_manage_cb_t)(lv_event_t *event);
+typedef void (*ui_printer_chooser_manage_cb_t)(int profile_index);
 
 /*
  * Theme-owned multi-printer landing page.

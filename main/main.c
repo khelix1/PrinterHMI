@@ -1499,7 +1499,8 @@ static void ui_network_tools_wifi_scan_now(void);
 static void scan_moonraker_now(void);
 static void moonraker_discovery_selected_bridge(
     const char *host,
-    int port);
+    int port,
+    const char *identity);
 
 static void ui_network_tools_open_wifi_scan_cb(lv_event_t *e)
 {
@@ -1827,11 +1828,10 @@ static void printer_chooser_select_bridge(int profile_index)
 }
 
 
-static void printer_chooser_manage_bridge(lv_event_t *event)
+static void printer_chooser_manage_bridge(int profile_index)
 {
-    (void)event;
-
-    ui_printer_profiles_show(
+    ui_printer_profiles_show_for_slot(
+        profile_index,
         printer_profiles_active_changed_bridge,
         scan_moonraker_now);
 }
@@ -2561,7 +2561,8 @@ scan_finished:
 
 static void moonraker_discovery_selected_bridge(
     const char *host,
-    int port)
+    int port,
+    const char *identity)
 {
     if (!host || !host[0] || port <= 0 || port >= 65536) {
         return;
@@ -2573,7 +2574,8 @@ static void moonraker_discovery_selected_bridge(
      */
     ui_printer_profiles_set_discovered_endpoint(
         host,
-        port);
+        port,
+        identity);
 
     moonraker_discovery_close();
 }

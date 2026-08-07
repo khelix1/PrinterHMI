@@ -79,18 +79,35 @@ static void candidate_data_deleted_cb(lv_event_t *e)
 }
 
 
-static bool host_already_seen(char seen[][32], int seen_count, const char *host)
-{
-    for (int i = 0; i < seen_count; i++) {
-        if (strcmp(seen[i], host) == 0) return true;
-    }
-    return false;
-}
-
 static bool moonraker_discovery_add_candidate(
     const char *host,
     int port,
     const moonraker_probe_result_t *probe);
+
+
+
+
+#define DISCOVERY_HOST_BATCH_SIZE 1
+
+static void discovery_add_candidate_address(
+    int *candidates,
+    size_t *candidate_count,
+    int host_octet,
+    int self_octet)
+{
+    if (!candidates || !candidate_count || host_octet <= 0 ||
+        host_octet >= 255 || host_octet == self_octet) {
+        return;
+    }
+
+    for (size_t index = 0; index < *candidate_count; ++index) {
+        if (candidates[index] == host_octet) {
+            return;
+        }
+    }
+
+    candidates[(*candidate_count)++] = host_octet;
+}
 
 
 static void scan_task(void *arg)
@@ -109,129 +126,154 @@ static void scan_task(void *arg)
     uint8_t c = esp_ip4_addr3(&s_scan_ip);
     int self_d = esp_ip4_addr4(&s_scan_ip);
 
-    char seen[96][32];
-    int seen_count = 0;
-    int found_count = 0;
+    /*
+     * Start with common addresses and nearby hosts for fast first results,
+     * then append every remaining usable address exactly once.
+     */
+    int candidates[254];
+    size_t candidate_count = 0;
+    static const int priority_hosts[] = {
+        1, 100, 101, 110, 120, 121, 122, 123, 124, 125,
+    };
+
+    for (size_t index = 0;
+         index < sizeof(priority_hosts) / sizeof(priority_hosts[0]);
+         ++index) {
+        discovery_add_candidate_address(
+            candidates, &candidate_count, priority_hosts[index], self_d);
+    }
+
+    for (int host = self_d - 20; host <= self_d + 20; ++host) {
+        discovery_add_candidate_address(
+            candidates, &candidate_count, host, self_d);
+    }
+
+    for (int host = 1; host < 255; ++host) {
+        discovery_add_candidate_address(
+            candidates, &candidate_count, host, self_d);
+    }
 
     char msg[512];
     snprintf(
         msg,
         sizeof(msg),
-        "Scanning %u.%u.%u.x on ports 7125-7128. Close cancels discovery.",
+        "Scanning all %u.%u.%u.x addresses on ports 7125-7128.",
         a,
         b,
         c);
     moonraker_discovery_set_status(msg);
 
-    int candidates[96];
-    int cand_count = 0;
+    size_t found_count = 0;
+    size_t next_candidate = 0;
 
-    /* Fast useful guesses first. */
-    candidates[cand_count++] = 1;
-    candidates[cand_count++] = 100;
-    candidates[cand_count++] = 101;
-    candidates[cand_count++] = 110;
-    candidates[cand_count++] = 120;
-    candidates[cand_count++] = 121;
-    candidates[cand_count++] = 122;
-    candidates[cand_count++] = 123;
-    candidates[cand_count++] = 124;
-    candidates[cand_count++] = 125;
+    while (next_candidate < candidate_count &&
+           !moonraker_discovery_is_cancelled()) {
+        char hosts[DISCOVERY_HOST_BATCH_SIZE][32];
+        const char *host_refs[DISCOVERY_HOST_BATCH_SIZE];
+        size_t host_count = 0;
 
-    for (int d = self_d - 20; d <= self_d + 20; d++) {
-        if (d > 0 && d < 255 && cand_count < 40) {
-            candidates[cand_count++] = d;
+        while (next_candidate < candidate_count &&
+               host_count < DISCOVERY_HOST_BATCH_SIZE) {
+            int host = candidates[next_candidate++];
+            snprintf(
+                hosts[host_count],
+                sizeof(hosts[host_count]),
+                "%u.%u.%u.%d",
+                a,
+                b,
+                c,
+                host);
+            host_refs[host_count] = hosts[host_count];
+            host_count++;
         }
-    }
-
-    /* Broader but still limited fallback. */
-    for (int d = 2; d <= 254 && cand_count < 96; d += 5) {
-        candidates[cand_count++] = d;
-    }
-
-    for (int i = 0; i < cand_count && found_count < 8; i++) {
-        if (moonraker_discovery_is_cancelled()) break;
-
-        int d = candidates[i];
-        if (d <= 0 || d >= 255) continue;
-
-        char host[32];
-        snprintf(host, sizeof(host), "%u.%u.%u.%d", a, b, c, d);
-
-        if (host_already_seen(seen, seen_count, host)) continue;
-        if (seen_count < 96) {
-            copy_text(seen[seen_count], sizeof(seen[seen_count]), host);
-            seen_count++;
-        }
-
-        bool open_ports[
-            sizeof(ports) / sizeof(ports[0])] = {0};
 
         snprintf(
             msg,
             sizeof(msg),
-            "Checking %s on ports 7125-7128   |   %d found",
-            host,
-            found_count);
+            "Checking %u of %u addresses on ports 7125-7128   |   %u found",
+            (unsigned)next_candidate,
+            (unsigned)candidate_count,
+            (unsigned)found_count);
         moonraker_discovery_set_status(msg);
 
+        bool open_ports[
+            DISCOVERY_HOST_BATCH_SIZE *
+            (sizeof(ports) / sizeof(ports[0]))] = {0};
+
         /*
-         * Four non-blocking TCP attempts share one short wait, replacing four
-         * full HTTP timeouts on addresses where no printer exists.
+         * ESP-Hosted is most reliable with one address worth of short
+         * TCP probes at a time. The full scan remains non-blocking for
+         * the interface because this worker owns the operation.
          */
         int tcp_timeout_ms = found_count == 0 ? 450 : 220;
         moonraker_probe_open_ports(
-            host,
+            host_refs[0],
             ports,
             sizeof(ports) / sizeof(ports[0]),
             tcp_timeout_ms,
             open_ports,
             sizeof(open_ports) / sizeof(open_ports[0]));
 
-        for (size_t port_index = 0;
-             port_index < sizeof(ports) / sizeof(ports[0]) &&
-             found_count < 8;
-             ++port_index) {
-            if (moonraker_discovery_is_cancelled()) break;
-            if (!open_ports[port_index]) continue;
-
-            int port = ports[port_index];
-
-            moonraker_probe_result_t probe = {0};
-            if (!moonraker_probe_endpoint(host, port, &probe)) continue;
-
-            bool published = false;
-
-            while (!moonraker_discovery_is_cancelled() &&
-                   moonraker_discovery_is_open()) {
-                if (bsp_display_lock(100)) {
-                    published = moonraker_discovery_add_candidate(
-                        host,
-                        port,
-                        &probe);
-                    bsp_display_unlock();
+        for (size_t host_index = 0;
+             host_index < host_count &&
+             !moonraker_discovery_is_cancelled();
+             ++host_index) {
+            bool host_has_open_port = false;
+            for (size_t port_index = 0;
+                 port_index < sizeof(ports) / sizeof(ports[0]);
+                 ++port_index) {
+                if (open_ports[
+                        host_index *
+                        (sizeof(ports) / sizeof(ports[0])) +
+                        port_index]) {
+                    host_has_open_port = true;
                     break;
                 }
-
-                vTaskDelay(pdMS_TO_TICKS(10));
             }
 
-            if (!published) {
-                break;
+            if (!host_has_open_port) {
+                continue;
             }
 
-            found_count++;
+            /*
+             * A shared Klipper host can accept one quick TCP SYN while
+             * dropping sibling probes. Once an address is positive, verify
+             * every supported Moonraker port serially. This finds separate
+             * instances on one host without broad concurrent HTTP traffic.
+             */
+            for (size_t port_index = 0;
+                 port_index < sizeof(ports) / sizeof(ports[0]) &&
+                 !moonraker_discovery_is_cancelled();
+                 ++port_index) {
+                moonraker_probe_result_t probe = {0};
+                int port = ports[port_index];
+                if (!moonraker_probe_endpoint(
+                        host_refs[host_index], port, &probe)) {
+                    continue;
+                }
 
-            snprintf(
-                msg,
-                sizeof(msg),
-                "%d Moonraker endpoint%s found. Select one below.",
-                found_count,
-                found_count == 1 ? "" : "s");
-            moonraker_discovery_set_status(msg);
+                bool published = false;
+                while (!moonraker_discovery_is_cancelled() &&
+                       moonraker_discovery_is_open()) {
+                    if (bsp_display_lock(100)) {
+                        published = moonraker_discovery_add_candidate(
+                            host_refs[host_index],
+                            port,
+                            &probe);
+                        bsp_display_unlock();
+                        break;
+                    }
+
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                }
+
+                if (published) {
+                    found_count++;
+                }
+            }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(15));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     if (!moonraker_discovery_is_cancelled()) {
@@ -239,8 +281,8 @@ static void scan_task(void *arg)
             snprintf(
                 msg,
                 sizeof(msg),
-                "No Moonraker endpoints found on %u.%u.%u.x ports "
-                "7125-7128. Verify the printer address and try again.",
+                "No Moonraker endpoints found on %u.%u.%u.x ports 7125-7128. "
+                "Verify the printer address and try again.",
                 a,
                 b,
                 c);
@@ -248,8 +290,8 @@ static void scan_task(void *arg)
             snprintf(
                 msg,
                 sizeof(msg),
-                "Discovery complete   |   %d endpoint%s found",
-                found_count,
+                "Discovery complete   |   %u endpoint%s found",
+                (unsigned)found_count,
                 found_count == 1 ? "" : "s");
         }
         moonraker_discovery_set_status(msg);

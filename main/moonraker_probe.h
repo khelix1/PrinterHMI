@@ -23,6 +23,7 @@ size_t moonraker_probe_open_ports(
     bool *open_ports,
     size_t open_ports_count);
 
+
 /*
  * Verifies one endpoint with /server/info. A successful endpoint then gets a
  * best-effort /printer/info identity lookup. Failure of that optional lookup

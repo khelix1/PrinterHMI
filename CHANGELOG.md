@@ -7,6 +7,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Changed
 
+- Moonraker discovery now completes a full local IPv4 subnet scan, testing ports 7125 through 7128 with the proven one-address TCP probe. Once an address responds, all four ports are HTTP-verified serially so separate instances on the same host are not skipped. Discovery no longer samples addresses or stops after eight results.
+- Added a non-blocking Test action to the printer profile editor. It verifies a manual Moonraker endpoint and reports the detected printer identity and Klipper readiness before an operator explicitly saves.
 - Clarified the About popup platform identity: ESP-IDF's `-dirty` suffix now explicitly identifies the intentional ESP-Hosted SDIO compatibility patch.
 
 ## [6.0.5] - 2026-08-07

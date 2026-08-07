@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "moonraker_config_controller.h"
+#include "moonraker_endpoint_test.h"
 #include "printer_preview_cache_v32.h"
 #include "printer_preview_store_v32.h"
 #include "printer_profile_health.h"
@@ -25,6 +26,7 @@ static lv_obj_t *s_editor_host = NULL;
 static lv_obj_t *s_editor_port = NULL;
 static lv_obj_t *s_editor_keyboard = NULL;
 static lv_obj_t *s_editor_status = NULL;
+static lv_timer_t *s_editor_test_timer = NULL;
 
 static int s_selected_profile = 0;
 static int s_editor_profile = -1;
@@ -47,6 +49,11 @@ static void editor_close(void)
     s_editor_host = NULL;
     s_editor_port = NULL;
     s_editor_keyboard = NULL;
+    if (s_editor_test_timer) {
+        lv_timer_delete(s_editor_test_timer);
+        s_editor_test_timer = NULL;
+    }
+
     s_editor_status = NULL;
     s_editor_profile = -1;
 }
@@ -464,6 +471,113 @@ static void editor_field_focused_cb(
 }
 
 
+static void editor_apply_identity_suggestion(
+    const char *identity)
+{
+    /*
+     * A verified identity is a suggestion for a fresh profile only. It never
+     * overwrites an operator's existing custom profile name.
+     */
+    if (!identity || !identity[0] || !s_editor_name) {
+        return;
+    }
+
+    char default_name[MOONRAKER_CONFIG_NAME_LENGTH];
+    snprintf(
+        default_name,
+        sizeof(default_name),
+        "Printer %d",
+        s_editor_profile + 1);
+
+    const char *current_name =
+        lv_textarea_get_text(s_editor_name);
+
+    if (!current_name || !current_name[0] ||
+        strcmp(current_name, default_name) == 0) {
+        lv_textarea_set_text(s_editor_name, identity);
+    }
+}
+
+
+static void editor_test_poll_cb(lv_timer_t *timer)
+{
+    moonraker_probe_result_t result = {0};
+    bool verified = false;
+
+    if (!moonraker_endpoint_test_take_result(&result, &verified)) {
+        return;
+    }
+
+    if (timer) {
+        lv_timer_delete(timer);
+    }
+    s_editor_test_timer = NULL;
+
+    if (!s_editor_popup) {
+        return;
+    }
+
+    if (!verified) {
+        editor_set_status(
+            "No verified Moonraker response. Check the host, port and network.");
+        return;
+    }
+
+    editor_apply_identity_suggestion(result.identity);
+
+    char status[192];
+    snprintf(
+        status,
+        sizeof(status),
+        result.klippy_ready
+            ? "Verified %s. Klipper is READY. Press SAVE to keep this profile."
+            : "Verified %s. Moonraker is reachable; Klipper is not ready.",
+        result.identity[0] ? result.identity : "Moonraker");
+    editor_set_status(status);
+}
+
+
+static void editor_test_cb(lv_event_t *event)
+{
+    (void)event;
+
+    if (!s_editor_host || !s_editor_port) {
+        return;
+    }
+
+    const char *host = lv_textarea_get_text(s_editor_host);
+    const char *port_text = lv_textarea_get_text(s_editor_port);
+
+    if (!host || !host[0]) {
+        editor_set_status("Enter a Moonraker host or IP address first.");
+        return;
+    }
+
+    char *port_end = NULL;
+    long port = strtol(port_text ? port_text : "", &port_end, 10);
+    if (!port_text || !port_text[0] || !port_end || *port_end != '\0' ||
+        port <= 0 || port >= 65536) {
+        editor_set_status("Port must be between 1 and 65535.");
+        return;
+    }
+
+    if (!moonraker_endpoint_test_start(host, (int)port)) {
+        editor_set_status(
+            moonraker_endpoint_test_busy()
+                ? "A connection test is already running."
+                : "Unable to start the connection test.");
+        return;
+    }
+
+    editor_set_status("Testing Moonraker connection...");
+    s_editor_test_timer = lv_timer_create(editor_test_poll_cb, 80, NULL);
+
+    if (!s_editor_test_timer) {
+        editor_set_status("Connection test is running; wait for it to finish.");
+    }
+}
+
+
 static void editor_save_cb(
     lv_event_t *event)
 {
@@ -573,26 +687,7 @@ void ui_printer_profiles_set_discovered_endpoint(
         s_editor_port,
         port_text);
 
-    /*
-     * The reported hostname is a suggestion for a fresh profile only.
-     * Discovery never overwrites an operator's existing custom name.
-     */
-    if (identity && identity[0] && s_editor_name) {
-        char default_name[MOONRAKER_CONFIG_NAME_LENGTH];
-        snprintf(
-            default_name,
-            sizeof(default_name),
-            "Printer %d",
-            s_editor_profile + 1);
-
-        const char *current_name =
-            lv_textarea_get_text(s_editor_name);
-
-        if (!current_name || !current_name[0] ||
-            strcmp(current_name, default_name) == 0) {
-            lv_textarea_set_text(s_editor_name, identity);
-        }
-    }
+    editor_apply_identity_suggestion(identity);
 
     editor_set_status(
         "Verified Moonraker endpoint selected. Review the name and press SAVE.");
@@ -788,32 +883,50 @@ static void manager_edit_cb(
 
     ui_popup_add_standard_footer_divider(s_editor_popup);
 
-    ui_popup_add_footer_action(
+    ui_popup_add_action_at(
         s_editor_popup,
         UI_POPUP_ACTION_CANCEL,
         LV_SYMBOL_CLOSE " CANCEL",
-        180,
-        UI_POPUP_FOOTER_LEFT,
+        32,
+        500,
+        172,
+        48,
         editor_cancel_cb,
         NULL,
         NULL);
 
-    ui_popup_add_footer_action(
+    ui_popup_add_action_at(
         s_editor_popup,
         UI_POPUP_ACTION_SECONDARY,
         LV_SYMBOL_REFRESH " DISCOVER",
-        180,
-        UI_POPUP_FOOTER_CENTER,
+        220,
+        500,
+        172,
+        48,
         editor_discover_cb,
         NULL,
         NULL);
 
-    ui_popup_add_footer_action(
+    ui_popup_add_action_at(
+        s_editor_popup,
+        UI_POPUP_ACTION_SECONDARY,
+        LV_SYMBOL_PLAY " TEST",
+        408,
+        500,
+        172,
+        48,
+        editor_test_cb,
+        NULL,
+        NULL);
+
+    ui_popup_add_action_at(
         s_editor_popup,
         UI_POPUP_ACTION_CONFIRM,
         LV_SYMBOL_SAVE " SAVE",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
+        596,
+        500,
+        172,
+        48,
         editor_save_cb,
         NULL,
         NULL);

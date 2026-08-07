@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V2
 expected_origin_repo="khelix1/PrinterHMI_v3_2"
-version="6.0.3"
+version="6.0.4"
 tag="v${version}"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {

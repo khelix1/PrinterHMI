@@ -5,6 +5,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [6.0.4] - 2026-08-07
+
 ### Fixed
 
 - Bound disconnected Moonraker WebSocket attempts to two seconds and
@@ -19,6 +21,13 @@ v4.0.0 is preserved under `docs/history/`.
 - Expired inactive positive state after five seconds. One missed inactive
   request now shows `VERIFYING...`; only a second confirmation failure
   changes an already-online printer to `OFFLINE`.
+
+### Validation
+
+- Built the ESP32-P4 firmware through `tools/build_idf6_hosted3.sh`.
+- Verified active Moonraker reconnection remains responsive.
+- Verified inactive healthy, starting, unreachable, shutdown and recovery
+  states update automatically in the chooser without selecting a printer.
 
 ## [6.0.3] - 2026-08-05
 

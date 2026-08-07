@@ -71,6 +71,7 @@ Moonraker discovery is part of Manage Printers. Open Add or Edit, select
 `DISCOVER`, then choose an endpoint to populate host and port. Discovery does
 not save automatically; select `SAVE` after reviewing the profile.
 
+Discovery verifies a candidate before showing it, displays the reported Moonraker host name when available, and can pre-fill a fresh profile name. It never saves or switches automatically; select `SAVE` after reviewing the profile.
 Current API paths include server information, file listing, file metadata,
 thumbnail download, object subscription, G-code script execution and print
 start. Connections currently use local-network HTTP and `ws://`.

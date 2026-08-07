@@ -1475,7 +1475,10 @@ bool moonraker_fetch_print_stats(const char *host,
         host,
         port,
         api_key,
-        "/printer/objects/query?print_stats",
+        /* A reachable Moonraker server is not enough: webhooks.state
+         * tells the inactive chooser whether Klipper is ready to run a
+         * printer. This remains one serialized HTTP transaction. */
+        "/printer/objects/query?print_stats&webhooks",
         1200,
         body,
         body_sz,

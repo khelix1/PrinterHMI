@@ -1522,7 +1522,9 @@ static void printer_profiles_active_changed_bridge(void)
     ui_shell_set_active_printer_name(
         moonraker_config_active_profile_name());
 
-    printer_profile_health_reset();
+    /* Selecting a printer moves active transport ownership.  It does not
+     * invalidate health already confirmed for other unchanged endpoints. */
+    printer_profile_health_reconcile();
     printer_profile_preview_worker_v32_reset();
     printer_preview_store_v32_reset_restore();
     ui_printer_chooser_v32_refresh();

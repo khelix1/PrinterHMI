@@ -10,6 +10,7 @@
 #include "moonraker_config_controller.h"
 #include "moonraker_probe.h"
 #include "printer_profile_health.h"
+#include "moonraker_live_websocket.h"
 #include "printer_preview_cache_v32.h"
 #include "ui_button.h"
 #include "ui_theme.h"
@@ -242,21 +243,57 @@ static void refresh_cards(void)
 
         lv_label_set_text(card->name, profile->name);
         lv_label_set_text(card->endpoint, endpoint);
-        const char *status_text =
-            !known
-                ? "CHECKING..."
-                : (online ? "ONLINE" : "OFFLINE");
-
-        if (index == active &&
+        bool active_live =
+            index == active &&
             state &&
-            state->moonraker_ok &&
-            state->printer_state[0] &&
-            strcmp(state->printer_state, "--") != 0) {
-            status_text = state->printer_state;
+            state->moonraker_ok;
+        bool status_online = active_live;
+        const char *status_text = NULL;
+
+        if (index == active) {
+            /* The active card reports only synchronized live state. */
+            if (active_live &&
+                state->printer_state[0] &&
+                strcmp(state->printer_state, "--") != 0) {
+                status_text = state->printer_state;
+            } else {
+                status_text = "OFFLINE / RETRYING";
+            }
+        } else {
+            char inactive_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
+            bool has_live_state =
+                known &&
+                online &&
+                printer_profile_health_get_live_state(
+                    index, inactive_state, sizeof(inactive_state));
+            bool inactive_online_fresh =
+                known &&
+                online &&
+                printer_profile_health_live_state_fresh(
+                    index, 5000000LL);
+            bool verifying = known && online && !inactive_online_fresh;
+
+            status_online = inactive_online_fresh;
+            status_text = !known
+                ? "VERIFYING..."
+                : (!online
+                    ? "OFFLINE"
+                    : (verifying
+                        ? "VERIFYING..."
+                        : (has_live_state
+                            ? inactive_state
+                            : "ONLINE")));
         }
 
         lv_label_set_text(card->status, status_text);
-        apply_status_style(card->status, true, online);
+        if (index != active &&
+            known &&
+            online &&
+            !status_online) {
+            ui_apply_label_dim(card->status);
+        } else {
+            apply_status_style(card->status, true, status_online);
+        }
 
         if (index == active) {
             lv_obj_clear_flag(card->active, LV_OBJ_FLAG_HIDDEN);

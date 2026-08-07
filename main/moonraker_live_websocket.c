@@ -22,6 +22,8 @@
 
 #define TAG "moon_live_ws"
 #define WS_RETRY_INTERVAL_US 3000000LL
+#define WS_RECONNECT_TIMEOUT_MS 5000
+#define WS_NETWORK_TIMEOUT_MS 2000
 /* Profile changes remain owned by the network task. Once that task observes
  * the new generation, retire and reopen during the same pass as v5.0 did.
  * v6.0.0 generation fencing still rejects every event from the old client.
@@ -1254,8 +1256,10 @@ static bool create_client(
         .uri = s_uri,
         .task_stack = 4096,
         .buffer_size = 4096,
-        .reconnect_timeout_ms = 5000,
-        .network_timeout_ms = 10000,
+        /* A dead LAN endpoint must never occupy the hosted transport
+         * for ten seconds.  Retries remain deliberately unhurried. */
+        .reconnect_timeout_ms = WS_RECONNECT_TIMEOUT_MS,
+        .network_timeout_ms = WS_NETWORK_TIMEOUT_MS,
     };
 
     s_client = esp_websocket_client_init(&config);

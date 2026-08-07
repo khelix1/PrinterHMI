@@ -5,6 +5,10 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Changed
+
+- Clarified the About popup platform identity: ESP-IDF's `-dirty` suffix now explicitly identifies the intentional ESP-Hosted SDIO compatibility patch.
+
 ## [6.0.5] - 2026-08-07
 
 ### Changed

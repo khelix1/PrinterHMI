@@ -72,23 +72,24 @@ void ui_about_popup_show(void)
         104,
         664);
 
-    char runtime[160];
+    char runtime[256];
     snprintf(
         runtime,
         sizeof(runtime),
-        "Firmware  %s\nBuild  %s\nPlatform  %s",
+        "Firmware  %s\nBuild  %s\nPlatform  %s\n"
+        "Custom SDIO compatibility patch applied",
         version,
         build,
         idf_version);
     ui_popup_add_caption(s_popup, runtime, 28, 205, 664);
-    ui_popup_add_divider(s_popup, 28, 286, 664);
+    ui_popup_add_divider(s_popup, 28, 300, 664);
     ui_popup_add_body(
         s_popup,
         "Designed and developed by khelix.\n"
         "Built with the open-source ESP-IDF, LVGL, ESP-Hosted, Klipper and "
         "Moonraker projects.",
         28,
-        302,
+        316,
         664);
     ui_popup_add_standard_footer_divider(s_popup);
     ui_popup_add_footer_action(

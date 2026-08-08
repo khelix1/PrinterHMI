@@ -45,7 +45,7 @@ publishing repository history.
 - Operator event history and configuration backup/restore
 - Network configuration with Moonraker discovery inside printer profile Add/Edit
 - Classic, Operator and Dark Glass runtime themes plus validated SD-card
-  custom themes created with PrinterHMI Theme Studio
+  custom themes authored externally and applied from the SD card
 - Accent, density, high-contrast, large-text, reduced-transparency and
   reduced-motion appearance settings
 - Persistent brightness, display sleep and timezone configuration

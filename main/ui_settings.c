@@ -9,7 +9,6 @@
 #include "timezone_config.h"
 #include "theme_manager.h"
 #include "ui_appearance_popups.h"
-#include "ui_theme_lab.h"
 
 #include "bsp/display.h"
 #include "esp_err.h"
@@ -103,13 +102,6 @@ static void settings_accessibility_card_cb(lv_event_t *event)
     (void)event;
     ui_appearance_popups_show_accessibility(settings_appearance_changed);
 }
-
-static void settings_theme_lab_cb(lv_event_t *event)
-{
-    (void)event;
-    ui_theme_lab_show();
-}
-
 
 static void settings_event_history_cb(lv_event_t *event)
 {
@@ -962,8 +954,7 @@ void ui_settings_show_page(
     const int display_row_3 = display_row_2 + row_height + 1;
     const int display_row_4 = display_row_3 + row_height + 1;
     const int display_row_5 = display_row_4 + row_height + 1;
-    const int display_row_6 = display_row_5 + row_height + 1;
-    const int display_height = display_row_6 + action_height + 6;
+    const int display_height = display_row_5 + row_height + 6;
     lv_obj_t *display = ui_settings_section_create(
         content,
         "DISPLAY",
@@ -1032,18 +1023,6 @@ void ui_settings_show_page(
         theme_manager_accessibility_label(),
         display_row_5,
         settings_accessibility_card_cb);
-
-    ui_settings_section_add_divider(
-        display, display_row_5 + row_height);
-
-    ui_settings_section_add_action_row(
-        display,
-        "Theme Laboratory",
-        "Inspect shared components and semantic states",
-        "OPEN LAB",
-        display_row_6,
-        settings_theme_lab_cb,
-        false);
 
     section_y += display_height + section_gap;
 
@@ -1177,7 +1156,6 @@ void hide_settings_tab(void)
         s_theme_rebuild_cb = NULL;
         settings_system_info_unbind();
         ui_appearance_popups_close_all();
-        ui_theme_lab_close();
         ui_settings_popups_close_all();
         ui_settings_backup_popup_close();
     }

@@ -16,34 +16,34 @@ when ownership or build membership changes.
 | `ui_theme`, `ui_theme_a`, `ui_theme_b`, `ui_theme_c` | Runtime theme contract and three implementations |
 | `theme_manager` | Persistent theme, accent, density and accessibility state |
 | `custom_theme` | SD-card custom-theme discovery, validation, overrides and removal |
-| `ui_theme_preview`, `ui_theme_lab`, `ui_appearance_popups` | Theme selection and operator preview tools |
+| `ui_theme_preview`, `ui_appearance_popups` | Theme selection, custom-package management and operator previews |
 | `ui_widgets`, `ui_button`, `ui_cards`, `ui_popup` | Shared controls and modal popup system |
-| `ui_page_title`, `ui_page_state_v32`, `ui_toast_v32` | Shared page and transient-state components |
+| `ui_page_title`, `ui_page_state`, `ui_toast` | Shared page and transient-state components |
 
 ## Shell and splash
 
 | Modules | Ownership |
 | --- | --- |
 | `ui_shell` | Persistent top bar, ten-destination navigation, clock and active printer; pointer state is permanently PSRAM-backed |
-| `ui_console_v32` | Console page, command entry and bounded history presentation |
-| `ui_macros_v32` | Detected public-macro page and run confirmation |
-| `ui_splash_v32` | Startup splash state and progress |
+| `ui_console` | Console page, command entry and bounded history presentation |
+| `ui_macros` | Detected public-macro page and run confirmation |
+| `ui_splash` | Startup splash state and progress |
 | `ui_logo_assets` | Compiled PrinterHMI logo assets |
 
 ## Dashboard
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_dashboard_v32`, `ui_dashboard_page_v32` | Dashboard page orchestration and layout |
-| `ui_dashboard_status_v32`, `ui_status_banner_v32` | Print state and status presentation |
-| `ui_active_print_v32`, `ui_machine_status_v32` | Active-print and machine cards |
-| `ui_command_bar_v32` | Dashboard operator actions |
+| `ui_dashboard`, `ui_dashboard_page` | Dashboard page orchestration and layout |
+| `ui_dashboard_status`, `ui_status_banner` | Print state and status presentation |
+| `ui_active_print`, `ui_machine_status` | Active-print and machine cards |
+| `ui_command_bar` | Dashboard operator actions |
 
 ## Printer
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_printer_v32`, `ui_printer_layout_v32` | Printer page orchestration and geometry |
+| `ui_printer`, `ui_printer_layout` | Printer page orchestration and geometry |
 | `ui_printer_motion`, `ui_printer_live_status` | Motion popup and live status |
 | `ui_printer_info_cards`, `ui_printer_actions`, `ui_printer_banner` | Printer presentation components |
 | `ui_printer_popups` | Temperature, fan, cancel and exclude-object interactions |
@@ -54,17 +54,17 @@ when ownership or build membership changes.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_calibration_v32` | Calibration page composition and workflow routing |
+| `ui_calibration` | Calibration page composition and workflow routing |
 | `ui_calibration_motion` | Input Shaper, Axis Twist and Z Tilt workflows |
 | `ui_calibration_pressure_advance` | Pressure Advance workflow |
 | `ui_calibration_manual_probe` | Shared guided Probe/Z and Axis Twist TESTZ controls, including 0.005 mm fine steps |
 | `calibration_capability_controller`, `calibration_session_controller` | Calibration availability, progress and command policy |
-| `ui_bed_mesh_v32` | Bed Mesh page composition and calibration entry |
+| `ui_bed_mesh` | Bed Mesh page composition and calibration entry |
 | `ui_bed_mesh_gestures`, `ui_bed_mesh_view` | Orbit, pan, pinch and shared view transform |
 | `ui_bed_mesh_renderer` | RGB565 height surface, grids, axes and origin rendering |
 | `ui_bed_mesh_profiles` | Profile list, Load, Save As, Remove and SAVE_CONFIG confirmations |
 | `bed_mesh_controller` | Active mesh and profile snapshots |
-| `ui_devices_v32` | Devices page composition and Telemetry bridge |
+| `ui_devices` | Devices page composition and Telemetry bridge |
 | `ui_devices_catalog_view` | Filters, cards, pagination and refresh timer |
 | `ui_devices_live_values` | Visible Moonraker device-value translation |
 | `device_catalog_controller` | Object discovery, classification and bounded catalog state |
@@ -75,20 +75,20 @@ when ownership or build membership changes.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_files_v32`, `files_page_controller` | Files page and behavior routing |
-| `files_row_preview_v32`, `file_detail_loader_v32` | Row thumbnail and long-press detail work |
-| `thumbnail_manager_v32`, `thumbnail_render_v32` | Thumbnail download/cache state and RGB565 rendering |
-| `thumbnail_session_v32`, `thumbnail_preview_coordinator_v32` | Selected-file metadata, layer fallback and preview coordination |
-| `ui_thumbnail_v32` | Shared thumbnail UI component |
+| `ui_files`, `files_page_controller` | Files page and behavior routing |
+| `files_row_preview`, `file_detail_loader` | Row thumbnail and long-press detail work |
+| `thumbnail_manager`, `thumbnail_render` | Thumbnail download/cache state and RGB565 rendering |
+| `thumbnail_session`, `thumbnail_preview_coordinator` | Selected-file metadata, layer fallback and preview coordination |
+| `ui_thumbnail` | Shared thumbnail UI component |
 
 ## Network and Moonraker
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_network_v32`, `ui_network_tools` | Network page and Wi-Fi tools |
-| `ui_printer_profiles`, `ui_printer_chooser_v32` | Profile Add/Edit with discovery and startup chooser |
+| `ui_network`, `ui_network_tools` | Network page and Wi-Fi tools |
+| `ui_printer_profiles`, `ui_printer_chooser` | Profile Add/Edit with discovery and startup chooser |
 | `printer_profile_health` | Per-profile reachability state |
-| `printer_preview_cache_v32`, `printer_profile_preview_worker_v32`, `printer_preview_store_v32` | Per-profile preview lifecycle; the low-priority worker owns inactive-profile HTTP health and preview requests |
+| `printer_preview_cache`, `printer_profile_preview_worker`, `printer_preview_store` | Per-profile preview lifecycle; the low-priority worker owns inactive-profile HTTP health and preview requests |
 | `network_status_controller`, `network_wifi_scan` | Network state policy and scan service |
 | `moonraker` | HTTP requests, response parsing and synchronized printer state |
 | `moonraker_config_controller` | Persistent multi-printer configuration |
@@ -100,14 +100,14 @@ when ownership or build membership changes.
 
 | Modules | Ownership |
 | --- | --- |
-| `ui_drybox_v32`, `ui_drybox_page_v32` | Drybox page routing, layout and controls |
+| `ui_drybox`, `ui_drybox_page` | Drybox page routing, layout and controls |
 
 ## Telemetry
 
 | Modules | Ownership |
 | --- | --- |
 | `telemetry_history` | Time-series sample storage |
-| `ui_telemetry_components`, `ui_telemetry_charts`, `ui_telemetry_v32` | Telemetry controls, charts and page orchestration |
+| `ui_telemetry_components`, `ui_telemetry_charts`, `ui_telemetry` | Telemetry controls, charts and page orchestration |
 
 ## Settings and OTA
 

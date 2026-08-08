@@ -12,7 +12,6 @@ idf_component_register(
         "theme_manager.c"
         "custom_theme.c"
         "ui_theme_preview.c"
-        "ui_theme_lab.c"
         "ui_appearance_popups.c"
         "ui_widgets.c"
         "ui_button.c"

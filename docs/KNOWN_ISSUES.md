@@ -62,12 +62,6 @@ Firmware updates use the ESP-IDF OTA framework but do not currently implement a 
 
 # Build & Portability
 
-## Absolute paths in `dependencies.lock`
-
-The generated dependency lock file currently contains machine-specific absolute paths.
-
-This should be made portable before introducing automated CI or distributing the repository for general development.
-
 ## Internal startup-RAM margin
 
 FreeRTOS creates the statically configured timer task before `app_main()`.

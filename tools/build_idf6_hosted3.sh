@@ -6,7 +6,7 @@ repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     exit 1
 }
 
-PRINTERHMI_IDF6_ROOT="${PRINTERHMI_IDF6_PATH:-$HOME/esp/esp-idf-v6.0.2}"
+PRINTERHMI_IDF6_ROOT="${PRINTERHMI_IDF6_PATH:-${IDF_PATH:-$HOME/esp/esp-idf-v6.0.2}}"
 
 if [[ ! -f "$PRINTERHMI_IDF6_ROOT/export.sh" ]]; then
     echo "ERROR: ESP-IDF 6.0.2 export script not found: $PRINTERHMI_IDF6_ROOT/export.sh" >&2

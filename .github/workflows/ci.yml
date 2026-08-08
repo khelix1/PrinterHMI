@@ -1,0 +1,50 @@
+name: PrinterHMI CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: printerhmi-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    name: Source policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Validate public source and release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check HEAD^ HEAD
+          bash -n tools/build_idf6_hosted3.sh tools/release_stable.sh \
+            tools/end_of_night_checkpoint.sh
+          tools/audit/public_tree_audit.sh
+          tools/audit/version_audit.sh
+          tools/audit/dependencies_lock_audit.sh
+
+  idf6-build:
+    name: ESP-IDF 6.0.2 build
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v6.0.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build verified P4 firmware
+        shell: bash
+        env:
+          PRINTERHMI_IDF6_PATH: /opt/esp/idf
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          tools/build_idf6_hosted3.sh
+          tools/audit/firmware_size_audit.sh

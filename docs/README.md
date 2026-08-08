@@ -12,6 +12,7 @@ under `history/`.
 | [Custom themes](CUSTOM_THEMES.md) | SD package format, validation and recovery |
 | [Flashing and OTA](FLASHING_AND_OTA.md) | USB installation, OTA and recovery |
 | [Testing](TESTING.md) | Required host and target validation |
+| [Continuous integration](CI.md) | Automated source policy and clean IDF6 build gate |
 | [Troubleshooting](TROUBLESHOOTING.md) | Diagnostic and recovery procedures |
 | [Known issues](KNOWN_ISSUES.md) | Open product and repository risks |
 | [Release checklist](RELEASE_CHECKLIST.md) | Release-quality gate |

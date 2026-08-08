@@ -10,30 +10,15 @@ v4.0.0 is preserved under `docs/history/`.
 ### Added
 
 - Optional AES-256-GCM encrypted configuration backups. Encrypted backups include Moonraker API keys only after passphrase protection; ordinary backups remain key-free.
-- A responsive progress dialog for encrypted backup creation and encrypted restore verification.
+- Responsive progress feedback while creating encrypted backups and verifying encrypted restores, plus a confirmed Clear All Backups operation that never changes live settings.
+- Optional per-printer Moonraker API-key authentication. API keys are masked in the editor, used by HTTP and live WebSocket connections, excluded from ordinary SD-card configuration backups, and never written to event logs.
 
 ### Changed
 
-- Configuration backup restore now validates before replacement, preserves recoverable previous files, and keeps destructive backup cleanup separate from live printer settings.
-
-
-### Added
-
-- Optional portable AES-256-GCM encrypted configuration backups. Encrypted backups include Moonraker API keys only after passphrase protection; plain backups remain key-free.
-- Live, non-blocking progress for encrypted backup creation and encrypted restore verification, plus a confirmed Clear All Backups operation that never changes live settings.
-
-### Added
-
-- Added optional per-printer Moonraker API-key authentication. API keys are
-  masked in the editor, used by HTTP and live WebSocket connections, excluded
-  from SD-card configuration backups and never written to event logs.
-
-
-### Changed
-
-- Moonraker discovery now completes a full local IPv4 subnet scan, testing ports 7125 through 7128 with the proven one-address TCP probe. Once an address responds, all four ports are HTTP-verified serially so separate instances on the same host are not skipped. Discovery no longer samples addresses or stops after eight results.
+- Moonraker discovery now completes a full local IPv4 subnet scan, testing ports 7125 through 7128 with the proven one-address TCP probe. Once an address responds, all four ports are HTTP-verified serially so separate instances on the same host are not skipped.
 - Added a non-blocking Test action to the printer profile editor. It verifies a manual Moonraker endpoint and reports the detected printer identity and Klipper readiness before an operator explicitly saves.
-- Clarified the About popup platform identity: ESP-IDF's `-dirty` suffix now explicitly identifies the intentional ESP-Hosted SDIO compatibility patch.
+- Clarified the About popup platform identity: ESP-IDF's `-dirty` suffix explicitly identifies the intentional ESP-Hosted SDIO compatibility patch.
+- Configuration backup restore now validates before replacement, preserves recoverable previous files, and keeps destructive backup cleanup separate from live printer settings.
 
 ## [6.0.5] - 2026-08-07
 

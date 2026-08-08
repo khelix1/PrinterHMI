@@ -54,3 +54,4 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           tools/build_idf6_hosted3.sh
           tools/audit/firmware_size_audit.sh
+          tools/audit/compiler_warning_audit.sh

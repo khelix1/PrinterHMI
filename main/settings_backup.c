@@ -1,4 +1,5 @@
 #include "settings_backup.h"
+#include "settings_backup_crypto.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -24,6 +25,12 @@
 #define SETTINGS_BACKUP_PREVIOUS_PATH \
     "/sdcard/PrinterHMI/config_backup.previous"
 #define SETTINGS_BACKUP_MAX_BYTES (16 * 1024)
+#define SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH \
+    "/sdcard/PrinterHMI/config_backup.phmb.tmp"
+#define SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH \
+    "/sdcard/PrinterHMI/config_backup.phmb.previous"
+#define SETTINGS_BACKUP_ENCRYPTED_MAX_BYTES \
+    (SETTINGS_BACKUP_MAX_BYTES + 128)
 
 
 typedef struct {
@@ -196,7 +203,8 @@ static void capture_current(
 
 
 static cJSON *snapshot_to_json(
-    const settings_backup_snapshot_t *snapshot)
+    const settings_backup_snapshot_t *snapshot,
+    bool include_api_keys)
 {
     if (!snapshot) {
         return NULL;
@@ -273,6 +281,13 @@ static cJSON *snapshot_to_json(
                 item,
                 "port",
                 profile->port);
+
+            if (include_api_keys) {
+                cJSON_AddStringToObject(
+                    item,
+                    "api_key",
+                    profile->api_key);
+            }
         }
 
         cJSON_AddItemToArray(
@@ -357,6 +372,7 @@ static cJSON *snapshot_to_json(
 static bool parse_snapshot(
     const cJSON *root,
     settings_backup_snapshot_t *snapshot,
+    bool include_api_keys,
     char *status,
     size_t status_size)
 {
@@ -485,6 +501,27 @@ static bool parse_snapshot(
                 status_size,
                 "Backup contains invalid printer settings.");
             return false;
+        }
+
+        if (include_api_keys) {
+            const cJSON *api_key =
+                cJSON_GetObjectItemCaseSensitive(
+                    profile_json,
+                    "api_key");
+            if (!cJSON_IsString(api_key) ||
+                !api_key->valuestring ||
+                strlen(api_key->valuestring) >=
+                    sizeof(profile->api_key)) {
+                set_status(
+                    status,
+                    status_size,
+                    "Encrypted backup contains an invalid API key.");
+                return false;
+            }
+            strlcpy(
+                profile->api_key,
+                api_key->valuestring,
+                sizeof(profile->api_key));
         }
 
         ++configured_count;
@@ -668,7 +705,7 @@ bool settings_backup_export(
     settings_backup_snapshot_t snapshot;
     capture_current(&snapshot);
 
-    cJSON *root = snapshot_to_json(&snapshot);
+    cJSON *root = snapshot_to_json(&snapshot, false);
 
     if (!root) {
         set_status(
@@ -885,11 +922,294 @@ static bool load_backup_snapshot(
         return false;
     }
 
-    bool valid = parse_snapshot(root, snapshot, status, status_size);
+    bool valid = parse_snapshot(
+        root, snapshot, false, status, status_size);
     cJSON_Delete(root);
     return valid;
 }
 
+
+static bool write_encrypted_backup_file(
+    const uint8_t *data,
+    size_t data_size,
+    char *status,
+    size_t status_size)
+{
+    if (mkdir(SETTINGS_BACKUP_DIRECTORY, 0775) != 0 && errno != EEXIST) {
+        set_status(status, status_size, "SD card is unavailable or not writable.");
+        return false;
+    }
+
+    FILE *file = fopen(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH, "wb");
+    if (!file) {
+        set_status(status, status_size, "Could not create encrypted backup on the SD card.");
+        return false;
+    }
+
+    bool written = fwrite(data, 1, data_size, file) == data_size &&
+        fflush(file) == 0 && fsync(fileno(file)) == 0;
+    bool closed = fclose(file) == 0;
+    if (!written || !closed) {
+        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
+        set_status(status, status_size, "Encrypted backup write failed; existing backup was preserved.");
+        return false;
+    }
+
+    if (unlink(SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH) != 0 && errno != ENOENT) {
+        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
+        set_status(status, status_size, "Encrypted backup rotation could not clear recovery copy.");
+        return false;
+    }
+
+    bool previous_backup = false;
+    if (rename(SETTINGS_BACKUP_ENCRYPTED_PATH,
+               SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH) == 0) {
+        previous_backup = true;
+    } else if (errno != ENOENT) {
+        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
+        set_status(status, status_size, "Existing encrypted backup could not be replaced.");
+        return false;
+    }
+
+    if (rename(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH,
+               SETTINGS_BACKUP_ENCRYPTED_PATH) != 0) {
+        if (previous_backup) {
+            (void)rename(SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH,
+                         SETTINGS_BACKUP_ENCRYPTED_PATH);
+        }
+        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
+        set_status(status, status_size, "Encrypted backup replacement failed; previous backup was restored.");
+        return false;
+    }
+    if (previous_backup) {
+        (void)unlink(SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH);
+    }
+    return true;
+}
+
+bool settings_backup_export_encrypted_with_progress(
+    const char *passphrase,
+    settings_backup_encrypted_progress_cb_t progress_cb,
+    void *progress_user_data,
+    char *status,
+    size_t status_size)
+{
+    if (progress_cb) {
+        progress_cb(SETTINGS_BACKUP_ENCRYPTED_PREPARING, progress_user_data);
+    }
+
+    settings_backup_snapshot_t snapshot;
+    capture_current(&snapshot);
+    cJSON *root = snapshot_to_json(&snapshot, true);
+    if (!root) {
+        set_status(status, status_size, "Unable to create encrypted backup document.");
+        return false;
+    }
+    char *document = cJSON_PrintBuffered(root, 2048, true);
+    cJSON_Delete(root);
+    if (!document) {
+        set_status(status, status_size, "Unable to encode encrypted backup document.");
+        return false;
+    }
+
+    if (progress_cb) {
+        progress_cb(SETTINGS_BACKUP_ENCRYPTED_ENCRYPTING, progress_user_data);
+    }
+
+    uint8_t *encrypted = NULL;
+    size_t encrypted_size = 0;
+    bool encrypted_ok = settings_backup_crypto_encrypt(
+        passphrase, (const uint8_t *)document, strlen(document),
+        &encrypted, &encrypted_size, status, status_size);
+    cJSON_free(document);
+    if (!encrypted_ok) {
+        return false;
+    }
+
+    if (progress_cb) {
+        progress_cb(SETTINGS_BACKUP_ENCRYPTED_WRITING, progress_user_data);
+    }
+
+    bool written = write_encrypted_backup_file(
+        encrypted, encrypted_size, status, status_size);
+    settings_backup_crypto_free(encrypted, encrypted_size);
+    if (!written) {
+        return false;
+    }
+    set_status(status, status_size,
+        "Encrypted configuration backup saved. API keys are protected inside it.");
+    operator_event_log_add(OPERATOR_EVENT_INFO,
+        "Encrypted configuration backup saved to SD card");
+    return true;
+}
+
+bool settings_backup_export_encrypted(
+    const char *passphrase,
+    char *status,
+    size_t status_size)
+{
+    return settings_backup_export_encrypted_with_progress(
+        passphrase,
+        NULL,
+        NULL,
+        status,
+        status_size);
+}
+
+
+static bool load_encrypted_backup_snapshot(
+    const char *passphrase,
+    settings_backup_snapshot_t *snapshot,
+    char *status,
+    size_t status_size)
+{
+    FILE *file = fopen(SETTINGS_BACKUP_ENCRYPTED_PATH, "rb");
+    if (!file) {
+        set_status(status, status_size, "No encrypted configuration backup was found on the SD card.");
+        return false;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        set_status(status, status_size, "Unable to inspect encrypted backup.");
+        return false;
+    }
+    long file_size = ftell(file);
+    if (file_size <= 0 || file_size > SETTINGS_BACKUP_ENCRYPTED_MAX_BYTES ||
+        fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        set_status(status, status_size, "Encrypted backup file size is invalid.");
+        return false;
+    }
+    uint8_t *encrypted = heap_caps_malloc((size_t)file_size,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!encrypted) {
+        encrypted = malloc((size_t)file_size);
+    }
+    if (!encrypted) {
+        fclose(file);
+        set_status(status, status_size, "Not enough memory to read encrypted backup.");
+        return false;
+    }
+    size_t read_size = fread(encrypted, 1, (size_t)file_size, file);
+    bool closed = fclose(file) == 0;
+    if (read_size != (size_t)file_size || !closed) {
+        settings_backup_crypto_free(encrypted, (size_t)file_size);
+        set_status(status, status_size, "Encrypted backup file could not be read completely.");
+        return false;
+    }
+
+    uint8_t *document = NULL;
+    size_t document_size = 0;
+    bool decrypted = settings_backup_crypto_decrypt(
+        passphrase, encrypted, (size_t)file_size, &document, &document_size,
+        status, status_size);
+    settings_backup_crypto_free(encrypted, (size_t)file_size);
+    if (!decrypted) {
+        return false;
+    }
+    cJSON *root = cJSON_ParseWithLength((const char *)document, document_size);
+    settings_backup_crypto_free(document, document_size + 1);
+    if (!root) {
+        set_status(status, status_size, "Encrypted backup contains invalid JSON.");
+        return false;
+    }
+    bool valid = parse_snapshot(root, snapshot, true, status, status_size);
+    cJSON_Delete(root);
+    return valid;
+}
+
+static void format_preflight(
+    const settings_backup_snapshot_t *snapshot,
+    bool encrypted,
+    char *status,
+    size_t status_size)
+{
+    int profile_count = 0;
+    for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index) {
+        if (snapshot->profiles[index].configured) {
+            ++profile_count;
+        }
+    }
+    const moonraker_profile_t *active =
+        &snapshot->profiles[snapshot->active_profile];
+    snprintf(status, status_size,
+        "Backup verified: schema %d, %d printer %s.\n"
+        "Active printer: %s.\n"
+        "Appearance and display settings included.\n%s",
+        SETTINGS_BACKUP_SCHEMA, profile_count,
+        profile_count == 1 ? "profile" : "profiles",
+        active->name[0] ? active->name : "unnamed printer",
+        encrypted ? "Moonraker API keys are included and encrypted."
+                  : "Moonraker API keys are not included in backups.");
+}
+
+bool settings_backup_encrypted_preflight(
+    const char *passphrase,
+    char *status,
+    size_t status_size)
+{
+    settings_backup_snapshot_t snapshot;
+    if (!load_encrypted_backup_snapshot(passphrase, &snapshot, status, status_size)) {
+        return false;
+    }
+    format_preflight(&snapshot, true, status, status_size);
+    return true;
+}
+
+bool settings_backup_restore_encrypted(
+    const char *passphrase,
+    char *status,
+    size_t status_size)
+{
+    settings_backup_snapshot_t restored;
+    if (!load_encrypted_backup_snapshot(passphrase, &restored, status, status_size)) {
+        operator_event_log_add(OPERATOR_EVENT_ERROR,
+            "Encrypted configuration restore rejected: validation failed");
+        return false;
+    }
+    settings_backup_snapshot_t previous;
+    capture_current(&previous);
+    if (!apply_snapshot(&restored)) {
+        (void)apply_snapshot(&previous);
+        set_status(status, status_size,
+            "Encrypted restore failed; previous settings were reapplied.");
+        operator_event_log_add(OPERATOR_EVENT_ERROR,
+            "Encrypted configuration restore failed");
+        return false;
+    }
+    set_status(status, status_size,
+        "Encrypted configuration restored. Reboot the controller to finish.");
+    operator_event_log_add(OPERATOR_EVENT_INFO,
+        "Encrypted configuration restored from SD card");
+    return true;
+}
+
+bool settings_backup_remove_all(char *status, size_t status_size)
+{
+    const char *paths[] = {
+        SETTINGS_BACKUP_PATH,
+        SETTINGS_BACKUP_TEMP_PATH,
+        SETTINGS_BACKUP_PREVIOUS_PATH,
+        SETTINGS_BACKUP_ENCRYPTED_PATH,
+        SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH,
+        SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH,
+    };
+    int removed = 0;
+    for (size_t index = 0; index < sizeof(paths) / sizeof(paths[0]); ++index) {
+        if (unlink(paths[index]) == 0) {
+            ++removed;
+        } else if (errno != ENOENT) {
+            set_status(status, status_size,
+                "Could not remove every backup; existing files were preserved.");
+            return false;
+        }
+    }
+    snprintf(status, status_size, "Removed %d configuration backup file%s.",
+        removed, removed == 1 ? "" : "s");
+    operator_event_log_add(OPERATOR_EVENT_INFO,
+        "Configuration backup files removed from SD card");
+    return true;
+}
 
 bool settings_backup_preflight(
     char *status,

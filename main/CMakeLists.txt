@@ -128,6 +128,8 @@ idf_component_register(
         "ui_settings_components.c"
         "settings_system_info.c"
         "settings_backup.c"
+        "settings_backup_crypto.c"
+        "settings_backup_encrypted_worker.c"
         "ui_settings_backup_popup.c"
         "timezone_config.c"
         "ui_settings_popups.c"
@@ -160,4 +162,5 @@ idf_component_register(
         sdmmc
         esp_driver_sdmmc
         espressif__esp_lcd_jd9165
+    PRIV_REQUIRES mbedtls
 )

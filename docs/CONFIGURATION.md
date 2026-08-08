@@ -111,3 +111,10 @@ Any NVS schema change must include:
 3. A fresh-device test.
 4. An upgrade test from the preceding known-good release.
 5. Updated factory-reset and recovery documentation.
+
+## Encrypted configuration backups
+
+Use **Settings → Configuration Backup → ENCRYPT** when a portable backup must
+also retain Moonraker API keys. The encrypted file requires a passphrase of at
+least 12 characters for both verification and restore. The regular **BACK UP**
+file continues to omit API keys by design.

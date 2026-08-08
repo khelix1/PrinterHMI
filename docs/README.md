@@ -31,3 +31,8 @@ evidence of a defect in one or the other. Resolve the mismatch in the same
 reviewed change rather than silently accepting drift.
 
 - [`FULL_STACK_BUILD.md`](FULL_STACK_BUILD.md) — reproducible ESP-IDF 6.0.5 P4 and C6 firmware build
+
+## Encrypted configuration backups
+
+See [Encrypted Configuration Backups](ENCRYPTED_CONFIGURATION_BACKUPS.md) for
+the portable encrypted-backup format, restore verification, and recovery rules.

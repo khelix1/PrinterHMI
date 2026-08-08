@@ -7,6 +7,11 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Added
 
+- Optional portable AES-256-GCM encrypted configuration backups. Encrypted backups include Moonraker API keys only after passphrase protection; plain backups remain key-free.
+- Live, non-blocking progress for encrypted backup creation and encrypted restore verification, plus a confirmed Clear All Backups operation that never changes live settings.
+
+### Added
+
 - Added optional per-printer Moonraker API-key authentication. API keys are
   masked in the editor, used by HTTP and live WebSocket connections, excluded
   from SD-card configuration backups and never written to event logs.

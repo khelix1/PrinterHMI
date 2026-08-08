@@ -137,3 +137,10 @@ granted as trademarks by the Apache License.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 and [SECURITY.md](SECURITY.md) before participating.
+
+## Encrypted configuration backups
+
+Configuration Backup supports a plain, API-key-free SD export and an optional
+passphrase-encrypted export that includes Moonraker API keys. See
+[`docs/ENCRYPTED_CONFIGURATION_BACKUPS.md`](docs/ENCRYPTED_CONFIGURATION_BACKUPS.md)
+for operation, recovery, and security details.

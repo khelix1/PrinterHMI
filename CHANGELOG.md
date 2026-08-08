@@ -5,6 +5,18 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [6.0.6] - 2026-08-08
+
+### Added
+
+- Optional AES-256-GCM encrypted configuration backups. Encrypted backups include Moonraker API keys only after passphrase protection; ordinary backups remain key-free.
+- A responsive progress dialog for encrypted backup creation and encrypted restore verification.
+
+### Changed
+
+- Configuration backup restore now validates before replacement, preserves recoverable previous files, and keeps destructive backup cleanup separate from live printer settings.
+
+
 ### Added
 
 - Optional portable AES-256-GCM encrypted configuration backups. Encrypted backups include Moonraker API keys only after passphrase protection; plain backups remain key-free.

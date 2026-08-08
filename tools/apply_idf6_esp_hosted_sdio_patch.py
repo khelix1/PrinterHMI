@@ -34,7 +34,6 @@ if head != tag_commit:
         f"{tag_commit[:12]}"
     )
 
-expected = patch.read_text()
 actual = git("diff", "--", target).stdout
 
 if not actual:
@@ -49,18 +48,25 @@ if not actual:
         ["git", "-C", str(idf), "apply", str(patch)],
         check=True,
     )
-    actual = git("diff", "--", target).stdout
-
-if actual != expected:
-    raise SystemExit(
-        "ERROR: ESP-IDF has changes other than the exact tracked SDIO patch"
-    )
 
 modified = git("diff", "--name-only").stdout.splitlines()
-
 if modified != [target]:
     raise SystemExit(
         f"ERROR: unexpected ESP-IDF modifications: {modified}"
+    )
+
+numstat = git("diff", "--numstat", "--", target).stdout.strip()
+if numstat != f"1\t1\t{target}":
+    raise SystemExit(
+        "ERROR: ESP-IDF SDIO patch must change exactly one line"
+    )
+
+source = (idf / target).read_text()
+required = 'SDIO_SLAVE_CHECK(len > 0, "len <= 0", ESP_ERR_INVALID_ARG);'
+legacy = 'SDIO_SLAVE_CHECK(len > 0 && len <= 4092,'
+if required not in source or legacy in source:
+    raise SystemExit(
+        "ERROR: required ESP-IDF SDIO compatibility correction is not exact"
     )
 
 git("diff", "--check")

@@ -9,6 +9,10 @@ v4.0.0 is preserved under `docs/history/`.
 
 - Added a non-publishing GitHub Actions CI gate for source-policy audits, portable dependency-lock validation, and a clean ESP-IDF 6.0.2 P4 build with a firmware-size budget.
 
+### Changed
+
+- Made CI verify the tracked ESP-IDF SDIO compatibility correction by target version, file set, line count and source markers, avoiding container-specific Git diff metadata.
+
 ## [6.0.6] - 2026-08-08
 
 ### Added

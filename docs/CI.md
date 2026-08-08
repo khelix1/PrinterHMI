@@ -6,6 +6,7 @@ firmware assets.
 
 ## Source policy job
 
+- Installs the explicit audit dependency (`ripgrep`) before checks.
 - Checks Git whitespace errors and release-script syntax.
 - Runs the public-tree, version/documentation, and dependency-lock audits.
 

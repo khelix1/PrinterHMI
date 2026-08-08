@@ -1254,38 +1254,8 @@ static bool moonraker_get_live_objects(void)
 return true;
 }
 
-static const char *dash_print_state_text(void)
-{
-    moonraker_state_t mr_state_snapshot;
-    moonraker_state_snapshot(&mr_state_snapshot);
-    const moonraker_state_t *mr_state = &mr_state_snapshot;
-
-    const char *txt =
-        printer_controller_status_text(
-            mr_state->printer_state);
-
-    if (txt && strcmp(txt, "--") != 0) {
-        return txt;
-    }
-
-    return s_moonraker_ok ? "CONNECTED" : "OFFLINE";
-}
-
-
 static void printer_thumb_start_delayed(void);
 static void printer_build_metadata_text(const char *file, char *out, size_t out_sz);
-static lv_color_t temp_value_color(double temp, double target)
-{
-    if (temp < -100.0) return UI_TEXT;
-    if (target <= 0.0) return UI_TEXT;
-
-    double diff = target - temp;
-    if (diff > 10.0) return UI_DANGER_BRIGHT;   // far below target
-    if (diff > 2.0)  return UI_WARN;   // heating
-    if (diff < -5.0) return UI_DANGER_BRIGHT;   // overshoot
-    return UI_OK_BRIGHT;                    // at/near target
-}
-
 static void thumbnail_preview_coordinator_v32_set_live_target(void)
 {
     printer_thumb_target = THUMB_TARGET_LIVE;

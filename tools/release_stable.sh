@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V2
-expected_origin_repo="khelix1/PrinterHMI_v3_2"
+expected_origin_repo="khelix1/PrinterHMI"
 version="6.0.6"
 tag="v${version}"
 

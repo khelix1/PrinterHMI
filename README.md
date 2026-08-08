@@ -15,7 +15,7 @@ timezone settings, runtime themes, and OTA firmware updates.
 
 - Firmware version: `6.0.6`
 - Target: `esp32p4`
-- Known-good ESP-IDF: `6.0.6`
+- Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`
 - Display: JD9165, 1024 x 600, MIPI-DSI
 - Touch: GT911 over I2C
@@ -82,17 +82,17 @@ These photographs show the interface operating on the target hardware.
 
 ## Quick start
 
-Install ESP-IDF 6.0.6, then:
+Install ESP-IDF 6.0.2, then:
 
 ```bash
-git clone https://github.com/khelix1/PrinterHMI_v3_2.git PrinterHMI_v3_2
-cd PrinterHMI_v3_2
+git clone https://github.com/khelix1/PrinterHMI.git PrinterHMI
+cd PrinterHMI
 ./tools/build_idf6_hosted3.sh
 
 # Or build and package both the P4 and C6 firmware stack:
 ./tools/build_v6_stack.sh
 
-source "$HOME/esp/esp-idf-v6.0.6/export.sh"
+source "$HOME/esp/esp-idf-v6.0.2/export.sh"
 idf.py -B build-idf6-hosted3 \
     -D SDKCONFIG="$PWD/sdkconfig.idf6" \
     -p /dev/ttyUSB0 flash monitor

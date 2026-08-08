@@ -19,7 +19,7 @@ the exact tested v6.0.2 tag alongside other SDK installations.
 Install Git, Python 3 and the standard ESP-IDF host prerequisites, then run:
 
 ```bash
-git clone https://github.com/khelix1/PrinterHMI_v3_2.git
+git clone https://github.com/khelix1/PrinterHMI.git
 cd PrinterHMI_v3_2
 ./tools/build_v6_stack.sh --bootstrap
 ```

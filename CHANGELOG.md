@@ -11,6 +11,7 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Changed
 
+- Updated active documentation and release tooling for the `khelix1/PrinterHMI` repository rename, the supported ESP-IDF 6.0.2 platform, and the active CI gate.
 - Removed legacy `_v32` filenames from active modules; behavior and public interfaces are unchanged.
 - Removed obsolete dashboard helpers so fresh PrinterHMI builds remain warning-free.
 - Made CI verify the tracked ESP-IDF SDIO compatibility correction by target version, file set, line count and source markers, avoiding container-specific Git diff metadata.

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # PUBLIC_CHECKPOINT_V2_NIGHTLY
-expected_origin_repo="khelix1/PrinterHMI_v3_2"
+expected_origin_repo="khelix1/PrinterHMI"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "ERROR: run this inside the PrinterHMI Git repository" >&2

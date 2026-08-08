@@ -13,7 +13,7 @@ are supported during active development.
 Report a suspected vulnerability through GitHub private vulnerability
 reporting:
 
-https://github.com/khelix1/PrinterHMI_v3_2/security/advisories/new
+https://github.com/khelix1/PrinterHMI/security/advisories/new
 
 Do not post passwords, API keys, private addresses, firmware URLs or complete
 device logs in a public issue.

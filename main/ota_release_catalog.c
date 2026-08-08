@@ -19,7 +19,7 @@
 #include <string.h>
 
 #define RELEASE_API_URL \
-    "https://api.github.com/repos/khelix1/PrinterHMI_v3_2/releases?per_page=30"
+    "https://api.github.com/repos/khelix1/PrinterHMI/releases?per_page=30"
 #define RELEASE_RESPONSE_MAX (256U * 1024U)
 
 typedef struct {

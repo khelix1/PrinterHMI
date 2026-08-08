@@ -72,16 +72,11 @@ release builds must continue checking the memory map and cold boot.
 
 ## Continuous Integration
 
-GitHub Actions (or an equivalent CI system) has not yet been implemented.
+**Status:** Implemented and required for changes pushed to `main`.
 
-Planned automated validation includes:
-
-* Public repository safety audit
-* Clean ESP-IDF build
-* Version consistency checks
-* Documentation consistency checks
-* Size regression monitoring
-* Compiler warning validation
+GitHub Actions validates the public-tree and version audits, portable locked
+dependencies, a clean ESP-IDF 6.0.2 P4 build, firmware-size budget, and
+PrinterHMI application compiler warnings. See [CI validation](CI.md).
 
 ---
 

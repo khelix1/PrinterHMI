@@ -117,12 +117,13 @@ static void restore_request_cb(lv_event_t *event)
         s_restore_confirmation,
         44);
 
-    ui_popup_add_message(
+    ui_popup_add_body(
         s_restore_confirmation,
         "This replaces printer profiles and interface settings with the "
         "validated SD-card backup. A reboot is required afterward.",
-        false,
-        48);
+        24,
+        64,
+        632);
 
     ui_popup_add_standard_footer_divider(
         s_restore_confirmation);

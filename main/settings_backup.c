@@ -21,6 +21,8 @@
 #define SETTINGS_BACKUP_DIRECTORY "/sdcard/PrinterHMI"
 #define SETTINGS_BACKUP_TEMP_PATH \
     "/sdcard/PrinterHMI/config_backup.tmp"
+#define SETTINGS_BACKUP_PREVIOUS_PATH \
+    "/sdcard/PrinterHMI/config_backup.previous"
 #define SETTINGS_BACKUP_MAX_BYTES (16 * 1024)
 
 
@@ -727,17 +729,57 @@ bool settings_backup_export(
     bool closed = fclose(file) == 0;
     cJSON_free(document);
 
-    if (!written ||
-        !closed ||
-        rename(
-            SETTINGS_BACKUP_TEMP_PATH,
-            SETTINGS_BACKUP_PATH) != 0) {
+    if (!written || !closed) {
         unlink(SETTINGS_BACKUP_TEMP_PATH);
         set_status(
             status,
             status_size,
             "Backup write failed; existing backup was preserved.");
         return false;
+    }
+
+    /*
+     * FATFS rename does not reliably replace an existing destination. Rotate
+     * the known-good backup out of the way first, then restore it if promotion
+     * of the fully written temporary file fails.
+     */
+    if (unlink(SETTINGS_BACKUP_PREVIOUS_PATH) != 0 && errno != ENOENT) {
+        unlink(SETTINGS_BACKUP_TEMP_PATH);
+        set_status(
+            status,
+            status_size,
+            "Backup rotation could not clear its previous recovery copy.");
+        return false;
+    }
+
+    bool previous_backup = false;
+    if (rename(SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_PREVIOUS_PATH) == 0) {
+        previous_backup = true;
+    } else if (errno != ENOENT) {
+        unlink(SETTINGS_BACKUP_TEMP_PATH);
+        set_status(
+            status,
+            status_size,
+            "Existing backup could not be prepared for replacement.");
+        return false;
+    }
+
+    if (rename(SETTINGS_BACKUP_TEMP_PATH, SETTINGS_BACKUP_PATH) != 0) {
+        if (previous_backup) {
+            (void)rename(
+                SETTINGS_BACKUP_PREVIOUS_PATH,
+                SETTINGS_BACKUP_PATH);
+        }
+        unlink(SETTINGS_BACKUP_TEMP_PATH);
+        set_status(
+            status,
+            status_size,
+            "Backup replacement failed; the previous backup was restored.");
+        return false;
+    }
+
+    if (previous_backup) {
+        (void)unlink(SETTINGS_BACKUP_PREVIOUS_PATH);
     }
 
     set_status(

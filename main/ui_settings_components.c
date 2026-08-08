@@ -3,7 +3,7 @@
 #include "ui_button.h"
 
 #include "ui_theme.h"
-#include "ui_page_geometry_v32.h"
+#include "ui_page_geometry.h"
 
 #include <stddef.h>
 

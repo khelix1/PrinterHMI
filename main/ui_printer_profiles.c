@@ -7,11 +7,11 @@
 
 #include "moonraker_config_controller.h"
 #include "moonraker_endpoint_test.h"
-#include "printer_preview_cache_v32.h"
-#include "printer_preview_store_v32.h"
+#include "printer_preview_cache.h"
+#include "printer_preview_store.h"
 #include "printer_profile_health.h"
 #include "ui_popup.h"
-#include "ui_printer_chooser_v32.h"
+#include "ui_printer_chooser.h"
 
 static lv_obj_t *s_manager_popup = NULL;
 static lv_obj_t *s_delete_popup = NULL;

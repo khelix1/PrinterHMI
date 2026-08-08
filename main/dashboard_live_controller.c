@@ -5,7 +5,7 @@
 
 #include "moonraker.h"
 #include "printer_controller.h"
-#include "ui_dashboard_v32.h"
+#include "ui_dashboard.h"
 
 void dashboard_live_controller_push_banner(bool moonraker_ok)
 {

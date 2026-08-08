@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#include "ui_network_v32.h"
+#include "ui_network.h"
 
 void network_status_controller_refresh(
     const char *banner_text,

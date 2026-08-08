@@ -10,7 +10,7 @@
 #include "ui_button.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
-#include "ui_toast_v32.h"
+#include "ui_toast.h"
 
 typedef struct {
     lv_obj_t *input_shaper_button;

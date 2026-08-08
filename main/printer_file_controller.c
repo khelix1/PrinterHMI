@@ -6,10 +6,10 @@
 #include "esp_log.h"
 
 #include "moonraker.h"
-#include "thumbnail_manager_v32.h"
-#include "thumbnail_session_v32.h"
-#include "ui_dashboard_v32.h"
-#include "ui_printer_v32.h"
+#include "thumbnail_manager.h"
+#include "thumbnail_session.h"
+#include "ui_dashboard.h"
+#include "ui_printer.h"
 
 static const char *TAG = "printer_file_ctrl";
 

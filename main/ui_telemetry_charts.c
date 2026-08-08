@@ -9,7 +9,7 @@
 #include "telemetry_history.h"
 #include "ui_telemetry_components.h"
 #include "ui_theme.h"
-#include "ui_page_geometry_v32.h"
+#include "ui_page_geometry.h"
 
 typedef struct {
     lv_obj_t *chart;

@@ -2,7 +2,7 @@
 
 #include "ui_theme.h"
 #include "ui_widgets.h"
-#include "ui_status_banner_v32.h"
+#include "ui_status_banner.h"
 
 #include "esp_timer.h"
 

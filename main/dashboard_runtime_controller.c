@@ -9,11 +9,11 @@
 #include "moonraker_config_controller.h"
 #include "printer_controller.h"
 #include "printer_layer_resolver.h"
-#include "thumbnail_preview_coordinator_v32.h"
-#include "thumbnail_session_v32.h"
-#include "ui_dashboard_status_v32.h"
-#include "ui_dashboard_v32.h"
-#include "ui_printer_v32.h"
+#include "thumbnail_preview_coordinator.h"
+#include "thumbnail_session.h"
+#include "ui_dashboard_status.h"
+#include "ui_dashboard.h"
+#include "ui_printer.h"
 #include "ui_theme.h"
 
 static const char *TAG = "dashboard_runtime";

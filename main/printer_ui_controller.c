@@ -5,7 +5,7 @@
 #include "printer_controller.h"
 #include "ui_printer_banner.h"
 #include "ui_printer_live_status.h"
-#include "ui_printer_v32.h"
+#include "ui_printer.h"
 #include "ui_printer_info_cards.h"
 
 static printer_ui_controller_send_gcode_cb_t

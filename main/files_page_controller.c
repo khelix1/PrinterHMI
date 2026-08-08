@@ -2,8 +2,8 @@
 
 #include "moonraker.h"
 #include "printer_files.h"
-#include "files_row_preview_v32.h"
-#include "ui_files_v32.h"
+#include "files_row_preview.h"
+#include "ui_files.h"
 #include "ui_theme.h"
 #include "moonraker_live_websocket.h"
 

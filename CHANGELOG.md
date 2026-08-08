@@ -11,6 +11,7 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Changed
 
+- Removed legacy `_v32` filenames from active modules; behavior and public interfaces are unchanged.
 - Removed obsolete dashboard helpers so fresh PrinterHMI builds remain warning-free.
 - Made CI verify the tracked ESP-IDF SDIO compatibility correction by target version, file set, line count and source markers, avoiding container-specific Git diff metadata.
 - Added a strict CI gate that rejects compiler warnings from PrinterHMI application sources without treating upstream ESP-IDF notes or third-party diagnostics as product warnings.

@@ -17,7 +17,7 @@
 
 
 #include "ui_theme.h"
-#include "ui_page_geometry_v32.h"
+#include "ui_page_geometry.h"
 #include "ui_page_title.h"
 #include "ui_widgets.h"
 #include "ui_shell.h"

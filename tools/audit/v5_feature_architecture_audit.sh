@@ -46,8 +46,8 @@ sources=(
     ui_devices_catalog_view.c
     console_controller.c
     macro_controller.c
-    ui_console_v32.c
-    ui_macros_v32.c
+    ui_console.c
+    ui_macros.c
 )
 
 for source in "${sources[@]}"; do
@@ -58,48 +58,48 @@ done
 require_file main/ui_bed_mesh_view.h
 
 require_reference \
-    main/ui_calibration_v32.c \
+    main/ui_calibration.c \
     'ui_calibration_motion'
 require_reference \
-    main/ui_calibration_v32.c \
+    main/ui_calibration.c \
     'ui_calibration_manual_probe'
 require_reference \
-    main/ui_calibration_v32.c \
+    main/ui_calibration.c \
     'ui_calibration_pressure_advance'
 
 require_reference \
-    main/ui_bed_mesh_v32.c \
+    main/ui_bed_mesh.c \
     'ui_bed_mesh_gestures'
 require_reference \
-    main/ui_bed_mesh_v32.c \
+    main/ui_bed_mesh.c \
     'ui_bed_mesh_renderer'
 require_reference \
-    main/ui_bed_mesh_v32.c \
+    main/ui_bed_mesh.c \
     'ui_bed_mesh_profiles'
 
 require_reference \
-    main/ui_devices_v32.c \
+    main/ui_devices.c \
     'ui_devices_catalog_view'
 require_reference \
     main/ui_devices_catalog_view.c \
     'ui_devices_live_values'
 
 require_reference \
-    main/ui_console_v32.c \
+    main/ui_console.c \
     'console_controller'
 require_reference \
-    main/ui_macros_v32.c \
+    main/ui_macros.c \
     'macro_controller'
 
 if rg -q \
     'rasterize_smooth_triangle|pinch_active|save_as_profile_cb' \
-    main/ui_bed_mesh_v32.c; then
+    main/ui_bed_mesh.c; then
     fail "Bed Mesh page still contains extracted implementation details"
 fi
 
 if rg -q \
     'format_known_live_value|devices_refresh_timer_cb' \
-    main/ui_devices_v32.c; then
+    main/ui_devices.c; then
     fail "Devices page still contains extracted implementation details"
 fi
 

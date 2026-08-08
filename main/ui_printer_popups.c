@@ -1,7 +1,7 @@
 #include "ui_printer_popups.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
-#include "ui_dashboard_v32.h"
+#include "ui_dashboard.h"
 #include "moonraker.h"
 #include "printer_controller.h"
 #include "esp_heap_caps.h"

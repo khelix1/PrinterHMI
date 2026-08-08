@@ -85,16 +85,6 @@ Planned automated validation includes:
 
 ---
 
-# Technical Debt
-
-## Legacy `_v32` filenames
-
-Several modules retain historical `_v32` suffixes.
-
-This naming no longer reflects the project version and should eventually be simplified. This is a maintenance task only and has no functional impact.
-
----
-
 # Maintenance
 
 The following items have been completed and are no longer tracked as known issues:

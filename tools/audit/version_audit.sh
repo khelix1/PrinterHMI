@@ -68,8 +68,8 @@ if rg -n \
     exit 1
 fi
 
-require_text main/ui_splash_v32.c "esp_app_get_description()"
-require_text main/ui_dashboard_v32.c "esp_app_get_description()"
+require_text main/ui_splash.c "esp_app_get_description()"
+require_text main/ui_dashboard.c "esp_app_get_description()"
 require_text main/ui_settings.c "esp_app_get_description()"
 require_text main/moonraker_live_websocket.c "esp_app_get_description()"
 

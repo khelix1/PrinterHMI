@@ -4,6 +4,8 @@
 #include "settings_backup.h"
 #include "ui_popup.h"
 
+#include <stdio.h>
+
 static lv_obj_t *s_popup = NULL;
 static lv_obj_t *s_status = NULL;
 static lv_obj_t *s_restore_confirmation = NULL;
@@ -90,6 +92,12 @@ static void restore_request_cb(lv_event_t *event)
 {
     (void)event;
 
+    char preflight[256];
+    if (!settings_backup_preflight(preflight, sizeof(preflight))) {
+        set_status(preflight);
+        return;
+    }
+
     if (s_restore_confirmation) {
         lv_obj_move_foreground(
             s_restore_confirmation);
@@ -117,10 +125,17 @@ static void restore_request_cb(lv_event_t *event)
         s_restore_confirmation,
         44);
 
+    char confirmation[384];
+    snprintf(
+        confirmation,
+        sizeof(confirmation),
+        "%s\n\nRESTORE replaces current printer profiles and settings. "
+        "A reboot is required afterward.",
+        preflight);
+
     ui_popup_add_body(
         s_restore_confirmation,
-        "This replaces printer profiles and interface settings with the "
-        "validated SD-card backup. A reboot is required afterward.",
+        confirmation,
         24,
         64,
         632);

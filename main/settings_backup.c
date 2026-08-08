@@ -795,10 +795,16 @@ bool settings_backup_export(
 }
 
 
-bool settings_backup_restore(
+static bool load_backup_snapshot(
+    settings_backup_snapshot_t *snapshot,
     char *status,
     size_t status_size)
 {
+    if (!snapshot) {
+        set_status(status, status_size, "Backup destination is unavailable.");
+        return false;
+    }
+
     FILE *file = fopen(
         SETTINGS_BACKUP_PATH,
         "rb");
@@ -838,8 +844,7 @@ bool settings_backup_restore(
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     if (!document) {
-        document = malloc(
-            (size_t)file_size + 1);
+        document = malloc((size_t)file_size + 1);
     }
 
     if (!document) {
@@ -851,18 +856,16 @@ bool settings_backup_restore(
         return false;
     }
 
-    size_t read_size =
-        fread(
-            document,
-            1,
-            (size_t)file_size,
-            file);
+    size_t read_size = fread(
+        document,
+        1,
+        (size_t)file_size,
+        file);
 
     bool closed = fclose(file) == 0;
     document[read_size] = '\0';
 
-    if (read_size != (size_t)file_size ||
-        !closed) {
+    if (read_size != (size_t)file_size || !closed) {
         free(document);
         set_status(
             status,
@@ -871,11 +874,7 @@ bool settings_backup_restore(
         return false;
     }
 
-    cJSON *root =
-        cJSON_ParseWithLength(
-            document,
-            read_size);
-
+    cJSON *root = cJSON_ParseWithLength(document, read_size);
     free(document);
 
     if (!root) {
@@ -886,17 +885,56 @@ bool settings_backup_restore(
         return false;
     }
 
+    bool valid = parse_snapshot(root, snapshot, status, status_size);
+    cJSON_Delete(root);
+    return valid;
+}
+
+
+bool settings_backup_preflight(
+    char *status,
+    size_t status_size)
+{
+    settings_backup_snapshot_t snapshot;
+
+    if (!load_backup_snapshot(&snapshot, status, status_size)) {
+        return false;
+    }
+
+    int profile_count = 0;
+    for (int index = 0;
+         index < MOONRAKER_CONFIG_MAX_PROFILES;
+         ++index) {
+        if (snapshot.profiles[index].configured) {
+            ++profile_count;
+        }
+    }
+
+    const moonraker_profile_t *active =
+        &snapshot.profiles[snapshot.active_profile];
+
+    snprintf(
+        status,
+        status_size,
+        "Backup verified: schema %d, %d printer %s.\n"
+        "Active printer: %s.\n"
+        "Appearance and display settings included.\n"
+        "Moonraker API keys are not included in backups.",
+        SETTINGS_BACKUP_SCHEMA,
+        profile_count,
+        profile_count == 1 ? "profile" : "profiles",
+        active->name[0] ? active->name : "unnamed printer");
+    return true;
+}
+
+
+bool settings_backup_restore(
+    char *status,
+    size_t status_size)
+{
     settings_backup_snapshot_t restored;
 
-    bool valid = parse_snapshot(
-        root,
-        &restored,
-        status,
-        status_size);
-
-    cJSON_Delete(root);
-
-    if (!valid) {
+    if (!load_backup_snapshot(&restored, status, status_size)) {
         operator_event_log_add(
             OPERATOR_EVENT_ERROR,
             "Configuration restore rejected: validation failed");

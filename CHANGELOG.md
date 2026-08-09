@@ -7,6 +7,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Added
 
+- Documented the planned opt-in per-profile HTTPS/WSS Moonraker transport, certificate-trust boundaries and no-downgrade policy.
+
 - Added a non-publishing GitHub Actions CI gate for source-policy audits, portable dependency-lock validation, and a clean ESP-IDF 6.0.2 P4 build with a firmware-size budget.
 
 ### Changed

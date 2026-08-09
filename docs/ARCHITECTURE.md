@@ -87,6 +87,10 @@ status banners, cards, previews, charts, action panels and popup controllers.
 - `moonraker_probe` and `moonraker_discovery` test and discover endpoints on
   ports 7125 through 7128; discovery is presented inside printer profile
   Add/Edit.
+- Planned secure transport keeps profile persistence in
+  `moonraker_config_controller`, TLS policy in
+  `moonraker_transport_security_controller`, and trust material in
+  `moonraker_tls_trust_store`; endpoint consumers share that policy.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
   `moonraker` and consumed through controllers.
 - `macro_controller` derives a bounded, alphabetized public-macro catalog from

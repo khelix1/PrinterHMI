@@ -50,9 +50,13 @@ completion signal if that does not destabilize startup.
 
 ## Local network transport
 
-PrinterHMI communicates with Moonraker over HTTP and WebSocket on the local network.
+PrinterHMI currently communicates with Moonraker over HTTP and WebSocket on
+the local network. This remains appropriate for trusted LAN deployments.
 
-This is appropriate for trusted LAN environments but does not provide encrypted transport.
+An opt-in per-profile HTTPS/WSS design is documented in
+`docs/SECURE_MOONRAKER_TRANSPORT.md`. It requires an independently configured
+local TLS endpoint and explicit CA approval; it must never silently downgrade
+to HTTP.
 
 ## OTA trust model
 

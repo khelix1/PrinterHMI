@@ -46,6 +46,7 @@
 #include "ui_ota_popup.h"
 #include "ui_ota_release_browser.h"
 #include "ota_manager.h"
+#include "ota_boot_validation.h"
 #include "operator_event_log.h"
 
 /*
@@ -452,29 +453,6 @@ static int64_t s_wifi_rssi_next_sample_us = 0;
 static int s_wifi_rssi_filtered = -127;
 static bool s_wifi_rssi_valid = false;
 static bool s_wifi_signal_dirty = true;
-
-
-static void ota_confirm_running_app_valid(void)
-{
-#if CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
-
-    if (esp_ota_get_state_partition(running, &state) == ESP_OK) {
-        ESP_LOGI(TAG, "OTA: running partition=%s state=%d",
-                 running ? running->label : "unknown", state);
-
-        if (state == ESP_OTA_IMG_PENDING_VERIFY) {
-            esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
-            if (err == ESP_OK) {
-                ESP_LOGI(TAG, "OTA: image marked valid, rollback cancelled");
-            } else {
-                ESP_LOGE(TAG, "OTA: mark valid failed: %s", esp_err_to_name(err));
-            }
-        }
-    }
-#endif
-}
 
 
 static const char *network_banner_text(void)
@@ -4060,7 +4038,7 @@ void app_main(void)
             ? running_app->version
             : "unknown");
 
-    ota_confirm_running_app_valid();
+    ota_boot_validation_confirm_running_image();
 
     BaseType_t rc = xTaskCreatePinnedToCore(
         hmi_runtime_task,

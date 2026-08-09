@@ -142,7 +142,7 @@ The OTA manager downloads to the inactive application slot. The progress
 popup can request cancellation; the worker aborts the OTA handle and returns
 without rebooting or selecting the incomplete image. On successful installation
 the device reboots. When rollback marks the new image as pending verification,
-startup marks the running image valid and cancels rollback.
+`ota_boot_validation` marks the running image valid and cancels rollback after the splash lifecycle completes.
 
 ## Startup sequence
 

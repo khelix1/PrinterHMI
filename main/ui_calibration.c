@@ -984,7 +984,7 @@ static void screws_tilt_button_cb(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -993,7 +993,7 @@ static void screws_tilt_button_cb(
 
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Screws Tilt cannot run during a print.");
@@ -1002,7 +1002,7 @@ static void screws_tilt_button_cb(
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Clear the printer error before calibration.");
@@ -1140,14 +1140,14 @@ static void run_gantry_level_cb(
     close_gantry_level_popup();
 
     if (!sent) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION FAILED",
             "Moonraker did not accept the gantry-level command.");
         return;
     }
 
-    ui_toast_v32_show(
+    ui_toast_show(
         UI_STATUS_OK,
         s_calibration->gantry_use_qgl
             ? "QGL STARTED"
@@ -1179,7 +1179,7 @@ static void gantry_level_button_cb(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -1188,7 +1188,7 @@ static void gantry_level_button_cb(
 
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Gantry leveling cannot run during a print.");
@@ -1197,7 +1197,7 @@ static void gantry_level_button_cb(
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Clear the printer error before calibration.");
@@ -1322,7 +1322,7 @@ static bool pid_printer_ready(void)
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "PID UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -1331,7 +1331,7 @@ static bool pid_printer_ready(void)
 
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "PID BLOCKED",
             "PID calibration cannot run during a print.");
@@ -1340,7 +1340,7 @@ static bool pid_printer_ready(void)
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "PID BLOCKED",
             "Clear the printer error before calibration.");
@@ -1479,7 +1479,7 @@ static void run_pid_tune_cb(
 
     if (written <= 0 ||
         (size_t)written >= sizeof(command)) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "PID FAILED",
             "The selected heater command is too long.");
@@ -1702,7 +1702,7 @@ static void pid_tune_button_cb(
     }
 
     if (s_calibration->pid_heater_count == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "NO PID HEATERS",
             "No PID-capable heater objects are available.");
@@ -1843,7 +1843,7 @@ static void run_save_config_cb(
         !snapshot.save_available ||
         snapshot.status != CALIBRATION_SESSION_RESULTS) {
         close_save_confirm_popup();
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "SAVE NOT AVAILABLE",
             "Klipper has not reported a completed save-worthy calibration.");
@@ -1860,7 +1860,7 @@ static void run_save_config_cb(
     close_calibration_results_popup();
 
     if (!sent) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "SAVE FAILED",
             "Moonraker did not accept SAVE_CONFIG.");
@@ -1868,7 +1868,7 @@ static void run_save_config_cb(
     }
 
     calibration_session_controller_reset();
-    ui_toast_v32_show(
+    ui_toast_show(
         UI_STATUS_OK,
         "APPLYING CONFIGURATION",
         "Klipper is saving the calibration and restarting. The printer will reconnect automatically.");
@@ -2084,7 +2084,7 @@ static bool calibration_action_ready(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -2099,7 +2099,7 @@ static bool calibration_action_ready(
             sizeof(detail),
             "%s cannot run during a print.",
             workflow ? workflow : "Calibration");
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             detail);
@@ -2108,7 +2108,7 @@ static bool calibration_action_ready(
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Clear the printer error before calibration.");
@@ -2164,7 +2164,7 @@ static void send_probe_step_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the TESTZ command.");
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "PROBE MOVE FAILED",
             "Moonraker did not accept the TESTZ command.");
@@ -2190,7 +2190,7 @@ static void abort_probe_calibration_cb(
     close_calibration_results_popup();
     calibration_session_controller_reset();
 
-    ui_toast_v32_show(
+    ui_toast_show(
         sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
         sent ? "PROBE CALIBRATION ABORTED" : "ABORT FAILED",
         sent
@@ -2588,7 +2588,7 @@ static void custom_calibration_button_cb(
     }
 
     if (s_calibration->custom_macro_count == 0) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "NO CUSTOM CALIBRATIONS",
             "No matching public calibration macros are available.");
@@ -2702,7 +2702,7 @@ static void send_axis_twist_step_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the Axis Twist TESTZ command.");
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "AXIS TWIST MOVE FAILED",
             "Moonraker did not accept the TESTZ command.");
@@ -2729,7 +2729,7 @@ static void abort_axis_twist_calibration_cb(
     close_calibration_results_popup();
     calibration_session_controller_reset();
 
-    ui_toast_v32_show(
+    ui_toast_show(
         sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
         sent ? "AXIS TWIST ABORTED" : "ABORT FAILED",
         sent
@@ -2984,7 +2984,7 @@ static void calibration_open_bed_mesh_event_cb(
 }
 
 
-void ui_calibration_v32_show(
+void ui_calibration_show(
     ui_calibration_open_bed_mesh_cb_t open_bed_mesh_cb,
     ui_calibration_send_gcode_cb_t send_gcode_cb)
 {
@@ -3302,7 +3302,7 @@ void ui_calibration_v32_show(
 }
 
 
-void ui_calibration_v32_hide(void)
+void ui_calibration_hide(void)
 {
     if (!s_calibration) {
         return;

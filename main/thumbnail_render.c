@@ -4,7 +4,7 @@
 
 #include "draw/lv_image_decoder_private.h"
 
-static uint16_t thumbnail_render_v32_rgb565_from_rgb(
+static uint16_t thumbnail_render_rgb565_from_rgb(
     uint8_t red,
     uint8_t green,
     uint8_t blue)
@@ -15,7 +15,7 @@ static uint16_t thumbnail_render_v32_rgb565_from_rgb(
         ((uint16_t)(blue >> 3)));
 }
 
-static bool thumbnail_render_v32_read_pixel(
+static bool thumbnail_render_read_pixel(
     const uint8_t *base,
     uint32_t stride,
     int x,
@@ -41,7 +41,7 @@ static bool thumbnail_render_v32_read_pixel(
     if (color_format == LV_COLOR_FORMAT_RGB888) {
         pixel += x * 3;
 
-        *out = thumbnail_render_v32_rgb565_from_rgb(
+        *out = thumbnail_render_rgb565_from_rgb(
             pixel[0],
             pixel[1],
             pixel[2]);
@@ -57,7 +57,7 @@ static bool thumbnail_render_v32_read_pixel(
          * LVGL's decoded 32-bit buffer is stored B, G, R, X/A
          * on this target, matching the previous main.c renderer.
          */
-        *out = thumbnail_render_v32_rgb565_from_rgb(
+        *out = thumbnail_render_rgb565_from_rgb(
             pixel[2],
             pixel[1],
             pixel[0]);
@@ -68,7 +68,7 @@ static bool thumbnail_render_v32_read_pixel(
     return false;
 }
 
-bool thumbnail_render_v32_to_rgb565(
+bool thumbnail_render_to_rgb565(
     const lv_image_dsc_t *image,
     uint16_t *destination,
     int destination_width,
@@ -158,7 +158,7 @@ bool thumbnail_render_v32_to_rgb565(
 
             uint16_t pixel = 0x0000;
 
-            if (!thumbnail_render_v32_read_pixel(
+            if (!thumbnail_render_read_pixel(
                     source,
                     stride,
                     source_x,

@@ -98,54 +98,54 @@ static void url_encode_filename(const char *input,
     output[j] = '\0';
 }
 
-char *thumbnail_session_v32_selected_file(void)
+char *thumbnail_session_selected_file(void)
 {
     return s_selected_file;
 }
 
-size_t thumbnail_session_v32_selected_file_size(void)
+size_t thumbnail_session_selected_file_size(void)
 {
     return sizeof(s_selected_file);
 }
 
-char *thumbnail_session_v32_selected_thumbnail_path(void)
+char *thumbnail_session_selected_thumbnail_path(void)
 {
     return s_selected_thumbnail_path;
 }
 
-size_t thumbnail_session_v32_selected_thumbnail_path_size(void)
+size_t thumbnail_session_selected_thumbnail_path_size(void)
 {
     return sizeof(s_selected_thumbnail_path);
 }
 
-char *thumbnail_session_v32_metadata_info(void)
+char *thumbnail_session_metadata_info(void)
 {
     return s_metadata_info;
 }
 
-size_t thumbnail_session_v32_metadata_info_size(void)
+size_t thumbnail_session_metadata_info_size(void)
 {
     return sizeof(s_metadata_info);
 }
 
-void thumbnail_session_v32_set_selected_file(const char *file)
+void thumbnail_session_set_selected_file(const char *file)
 {
     copy_text(s_selected_file,
               sizeof(s_selected_file),
               file);
 }
 
-void thumbnail_session_v32_clear_selected_file(void)
+void thumbnail_session_clear_selected_file(void)
 {
     s_selected_file[0] = '\0';
 }
 
-void thumbnail_session_v32_clear_thumbnail_path(void)
+void thumbnail_session_clear_thumbnail_path(void)
 {
     s_selected_thumbnail_path[0] = '\0';
 }
 
-bool thumbnail_session_v32_build_metadata(
+bool thumbnail_session_build_metadata(
     const char *moonraker_host,
     int moonraker_port,
     const char *api_key,
@@ -218,7 +218,7 @@ bool thumbnail_session_v32_build_metadata(
     return true;
 }
 
-bool thumbnail_session_v32_get_layer_metadata(
+bool thumbnail_session_get_layer_metadata(
     double *object_height,
     double *layer_height)
 {
@@ -233,32 +233,32 @@ bool thumbnail_session_v32_get_layer_metadata(
     return true;
 }
 
-void thumbnail_session_v32_clear_png_buffer(void)
+void thumbnail_session_clear_png_buffer(void)
 {
-    thumbnail_manager_v32_clear_png();
+    thumbnail_manager_clear_png();
 
-    memset(thumbnail_manager_v32_image_dsc(),
+    memset(thumbnail_manager_image_dsc(),
            0,
-           sizeof(*thumbnail_manager_v32_image_dsc()));
+           sizeof(*thumbnail_manager_image_dsc()));
 }
 
-void thumbnail_session_v32_free_thumbnail(void)
+void thumbnail_session_free_thumbnail(void)
 {
-    thumbnail_session_v32_clear_png_buffer();
+    thumbnail_session_clear_png_buffer();
 }
 
-void thumbnail_session_v32_install_png_buffer(
+void thumbnail_session_install_png_buffer(
     uint8_t *buffer,
     size_t length)
 {
-    thumbnail_session_v32_free_thumbnail();
+    thumbnail_session_free_thumbnail();
 
-    thumbnail_manager_v32_take_png(buffer, length);
-    thumbnail_manager_v32_prepare_raw_image();
-    thumbnail_manager_v32_mark_ready();
+    thumbnail_manager_take_png(buffer, length);
+    thumbnail_manager_prepare_raw_image();
+    thumbnail_manager_mark_ready();
 }
 
-void thumbnail_session_v32_save_last_selected_file(void)
+void thumbnail_session_save_last_selected_file(void)
 {
     if (!s_selected_file[0]) {
         return;
@@ -292,36 +292,36 @@ void thumbnail_session_v32_save_last_selected_file(void)
     }
 }
 
-bool thumbnail_session_v32_load_selected_cache(
+bool thumbnail_session_load_selected_cache(
     bool sd_card_available)
 {
     if (!sd_card_available || !s_selected_file[0]) {
         return false;
     }
 
-    return thumbnail_manager_v32_load_selected_cache(
+    return thumbnail_manager_load_selected_cache(
         s_selected_file);
 }
 
-void thumbnail_session_v32_store_selected_cache(
+void thumbnail_session_store_selected_cache(
     bool sd_card_available)
 {
     if (!sd_card_available || !s_selected_file[0]) {
         return;
     }
 
-    if (!thumbnail_manager_v32_store_selected_cache(
+    if (!thumbnail_manager_store_selected_cache(
             s_selected_file)) {
         ESP_LOGW(TAG, "SD_THUMB cache write failed");
     }
 }
 
-thumbnail_session_v32_restore_result_t
-thumbnail_session_v32_restore_last_selected_file(
+thumbnail_session_restore_result_t
+thumbnail_session_restore_last_selected_file(
     bool sd_card_available)
 {
     if (!sd_card_available) {
-        return THUMBNAIL_SESSION_V32_RESTORE_NONE;
+        return THUMBNAIL_SESSION_RESTORE_NONE;
     }
 
     nvs_handle_t handle;
@@ -330,7 +330,7 @@ thumbnail_session_v32_restore_last_selected_file(
 
     if (error != ESP_OK) {
         ESP_LOGI(TAG, "NVS last_file: none");
-        return THUMBNAIL_SESSION_V32_RESTORE_NONE;
+        return THUMBNAIL_SESSION_RESTORE_NONE;
     }
 
     char last_file[160] = "";
@@ -345,23 +345,23 @@ thumbnail_session_v32_restore_last_selected_file(
 
     if (error != ESP_OK || !last_file[0]) {
         ESP_LOGI(TAG, "NVS last_file: none");
-        return THUMBNAIL_SESSION_V32_RESTORE_NONE;
+        return THUMBNAIL_SESSION_RESTORE_NONE;
     }
 
-    thumbnail_session_v32_set_selected_file(last_file);
+    thumbnail_session_set_selected_file(last_file);
 
-    if (thumbnail_session_v32_load_selected_cache(
+    if (thumbnail_session_load_selected_cache(
             sd_card_available)) {
         ESP_LOGI(TAG,
                  "Restored last selected file from SD cache: %s",
                  s_selected_file);
 
-        return THUMBNAIL_SESSION_V32_RESTORE_CACHE_READY;
+        return THUMBNAIL_SESSION_RESTORE_CACHE_READY;
     }
 
     ESP_LOGI(TAG,
              "Last selected file has no SD thumbnail cache yet: %s",
              s_selected_file);
 
-    return THUMBNAIL_SESSION_V32_RESTORE_NO_CACHE;
+    return THUMBNAIL_SESSION_RESTORE_NO_CACHE;
 }

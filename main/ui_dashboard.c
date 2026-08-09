@@ -19,11 +19,11 @@ static lv_obj_t *dash32_root = NULL;
 /*
  * TEST12_NEW_DASHBOARD_OWNER
  *
- * The public ui_dashboard_v32_* API remains the application-facing
+ * The public ui_dashboard_* API remains the application-facing
  * Dashboard interface. Creation and destruction now delegate to the
  * new Theme B Dashboard page.
  */
-static ui_dashboard_page_v32_t dash32_page = {0};
+static ui_dashboard_page_t dash32_page = {0};
 
 /*
  * TEST9_DASHBOARD_STATUS_OWNER
@@ -32,26 +32,26 @@ static ui_dashboard_page_v32_t dash32_page = {0};
  * module. The returned label handles remain available to main.c
  * during the legacy transition.
  */
-static ui_dashboard_status_v32_t dash32_status = {0};
+static ui_dashboard_status_t dash32_status = {0};
 
-lv_obj_t **ui_dashboard_v32_thumb_canvas_ref(void)
+lv_obj_t **ui_dashboard_thumb_canvas_ref(void)
 {
-    return ui_active_print_v32_thumb_canvas_ref();
+    return ui_active_print_thumb_canvas_ref();
 }
 
-uint16_t **ui_dashboard_v32_thumb_canvas_buf_ref(void)
+uint16_t **ui_dashboard_thumb_canvas_buf_ref(void)
 {
-    return ui_active_print_v32_thumb_canvas_buf_ref();
+    return ui_active_print_thumb_canvas_buf_ref();
 }
 
-char *ui_dashboard_v32_thumb_canvas_file(void)
+char *ui_dashboard_thumb_canvas_file(void)
 {
-    return ui_active_print_v32_thumb_canvas_file();
+    return ui_active_print_thumb_canvas_file();
 }
 
-size_t ui_dashboard_v32_thumb_canvas_file_size(void)
+size_t ui_dashboard_thumb_canvas_file_size(void)
 {
-    return ui_active_print_v32_thumb_canvas_file_size();
+    return ui_active_print_thumb_canvas_file_size();
 }
 
 static lv_obj_t *dash32_banner = NULL;
@@ -60,12 +60,12 @@ static lv_obj_t *dash32_active_print = NULL;
 static lv_obj_t *dash32_thumb_box = NULL;
 static lv_obj_t *dash32_thumb_label = NULL;
 
-ui_dashboard_status_v32_t ui_dashboard_v32_create_status(
+ui_dashboard_status_t ui_dashboard_create_status(
     lv_obj_t *parent)
 {
     /*
      * The replacement page normally creates Print Status as part of
-     * ui_dashboard_v32_create(). Preserve a guarded fallback for the
+     * ui_dashboard_create(). Preserve a guarded fallback for the
      * legacy startup ordering.
      */
     if (dash32_page.print_status.root) {
@@ -73,14 +73,14 @@ ui_dashboard_status_v32_t ui_dashboard_v32_create_status(
         return dash32_status;
     }
 
-    ui_dashboard_status_v32_t empty = {0};
+    ui_dashboard_status_t empty = {0};
 
     if (!parent) {
         return empty;
     }
 
     dash32_status =
-        ui_dashboard_status_v32_create(parent);
+        ui_dashboard_status_create(parent);
 
     dash32_page.print_status = dash32_status;
     dash32_page.print_status_host = dash32_status.root;
@@ -89,7 +89,7 @@ ui_dashboard_status_v32_t ui_dashboard_v32_create_status(
 }
 
 
-void ui_dashboard_v32_create(void)
+void ui_dashboard_create(void)
 {
     if (dash32_page.root) {
         lv_obj_move_foreground(dash32_page.root);
@@ -97,7 +97,7 @@ void ui_dashboard_v32_create(void)
     }
 
     dash32_page =
-        ui_dashboard_page_v32_create(
+        ui_dashboard_page_create(
             lv_screen_active());
 
     dash32_root = dash32_page.root;
@@ -110,7 +110,7 @@ void ui_dashboard_v32_create(void)
         !dash32_banner ||
         !dash32_active_print ||
         !dash32_machine) {
-        ui_dashboard_page_v32_destroy(&dash32_page);
+        ui_dashboard_page_destroy(&dash32_page);
 
         dash32_root = NULL;
         dash32_banner = NULL;
@@ -121,19 +121,19 @@ void ui_dashboard_v32_create(void)
         return;
     }
 
-    ui_dashboard_v32_set_active_print(
+    ui_dashboard_set_active_print(
         "--/--",
         "--:--",
         "REM --:--");
 
     dash32_thumb_box =
-        ui_active_print_v32_thumb_box(
+        ui_active_print_thumb_box(
             dash32_active_print);
 
-    ui_dashboard_v32_thumb_set_placeholder(
+    ui_dashboard_thumb_set_placeholder(
         "PRINT\nTHUMBNAIL");
 
-    ui_machine_status_v32_set(
+    ui_machine_status_set(
         dash32_machine,
         "-- / -- C",
         "-- / -- C",
@@ -143,10 +143,10 @@ void ui_dashboard_v32_create(void)
         "100%",
         "--%");
 
-    ui_dashboard_v32_update();
+    ui_dashboard_update();
 }
 
-void ui_dashboard_v32_set_active_print_file(const char *filename)
+void ui_dashboard_set_active_print_file(const char *filename)
 {
     /*
      * The active filename now belongs exclusively to the Dashboard
@@ -156,15 +156,15 @@ void ui_dashboard_v32_set_active_print_file(const char *filename)
     (void)filename;
 }
 
-void ui_dashboard_v32_set_active_print(const char *layer,
+void ui_dashboard_set_active_print(const char *layer,
                                        const char *elapsed,
                                        const char *remaining)
 {
     if (!dash32_active_print) return;
-    ui_active_print_v32_set(dash32_active_print, layer, elapsed, remaining);
+    ui_active_print_set(dash32_active_print, layer, elapsed, remaining);
 }
 
-void ui_dashboard_v32_update(void)
+void ui_dashboard_update(void)
 {
     if (!dash32_banner) return;
 
@@ -183,7 +183,7 @@ void ui_dashboard_v32_update(void)
         version[0] == 'v' ? "" : "v",
         version);
 
-    ui_status_banner_v32_set(
+    ui_status_banner_set(
         dash32_banner,
         LV_SYMBOL_OK " READY",
         console_name,
@@ -192,9 +192,9 @@ void ui_dashboard_v32_update(void)
     );
 }
 
-void ui_dashboard_v32_destroy(void)
+void ui_dashboard_destroy(void)
 {
-    ui_dashboard_page_v32_destroy(
+    ui_dashboard_page_destroy(
         &dash32_page);
 
     dash32_root = NULL;
@@ -203,47 +203,47 @@ void ui_dashboard_v32_destroy(void)
     dash32_active_print = NULL;
     dash32_thumb_box = NULL;
     dash32_thumb_label = NULL;
-    dash32_status = (ui_dashboard_status_v32_t){0};
+    dash32_status = (ui_dashboard_status_t){0};
 }
 
-void ui_dashboard_v32_set_filament(
+void ui_dashboard_set_filament(
     bool moonraker_online,
     const moonraker_filament_state_t *state)
 {
     if (!dash32_machine) return;
 
-    ui_machine_status_v32_set_filament(
+    ui_machine_status_set_filament(
         dash32_machine,
         moonraker_online,
         state);
 }
 
 
-void ui_dashboard_v32_set_machine_connection(
+void ui_dashboard_set_machine_connection(
     bool online)
 {
     if (!dash32_machine) return;
 
-    ui_machine_status_v32_set_connection(
+    ui_machine_status_set_connection(
         dash32_machine,
         online);
 }
 
 
-void ui_dashboard_v32_set_active_hotend(
+void ui_dashboard_set_active_hotend(
     const char *name,
     const char *value)
 {
     if (!dash32_machine) return;
 
-    ui_machine_status_v32_set_active_hotend(
+    ui_machine_status_set_active_hotend(
         dash32_machine,
         name,
         value);
 }
 
 
-void ui_dashboard_v32_set_machine(
+void ui_dashboard_set_machine(
     const char *nozzle,
     const char *bed,
     const char *chamber,
@@ -255,7 +255,7 @@ void ui_dashboard_v32_set_machine(
 {
     if (!dash32_machine) return;
 
-    ui_machine_status_v32_set(
+    ui_machine_status_set(
         dash32_machine,
         nozzle,
         bed,
@@ -268,7 +268,7 @@ void ui_dashboard_v32_set_machine(
 }
 
 
-void ui_dashboard_v32_set_banner(
+void ui_dashboard_set_banner(
     const char *state,
     const char *file,
     const char *eta,
@@ -276,7 +276,7 @@ void ui_dashboard_v32_set_banner(
 )
 {
     if (!dash32_banner) return;
-    ui_status_banner_v32_set(dash32_banner, state, file, eta, progress);
+    ui_status_banner_set(dash32_banner, state, file, eta, progress);
 }
 
 
@@ -295,12 +295,12 @@ static void dashboard_status_close_cb(lv_event_t *e)
     }
 }
 
-void ui_dashboard_v32_status_popup_close(void)
+void ui_dashboard_status_popup_close(void)
 {
     dashboard_status_close_cb(NULL);
 }
 
-void ui_dashboard_v32_status_popup_show(const char *title_text, const char *body)
+void ui_dashboard_status_popup_show(const char *title_text, const char *body)
 {
     if (s_dashboard_status_popup) {
         lv_obj_delete(s_dashboard_status_popup);
@@ -352,58 +352,58 @@ void ui_dashboard_v32_status_popup_show(const char *title_text, const char *body
 }
 
 
-lv_obj_t *ui_dashboard_v32_thumb_box(void)
+lv_obj_t *ui_dashboard_thumb_box(void)
 {
     if (dash32_active_print) {
-        dash32_thumb_box = ui_active_print_v32_thumb_box(dash32_active_print);
+        dash32_thumb_box = ui_active_print_thumb_box(dash32_active_print);
     }
     return dash32_thumb_box;
 }
 
-bool ui_dashboard_v32_thumb_ready(void)
+bool ui_dashboard_thumb_ready(void)
 {
-    return ui_dashboard_v32_thumb_box() != NULL;
+    return ui_dashboard_thumb_box() != NULL;
 }
 
-void ui_dashboard_v32_thumb_set_placeholder(const char *text)
+void ui_dashboard_thumb_set_placeholder(const char *text)
 {
-    ui_active_print_v32_thumb_set_placeholder(dash32_active_print, text);
-}
-
-
-bool ui_dashboard_v32_thumb_canvas_matches(const char *file)
-{
-    return ui_active_print_v32_thumb_canvas_matches(file);
-}
-
-bool ui_dashboard_v32_thumb_ensure_canvas_buffer(size_t pixels)
-{
-    return ui_active_print_v32_thumb_ensure_canvas_buffer(pixels);
-}
-
-void ui_dashboard_v32_thumb_delete_canvas(void)
-{
-    ui_active_print_v32_thumb_delete_canvas();
-}
-
-void ui_dashboard_v32_thumb_forget_canvas_file(void)
-{
-    ui_active_print_v32_thumb_forget_canvas_file();
+    ui_active_print_thumb_set_placeholder(dash32_active_print, text);
 }
 
 
-void ui_dashboard_v32_thumb_show_canvas_from_buffer(int w, int h, const char *file)
+bool ui_dashboard_thumb_canvas_matches(const char *file)
 {
-    ui_active_print_v32_thumb_show_canvas_from_buffer(dash32_active_print, w, h, file);
+    return ui_active_print_thumb_canvas_matches(file);
 }
 
-void ui_dashboard_v32_thumb_apply_canvas_from_buffer(int w, int h, const char *file)
+bool ui_dashboard_thumb_ensure_canvas_buffer(size_t pixels)
 {
-    ui_active_print_v32_thumb_apply_canvas_from_buffer(dash32_active_print, w, h, file);
+    return ui_active_print_thumb_ensure_canvas_buffer(pixels);
+}
+
+void ui_dashboard_thumb_delete_canvas(void)
+{
+    ui_active_print_thumb_delete_canvas();
+}
+
+void ui_dashboard_thumb_forget_canvas_file(void)
+{
+    ui_active_print_thumb_forget_canvas_file();
 }
 
 
-void ui_dashboard_v32_thumb_clear_placeholder(void)
+void ui_dashboard_thumb_show_canvas_from_buffer(int w, int h, const char *file)
 {
-    ui_active_print_v32_thumb_clear_placeholder(dash32_active_print);
+    ui_active_print_thumb_show_canvas_from_buffer(dash32_active_print, w, h, file);
+}
+
+void ui_dashboard_thumb_apply_canvas_from_buffer(int w, int h, const char *file)
+{
+    ui_active_print_thumb_apply_canvas_from_buffer(dash32_active_print, w, h, file);
+}
+
+
+void ui_dashboard_thumb_clear_placeholder(void)
+{
+    ui_active_print_thumb_clear_placeholder(dash32_active_print);
 }

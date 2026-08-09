@@ -11,7 +11,7 @@
  * plus endpoint/file identity per profile and restores one slot per call from
  * the existing runtime worker. It creates no task or timer.
  */
-bool printer_preview_store_v32_store_png(
+bool printer_preview_store_store_png(
     int profile_index,
     const char *expected_host,
     int expected_port,
@@ -19,11 +19,11 @@ bool printer_preview_store_v32_store_png(
     const uint8_t *png,
     size_t png_size);
 
-bool printer_preview_store_v32_store_active(
+bool printer_preview_store_store_active(
     const char *file,
     const uint8_t *png,
     size_t png_size);
 
-void printer_preview_store_v32_restore_one(bool sd_available);
-void printer_preview_store_v32_reset_restore(void);
-void printer_preview_store_v32_invalidate(int profile_index);
+void printer_preview_store_restore_one(bool sd_available);
+void printer_preview_store_reset_restore(void);
+void printer_preview_store_invalidate(int profile_index);

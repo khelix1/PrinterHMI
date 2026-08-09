@@ -103,7 +103,7 @@ static void machine_status_add_live_badge(
 }
 
 
-lv_obj_t *ui_machine_status_v32_create(
+lv_obj_t *ui_machine_status_create(
     lv_obj_t *parent,
     int x,
     int y,
@@ -118,14 +118,14 @@ lv_obj_t *ui_machine_status_v32_create(
         .split_gap = 12,
     };
 
-    return ui_machine_status_v32_create_profile(
+    return ui_machine_status_create_profile(
         parent,
         &rect,
         &layout);
 }
 
 
-lv_obj_t *ui_machine_status_v32_create_profile(
+lv_obj_t *ui_machine_status_create_profile(
     lv_obj_t *parent,
     const ui_dashboard_rect_t *rect,
     const ui_dashboard_machine_layout_t *layout)
@@ -329,7 +329,7 @@ lv_obj_t *ui_machine_status_v32_create_profile(
     return host;
 }
 
-void ui_machine_status_v32_set_filament(
+void ui_machine_status_set_filament(
     lv_obj_t *panel,
     bool moonraker_online,
     const moonraker_filament_state_t *state)
@@ -425,7 +425,7 @@ void ui_machine_status_v32_set_filament(
 }
 
 
-void ui_machine_status_v32_set_connection(
+void ui_machine_status_set_connection(
     lv_obj_t *panel,
     bool online)
 {
@@ -450,7 +450,7 @@ void ui_machine_status_v32_set_connection(
 }
 
 
-void ui_machine_status_v32_set_active_hotend(
+void ui_machine_status_set_active_hotend(
     lv_obj_t *panel,
     const char *name,
     const char *value)
@@ -476,7 +476,7 @@ void ui_machine_status_v32_set_active_hotend(
 }
 
 
-void ui_machine_status_v32_set(
+void ui_machine_status_set(
     lv_obj_t *panel,
     const char *nozzle,
     const char *bed,

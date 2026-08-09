@@ -170,7 +170,7 @@ static bool install_pixels(
 }
 
 
-bool printer_preview_cache_v32_publish_active(
+bool printer_preview_cache_publish_active(
     const char *file,
     const uint16_t *pixels,
     int width,
@@ -214,7 +214,7 @@ bool printer_preview_cache_v32_publish_active(
 }
 
 
-bool printer_preview_cache_v32_publish_png(
+bool printer_preview_cache_publish_png(
     int profile_index,
     const char *expected_host,
     int expected_port,
@@ -253,7 +253,7 @@ bool printer_preview_cache_v32_publish_png(
     raw_png.data = png;
     raw_png.data_size = png_size;
 
-    bool rendered = thumbnail_render_v32_to_rgb565(
+    bool rendered = thumbnail_render_to_rgb565(
         &raw_png,
         replacement,
         width,
@@ -277,7 +277,7 @@ bool printer_preview_cache_v32_publish_png(
 }
 
 
-bool printer_preview_cache_v32_matches(
+bool printer_preview_cache_matches(
     int profile_index,
     const char *file)
 {
@@ -295,7 +295,7 @@ bool printer_preview_cache_v32_matches(
 }
 
 
-const lv_image_dsc_t *printer_preview_cache_v32_image(
+const lv_image_dsc_t *printer_preview_cache_image(
     int profile_index,
     const char **file_out,
     uint32_t *revision_out)
@@ -322,7 +322,7 @@ const lv_image_dsc_t *printer_preview_cache_v32_image(
 }
 
 
-void printer_preview_cache_v32_invalidate(int profile_index)
+void printer_preview_cache_invalidate(int profile_index)
 {
     if (!valid_index(profile_index) || !s_slots) return;
 
@@ -337,7 +337,7 @@ void printer_preview_cache_v32_invalidate(int profile_index)
 }
 
 
-void printer_preview_cache_v32_reset(void)
+void printer_preview_cache_reset(void)
 {
     if (!s_slots) return;
 

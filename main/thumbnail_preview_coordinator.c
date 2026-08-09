@@ -39,13 +39,13 @@ static void delete_object(lv_obj_t **object)
     *object = NULL;
 }
 
-void thumbnail_preview_coordinator_v32_reset(void)
+void thumbnail_preview_coordinator_reset(void)
 {
     s_live_preview_key[0] = '\0';
 }
 
-void thumbnail_preview_coordinator_v32_update(
-    thumbnail_preview_coordinator_v32_context_t *context)
+void thumbnail_preview_coordinator_update(
+    thumbnail_preview_coordinator_context_t *context)
 {
     if (!context ||
         !context->printer_state ||
@@ -67,11 +67,11 @@ void thumbnail_preview_coordinator_v32_update(
         strcmp(context->printer_file, "--") != 0;
 
     if (!live_printing) {
-        thumbnail_preview_coordinator_v32_reset();
+        thumbnail_preview_coordinator_reset();
         return;
     }
 
-    if (thumbnail_manager_v32_task_running()) {
+    if (thumbnail_manager_task_running()) {
         return;
     }
 
@@ -114,7 +114,7 @@ void thumbnail_preview_coordinator_v32_update(
         context->printer_canvas_file[0] = '\0';
     }
 
-    thumbnail_manager_v32_set_force_refresh(true);
+    thumbnail_manager_set_force_refresh(true);
 
     delete_object(context->dashboard_canvas);
     delete_object(context->dashboard_image);

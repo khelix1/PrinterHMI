@@ -13,19 +13,19 @@ lv_obj_t *state;
 
     lv_obj_t *nozzle;
     lv_obj_t *bed;
-} ui_dashboard_status_v32_t;
+} ui_dashboard_status_t;
 
-ui_dashboard_status_v32_t ui_dashboard_status_v32_create(lv_obj_t *parent);
+ui_dashboard_status_t ui_dashboard_status_create(lv_obj_t *parent);
 
-void ui_dashboard_status_v32_set_print_state(const char *state);
-void ui_dashboard_status_v32_set_progress(const char *progress_text,
+void ui_dashboard_status_set_print_state(const char *state);
+void ui_dashboard_status_set_progress(const char *progress_text,
                                           int progress_pct,
                                           lv_color_t progress_color);
 
-lv_color_t ui_dashboard_status_v32_progress_color(double progress);
+lv_color_t ui_dashboard_status_progress_color(double progress);
 
-void ui_dashboard_status_v32_refresh(double progress,
+void ui_dashboard_status_refresh(double progress,
                                      double print_duration_seconds);
-void ui_dashboard_status_v32_set_times(const char *elapsed,
+void ui_dashboard_status_set_times(const char *elapsed,
                                        const char *remaining,
                                        const char *eta);

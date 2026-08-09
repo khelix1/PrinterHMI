@@ -12,20 +12,20 @@
 #include "ui_widgets.h"
 
 /* Temporary bridge while Printer page implementation still lives in main.c. */
-void ui_printer_v32_create(void);
-void ui_printer_v32_destroy(void);
+void ui_printer_create(void);
+void ui_printer_destroy(void);
 
-void ui_printer_v32_show(void)
+void ui_printer_show(void)
 {
-    ui_printer_v32_create();
+    ui_printer_create();
 }
 
-void ui_printer_v32_hide(void)
+void ui_printer_hide(void)
 {
-    ui_printer_v32_destroy();
+    ui_printer_destroy();
 }
 
-void ui_printer_v32_refresh(void)
+void ui_printer_refresh(void)
 {
 }
 
@@ -50,13 +50,13 @@ static void preview_clicked_cb(lv_event_t *event)
 
     if (s_preview_image &&
         !lv_obj_has_flag(s_preview_image, LV_OBJ_FLAG_HIDDEN)) {
-        ui_preview_lightbox_v32_show_object(s_preview_image);
+        ui_preview_lightbox_show_object(s_preview_image);
         return;
     }
 
     if (s_preview_canvas &&
         !lv_obj_has_flag(s_preview_canvas, LV_OBJ_FLAG_HIDDEN)) {
-        ui_preview_lightbox_v32_show_object(s_preview_canvas);
+        ui_preview_lightbox_show_object(s_preview_canvas);
     }
 }
 
@@ -113,7 +113,7 @@ static void preview_show_placeholder(void)
 }
 
 
-void ui_printer_v32_preview_create(lv_obj_t *parent)
+void ui_printer_preview_create(lv_obj_t *parent)
 {
     if (!parent || s_preview_box) {
         return;
@@ -169,7 +169,7 @@ void ui_printer_v32_preview_create(lv_obj_t *parent)
 }
 
 
-void ui_printer_v32_preview_show(
+void ui_printer_preview_show(
     const char *printer_state,
     const char *printer_file,
     const char *selected_file)
@@ -194,7 +194,7 @@ void ui_printer_v32_preview_show(
         moonraker_config_active_profile_index();
 
     const lv_image_dsc_t *cached_image =
-        printer_preview_cache_v32_image(
+        printer_preview_cache_image(
             active_profile,
             &cached_file,
             &cached_revision);
@@ -234,7 +234,7 @@ void ui_printer_v32_preview_show(
              */
             lv_image_set_src(s_preview_image, cached_image);
 
-            ui_thumbnail_v32_fit_object(
+            ui_thumbnail_fit_object(
                 s_preview_image,
                 s_preview_box,
                 (int)cached_image->header.w,
@@ -274,7 +274,7 @@ void ui_printer_v32_preview_show(
 
 }
 
-void ui_printer_v32_preview_reset(void)
+void ui_printer_preview_reset(void)
 {
     s_preview_canvas_file[0] = '\0';
     s_preview_cache_revision = 0;
@@ -293,7 +293,7 @@ void ui_printer_v32_preview_reset(void)
     preview_show_placeholder();
 }
 
-void ui_printer_v32_preview_destroy_refs(void)
+void ui_printer_preview_destroy_refs(void)
 {
     /*
      * The page parent owns and deletes the LVGL children.
@@ -308,22 +308,22 @@ void ui_printer_v32_preview_destroy_refs(void)
     s_preview_cache_profile_index = -1;
 }
 
-char *ui_printer_v32_preview_canvas_file(void)
+char *ui_printer_preview_canvas_file(void)
 {
     return s_preview_canvas_file;
 }
 
-size_t ui_printer_v32_preview_canvas_file_size(void)
+size_t ui_printer_preview_canvas_file_size(void)
 {
     return sizeof(s_preview_canvas_file);
 }
 
-lv_obj_t **ui_printer_v32_preview_canvas_ref(void)
+lv_obj_t **ui_printer_preview_canvas_ref(void)
 {
     return &s_preview_canvas;
 }
 
-lv_obj_t **ui_printer_v32_preview_image_ref(void)
+lv_obj_t **ui_printer_preview_image_ref(void)
 {
     return &s_preview_image;
 }

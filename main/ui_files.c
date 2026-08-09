@@ -19,15 +19,15 @@
 static lv_obj_t *s_printer_file_popup = NULL;
 static lv_obj_t *s_printer_file_popup_label = NULL;
 static lv_obj_t *s_printer_file_list = NULL;
-static ui_page_state_v32_t *s_files_state = NULL;
+static ui_page_state_t *s_files_state = NULL;
 
-static ui_files_v32_refresh_cb_t s_refresh_cb = NULL;
-static ui_files_v32_select_cb_t s_select_cb = NULL;
-static ui_files_v32_preview_cb_t s_preview_cb = NULL;
-static ui_files_v32_search_cb_t s_search_cb = NULL;
-static ui_files_v32_action_cb_t s_sort_cb = NULL;
-static ui_files_v32_folder_cb_t s_folder_cb = NULL;
-static ui_files_v32_action_cb_t s_up_cb = NULL;
+static ui_files_refresh_cb_t s_refresh_cb = NULL;
+static ui_files_select_cb_t s_select_cb = NULL;
+static ui_files_preview_cb_t s_preview_cb = NULL;
+static ui_files_search_cb_t s_search_cb = NULL;
+static ui_files_action_cb_t s_sort_cb = NULL;
+static ui_files_folder_cb_t s_folder_cb = NULL;
+static ui_files_action_cb_t s_up_cb = NULL;
 static lv_obj_t *s_breadcrumb_label = NULL;
 static lv_obj_t *s_sort_label = NULL;
 static lv_obj_t *s_search_label = NULL;
@@ -60,45 +60,45 @@ static void file_preview_clicked_cb(lv_event_t *event)
     lv_event_stop_bubbling(event);
 
     if (row->preview_image) {
-        ui_preview_lightbox_v32_show_object(
+        ui_preview_lightbox_show_object(
             row->preview_image);
     }
 }
 
-lv_obj_t *ui_files_v32_get_popup(void)
+lv_obj_t *ui_files_get_popup(void)
 {
     return s_printer_file_popup;
 }
 
-void ui_files_v32_set_status(const char *text)
+void ui_files_set_status(const char *text)
 {
     if (!s_files_state) return;
 
     const char *message = text ? text : "";
     if (strstr(message, "Loading")) {
-        ui_page_state_v32_show(s_files_state,
+        ui_page_state_show(s_files_state,
                                UI_PAGE_STATE_LOADING,
                                "LOADING FILES",
                                "Requesting the G-code library from Moonraker.");
     } else if (strstr(message, "No files")) {
-        ui_page_state_v32_show(s_files_state,
+        ui_page_state_show(s_files_state,
                                UI_PAGE_STATE_EMPTY,
                                "NO FILES FOUND",
                                "Upload G-code through Moonraker, then refresh.");
     } else if (strstr(message, "host") ||
                strstr(message, "WiFi") ||
                strstr(message, "offline")) {
-        ui_page_state_v32_show(s_files_state,
+        ui_page_state_show(s_files_state,
                                UI_PAGE_STATE_OFFLINE,
                                "FILES OFFLINE",
                                message);
     } else if (message[0]) {
-        ui_page_state_v32_show(s_files_state,
+        ui_page_state_show(s_files_state,
                                UI_PAGE_STATE_ERROR,
                                "FILES UNAVAILABLE",
                                message);
     } else {
-        ui_page_state_v32_hide(s_files_state);
+        ui_page_state_hide(s_files_state);
     }
 }
 
@@ -112,11 +112,11 @@ static void files_refresh_event_cb(lv_event_t *e)
      * Recreate the Files page before reloading its contents.
      *
      * app_files_reload() intentionally no longer calls
-     * ui_files_v32_show(), because its 4 KB response buffer was moved
+     * ui_files_show(), because its 4 KB response buffer was moved
      * out of the LVGL task stack and page ownership now stays here.
      */
-    ui_files_v32_hide();
-    ui_files_v32_show();
+    ui_files_hide();
+    ui_files_show();
 
     if (s_refresh_cb) {
         s_refresh_cb();
@@ -198,7 +198,7 @@ static void file_row_event_cb(lv_event_t *e)
     if (s_select_cb) s_select_cb(row->path);
 }
 
-void ui_files_v32_add_file_entry(const char *path,
+void ui_files_add_file_entry(const char *path,
                                  double size,
                                  double modified,
                                  int y)
@@ -207,7 +207,7 @@ void ui_files_v32_add_file_entry(const char *path,
         return;
     }
 
-    ui_page_state_v32_hide(s_files_state);
+    ui_page_state_hide(s_files_state);
 
     lv_obj_t *parent =
         s_printer_file_list
@@ -449,9 +449,9 @@ void ui_files_v32_add_file_entry(const char *path,
     }
 }
 
-void ui_files_v32_add_file_button(const char *path, int y)
+void ui_files_add_file_button(const char *path, int y)
 {
-    ui_files_v32_add_file_entry(path, 0.0, 0.0, y);
+    ui_files_add_file_entry(path, 0.0, 0.0, y);
 }
 
 typedef struct {
@@ -470,7 +470,7 @@ static void folder_event_cb(lv_event_t *event)
     }
 }
 
-void ui_files_v32_add_folder_button(const char *name,
+void ui_files_add_folder_button(const char *name,
                                     const char *path,
                                     int y)
 {
@@ -505,13 +505,13 @@ void ui_files_v32_add_folder_button(const char *name,
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 18, 0);
 }
 
-void ui_files_v32_clear_rows(void)
+void ui_files_clear_rows(void)
 {
     if (s_printer_file_list) lv_obj_clean(s_printer_file_list);
     s_file_rows = NULL;
 }
 
-void ui_files_v32_set_breadcrumb(const char *path)
+void ui_files_set_breadcrumb(const char *path)
 {
     if (!s_breadcrumb_label) return;
     char text[190];
@@ -519,12 +519,12 @@ void ui_files_v32_set_breadcrumb(const char *path)
     lv_label_set_text(s_breadcrumb_label, text);
 }
 
-void ui_files_v32_set_sort_text(const char *text)
+void ui_files_set_sort_text(const char *text)
 {
     if (s_sort_label) lv_label_set_text(s_sort_label, text ? text : "SORT");
 }
 
-void ui_files_v32_set_search_text(const char *text)
+void ui_files_set_search_text(const char *text)
 {
     snprintf(s_search_text, sizeof(s_search_text), "%s", text ? text : "");
 
@@ -690,7 +690,7 @@ static void up_button_cb(lv_event_t *event)
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && s_up_cb) s_up_cb();
 }
 
-void ui_files_v32_set_file_thumbnail(
+void ui_files_set_file_thumbnail(
     const char *path,
     const lv_image_dsc_t *image)
 {
@@ -712,7 +712,7 @@ void ui_files_v32_set_file_thumbnail(
         }
 
         lv_image_set_src(row->preview_image, image);
-        ui_thumbnail_v32_fit_object(
+        ui_thumbnail_fit_object(
             row->preview_image,
             row->preview_frame,
             (int)image->header.w,
@@ -722,7 +722,7 @@ void ui_files_v32_set_file_thumbnail(
     }
 }
 
-void ui_files_v32_show(void)
+void ui_files_show(void)
 {
     if (s_printer_file_popup) {
         lv_obj_move_foreground(
@@ -780,7 +780,7 @@ void ui_files_v32_show(void)
         s_breadcrumb_label,
         layout->breadcrumb.x,
         layout->breadcrumb.y);
-    ui_files_v32_set_breadcrumb(NULL);
+    ui_files_set_breadcrumb(NULL);
 
     lv_obj_t *up = ui_button_create_icon(
         s_printer_file_popup, UI_BUTTON_OUTLINED,
@@ -810,7 +810,7 @@ void ui_files_v32_show(void)
             layout->search.x,
             layout->search.y);
         s_search_label = lv_obj_get_child(search, 1);
-        ui_files_v32_set_search_text(s_search_text);
+        ui_files_set_search_text(s_search_text);
         lv_obj_add_event_cb(search, search_button_cb, LV_EVENT_CLICKED, NULL);
     }
 
@@ -913,7 +913,7 @@ void ui_files_v32_show(void)
         LV_EVENT_ALL,
         NULL);
 
-    s_files_state = ui_page_state_v32_create(
+    s_files_state = ui_page_state_create(
         s_printer_file_popup,
         layout->list.x,
         layout->list.y,
@@ -921,7 +921,7 @@ void ui_files_v32_show(void)
         layout->list.height);
 }
 
-void ui_files_v32_hide(void)
+void ui_files_hide(void)
 {
     close_search_popup();
     if (s_printer_file_popup) {
@@ -936,11 +936,11 @@ void ui_files_v32_hide(void)
     }
 }
 
-void ui_files_v32_set_browser_callbacks(
-    ui_files_v32_search_cb_t search_cb,
-    ui_files_v32_action_cb_t sort_cb,
-    ui_files_v32_folder_cb_t folder_cb,
-    ui_files_v32_action_cb_t up_cb)
+void ui_files_set_browser_callbacks(
+    ui_files_search_cb_t search_cb,
+    ui_files_action_cb_t sort_cb,
+    ui_files_folder_cb_t folder_cb,
+    ui_files_action_cb_t up_cb)
 {
     s_search_cb = search_cb;
     s_sort_cb = sort_cb;
@@ -948,19 +948,19 @@ void ui_files_v32_set_browser_callbacks(
     s_up_cb = up_cb;
 }
 
-void ui_files_v32_refresh(void)
+void ui_files_refresh(void)
 {
-    ui_files_v32_hide();
-    ui_files_v32_show();
+    ui_files_hide();
+    ui_files_show();
 
     if (s_refresh_cb) {
         s_refresh_cb();
     }
 }
 
-void ui_files_v32_set_callbacks(ui_files_v32_refresh_cb_t refresh_cb,
-                                ui_files_v32_select_cb_t select_cb,
-                                ui_files_v32_preview_cb_t preview_cb)
+void ui_files_set_callbacks(ui_files_refresh_cb_t refresh_cb,
+                                ui_files_select_cb_t select_cb,
+                                ui_files_preview_cb_t preview_cb)
 {
     s_refresh_cb = refresh_cb;
     s_select_cb = select_cb;
@@ -971,17 +971,17 @@ void ui_files_v32_set_callbacks(ui_files_v32_refresh_cb_t refresh_cb,
 /* File detail popup */
 
 static lv_obj_t *s_file_detail_popup = NULL;
-static ui_files_v32_detail_cb_t s_detail_cancel_cb = NULL;
-static ui_files_v32_detail_cb_t s_detail_start_cb = NULL;
+static ui_files_detail_cb_t s_detail_cancel_cb = NULL;
+static ui_files_detail_cb_t s_detail_start_cb = NULL;
 static lv_obj_t *s_detail_info_label = NULL;
 static lv_obj_t *s_detail_start_button = NULL;
 
-bool ui_files_v32_detail_is_open(void)
+bool ui_files_detail_is_open(void)
 {
     return s_file_detail_popup != NULL;
 }
 
-void ui_files_v32_close_detail_popup(void)
+void ui_files_close_detail_popup(void)
 {
     if (s_file_detail_popup) {
         lv_obj_delete(s_file_detail_popup);
@@ -997,7 +997,7 @@ static void detail_cancel_event_cb(lv_event_t *e)
     if (s_detail_cancel_cb) {
         s_detail_cancel_cb();
     } else {
-        ui_files_v32_close_detail_popup();
+        ui_files_close_detail_popup();
     }
 }
 
@@ -1009,14 +1009,14 @@ static void detail_start_event_cb(lv_event_t *e)
     }
 }
 
-void ui_files_v32_show_detail_popup(const char *filename_text,
+void ui_files_show_detail_popup(const char *filename_text,
                                     const char *metadata_text,
                                     lv_obj_t **thumb_box_out,
-                                    ui_thumbnail_v32_t **thumb_view_out,
-                                    ui_files_v32_detail_cb_t cancel_cb,
-                                    ui_files_v32_detail_cb_t start_cb)
+                                    ui_thumbnail_t **thumb_view_out,
+                                    ui_files_detail_cb_t cancel_cb,
+                                    ui_files_detail_cb_t start_cb)
 {
-    ui_files_v32_close_detail_popup();
+    ui_files_close_detail_popup();
 
     s_detail_cancel_cb = cancel_cb;
     s_detail_start_cb = start_cb;
@@ -1032,7 +1032,7 @@ void ui_files_v32_show_detail_popup(const char *filename_text,
     /*
      * TEST79_FILES_SHARED_PREVIEW_LONG_FILENAME
      *
-     * The popup now creates the same shared ui_thumbnail_v32 component
+     * The popup now creates the same shared ui_thumbnail component
      * used by the rest of the application. The popup does not allocate
      * or own a separate image buffer.
      */
@@ -1146,8 +1146,8 @@ void ui_files_v32_show_detail_popup(const char *filename_text,
     /*
      * Shared thumbnail component.
      */
-    ui_thumbnail_v32_t *thumb_view =
-        ui_thumbnail_v32_create(
+    ui_thumbnail_t *thumb_view =
+        ui_thumbnail_create(
             s_file_detail_popup,
             28,
             128,
@@ -1162,12 +1162,12 @@ void ui_files_v32_show_detail_popup(const char *filename_text,
         return;
     }
 
-    ui_thumbnail_v32_set_placeholder(
+    ui_thumbnail_set_placeholder(
         thumb_view,
         "PRINT\nTHUMBNAIL");
 
     lv_obj_t *thumb_box =
-        ui_thumbnail_v32_box(
+        ui_thumbnail_box(
             thumb_view);
 
     if (thumb_box_out) {
@@ -1289,7 +1289,7 @@ void ui_files_v32_show_detail_popup(const char *filename_text,
         s_file_detail_popup);
 }
 
-void ui_files_v32_update_detail_metadata(
+void ui_files_update_detail_metadata(
     const char *metadata_text,
     bool ready)
 {

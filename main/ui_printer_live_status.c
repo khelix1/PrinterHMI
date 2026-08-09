@@ -413,7 +413,7 @@ void ui_printer_live_status_create(
 
     /*
      * parent is the 800x220 Active Print panel created by
-     * ui_printer_layout_v32.
+     * ui_printer_layout.
      */
     lv_obj_t *card = parent;
 

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-struct ui_preview_v32 {
+struct ui_preview {
     lv_obj_t *box;
     lv_obj_t *label;
     lv_obj_t *image;
@@ -14,7 +14,7 @@ struct ui_preview_v32 {
     int h;
 };
 
-static void preview_show_placeholder(ui_preview_v32_t *p, const char *text)
+static void preview_show_placeholder(ui_preview_t *p, const char *text)
 {
     if (!p) return;
 
@@ -29,9 +29,9 @@ static void preview_show_placeholder(ui_preview_v32_t *p, const char *text)
     }
 }
 
-ui_preview_v32_t *ui_preview_v32_create(lv_obj_t *parent, int x, int y, int w, int h)
+ui_preview_t *ui_preview_create(lv_obj_t *parent, int x, int y, int w, int h)
 {
-    ui_preview_v32_t *p = lv_malloc(sizeof(ui_preview_v32_t));
+    ui_preview_t *p = lv_malloc(sizeof(ui_preview_t));
     if (!p) return NULL;
 
     memset(p, 0, sizeof(*p));
@@ -54,17 +54,17 @@ ui_preview_v32_t *ui_preview_v32_create(lv_obj_t *parent, int x, int y, int w, i
     return p;
 }
 
-void ui_preview_v32_set_placeholder(ui_preview_v32_t *p, const char *text)
+void ui_preview_set_placeholder(ui_preview_t *p, const char *text)
 {
     preview_show_placeholder(p, text);
 }
 
-void ui_preview_v32_clear(ui_preview_v32_t *p)
+void ui_preview_clear(ui_preview_t *p)
 {
     preview_show_placeholder(p, "PREVIEW");
 }
 
-bool ui_preview_v32_show_image_src(ui_preview_v32_t *p, const void *src)
+bool ui_preview_show_image_src(ui_preview_t *p, const void *src)
 {
     if (!p || !p->image || !src) {
         return false;
@@ -82,13 +82,13 @@ bool ui_preview_v32_show_image_src(ui_preview_v32_t *p, const void *src)
 }
 
 
-void ui_preview_v32_show_manager_status(ui_preview_v32_t *p)
+void ui_preview_show_manager_status(ui_preview_t *p)
 {
     if (!p) return;
 
-    if (thumbnail_manager_v32_has_ready_image()) {
-        ui_preview_v32_set_placeholder(p, thumbnail_manager_v32_cache_path());
+    if (thumbnail_manager_has_ready_image()) {
+        ui_preview_set_placeholder(p, thumbnail_manager_cache_path());
     } else {
-        ui_preview_v32_set_placeholder(p, thumbnail_manager_v32_status_text());
+        ui_preview_set_placeholder(p, thumbnail_manager_status_text());
     }
 }

@@ -53,7 +53,7 @@ static char s_host[128];
 static char s_api_key[128];
 static int s_port;
 static bool s_sd_available;
-static files_row_preview_v32_ready_cb_t s_ready_cb;
+static files_row_preview_ready_cb_t s_ready_cb;
 
 static bool ensure_runtime(void)
 {
@@ -98,11 +98,11 @@ static bool fetch_preview_png(
 
     char cache_path[220];
     if (sd_available &&
-        thumbnail_manager_v32_cache_path_for_file(
+        thumbnail_manager_cache_path_for_file(
             file,
             cache_path,
             sizeof(cache_path)) &&
-        thumbnail_manager_v32_load_cache_file(
+        thumbnail_manager_load_cache_file(
             cache_path,
             png_out,
             png_size_out)) {
@@ -124,7 +124,7 @@ static bool fetch_preview_png(
     if (!metadata) return false;
 
     char encoded_file[256];
-    thumbnail_manager_v32_url_encode(
+    thumbnail_manager_url_encode(
         file,
         encoded_file,
         sizeof(encoded_file));
@@ -153,7 +153,7 @@ static bool fetch_preview_png(
     if (!has_thumbnail) return false;
 
     char encoded_thumbnail[256];
-    thumbnail_manager_v32_url_encode(
+    thumbnail_manager_url_encode(
         thumbnail_path,
         encoded_thumbnail,
         sizeof(encoded_thumbnail));
@@ -168,11 +168,11 @@ static bool fetch_preview_png(
     }
 
     if (sd_available &&
-        thumbnail_manager_v32_cache_path_for_file(
+        thumbnail_manager_cache_path_for_file(
             file,
             cache_path,
             sizeof(cache_path))) {
-        (void)thumbnail_manager_v32_store_cache_file(
+        (void)thumbnail_manager_store_cache_file(
             cache_path,
             *png_out,
             *png_size_out);
@@ -254,7 +254,7 @@ static void preview_worker(void *arg)
             raw_png.data_size = png_size;
 
             if (rendered && bsp_display_lock(2500)) {
-                rendered_ok = thumbnail_render_v32_to_rgb565(
+                rendered_ok = thumbnail_render_to_rgb565(
                     &raw_png,
                     rendered,
                     ROW_PREVIEW_WIDTH,
@@ -266,7 +266,7 @@ static void preview_worker(void *arg)
         if (png) heap_caps_free(png);
 
         const lv_image_dsc_t *ready_image = NULL;
-        files_row_preview_v32_ready_cb_t ready_cb = NULL;
+        files_row_preview_ready_cb_t ready_cb = NULL;
 
         xSemaphoreTake(s_lock, portMAX_DELAY);
 
@@ -337,12 +337,12 @@ static void preview_worker(void *arg)
     }
 }
 
-void files_row_preview_v32_begin(
+void files_row_preview_begin(
     const char *host,
     int port,
     const char *api_key,
     bool sd_available,
-    files_row_preview_v32_ready_cb_t ready_cb)
+    files_row_preview_ready_cb_t ready_cb)
 {
     if (!ensure_runtime()) {
         ESP_LOGE(TAG, "Runtime allocation failed");
@@ -386,7 +386,7 @@ void files_row_preview_v32_begin(
     }
 }
 
-void files_row_preview_v32_request(const char *file)
+void files_row_preview_request(const char *file)
 {
     if (!file || !file[0] || !ensure_runtime() || !s_worker_started) {
         return;
@@ -397,7 +397,7 @@ void files_row_preview_v32_request(const char *file)
         .generation = 0,
     };
     const lv_image_dsc_t *ready_image = NULL;
-    files_row_preview_v32_ready_cb_t ready_cb = NULL;
+    files_row_preview_ready_cb_t ready_cb = NULL;
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
 

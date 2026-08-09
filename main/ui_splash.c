@@ -11,7 +11,7 @@ static lv_obj_t *splash_bar = NULL;
 static lv_obj_t *splash_status = NULL;
 static lv_obj_t *splash_percent = NULL;
 
-static void ui_splash_v32_set_progress(int pct, const char *status)
+static void ui_splash_set_progress(int pct, const char *status)
 {
     if (!splash_root) return;
 
@@ -36,33 +36,33 @@ static void ui_splash_v32_set_progress(int pct, const char *status)
 }
 
 
-void ui_splash_v32_display_ready(void)
+void ui_splash_display_ready(void)
 {
-    ui_splash_v32_set_progress(25, "Display and touch online...");
+    ui_splash_set_progress(25, "Display and touch online...");
 }
 
-void ui_splash_v32_wifi_starting(void)
+void ui_splash_wifi_starting(void)
 {
-    ui_splash_v32_set_progress(45, "Starting WiFi...");
+    ui_splash_set_progress(45, "Starting WiFi...");
 }
 
-void ui_splash_v32_wifi_waiting(bool connected)
+void ui_splash_wifi_waiting(bool connected)
 {
-    ui_splash_v32_set_progress(connected ? 75 : 62,
+    ui_splash_set_progress(connected ? 75 : 62,
                                connected ? "WiFi connected. Starting services..." : "WiFi pending. Continuing offline...");
 }
 
-void ui_splash_v32_moonraker_ready(void)
+void ui_splash_moonraker_ready(void)
 {
-    ui_splash_v32_set_progress(88, "Moonraker polling active...");
+    ui_splash_set_progress(88, "Moonraker polling active...");
 }
 
-void ui_splash_v32_dashboard_ready(void)
+void ui_splash_dashboard_ready(void)
 {
-    ui_splash_v32_set_progress(100, "Dashboard ready.");
+    ui_splash_set_progress(100, "Dashboard ready.");
 }
 
-void ui_splash_v32_create(void)
+void ui_splash_create(void)
 {
     if (splash_root) return;
 
@@ -145,10 +145,10 @@ void ui_splash_v32_create(void)
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -26);
 
     lv_obj_move_foreground(splash_root);
-    ui_splash_v32_set_progress(5, "Booting display stack...");
+    ui_splash_set_progress(5, "Booting display stack...");
 }
 
-void ui_splash_v32_destroy(void)
+void ui_splash_destroy(void)
 {
     if (!splash_root) return;
 

@@ -105,7 +105,7 @@ void ui_printer_banner_create(
     *banner_label = NULL;
 
     lv_obj_t *banner =
-        ui_status_banner_v32_create(
+        ui_status_banner_create(
             parent,
             UI_STATUS_BAR_X,
             UI_STATUS_BAR_Y,
@@ -116,7 +116,7 @@ void ui_printer_banner_create(
         return;
     }
 
-    ui_status_banner_v32_set(
+    ui_status_banner_set(
         banner,
         "--",
         initial_text && initial_text[0]
@@ -126,7 +126,7 @@ void ui_printer_banner_create(
         NULL);
 
     *banner_label =
-        ui_status_banner_v32_state_label(banner);
+        ui_status_banner_state_label(banner);
 }
 
 
@@ -153,7 +153,7 @@ void ui_printer_banner_refresh(
     }
 
     if (s_notice[0] && esp_timer_get_time() < s_notice_until_us) {
-        ui_status_banner_v32_set(banner,
+        ui_status_banner_set(banner,
                                  "UPDATED",
                                  s_notice,
                                  NULL,
@@ -176,7 +176,7 @@ void ui_printer_banner_refresh(
         strcmp(printer_file, "No file") != 0 &&
         strcmp(printer_file, "--") != 0;
 
-    ui_status_banner_v32_set(
+    ui_status_banner_set(
         banner,
         normalized_state[0]
             ? normalized_state

@@ -26,7 +26,7 @@ static void active_print_preview_clicked_cb(lv_event_t *event)
         return;
     }
 
-    ui_preview_lightbox_v32_show_object(
+    ui_preview_lightbox_show_object(
         s_active_print_thumb_canvas);
 }
 
@@ -54,7 +54,7 @@ static void active_print_delete_cb(lv_event_t *event)
 }
 
 
-lv_obj_t *ui_active_print_v32_thumb_box(lv_obj_t *card)
+lv_obj_t *ui_active_print_thumb_box(lv_obj_t *card)
 {
     if (!card) return NULL;
 
@@ -65,27 +65,27 @@ lv_obj_t *ui_active_print_v32_thumb_box(lv_obj_t *card)
 }
 
 
-lv_obj_t **ui_active_print_v32_thumb_canvas_ref(void)
+lv_obj_t **ui_active_print_thumb_canvas_ref(void)
 {
     return &s_active_print_thumb_canvas;
 }
 
-uint16_t **ui_active_print_v32_thumb_canvas_buf_ref(void)
+uint16_t **ui_active_print_thumb_canvas_buf_ref(void)
 {
     return &s_active_print_thumb_canvas_buf;
 }
 
-char *ui_active_print_v32_thumb_canvas_file(void)
+char *ui_active_print_thumb_canvas_file(void)
 {
     return s_active_print_thumb_canvas_file;
 }
 
-size_t ui_active_print_v32_thumb_canvas_file_size(void)
+size_t ui_active_print_thumb_canvas_file_size(void)
 {
     return sizeof(s_active_print_thumb_canvas_file);
 }
 
-void ui_active_print_v32_thumb_set_placeholder(lv_obj_t *card, const char *text)
+void ui_active_print_thumb_set_placeholder(lv_obj_t *card, const char *text)
 {
     if (!card) card = s_active_print_panel;
     if (!card) return;
@@ -99,7 +99,7 @@ void ui_active_print_v32_thumb_set_placeholder(lv_obj_t *card, const char *text)
     lv_obj_move_foreground(ctx->preview_label);
 }
 
-void ui_active_print_v32_thumb_clear_placeholder(lv_obj_t *card)
+void ui_active_print_thumb_clear_placeholder(lv_obj_t *card)
 {
     if (!card) card = s_active_print_panel;
     if (!card) return;
@@ -110,14 +110,14 @@ void ui_active_print_v32_thumb_clear_placeholder(lv_obj_t *card)
     lv_obj_add_flag(ctx->preview_label, LV_OBJ_FLAG_HIDDEN);
 }
 
-bool ui_active_print_v32_thumb_canvas_matches(const char *file)
+bool ui_active_print_thumb_canvas_matches(const char *file)
 {
     return s_active_print_thumb_canvas &&
            file && file[0] &&
            strcmp(s_active_print_thumb_canvas_file, file) == 0;
 }
 
-bool ui_active_print_v32_thumb_ensure_canvas_buffer(size_t pixels)
+bool ui_active_print_thumb_ensure_canvas_buffer(size_t pixels)
 {
     if (s_active_print_thumb_canvas_buf) return true;
 
@@ -131,7 +131,7 @@ bool ui_active_print_v32_thumb_ensure_canvas_buffer(size_t pixels)
     return s_active_print_thumb_canvas_buf != NULL;
 }
 
-void ui_active_print_v32_thumb_delete_canvas(void)
+void ui_active_print_thumb_delete_canvas(void)
 {
     if (s_active_print_thumb_canvas) {
         lv_obj_delete(s_active_print_thumb_canvas);
@@ -140,12 +140,12 @@ void ui_active_print_v32_thumb_delete_canvas(void)
     s_active_print_thumb_canvas_file[0] = 0;
 }
 
-void ui_active_print_v32_thumb_forget_canvas_file(void)
+void ui_active_print_thumb_forget_canvas_file(void)
 {
     s_active_print_thumb_canvas_file[0] = 0;
 }
 
-static void ui_active_print_v32_thumb_copy_file(const char *file)
+static void ui_active_print_thumb_copy_file(const char *file)
 {
     if (!file) file = "";
     snprintf(s_active_print_thumb_canvas_file,
@@ -154,12 +154,12 @@ static void ui_active_print_v32_thumb_copy_file(const char *file)
              file);
 }
 
-void ui_active_print_v32_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, int h, const char *file)
+void ui_active_print_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, int h, const char *file)
 {
-    lv_obj_t *box = ui_active_print_v32_thumb_box(card);
+    lv_obj_t *box = ui_active_print_thumb_box(card);
     if (!box || !s_active_print_thumb_canvas_buf) return;
 
-    ui_active_print_v32_thumb_clear_placeholder(card);
+    ui_active_print_thumb_clear_placeholder(card);
 
     if (!s_active_print_thumb_canvas) {
         s_active_print_thumb_canvas = lv_canvas_create(box);
@@ -171,7 +171,7 @@ void ui_active_print_v32_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, in
                          h,
                          LV_COLOR_FORMAT_RGB565);
 
-    ui_thumbnail_v32_fit_object(
+    ui_thumbnail_fit_object(
         s_active_print_thumb_canvas,
         box,
         w,
@@ -179,12 +179,12 @@ void ui_active_print_v32_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, in
         6);
     lv_obj_move_foreground(s_active_print_thumb_canvas);
 
-    ui_active_print_v32_thumb_copy_file(file);
+    ui_active_print_thumb_copy_file(file);
 }
 
-void ui_active_print_v32_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, int h, const char *file)
+void ui_active_print_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, int h, const char *file)
 {
-    lv_obj_t *box = ui_active_print_v32_thumb_box(card);
+    lv_obj_t *box = ui_active_print_thumb_box(card);
     if (!box || !s_active_print_thumb_canvas_buf) return;
 
     if (!s_active_print_thumb_canvas) {
@@ -200,19 +200,19 @@ void ui_active_print_v32_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, i
         lv_obj_move_foreground(s_active_print_thumb_canvas);
     }
 
-    ui_thumbnail_v32_fit_object(
+    ui_thumbnail_fit_object(
         s_active_print_thumb_canvas,
         box,
         w,
         h,
         6);
 
-    ui_active_print_v32_thumb_clear_placeholder(card);
-    ui_active_print_v32_thumb_copy_file(file);
+    ui_active_print_thumb_clear_placeholder(card);
+    ui_active_print_thumb_copy_file(file);
 }
 
 
-lv_obj_t *ui_active_print_v32_create(
+lv_obj_t *ui_active_print_create(
     lv_obj_t *parent,
     int x,
     int y,
@@ -233,14 +233,14 @@ lv_obj_t *ui_active_print_v32_create(
         .footer_bottom = 31,
     };
 
-    return ui_active_print_v32_create_profile(
+    return ui_active_print_create_profile(
         parent,
         &rect,
         &layout);
 }
 
 
-lv_obj_t *ui_active_print_v32_create_profile(
+lv_obj_t *ui_active_print_create_profile(
     lv_obj_t *parent,
     const ui_dashboard_rect_t *rect,
     const ui_dashboard_active_print_layout_t *layout)
@@ -424,7 +424,7 @@ lv_obj_t *ui_active_print_v32_create_profile(
 }
 
 
-void ui_active_print_v32_set(lv_obj_t *panel,
+void ui_active_print_set(lv_obj_t *panel,
                              const char *layer,
                              const char *elapsed,
                              const char *remaining)

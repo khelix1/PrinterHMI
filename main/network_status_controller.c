@@ -33,7 +33,7 @@ void network_status_controller_refresh(
         wifi_text = wifi_buf;
     }
 
-    ui_network_v32_refresh_objects(
+    ui_network_refresh_objects(
         banner_text ? banner_text : "NETWORK OFFLINE",
         wifi_text,
         ip_text ? ip_text : "--",

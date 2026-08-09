@@ -18,8 +18,8 @@
  * Network transport, Wi-Fi management, Moonraker probing, NVS ownership,
  * and popup behavior remain outside this page module.
  */
-void ui_network_v32_create(void);
-void ui_network_v32_destroy(void);
+void ui_network_create(void);
+void ui_network_destroy(void);
 
 typedef struct {
     lv_obj_t *root;
@@ -132,24 +132,24 @@ static void network_scan_ssid_data_delete_cb(lv_event_t *e)
 /* Page ownership                                                             */
 /* ------------------------------------------------------------------------- */
 
-void ui_network_v32_show(void)
+void ui_network_show(void)
 {
-    ui_network_v32_create();
+    ui_network_create();
 }
 
-void ui_network_v32_hide(void)
+void ui_network_hide(void)
 {
-    ui_network_v32_destroy();
+    ui_network_destroy();
 }
 
-void ui_network_v32_refresh(void)
+void ui_network_refresh(void)
 {
 }
 
-void ui_network_v32_create_objects(
+void ui_network_create_objects(
     const char *banner_text,
     int moonraker_port,
-    ui_network_v32_make_info_cb_t make_info_cb,
+    ui_network_make_info_cb_t make_info_cb,
     lv_event_cb_t wifi_clicked_cb,
     lv_event_cb_t host_clicked_cb,
     lv_event_cb_t port_clicked_cb)
@@ -224,7 +224,7 @@ void ui_network_v32_create_objects(
      * Network-state banner.
      */
     s_network.banner =
-        ui_status_banner_v32_create(
+        ui_status_banner_create(
             s_network.root,
             UI_STATUS_BAR_X,
             UI_STATUS_BAR_Y,
@@ -232,11 +232,11 @@ void ui_network_v32_create_objects(
             UI_STATUS_BAR_HEIGHT);
 
     if (!s_network.banner) {
-        ui_network_v32_destroy_objects(NULL, NULL, NULL);
+        ui_network_destroy_objects(NULL, NULL, NULL);
         return;
     }
 
-    ui_status_banner_v32_set_simple(
+    ui_status_banner_set_simple(
         s_network.banner,
         "OFFLINE",
         banner_text ? banner_text : "NETWORK OFFLINE");
@@ -562,7 +562,7 @@ void ui_network_v32_create_objects(
 
 }
 
-void ui_network_v32_refresh_objects(
+void ui_network_refresh_objects(
     const char *banner_text,
     const char *wifi_text,
     const char *ip_text,
@@ -581,7 +581,7 @@ void ui_network_v32_refresh_objects(
         ip_text[0] != '-';
 
     if (s_network.banner) {
-        ui_status_banner_v32_set_simple(
+        ui_status_banner_set_simple(
             s_network.banner,
             moonraker_connected
                 ? "CONNECTED"
@@ -672,7 +672,7 @@ void ui_network_v32_refresh_objects(
 
 }
 
-void ui_network_v32_set_scan_status(
+void ui_network_set_scan_status(
     const char *status_text)
 {
     if (!s_network.networks_status) {
@@ -687,7 +687,7 @@ void ui_network_v32_set_scan_status(
 }
 
 
-void ui_network_v32_render_scan_results(
+void ui_network_render_scan_results(
     const wifi_ap_record_t *aps,
     uint16_t count,
     unsigned total_count,
@@ -700,7 +700,7 @@ void ui_network_v32_render_scan_results(
     lv_obj_clean(s_network.networks_list);
 
     if (!aps || count == 0 || !selected_cb) {
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             "NO NETWORKS FOUND");
 
         return;
@@ -724,7 +724,7 @@ void ui_network_v32_render_scan_results(
             total_count == 1 ? "" : "S");
     }
 
-    ui_network_v32_set_scan_status(status);
+    ui_network_set_scan_status(status);
 
     for (uint16_t i = 0; i < count; i++) {
         const char *ssid =
@@ -839,7 +839,7 @@ void ui_network_v32_render_scan_results(
 }
 
 
-void ui_network_v32_set_port(int port)
+void ui_network_set_port(int port)
 {
     if (!s_network.moonraker_port) {
         return;
@@ -858,7 +858,7 @@ void ui_network_v32_set_port(int port)
         port_buf);
 }
 
-void ui_network_v32_destroy_objects(
+void ui_network_destroy_objects(
     lv_obj_t **network_selected_ssid_label,
     lv_obj_t **network_password_ta,
     lv_obj_t **network_keyboard)

@@ -4,9 +4,9 @@
 
 #include "lvgl.h"
 
-typedef void (*thumbnail_preview_coordinator_v32_void_fn_t)(void);
+typedef void (*thumbnail_preview_coordinator_void_fn_t)(void);
 
-typedef void (*thumbnail_preview_coordinator_v32_metadata_fn_t)(
+typedef void (*thumbnail_preview_coordinator_metadata_fn_t)(
     const char *file,
     char *out,
     size_t out_size);
@@ -34,13 +34,13 @@ typedef struct {
     char *metadata_info;
     size_t metadata_info_size;
 
-    thumbnail_preview_coordinator_v32_void_fn_t set_live_target;
-    thumbnail_preview_coordinator_v32_void_fn_t free_thumbnail;
-    thumbnail_preview_coordinator_v32_metadata_fn_t build_metadata;
-    thumbnail_preview_coordinator_v32_void_fn_t start_delayed;
-} thumbnail_preview_coordinator_v32_context_t;
+    thumbnail_preview_coordinator_void_fn_t set_live_target;
+    thumbnail_preview_coordinator_void_fn_t free_thumbnail;
+    thumbnail_preview_coordinator_metadata_fn_t build_metadata;
+    thumbnail_preview_coordinator_void_fn_t start_delayed;
+} thumbnail_preview_coordinator_context_t;
 
-void thumbnail_preview_coordinator_v32_reset(void);
+void thumbnail_preview_coordinator_reset(void);
 
-void thumbnail_preview_coordinator_v32_update(
-    thumbnail_preview_coordinator_v32_context_t *context);
+void thumbnail_preview_coordinator_update(
+    thumbnail_preview_coordinator_context_t *context);

@@ -45,7 +45,7 @@ static ui_macros_state_t *s_macros = NULL;
 #define s_pending_macro       (s_macros->pending_macro)
 
 
-bool ui_macros_v32_init(void)
+bool ui_macros_init(void)
 {
     if (s_macros) {
         return true;
@@ -338,10 +338,10 @@ static void refresh_timer_cb(lv_timer_t *timer)
 }
 
 
-void ui_macros_v32_show(
+void ui_macros_show(
     ui_macros_command_cb_t command_callback)
 {
-    if (!ui_macros_v32_init()) {
+    if (!ui_macros_init()) {
         return;
     }
 
@@ -413,7 +413,7 @@ void ui_macros_v32_show(
 }
 
 
-void ui_macros_v32_hide(void)
+void ui_macros_hide(void)
 {
     if (!s_macros) {
         return;

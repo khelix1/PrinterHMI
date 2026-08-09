@@ -182,7 +182,7 @@ static void refresh_cards(void)
 
         const lv_image_dsc_t *cached_image =
             configured
-                ? printer_preview_cache_v32_image(
+                ? printer_preview_cache_image(
                     index,
                     &cached_file,
                     &cached_revision)
@@ -335,14 +335,14 @@ static void chooser_timer_cb(lv_timer_t *timer)
 }
 
 
-void ui_printer_chooser_v32_refresh(void)
+void ui_printer_chooser_refresh(void)
 {
     if (!s_root) return;
     refresh_cards();
 }
 
 
-void ui_printer_chooser_v32_show(
+void ui_printer_chooser_show(
     ui_printer_chooser_select_cb_t select_cb,
     ui_printer_chooser_manage_cb_t manage_cb)
 {
@@ -415,7 +415,7 @@ void ui_printer_chooser_v32_show(
 }
 
 
-void ui_printer_chooser_v32_hide(void)
+void ui_printer_chooser_hide(void)
 {
     if (s_timer) {
         lv_timer_delete(s_timer);
@@ -433,7 +433,7 @@ void ui_printer_chooser_v32_hide(void)
 }
 
 
-bool ui_printer_chooser_v32_is_visible(void)
+bool ui_printer_chooser_is_visible(void)
 {
     return s_root != NULL;
 }

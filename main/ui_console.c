@@ -371,7 +371,7 @@ static void send_command_cb(lv_event_t *event)
     }
 
     if (!input || !input[0]) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "EMPTY COMMAND",
             "Enter a Klipper G-code command first.");
@@ -585,7 +585,7 @@ static lv_obj_t *page_button(
 }
 
 
-void ui_console_v32_show(
+void ui_console_show(
     ui_console_command_cb_t command_callback)
 {
     s_command_callback = command_callback;
@@ -680,7 +680,7 @@ void ui_console_v32_show(
 }
 
 
-void ui_console_v32_hide(void)
+void ui_console_hide(void)
 {
     close_command_popup();
 

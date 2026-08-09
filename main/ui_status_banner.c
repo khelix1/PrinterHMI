@@ -102,7 +102,7 @@ static ui_status_kind_t banner_state_kind(
     return UI_STATUS_NEUTRAL;
 }
 
-lv_obj_t *ui_status_banner_v32_create(
+lv_obj_t *ui_status_banner_create(
     lv_obj_t *parent,
     int x,
     int y,
@@ -364,7 +364,7 @@ lv_obj_t *ui_status_banner_v32_create(
     return banner;
 }
 
-void ui_status_banner_v32_set(
+void ui_status_banner_set(
     lv_obj_t *banner,
     const char *state,
     const char *file,
@@ -464,12 +464,12 @@ void ui_status_banner_v32_set(
     }
 }
 
-void ui_status_banner_v32_set_simple(
+void ui_status_banner_set_simple(
     lv_obj_t *banner,
     const char *state,
     const char *message)
 {
-    ui_status_banner_v32_set(
+    ui_status_banner_set(
         banner,
         state,
         message,
@@ -491,7 +491,7 @@ void ui_status_banner_v32_set_simple(
     lv_obj_set_style_text_align(ctx->file, LV_TEXT_ALIGN_LEFT, 0);
 }
 
-lv_obj_t *ui_status_banner_v32_state_label(lv_obj_t *banner)
+lv_obj_t *ui_status_banner_state_label(lv_obj_t *banner)
 {
     if (!banner) return NULL;
 

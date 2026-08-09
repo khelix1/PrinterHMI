@@ -2,7 +2,7 @@
 
 #include "ui_theme.h"
 
-struct ui_page_state_v32 {
+struct ui_page_state {
     lv_obj_t *root;
     lv_obj_t *icon;
     lv_obj_t *title;
@@ -12,17 +12,17 @@ struct ui_page_state_v32 {
 
 static void page_state_delete_cb(lv_event_t *event)
 {
-    ui_page_state_v32_t *state =
-        (ui_page_state_v32_t *)lv_event_get_user_data(event);
+    ui_page_state_t *state =
+        (ui_page_state_t *)lv_event_get_user_data(event);
     if (state) lv_free(state);
 }
 
-ui_page_state_v32_t *ui_page_state_v32_create(
+ui_page_state_t *ui_page_state_create(
     lv_obj_t *parent, int x, int y, int width, int height)
 {
     if (!parent) return NULL;
 
-    ui_page_state_v32_t *state = lv_malloc(sizeof(*state));
+    ui_page_state_t *state = lv_malloc(sizeof(*state));
     if (!state) return NULL;
 
     state->root = lv_obj_create(parent);
@@ -71,7 +71,7 @@ ui_page_state_v32_t *ui_page_state_v32_create(
     return state;
 }
 
-void ui_page_state_v32_show(ui_page_state_v32_t *state,
+void ui_page_state_show(ui_page_state_t *state,
                             ui_page_state_kind_t kind,
                             const char *title,
                             const char *detail)
@@ -116,7 +116,7 @@ void ui_page_state_v32_show(ui_page_state_v32_t *state,
     lv_obj_move_foreground(state->root);
 }
 
-void ui_page_state_v32_hide(ui_page_state_v32_t *state)
+void ui_page_state_hide(ui_page_state_t *state)
 {
     if (state && state->root) {
         lv_obj_add_flag(state->root, LV_OBJ_FLAG_HIDDEN);

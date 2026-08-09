@@ -6,11 +6,11 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
-static ui_dashboard_status_v32_t s_dash_status = {0};
+static ui_dashboard_status_t s_dash_status = {0};
 
-ui_dashboard_status_v32_t ui_dashboard_status_v32_create(lv_obj_t *parent)
+ui_dashboard_status_t ui_dashboard_status_create(lv_obj_t *parent)
 {
-    ui_dashboard_status_v32_t out = {0};
+    ui_dashboard_status_t out = {0};
 
     lv_obj_t *right_panel = lv_obj_create(parent);
     out.root = right_panel;
@@ -117,14 +117,14 @@ ui_dashboard_status_v32_t ui_dashboard_status_v32_create(lv_obj_t *parent)
     return out;
 }
 
-void ui_dashboard_status_v32_set_print_state(const char *state)
+void ui_dashboard_status_set_print_state(const char *state)
 {
     if (s_dash_status.state) {
         lv_label_set_text(s_dash_status.state, state ? state : "--");
     }
 }
 
-lv_color_t ui_dashboard_status_v32_progress_color(double progress)
+lv_color_t ui_dashboard_status_progress_color(double progress)
 {
     if (progress < 0.0) return UI_TEXT;
     if (progress < 0.25) return UI_ACCENT_INFO;
@@ -132,7 +132,7 @@ lv_color_t ui_dashboard_status_v32_progress_color(double progress)
     return UI_OK_BRIGHT;
 }
 
-void ui_dashboard_status_v32_refresh(double progress,
+void ui_dashboard_status_refresh(double progress,
                                      double print_duration_seconds)
 {
     char progress_buf[32];
@@ -168,17 +168,17 @@ void ui_dashboard_status_v32_refresh(double progress,
                                         progress,
                                         print_duration_seconds);
 
-    ui_dashboard_status_v32_set_progress(
+    ui_dashboard_status_set_progress(
         progress_buf,
         progress_pct,
-        ui_dashboard_status_v32_progress_color(progress));
+        ui_dashboard_status_progress_color(progress));
 
-    ui_dashboard_status_v32_set_times(elapsed_buf,
+    ui_dashboard_status_set_times(elapsed_buf,
                                       remaining_buf,
                                       eta_buf);
 }
 
-void ui_dashboard_status_v32_set_progress(const char *progress_text,
+void ui_dashboard_status_set_progress(const char *progress_text,
                                           int progress_pct,
                                           lv_color_t progress_color)
 {
@@ -194,7 +194,7 @@ void ui_dashboard_status_v32_set_progress(const char *progress_text,
     }
 }
 
-void ui_dashboard_status_v32_set_times(const char *elapsed,
+void ui_dashboard_status_set_times(const char *elapsed,
                                        const char *remaining,
                                        const char *eta)
 {

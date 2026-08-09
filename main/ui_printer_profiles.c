@@ -306,8 +306,8 @@ static void delete_confirm_cb(lv_event_t *event)
     }
 
     printer_profile_health_set(s_selected_profile, true, false);
-    printer_preview_cache_v32_invalidate(s_selected_profile);
-    printer_preview_store_v32_invalidate(s_selected_profile);
+    printer_preview_cache_invalidate(s_selected_profile);
+    printer_preview_store_invalidate(s_selected_profile);
 
     s_selected_profile =
         moonraker_config_active_profile_index();
@@ -318,7 +318,7 @@ static void delete_confirm_cb(lv_event_t *event)
     if (active_removed && s_active_changed_cb) {
         s_active_changed_cb();
     } else {
-        ui_printer_chooser_v32_refresh();
+        ui_printer_chooser_refresh();
     }
 
     char status[160];

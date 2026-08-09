@@ -146,7 +146,7 @@ static void input_shaper_button_cb(
 
     if (!s_motion.input_shaper ||
         !s_motion.accelerometer) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "INPUT SHAPER UNAVAILABLE",
             "This printer has not reported both Input Shaper and an accelerometer.");
@@ -297,7 +297,7 @@ static void resonance_test_button_cb(
 
     if (!s_motion.input_shaper ||
         !s_motion.accelerometer) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "RESONANCE TEST UNAVAILABLE",
             "This printer has not reported the required motion measurement stack.");
@@ -435,7 +435,7 @@ static void accelerometer_check_button_cb(
     }
 
     if (!s_motion.accelerometer) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "SENSOR CHECK UNAVAILABLE",
             "This printer has not reported a supported accelerometer.");

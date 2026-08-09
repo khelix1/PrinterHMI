@@ -75,7 +75,7 @@ static bool endpoint_matches(
 }
 
 
-void printer_preview_store_v32_reset_restore(void)
+void printer_preview_store_reset_restore(void)
 {
     memset(s_attempted, 0, sizeof(s_attempted));
     s_next_profile = 0;
@@ -83,7 +83,7 @@ void printer_preview_store_v32_reset_restore(void)
 }
 
 
-void printer_preview_store_v32_invalidate(int profile_index)
+void printer_preview_store_invalidate(int profile_index)
 {
     if (!valid_index(profile_index)) return;
 
@@ -103,7 +103,7 @@ void printer_preview_store_v32_invalidate(int profile_index)
 }
 
 
-bool printer_preview_store_v32_store_png(
+bool printer_preview_store_store_png(
     int profile_index,
     const char *expected_host,
     int expected_port,
@@ -150,7 +150,7 @@ bool printer_preview_store_v32_store_png(
         meta_temporary,
         sizeof(meta_temporary));
 
-    if (!thumbnail_manager_v32_store_cache_file(
+    if (!thumbnail_manager_store_cache_file(
             png_temporary,
             png,
             png_size)) {
@@ -205,7 +205,7 @@ bool printer_preview_store_v32_store_png(
 }
 
 
-bool printer_preview_store_v32_store_active(
+bool printer_preview_store_store_active(
     const char *file,
     const uint8_t *png,
     size_t png_size)
@@ -222,7 +222,7 @@ bool printer_preview_store_v32_store_active(
     strlcpy(host, profile->host, sizeof(host));
     int port = profile->port;
 
-    return printer_preview_store_v32_store_png(
+    return printer_preview_store_store_png(
         profile_index,
         host,
         port,
@@ -239,7 +239,7 @@ static bool restore_profile(int profile_index)
 
     if (!profile || !profile->configured) return false;
 
-    if (printer_preview_cache_v32_image(
+    if (printer_preview_cache_image(
             profile_index,
             NULL,
             NULL)) {
@@ -286,7 +286,7 @@ static bool restore_profile(int profile_index)
     uint8_t *png = NULL;
     size_t png_size = 0;
 
-    if (!thumbnail_manager_v32_load_cache_file(
+    if (!thumbnail_manager_load_cache_file(
             png_path,
             &png,
             &png_size)) {
@@ -296,7 +296,7 @@ static bool restore_profile(int profile_index)
     bool installed = false;
 
     if (bsp_display_lock(1000)) {
-        installed = printer_preview_cache_v32_publish_png(
+        installed = printer_preview_cache_publish_png(
             profile_index,
             host,
             port,
@@ -323,13 +323,13 @@ static bool restore_profile(int profile_index)
 }
 
 
-void printer_preview_store_v32_restore_one(bool sd_available)
+void printer_preview_store_restore_one(bool sd_available)
 {
     uint32_t generation = moonraker_config_generation();
 
     if (generation != s_generation ||
         (sd_available && !s_last_sd_available)) {
-        printer_preview_store_v32_reset_restore();
+        printer_preview_store_reset_restore();
     }
 
     s_last_sd_available = sd_available;

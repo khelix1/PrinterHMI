@@ -17,16 +17,16 @@ static void preview_lightbox_delete_cb(lv_event_t *event)
 static void preview_lightbox_close_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        ui_preview_lightbox_v32_close();
+        ui_preview_lightbox_close();
     }
 }
 
-bool ui_preview_lightbox_v32_is_open(void)
+bool ui_preview_lightbox_is_open(void)
 {
     return s_preview_lightbox != NULL;
 }
 
-void ui_preview_lightbox_v32_close(void)
+void ui_preview_lightbox_close(void)
 {
     if (!s_preview_lightbox) {
         return;
@@ -37,13 +37,13 @@ void ui_preview_lightbox_v32_close(void)
     lv_obj_delete(lightbox);
 }
 
-void ui_preview_lightbox_v32_show(const lv_image_dsc_t *image)
+void ui_preview_lightbox_show(const lv_image_dsc_t *image)
 {
     if (!image || image->header.w == 0 || image->header.h == 0) {
         return;
     }
 
-    ui_preview_lightbox_v32_close();
+    ui_preview_lightbox_close();
 
     lv_obj_t *screen = lv_screen_active();
     if (!screen) {
@@ -85,7 +85,7 @@ void ui_preview_lightbox_v32_show(const lv_image_dsc_t *image)
 
     lv_obj_t *preview = lv_image_create(s_preview_lightbox);
     if (!preview) {
-        ui_preview_lightbox_v32_close();
+        ui_preview_lightbox_close();
         return;
     }
 
@@ -121,7 +121,7 @@ void ui_preview_lightbox_v32_show(const lv_image_dsc_t *image)
     lv_obj_move_foreground(s_preview_lightbox);
 }
 
-void ui_preview_lightbox_v32_show_object(lv_obj_t *image_object)
+void ui_preview_lightbox_show_object(lv_obj_t *image_object)
 {
     if (!image_object) {
         return;
@@ -132,6 +132,6 @@ void ui_preview_lightbox_v32_show_object(lv_obj_t *image_object)
         return;
     }
 
-    ui_preview_lightbox_v32_show(
+    ui_preview_lightbox_show(
         (const lv_image_dsc_t *)source);
 }

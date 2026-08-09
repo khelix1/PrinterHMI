@@ -15,13 +15,13 @@
  *
  * Publish functions must be called while the LVGL/display lock is held.
  */
-bool printer_preview_cache_v32_publish_active(
+bool printer_preview_cache_publish_active(
     const char *file,
     const uint16_t *pixels,
     int width,
     int height);
 
-bool printer_preview_cache_v32_publish_png(
+bool printer_preview_cache_publish_png(
     int profile_index,
     const char *expected_host,
     int expected_port,
@@ -31,14 +31,14 @@ bool printer_preview_cache_v32_publish_png(
     int width,
     int height);
 
-bool printer_preview_cache_v32_matches(
+bool printer_preview_cache_matches(
     int profile_index,
     const char *file);
 
-const lv_image_dsc_t *printer_preview_cache_v32_image(
+const lv_image_dsc_t *printer_preview_cache_image(
     int profile_index,
     const char **file_out,
     uint32_t *revision_out);
 
-void printer_preview_cache_v32_invalidate(int profile_index);
-void printer_preview_cache_v32_reset(void);
+void printer_preview_cache_invalidate(int profile_index);
+void printer_preview_cache_reset(void);

@@ -69,7 +69,7 @@ static lv_obj_t *topbar_eta_label = NULL;
 
 
 void app_files_reload(void);
-void ui_files_v32_refresh(void);
+void ui_files_refresh(void);
 static void files_refresh_bridge(void);
 static void files_select_bridge(const char *path);
 static void files_preview_bridge(const char *path);
@@ -328,9 +328,9 @@ static bool sd_card_ok = false;
 static bool sd_mount_attempted = false;
 static lv_obj_t *printer_panel = NULL;
 
-static ui_printer_layout_v32_t printer_layout = {0};
+static ui_printer_layout_t printer_layout = {0};
 static lv_obj_t *printer_thumb_box = NULL;
-static ui_thumbnail_v32_t *printer_thumb_view = NULL;
+static ui_thumbnail_t *printer_thumb_view = NULL;
 
 #define THUMB_TARGET_LIVE  0
 #define THUMB_TARGET_POPUP 1
@@ -348,10 +348,10 @@ static lv_obj_t *network_keyboard = NULL;
  * selected_program remembers the material profile so RESUME can
  * return from HOLD to PLA or PETG.
  */
-static ui_drybox_program_v32_t s_drybox_selected_program =
+static ui_drybox_program_t s_drybox_selected_program =
     UI_DRYBOX_PROGRAM_NONE;
 
-static ui_drybox_program_v32_t s_drybox_active_program =
+static ui_drybox_program_t s_drybox_active_program =
     UI_DRYBOX_PROGRAM_NONE;
 static lv_obj_t *printer_state_label = NULL;
 static lv_obj_t *printer_file_label = NULL;
@@ -396,8 +396,8 @@ static lv_obj_t *card_moonraker = NULL;
 static lv_obj_t *dash_nozzle_label = NULL;
 static lv_obj_t *dash_bed_label = NULL;
 static lv_obj_t *dash_thumb_img = NULL;
-#define dash_thumb_canvas (*ui_dashboard_v32_thumb_canvas_ref())
-#define dash_thumb_canvas_buf (*ui_dashboard_v32_thumb_canvas_buf_ref())
+#define dash_thumb_canvas (*ui_dashboard_thumb_canvas_ref())
+#define dash_thumb_canvas_buf (*ui_dashboard_thumb_canvas_buf_ref())
 static volatile bool dash_thumb_render_running = false;
 static volatile bool dash_thumb_render_ready = false;
 static volatile bool dash_thumb_render_failed = false;
@@ -495,15 +495,15 @@ static void dashboard_restore_active_profile_preview(void);
 static void reset_preview_state_for_host_change(void)
 {
     printer_thumb_target = THUMB_TARGET_LIVE;
-    thumbnail_manager_v32_set_force_refresh(true);
-    thumbnail_manager_v32_mark_pending();
+    thumbnail_manager_set_force_refresh(true);
+    thumbnail_manager_mark_pending();
 
-    thumbnail_session_v32_selected_thumbnail_path()[0] = 0;
-    ui_dashboard_v32_thumb_canvas_file()[0] = 0;
-    ui_printer_v32_preview_reset();
-    thumbnail_preview_coordinator_v32_reset();
+    thumbnail_session_selected_thumbnail_path()[0] = 0;
+    ui_dashboard_thumb_canvas_file()[0] = 0;
+    ui_printer_preview_reset();
+    thumbnail_preview_coordinator_reset();
 
-    thumbnail_session_v32_free_thumbnail();
+    thumbnail_session_free_thumbnail();
 }
 
 
@@ -567,8 +567,8 @@ static void reset_active_printer_runtime_state(void)
 
     last_dashboard_print_state[0] = '\0';
 
-    thumbnail_session_v32_clear_selected_file();
-    thumbnail_session_v32_clear_thumbnail_path();
+    thumbnail_session_clear_selected_file();
+    thumbnail_session_clear_thumbnail_path();
 }
 
 
@@ -578,7 +578,7 @@ static void moonraker_configuration_changed(
 {
     reset_preview_state_for_host_change();
 
-    ui_network_v32_set_port(
+    ui_network_set_port(
         moonraker_config_port());
 
     s_moonraker_ok = false;
@@ -1179,7 +1179,7 @@ static bool moonraker_get_live_objects(void)
         double object_height = 0.0;
         double layer_height = 0.0;
 
-        if (thumbnail_session_v32_get_layer_metadata(
+        if (thumbnail_session_get_layer_metadata(
                 &object_height,
                 &layer_height) &&
             object_height > 0.0 &&
@@ -1256,7 +1256,7 @@ return true;
 
 static void printer_thumb_start_delayed(void);
 static void printer_build_metadata_text(const char *file, char *out, size_t out_sz);
-static void thumbnail_preview_coordinator_v32_set_live_target(void)
+static void thumbnail_preview_coordinator_set_live_target(void)
 {
     printer_thumb_target = THUMB_TARGET_LIVE;
 }
@@ -1357,7 +1357,7 @@ static bool moonraker_send_gcode_http(const char *cmd)
         safe_copy(moonraker_status,
                   sizeof(moonraker_status),
                   "Moonraker: no WiFi for command");
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "COMMAND NOT SENT",
             "Moonraker is offline.");
@@ -1407,7 +1407,7 @@ static bool moonraker_send_gcode_http(const char *cmd)
              "HTTP %d  %.110s",
              http_code,
              cmd);
-    ui_toast_v32_show(
+    ui_toast_show(
         UI_STATUS_DANGER,
         "COMMAND FAILED",
         toast_detail);
@@ -1461,9 +1461,9 @@ static bool moonraker_send_gcode(
         resolution.command);
 }
 
-void ui_printer_v32_create(void);
+void ui_printer_create(void);
 /* BEGIN LEGACY PRINTER PAGE BLOCK */
-void ui_printer_v32_destroy(void);
+void ui_printer_destroy(void);
 static void ui_network_tools_wifi_scan_now(void);
 static void scan_moonraker_now(void);
 static void moonraker_discovery_selected_bridge(
@@ -1495,9 +1495,9 @@ static void printer_profiles_active_changed_bridge(void)
     /* Selecting a printer moves active transport ownership.  It does not
      * invalidate health already confirmed for other unchanged endpoints. */
     printer_profile_health_reconcile();
-    printer_profile_preview_worker_v32_reset();
-    printer_preview_store_v32_reset_restore();
-    ui_printer_chooser_v32_refresh();
+    printer_profile_preview_worker_reset();
+    printer_preview_store_reset_restore();
+    ui_printer_chooser_refresh();
 
     char status[128];
 
@@ -1585,9 +1585,9 @@ static lv_obj_t *make_printer_info(
         98);
 }
 
-void ui_network_v32_create(void)
+void ui_network_create(void)
 {
-    ui_network_v32_create_objects(
+    ui_network_create_objects(
         network_banner_text(),
         moonraker_config_port(),
         make_printer_info,
@@ -1596,7 +1596,7 @@ void ui_network_v32_create(void)
         ui_network_tools_open_port_edit_cb);
 }
 
-static void ui_network_v32_refresh_bridge(void)
+static void ui_network_refresh_bridge(void)
 {
     char ip_buf[32];
 
@@ -1638,7 +1638,7 @@ static bool ota_start_url(const char *url, bool save_custom_url)
 
     if (!ota_manager_start(url)) {
         ESP_LOGE(TAG, "OTA: unable to start update");
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "OTA NOT STARTED",
             "Another network operation is active. Try again.");
@@ -1716,7 +1716,7 @@ static void ota_open_popup_cb(lv_event_t *e)
 }
 
 
-void ui_files_v32_destroy(void);
+void ui_files_destroy(void);
 static void dashboard_dry_status_event_cb(lv_event_t *e);
 
 static void printer_popup_send_gcode_bridge(const char *cmd)
@@ -1725,7 +1725,7 @@ static void printer_popup_send_gcode_bridge(const char *cmd)
 }
 
 
-void ui_command_bar_v32_action(const char *action)
+void ui_command_bar_action(const char *action)
 {
     if (!action) return;
 
@@ -1742,21 +1742,21 @@ void ui_command_bar_v32_action(const char *action)
     }
 
     if (strcmp(action, "FILES") == 0) {
-    ui_files_v32_set_callbacks(
+    ui_files_set_callbacks(
         files_refresh_bridge,
         files_select_bridge,
         files_preview_bridge);
-    ui_files_v32_show();
+    ui_files_show();
     app_files_reload();
 return;
     }
 
     if (strcmp(action, "DRYBOX") == 0) {
-        ui_files_v32_hide();
-        ui_printer_v32_hide();
-        ui_network_v32_hide();
+        ui_files_hide();
+        ui_printer_hide();
+        ui_network_hide();
         hide_settings_tab();
-        ui_drybox_v32_show();
+        ui_drybox_show();
         ui_shell_set_active_nav(
             UI_SHELL_PAGE_DRYBOX);
         return;
@@ -1790,8 +1790,8 @@ static void printer_chooser_select_bridge(int profile_index)
             moonraker_config_active_profile_name());
     }
 
-    ui_printer_chooser_v32_hide();
-    ui_dashboard_v32_create();
+    ui_printer_chooser_hide();
+    ui_dashboard_create();
     dashboard_restore_active_profile_preview();
     ui_shell_set_active_nav(UI_SHELL_PAGE_DASHBOARD);
 }
@@ -1809,16 +1809,16 @@ static void printer_chooser_manage_bridge(int profile_index)
 
 static void app_hide_operator_pages(void)
 {
-    ui_bed_mesh_v32_close();
-    ui_calibration_v32_hide();
-    ui_devices_v32_hide();
-    ui_macros_v32_hide();
-    ui_console_v32_hide();
-    ui_telemetry_v32_hide();
-    ui_files_v32_hide();
-    ui_printer_v32_hide();
-    ui_drybox_v32_hide();
-    ui_network_v32_hide();
+    ui_bed_mesh_close();
+    ui_calibration_hide();
+    ui_devices_hide();
+    ui_macros_hide();
+    ui_console_hide();
+    ui_telemetry_hide();
+    ui_files_hide();
+    ui_printer_hide();
+    ui_drybox_hide();
+    ui_network_hide();
     hide_settings_tab();
 }
 
@@ -1826,7 +1826,7 @@ static void app_hide_operator_pages(void)
 static void devices_open_telemetry_bridge(void)
 {
     app_hide_operator_pages();
-    ui_telemetry_v32_show();
+    ui_telemetry_show();
     ui_shell_set_active_nav(UI_SHELL_PAGE_DEVICES);
 }
 
@@ -1843,7 +1843,7 @@ static void settings_open_network_bridge(lv_event_t *event)
     (void)event;
 
     app_hide_operator_pages();
-    ui_network_v32_show();
+    ui_network_show();
     ui_shell_set_active_nav(UI_SHELL_PAGE_SETTINGS);
 }
 
@@ -1852,7 +1852,7 @@ static void printer_chooser_open_from_topbar(void)
 {
     app_hide_operator_pages();
 
-    ui_printer_chooser_v32_show(
+    ui_printer_chooser_show(
         printer_chooser_select_bridge,
         printer_chooser_manage_bridge);
 
@@ -1864,40 +1864,40 @@ static void printer_chooser_open_from_topbar(void)
 void ui_shell_page_action(ui_shell_page_t page)
 {
     /* Every sidebar destination closes the explicit printer chooser. */
-    ui_printer_chooser_v32_hide();
+    ui_printer_chooser_hide();
     app_hide_operator_pages();
 
     switch (page) {
     case UI_SHELL_PAGE_DASHBOARD:
-        ui_dashboard_v32_create();
+        ui_dashboard_create();
         dashboard_restore_active_profile_preview();
         return;
 
     case UI_SHELL_PAGE_PRINTER:
-        ui_printer_v32_show();
+        ui_printer_show();
         return;
 
     case UI_SHELL_PAGE_FILES:
-        ui_files_v32_set_callbacks(
+        ui_files_set_callbacks(
             files_refresh_bridge,
             files_select_bridge,
             files_preview_bridge);
-        ui_files_v32_show();
+        ui_files_show();
         app_files_reload();
         return;
 
     case UI_SHELL_PAGE_BED_MESH:
-        ui_bed_mesh_v32_show(printer_popup_send_gcode_bridge);
+        ui_bed_mesh_show(printer_popup_send_gcode_bridge);
         return;
 
     case UI_SHELL_PAGE_CALIBRATION:
-        ui_calibration_v32_show(
+        ui_calibration_show(
             calibration_open_bed_mesh_bridge,
             moonraker_send_gcode);
         return;
 
     case UI_SHELL_PAGE_DEVICES:
-        ui_devices_v32_show(
+        ui_devices_show(
             devices_open_telemetry_bridge);
         return;
 
@@ -1906,7 +1906,7 @@ void ui_shell_page_action(ui_shell_page_t page)
          * The operator explicitly selected this detected macro. Preserve its
          * exact catalog name instead of resolving it as another action.
          */
-        ui_macros_v32_show(
+        ui_macros_show(
             moonraker_send_gcode_raw);
         return;
 
@@ -1915,12 +1915,12 @@ void ui_shell_page_action(ui_shell_page_t page)
          * Console is intentionally literal. It still uses asynchronous
          * WebSocket dispatch, but never rewrites operator-entered G-code.
          */
-        ui_console_v32_show(
+        ui_console_show(
             moonraker_send_gcode_raw);
         return;
 
     case UI_SHELL_PAGE_DRYBOX:
-        ui_drybox_v32_show();
+        ui_drybox_show();
         return;
 
     case UI_SHELL_PAGE_SETTINGS:
@@ -1939,7 +1939,7 @@ static void printer_thumb_cleanup_for_popup_close(void)
      * popup must not make a still-running worker appear idle and permit a
      * second overlapping thumbnail transfer.
      */
-    thumbnail_manager_v32_mark_pending();
+    thumbnail_manager_mark_pending();
 
     thumb_poll_timer = NULL;
 
@@ -1949,7 +1949,7 @@ static void printer_thumb_cleanup_for_popup_close(void)
 }
 
 static void close_printer_file_detail_popup(void);
-void ui_files_v32_destroy(void)
+void ui_files_destroy(void)
 {
     close_printer_file_detail_popup();
 
@@ -1987,7 +1987,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
             printer_meta_layer_height,
             telemetry_state.progress);
 
-    ui_telemetry_v32_refresh(
+    ui_telemetry_refresh(
         &telemetry_state,
         esp_timer_get_time());
     network_status_controller_update_topbar(
@@ -2019,7 +2019,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
             telemetry_state.moonraker_ok),
         .printer_state = telemetry_state.printer_state,
         .printer_file = telemetry_state.printer_file,
-        .selected_preview_file = thumbnail_session_v32_selected_file(),
+        .selected_preview_file = thumbnail_session_selected_file(),
 
         .live_velocity = telemetry_state.live_velocity,
         .live_flow = telemetry_state.live_flow,
@@ -2048,16 +2048,16 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 
     printer_ui_controller_refresh(&printer_refresh);
 
-ui_drybox_v32_refresh();
+ui_drybox_refresh();
 
-    ui_network_v32_refresh_bridge();
+    ui_network_refresh_bridge();
     ui_settings_refresh();
 
 
     dashboard_live_controller_push_banner(
         telemetry_state.moonraker_ok);
     dashboard_live_controller_push_machine();
-    ui_command_bar_v32_update(
+    ui_command_bar_update(
         telemetry_state.printer_state,
         moonraker_exclude_objects_available());
 
@@ -2095,7 +2095,7 @@ static void dashboard_dry_status_event_cb(lv_event_t *e)
              state.live_data_ok ? "linked" : "not linked",
              IP2STR(&s_ip));
 
-    ui_dashboard_v32_status_popup_show("DRYBOX LIVE STATUS", body);
+    ui_dashboard_status_popup_show("DRYBOX LIVE STATUS", body);
 }
 
 
@@ -2217,7 +2217,7 @@ static void printer_ui_controller_show_object_bridge(void)
 /* Printer information cards are constructed by ui_cards. */
 
 /* BEGIN LEGACY PRINTER PAGE BLOCK */
-void ui_printer_v32_destroy(void)
+void ui_printer_destroy(void)
 {
 
     if (printer_panel) {
@@ -2235,7 +2235,7 @@ void ui_printer_v32_destroy(void)
     printer_progress_label = NULL;
     printer_tuning_label = NULL;
     printer_active_file_label = NULL;
-    ui_printer_v32_preview_destroy_refs();
+    ui_printer_preview_destroy_refs();
     printer_nozzle_label = NULL;
     printer_bed_label = NULL;
     printer_eta_label = NULL;
@@ -2406,7 +2406,7 @@ static void ui_network_tools_wifi_scan_now(void)
             ui_network_tools_network_scan_status,
             sizeof(ui_network_tools_network_scan_status),
             "NETWORK BUSY - TRY AGAIN");
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             ui_network_tools_network_scan_status);
         return;
     }
@@ -2416,7 +2416,7 @@ static void ui_network_tools_wifi_scan_now(void)
         sizeof(ui_network_tools_network_scan_status),
         "SCANNING...");
 
-    ui_network_v32_set_scan_status(
+    ui_network_set_scan_status(
         ui_network_tools_network_scan_status);
 
     /* Draw the state while the runtime retires WebSocket/background HTTP. */
@@ -2435,7 +2435,7 @@ static void ui_network_tools_wifi_scan_now(void)
             ui_network_tools_network_scan_status,
             sizeof(ui_network_tools_network_scan_status),
             "SCAN WAIT TIMEOUT");
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             ui_network_tools_network_scan_status);
         network_activity_controller_release_exclusive();
         return;
@@ -2456,7 +2456,7 @@ static void ui_network_tools_wifi_scan_now(void)
             "SCAN FAILED: %s",
             esp_err_to_name(err));
 
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             ui_network_tools_network_scan_status);
 
         goto scan_finished;
@@ -2473,7 +2473,7 @@ static void ui_network_tools_wifi_scan_now(void)
             "COUNT FAILED: %s",
             esp_err_to_name(err));
 
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             ui_network_tools_network_scan_status);
 
         goto scan_finished;
@@ -2485,7 +2485,7 @@ static void ui_network_tools_wifi_scan_now(void)
             sizeof(ui_network_tools_network_scan_status),
             "NO NETWORKS FOUND");
 
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             ui_network_tools_network_scan_status);
 
         goto scan_finished;
@@ -2511,13 +2511,13 @@ static void ui_network_tools_wifi_scan_now(void)
             "RESULT FAILED: %s",
             esp_err_to_name(err));
 
-        ui_network_v32_set_scan_status(
+        ui_network_set_scan_status(
             ui_network_tools_network_scan_status);
 
         goto scan_finished;
     }
 
-    ui_network_v32_render_scan_results(
+    ui_network_render_scan_results(
         aps,
         visible_count,
         (unsigned)ap_count,
@@ -2584,12 +2584,12 @@ static void test_moonraker_now(void)
     }
 }
 
-void ui_network_v32_destroy(void)
+void ui_network_destroy(void)
 {
     ui_printer_profiles_close_all();
     ui_network_tools_wifi_popup_destroy_all();
 
-    ui_network_v32_destroy_objects(
+    ui_network_destroy_objects(
         &network_selected_ssid_label,
         &network_password_ta,
         &network_keyboard);
@@ -2705,8 +2705,8 @@ static void app_theme_changed(void)
      * return the operator to the same page under the newly selected theme.
      */
     hide_settings_tab();
-    ui_dashboard_v32_status_popup_close();
-    ui_dashboard_v32_destroy();
+    ui_dashboard_status_popup_close();
+    ui_dashboard_destroy();
 
     if (wifi_label) {
         lv_obj_delete(wifi_label);
@@ -2723,7 +2723,7 @@ static void app_theme_changed(void)
     ui_shell_set_active_printer_name(
         moonraker_config_active_profile_name());
 
-    ui_dashboard_v32_create();
+    ui_dashboard_create();
     dashboard_restore_active_profile_preview();
     app_create_wifi_status_label();
 
@@ -2740,9 +2740,9 @@ static void app_theme_changed(void)
 
 static void close_printer_file_detail_popup(void)
 {
-    file_detail_loader_v32_cancel();
+    file_detail_loader_cancel();
     printer_thumb_cleanup_for_popup_close();
-    ui_files_v32_close_detail_popup();
+    ui_files_close_detail_popup();
 
     printer_thumb_box = NULL;
     printer_thumb_view = NULL;
@@ -2770,7 +2770,7 @@ static void printer_build_metadata_text(
     printer_meta_object_height = 0.0;
     printer_meta_layer_height = 0.0;
 
-    bool metadata_ok = thumbnail_session_v32_build_metadata(
+    bool metadata_ok = thumbnail_session_build_metadata(
         moonraker_config_host(),
         moonraker_config_port(),
         moonraker_config_api_key(),
@@ -2779,7 +2779,7 @@ static void printer_build_metadata_text(
         out_size);
 
     if (metadata_ok) {
-        (void)thumbnail_session_v32_get_layer_metadata(
+        (void)thumbnail_session_get_layer_metadata(
             &printer_meta_object_height,
             &printer_meta_layer_height);
     }
@@ -2791,7 +2791,7 @@ static void printer_thumb_set_label(const char *txt)
         return;
     }
 
-    ui_thumbnail_v32_set_placeholder(
+    ui_thumbnail_set_placeholder(
         printer_thumb_view,
         txt ? txt : "NO THUMBNAIL");
 }
@@ -2801,29 +2801,29 @@ static void dashboard_show_loaded_thumbnail(void);
 static bool printer_publish_selected_preview_cache(void)
 {
     const char *file =
-        thumbnail_session_v32_selected_file();
+        thumbnail_session_selected_file();
 
     if (!file || !file[0] ||
-        !thumbnail_manager_v32_has_png()) {
+        !thumbnail_manager_has_png()) {
         return false;
     }
 
     bool published =
-        printer_preview_cache_v32_publish_png(
+        printer_preview_cache_publish_png(
             moonraker_config_active_profile_index(),
             moonraker_config_host(),
             moonraker_config_port(),
             file,
-            thumbnail_manager_v32_png_data(),
-            thumbnail_manager_v32_png_size(),
+            thumbnail_manager_png_data(),
+            thumbnail_manager_png_size(),
             DASH_THUMB_CANVAS_W,
             DASH_THUMB_CANVAS_H);
 
     if (published) {
-        printer_preview_store_v32_store_active(
+        printer_preview_store_store_active(
             file,
-            thumbnail_manager_v32_png_data(),
-            thumbnail_manager_v32_png_size());
+            thumbnail_manager_png_data(),
+            thumbnail_manager_png_size());
     }
 
     return published;
@@ -2832,15 +2832,15 @@ static bool printer_publish_selected_preview_cache(void)
 
 static void dashboard_show_loaded_thumbnail(void)
 {
-    if (!ui_dashboard_v32_thumb_ready() ||
-        !thumbnail_manager_v32_has_png()) {
+    if (!ui_dashboard_thumb_ready() ||
+        !thumbnail_manager_has_png()) {
         return;
     }
 
     if (dash_thumb_canvas &&
-        thumbnail_session_v32_selected_file()[0] &&
-        strcmp(ui_dashboard_v32_thumb_canvas_file(),
-               thumbnail_session_v32_selected_file()) == 0) {
+        thumbnail_session_selected_file()[0] &&
+        strcmp(ui_dashboard_thumb_canvas_file(),
+               thumbnail_session_selected_file()) == 0) {
         return;
     }
 
@@ -2865,8 +2865,8 @@ static void dashboard_show_loaded_thumbnail(void)
         return;
     }
 
-    if (!thumbnail_render_v32_to_rgb565(
-            thumbnail_manager_v32_image_dsc(),
+    if (!thumbnail_render_to_rgb565(
+            thumbnail_manager_image_dsc(),
             dash_thumb_canvas_buf,
             DASH_THUMB_CANVAS_W,
             DASH_THUMB_CANVAS_H)) {
@@ -2877,22 +2877,22 @@ static void dashboard_show_loaded_thumbnail(void)
 
     /* CACHE_PUBLISH_SYNC: PREVIEW_PROFILE_OWNERSHIP_COMPLETE */
     const char *cache_file =
-        thumbnail_session_v32_selected_file();
+        thumbnail_session_selected_file();
 
     if (cache_file && cache_file[0]) {
         bool cache_published =
-            printer_preview_cache_v32_publish_active(
+            printer_preview_cache_publish_active(
                 cache_file,
                 dash_thumb_canvas_buf,
                 DASH_THUMB_CANVAS_W,
                 DASH_THUMB_CANVAS_H);
 
         if (cache_published &&
-            thumbnail_manager_v32_has_png()) {
-            printer_preview_store_v32_store_active(
+            thumbnail_manager_has_png()) {
+            printer_preview_store_store_active(
                 cache_file,
-                thumbnail_manager_v32_png_data(),
-                thumbnail_manager_v32_png_size());
+                thumbnail_manager_png_data(),
+                thumbnail_manager_png_size());
         }
     }
 
@@ -2903,7 +2903,7 @@ static void dashboard_show_loaded_thumbnail(void)
 
     if (!dash_thumb_canvas) {
         dash_thumb_canvas =
-            lv_canvas_create(ui_dashboard_v32_thumb_box());
+            lv_canvas_create(ui_dashboard_thumb_box());
     }
 
     lv_canvas_set_buffer(
@@ -2913,27 +2913,27 @@ static void dashboard_show_loaded_thumbnail(void)
         DASH_THUMB_CANVAS_H,
         LV_COLOR_FORMAT_RGB565);
 
-    ui_thumbnail_v32_fit_object(
+    ui_thumbnail_fit_object(
         dash_thumb_canvas,
-        ui_dashboard_v32_thumb_box(),
+        ui_dashboard_thumb_box(),
         DASH_THUMB_CANVAS_W,
         DASH_THUMB_CANVAS_H,
         6);
     lv_obj_move_foreground(dash_thumb_canvas);
 
-    ui_dashboard_v32_thumb_clear_placeholder();
+    ui_dashboard_thumb_clear_placeholder();
 
     safe_copy(
-        ui_dashboard_v32_thumb_canvas_file(),
-        ui_dashboard_v32_thumb_canvas_file_size(),
-        thumbnail_session_v32_selected_file());
+        ui_dashboard_thumb_canvas_file(),
+        ui_dashboard_thumb_canvas_file_size(),
+        thumbnail_session_selected_file());
 
 }
 
 
 static void dashboard_apply_rendered_thumbnail(void)
 {
-    if (!ui_dashboard_v32_thumb_ready() || !dash_thumb_canvas_buf) return;
+    if (!ui_dashboard_thumb_ready() || !dash_thumb_canvas_buf) return;
 
     /*
      * Minimal LVGL apply:
@@ -2942,7 +2942,7 @@ static void dashboard_apply_rendered_thumbnail(void)
      * - Worker already rendered pixels into dash_thumb_canvas_buf.
      */
     if (!dash_thumb_canvas) {
-        dash_thumb_canvas = lv_canvas_create(ui_dashboard_v32_thumb_box());
+        dash_thumb_canvas = lv_canvas_create(ui_dashboard_thumb_box());
         lv_canvas_set_buffer(dash_thumb_canvas,
                              dash_thumb_canvas_buf,
                              DASH_THUMB_CANVAS_W,
@@ -2953,20 +2953,20 @@ static void dashboard_apply_rendered_thumbnail(void)
         lv_obj_invalidate(dash_thumb_canvas);
     }
 
-    ui_thumbnail_v32_fit_object(
+    ui_thumbnail_fit_object(
         dash_thumb_canvas,
-        ui_dashboard_v32_thumb_box(),
+        ui_dashboard_thumb_box(),
         DASH_THUMB_CANVAS_W,
         DASH_THUMB_CANVAS_H,
         6);
 
-    ui_dashboard_v32_thumb_clear_placeholder();
+    ui_dashboard_thumb_clear_placeholder();
 
     if (dash_thumb_img) {
         lv_obj_add_flag(dash_thumb_img, LV_OBJ_FLAG_HIDDEN);
     }
 
-    safe_copy(ui_dashboard_v32_thumb_canvas_file(), ui_dashboard_v32_thumb_canvas_file_size(), dash_thumb_render_file);
+    safe_copy(ui_dashboard_thumb_canvas_file(), ui_dashboard_thumb_canvas_file_size(), dash_thumb_render_file);
 
 }
 
@@ -2978,7 +2978,7 @@ static void dashboard_restore_active_profile_preview(void)
     uint32_t revision = 0;
 
     const lv_image_dsc_t *image =
-        printer_preview_cache_v32_image(
+        printer_preview_cache_image(
             moonraker_config_active_profile_index(),
             &file,
             &revision);
@@ -2993,13 +2993,13 @@ static void dashboard_restore_active_profile_preview(void)
         image->data_size <
             DASH_THUMB_CANVAS_W *
             DASH_THUMB_CANVAS_H * sizeof(uint16_t)) {
-        ui_dashboard_v32_thumb_delete_canvas();
-        ui_dashboard_v32_thumb_set_placeholder(
+        ui_dashboard_thumb_delete_canvas();
+        ui_dashboard_thumb_set_placeholder(
             "PRINT\nTHUMBNAIL\n\nNo preview loaded");
         return;
     }
 
-    if (!ui_dashboard_v32_thumb_ensure_canvas_buffer(
+    if (!ui_dashboard_thumb_ensure_canvas_buffer(
             DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H)) {
         return;
     }
@@ -3010,7 +3010,7 @@ static void dashboard_restore_active_profile_preview(void)
         DASH_THUMB_CANVAS_W *
             DASH_THUMB_CANVAS_H * sizeof(uint16_t));
 
-    ui_dashboard_v32_thumb_show_canvas_from_buffer(
+    ui_dashboard_thumb_show_canvas_from_buffer(
         DASH_THUMB_CANVAS_W,
         DASH_THUMB_CANVAS_H,
         file);
@@ -3024,7 +3024,7 @@ static void dash_thumb_render_task(void *arg)
     dash_thumb_render_ready = false;
     dash_thumb_render_failed = false;
 
-    if (!thumbnail_manager_v32_has_png()) {
+    if (!thumbnail_manager_has_png()) {
         dash_thumb_render_failed = true;
         dash_thumb_render_running = false;
         vTaskDelete(NULL);
@@ -3056,8 +3056,8 @@ static void dash_thumb_render_task(void *arg)
     bool ok = false;
 
     if (bsp_display_lock(1000)) {
-        ok = thumbnail_render_v32_to_rgb565(
-            thumbnail_manager_v32_image_dsc(),
+        ok = thumbnail_render_to_rgb565(
+            thumbnail_manager_image_dsc(),
             dash_thumb_canvas_buf,
             DASH_THUMB_CANVAS_W,
             DASH_THUMB_CANVAS_H);
@@ -3073,18 +3073,18 @@ static void dash_thumb_render_task(void *arg)
 
             if (same_profile && dash_thumb_render_file[0]) {
                 bool cache_published =
-                    printer_preview_cache_v32_publish_active(
+                    printer_preview_cache_publish_active(
                         dash_thumb_render_file,
                         dash_thumb_canvas_buf,
                         DASH_THUMB_CANVAS_W,
                         DASH_THUMB_CANVAS_H);
 
                 if (cache_published &&
-                    thumbnail_manager_v32_has_png()) {
-                    printer_preview_store_v32_store_active(
+                    thumbnail_manager_has_png()) {
+                    printer_preview_store_store_active(
                         dash_thumb_render_file,
-                        thumbnail_manager_v32_png_data(),
-                        thumbnail_manager_v32_png_size());
+                        thumbnail_manager_png_data(),
+                        thumbnail_manager_png_size());
                 }
             } else if (!same_profile) {
                 ESP_LOGW(TAG,
@@ -3124,9 +3124,9 @@ static void dash_thumb_render_ui_poll_cb(lv_timer_t *t)
 static void dash_thumb_start_render_task(void)
 {
     if (dash_thumb_render_running) return;
-    if (!thumbnail_manager_v32_has_png()) return;
+    if (!thumbnail_manager_has_png()) return;
 
-    safe_copy(dash_thumb_render_file, sizeof(dash_thumb_render_file), thumbnail_session_v32_selected_file());
+    safe_copy(dash_thumb_render_file, sizeof(dash_thumb_render_file), thumbnail_session_selected_file());
     dash_thumb_render_profile_index =
         moonraker_config_active_profile_index();
     dash_thumb_render_generation =
@@ -3164,10 +3164,10 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
     bool is_live_thumb =
         (printer_thumb_target == THUMB_TARGET_LIVE);
 
-    thumbnail_manager_v32_result_t result =
-        thumbnail_manager_v32_result();
+    thumbnail_manager_result_t result =
+        thumbnail_manager_result();
 
-    if (result == THUMBNAIL_MANAGER_V32_RESULT_LOADING) {
+    if (result == THUMBNAIL_MANAGER_RESULT_LOADING) {
         return;
     }
 
@@ -3175,22 +3175,22 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
     thumb_poll_timer = NULL;
 
     switch (result) {
-    case THUMBNAIL_MANAGER_V32_RESULT_FAILED:
+    case THUMBNAIL_MANAGER_RESULT_FAILED:
         if (!is_live_thumb) {
             printer_thumb_set_label("THUMBNAIL\nTIMEOUT");
         }
         return;
 
-    case THUMBNAIL_MANAGER_V32_RESULT_IDLE:
+    case THUMBNAIL_MANAGER_RESULT_IDLE:
         if (!is_live_thumb) {
             printer_thumb_set_label("NO THUMBNAIL");
         }
         return;
 
-    case THUMBNAIL_MANAGER_V32_RESULT_READY:
+    case THUMBNAIL_MANAGER_RESULT_READY:
         break;
 
-    case THUMBNAIL_MANAGER_V32_RESULT_LOADING:
+    case THUMBNAIL_MANAGER_RESULT_LOADING:
     default:
         return;
     }
@@ -3201,13 +3201,13 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
     }
 
     /* Popup/selected-file preview path only. */
-    if (!ui_files_v32_detail_is_open() || !printer_thumb_box) {
+    if (!ui_files_detail_is_open() || !printer_thumb_box) {
         return;
     }
 
-    ui_thumbnail_v32_show_image(
+    ui_thumbnail_show_image(
         printer_thumb_view,
-        thumbnail_manager_v32_image_dsc(),
+        thumbnail_manager_image_dsc(),
         0);
 
     moonraker_state_t state;
@@ -3221,23 +3221,23 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
          */
         bool published = false;
 
-        if (ui_dashboard_v32_thumb_ready()) {
-            ui_dashboard_v32_thumb_canvas_file()[0] = 0;
+        if (ui_dashboard_thumb_ready()) {
+            ui_dashboard_thumb_canvas_file()[0] = 0;
             dashboard_show_loaded_thumbnail();
             published =
-                printer_preview_cache_v32_matches(
+                printer_preview_cache_matches(
                     moonraker_config_active_profile_index(),
-                    thumbnail_session_v32_selected_file());
+                    thumbnail_session_selected_file());
         } else {
             published =
                 printer_publish_selected_preview_cache();
         }
 
         if (published) {
-            ui_printer_v32_preview_show(
+            ui_printer_preview_show(
                 state.printer_state,
                 state.printer_file,
-                thumbnail_session_v32_selected_file());
+                thumbnail_session_selected_file());
         }
     }
 }
@@ -3245,9 +3245,9 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
 
 static void printer_thumb_start_delayed(void)
 {
-    thumbnail_manager_v32_mark_pending();
+    thumbnail_manager_mark_pending();
 
-    if (!thumbnail_session_v32_selected_thumbnail_path()[0]) {
+    if (!thumbnail_session_selected_thumbnail_path()[0]) {
         printer_thumb_set_label("NO THUMBNAIL");
         return;
     }
@@ -3264,7 +3264,7 @@ static void printer_thumb_start_delayed(void)
 
     /* Thumbnail fetch is allowed to run after live polling. */
 
-    if (thumbnail_manager_v32_task_running()) {
+    if (thumbnail_manager_task_running()) {
         printer_thumb_set_label("LOADING...");
         if (!thumb_poll_timer)
         thumb_poll_timer = lv_timer_create(printer_thumb_ui_poll_cb, 200, NULL);
@@ -3273,16 +3273,16 @@ static void printer_thumb_start_delayed(void)
 
     printer_thumb_set_label("LOADING...");
     bool started =
-        thumbnail_manager_v32_start_download_task(
+        thumbnail_manager_start_download_task(
             moonraker_config_host(),
             moonraker_config_port(),
-            thumbnail_session_v32_selected_file(),
-            thumbnail_session_v32_selected_thumbnail_path(),
-            thumbnail_manager_v32_force_refresh(),
+            thumbnail_session_selected_file(),
+            thumbnail_session_selected_thumbnail_path(),
+            thumbnail_manager_force_refresh(),
             sd_card_ok);
 
     if (!started) {
-        thumbnail_manager_v32_mark_failed();
+        thumbnail_manager_mark_failed();
         printer_thumb_set_label("THUMBNAIL\nTASK FAIL");
         return;
     }
@@ -3298,22 +3298,22 @@ static void file_detail_ready_cb(
     const char *metadata_text,
     const char *thumbnail_path)
 {
-    if (!ui_files_v32_detail_is_open() ||
+    if (!ui_files_detail_is_open() ||
         !file ||
-        strcmp(file, thumbnail_session_v32_selected_file()) != 0) {
+        strcmp(file, thumbnail_session_selected_file()) != 0) {
         return;
     }
 
     safe_copy(
-        thumbnail_session_v32_metadata_info(),
-        thumbnail_session_v32_metadata_info_size(),
+        thumbnail_session_metadata_info(),
+        thumbnail_session_metadata_info_size(),
         metadata_text);
     safe_copy(
-        thumbnail_session_v32_selected_thumbnail_path(),
-        thumbnail_session_v32_selected_thumbnail_path_size(),
+        thumbnail_session_selected_thumbnail_path(),
+        thumbnail_session_selected_thumbnail_path_size(),
         thumbnail_path);
 
-    ui_files_v32_update_detail_metadata(metadata_text, true);
+    ui_files_update_detail_metadata(metadata_text, true);
 
     if (thumbnail_path && thumbnail_path[0]) {
         printer_thumb_set_label("THUMBNAIL\nFOUND");
@@ -3324,7 +3324,7 @@ static void file_detail_ready_cb(
     }
 
     if (!metadata_ok) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_WARNING,
             "METADATA UNAVAILABLE",
             "The file can still be started.");
@@ -3335,30 +3335,30 @@ static void show_printer_file_detail_popup(void)
 {
     close_printer_file_detail_popup();
 
-    thumbnail_session_v32_selected_thumbnail_path()[0] = 0;
-    safe_copy(thumbnail_session_v32_metadata_info(),
-              thumbnail_session_v32_metadata_info_size(),
+    thumbnail_session_selected_thumbnail_path()[0] = 0;
+    safe_copy(thumbnail_session_metadata_info(),
+              thumbnail_session_metadata_info_size(),
               "Loading metadata...");
 
     printer_thumb_box = NULL;
     printer_thumb_view = NULL;
 
-    ui_files_v32_show_detail_popup(
-        thumbnail_session_v32_selected_file(),
-        thumbnail_session_v32_metadata_info(),
+    ui_files_show_detail_popup(
+        thumbnail_session_selected_file(),
+        thumbnail_session_metadata_info(),
         &printer_thumb_box,
         &printer_thumb_view,
         close_printer_file_detail_popup,
         printer_file_detail_start_bridge);
     printer_thumb_set_label("LOADING...");
 
-    if (!file_detail_loader_v32_start(
+    if (!file_detail_loader_start(
             moonraker_config_host(),
             moonraker_config_port(),
             moonraker_config_api_key(),
-            thumbnail_session_v32_selected_file(),
+            thumbnail_session_selected_file(),
             file_detail_ready_cb)) {
-        ui_files_v32_update_detail_metadata(
+        ui_files_update_detail_metadata(
             "Unable to start the metadata worker.",
             true);
         printer_thumb_set_label("NO THUMBNAIL");
@@ -3398,7 +3398,7 @@ void app_files_reload(void)
 /* END FILES APP BRIDGE BLOCK */
 
 
-void ui_printer_v32_create(void)
+void ui_printer_create(void)
 {
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
@@ -3408,18 +3408,18 @@ void ui_printer_v32_create(void)
 
     if (printer_is_live && state.printer_file[0] &&
         strcmp(
-            thumbnail_session_v32_selected_file(),
+            thumbnail_session_selected_file(),
             state.printer_file) != 0) {
         safe_copy(
-            thumbnail_session_v32_selected_file(),
-            thumbnail_session_v32_selected_file_size(),
+            thumbnail_session_selected_file(),
+            thumbnail_session_selected_file_size(),
             state.printer_file);
-        thumbnail_session_v32_selected_thumbnail_path()[0] = 0;
-        ui_dashboard_v32_thumb_canvas_file()[0] = 0;
-        ui_printer_v32_preview_reset();
-        thumbnail_preview_coordinator_v32_reset();
+        thumbnail_session_selected_thumbnail_path()[0] = 0;
+        ui_dashboard_thumb_canvas_file()[0] = 0;
+        ui_printer_preview_reset();
+        thumbnail_preview_coordinator_reset();
 
-        thumbnail_session_v32_clear_png_buffer();
+        thumbnail_session_clear_png_buffer();
     }
 
     if (printer_panel) {
@@ -3447,7 +3447,7 @@ void ui_printer_v32_create(void)
         LV_SYMBOL_LIST " PRINTER",
         ui_page_layout_profile_current()->printer.subtitle);
 
-    if (!ui_printer_layout_v32_create(
+    if (!ui_printer_layout_create(
             printer_panel,
             &printer_layout)) {
         ESP_LOGE(
@@ -3485,7 +3485,7 @@ void ui_printer_v32_create(void)
     printer_remaining_label = printer_info_cards.remaining;
     printer_eta_label = printer_info_cards.eta;
 
-    ui_printer_v32_preview_create(printer_layout.active_panel);
+    ui_printer_preview_create(printer_layout.active_panel);
 
     lv_obj_t *divider = lv_obj_create(printer_panel);
     lv_obj_set_size(divider, 0, 0);
@@ -3508,10 +3508,10 @@ void ui_printer_v32_create(void)
     printer_object_btn = printer_actions.object;
     printer_cancel_btn = printer_actions.cancel;
 
-    ui_printer_v32_preview_show(
+    ui_printer_preview_show(
         state.printer_state,
         state.printer_file,
-        thumbnail_session_v32_selected_file());
+        thumbnail_session_selected_file());
     lv_obj_set_pos(divider, 20, 345);
     lv_obj_set_style_bg_color(divider, UI_BORDER_SOFT, 0);
     lv_obj_set_style_border_width(divider, 0, 0);
@@ -3522,9 +3522,9 @@ void ui_printer_v32_create(void)
     
     
 
-    ui_drybox_v32_refresh();
+    ui_drybox_refresh();
 
-    ui_network_v32_refresh_bridge();
+    ui_network_refresh_bridge();
 
     printer_ui_controller_update_action_buttons(
         printer_home_btn,
@@ -3546,7 +3546,7 @@ static void build_drybox_dashboard(void)
 
     /* Top bar now belongs to ui_shell. */
     ui_shell_create();
-    ui_drybox_v32_set_callbacks(
+    ui_drybox_set_callbacks(
         moonraker_send_gcode,
         dashboard_dry_status_event_cb);
     ui_shell_set_printer_switch_callback(
@@ -3557,9 +3557,9 @@ static void build_drybox_dashboard(void)
 
     /* Legacy dashboard body removed.
      * The shell/topbar/nav stay here for now.
-     * The only dashboard is ui_dashboard_v32.
+     * The only dashboard is ui_dashboard.
      */
-    ui_dashboard_v32_create();
+    ui_dashboard_create();
 
     app_create_wifi_status_label();
 
@@ -3808,7 +3808,7 @@ static void hmi_runtime_task(void *arg)
          * The legacy global last-file cache must not publish into whichever
          * printer profile happens to be active at boot.
          */
-        printer_preview_store_v32_restore_one(sd_card_ok);
+        printer_preview_store_restore_one(sd_card_ok);
         if (bsp_display_lock(50)) {
             if (wifi_label) {
                 lv_label_set_text(wifi_label, wifi_status);
@@ -3847,9 +3847,9 @@ static void hmi_runtime_task(void *arg)
                 s_got_ip && !exclusive_network,
 
             .set_live_target =
-                thumbnail_preview_coordinator_v32_set_live_target,
+                thumbnail_preview_coordinator_set_live_target,
             .free_thumbnail =
-                thumbnail_session_v32_free_thumbnail,
+                thumbnail_session_free_thumbnail,
             .build_metadata =
                 printer_build_metadata_text,
             .start_delayed =
@@ -3892,7 +3892,7 @@ static void app_splash_wifi_waiting_locked(bool connected)
         return;
     }
 
-    ui_splash_v32_wifi_waiting(connected);
+    ui_splash_wifi_waiting(connected);
     bsp_display_unlock();
 }
 
@@ -3902,18 +3902,18 @@ static void app_startup_show_initial_ui(void)
     bsp_display_lock(0);
     build_drybox_dashboard();
     hide_settings_tab();
-    ui_dashboard_v32_create();
+    ui_dashboard_create();
 
     /* STARTUP_OPEN_PRINTER_CHOOSER
      * Keep the active Dashboard built behind the startup splash, then place
      * the multi-printer chooser in front. Selecting a printer continues into
      * that profile's Dashboard through printer_chooser_select_bridge().
      */
-    ui_printer_chooser_v32_show(
+    ui_printer_chooser_show(
         printer_chooser_select_bridge,
         printer_chooser_manage_bridge);
-    ui_splash_v32_create();
-    ui_splash_v32_display_ready();
+    ui_splash_create();
+    ui_splash_display_ready();
     bsp_display_unlock();
 }
 
@@ -3938,7 +3938,7 @@ void app_main(void)
     macro_controller_init();
     device_catalog_controller_init();
     calibration_session_controller_init();
-    ui_macros_v32_init();
+    ui_macros_init();
     operator_event_log_add(
         OPERATOR_EVENT_INFO,
         "Controller started; reset reason %d",
@@ -4024,7 +4024,7 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(250));
 
-    app_splash_locked(ui_splash_v32_wifi_starting);
+    app_splash_locked(ui_splash_wifi_starting);
 
     /* Start WiFi after dashboard is visible. Touch scaling fix remains in BSP. */
     if (!sd_mount_attempted) {
@@ -4040,15 +4040,15 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(350));
 
-    app_splash_locked(ui_splash_v32_moonraker_ready);
+    app_splash_locked(ui_splash_moonraker_ready);
 
     vTaskDelay(pdMS_TO_TICKS(350));
 
-    app_splash_locked(ui_splash_v32_dashboard_ready);
+    app_splash_locked(ui_splash_dashboard_ready);
 
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    app_splash_locked(ui_splash_v32_destroy);
+    app_splash_locked(ui_splash_destroy);
 
     const esp_app_desc_t *running_app =
         esp_app_get_description();
@@ -4076,7 +4076,7 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to start hmi_runtime task");
     } else {
         /* Inactive-profile HTTP checks may wait for unreachable hosts. */
-        printer_profile_preview_worker_v32_start(
+        printer_profile_preview_worker_start(
             moonraker_config_api_key());
     }
 

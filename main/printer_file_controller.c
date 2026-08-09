@@ -38,25 +38,25 @@ void printer_file_controller_select_file(
     }
 
     snprintf(
-        thumbnail_session_v32_selected_file(),
-        thumbnail_session_v32_selected_file_size(),
+        thumbnail_session_selected_file(),
+        thumbnail_session_selected_file_size(),
         "%s",
         path);
 
-    thumbnail_manager_v32_set_force_refresh(true);
+    thumbnail_manager_set_force_refresh(true);
 
-    if (ui_dashboard_v32_thumb_canvas_file()) {
-        ui_dashboard_v32_thumb_canvas_file()[0] = '\0';
+    if (ui_dashboard_thumb_canvas_file()) {
+        ui_dashboard_thumb_canvas_file()[0] = '\0';
     }
 
-    ui_printer_v32_preview_reset();
+    ui_printer_preview_reset();
 
     ESP_LOGI(
         TAG,
         "PRINTER_FILE_SELECTED %s",
-        thumbnail_session_v32_selected_file());
+        thumbnail_session_selected_file());
 
-    thumbnail_session_v32_save_last_selected_file();
+    thumbnail_session_save_last_selected_file();
 
     if (show_detail_popup) {
         show_detail_popup();
@@ -142,7 +142,7 @@ bool printer_file_controller_start_selected_file(
     printer_file_controller_popup_cb_t close_detail_popup)
 {
     const char *selected_file =
-        thumbnail_session_v32_selected_file();
+        thumbnail_session_selected_file();
 
     if (!selected_file || !selected_file[0]) {
         if (close_detail_popup) {

@@ -96,7 +96,7 @@ static void update_status_cards(
             0);
     }
 
-    ui_dashboard_status_v32_refresh(
+    ui_dashboard_status_refresh(
         state->progress,
         state->print_duration);
 
@@ -132,12 +132,12 @@ static void update_status_cards(
         state->progress,
         state->print_duration);
 
-    ui_dashboard_v32_set_active_print(
+    ui_dashboard_set_active_print(
         layer,
         elapsed,
         remaining);
 
-    ui_dashboard_status_v32_set_print_state(
+    ui_dashboard_status_set_print_state(
         dashboard_print_state_text(state));
 }
 
@@ -149,7 +149,7 @@ static void update_live_preview(
         return;
     }
 
-    thumbnail_preview_coordinator_v32_context_t preview = {
+    thumbnail_preview_coordinator_context_t preview = {
         .printer_state = state->printer_state,
         .printer_file = state->printer_file,
 
@@ -157,28 +157,28 @@ static void update_live_preview(
         .moonraker_port = moonraker_config_port(),
 
         .selected_print_file =
-            thumbnail_session_v32_selected_file(),
+            thumbnail_session_selected_file(),
         .selected_print_file_size =
-            thumbnail_session_v32_selected_file_size(),
+            thumbnail_session_selected_file_size(),
         .selected_thumbnail_path =
-            thumbnail_session_v32_selected_thumbnail_path(),
+            thumbnail_session_selected_thumbnail_path(),
 
         .dashboard_canvas_file =
-            ui_dashboard_v32_thumb_canvas_file(),
+            ui_dashboard_thumb_canvas_file(),
         .printer_canvas_file =
-            ui_printer_v32_preview_canvas_file(),
+            ui_printer_preview_canvas_file(),
 
         .dashboard_canvas = context->dashboard_canvas,
         .dashboard_image = context->dashboard_image,
         .printer_canvas =
-            ui_printer_v32_preview_canvas_ref(),
+            ui_printer_preview_canvas_ref(),
         .printer_image =
-            ui_printer_v32_preview_image_ref(),
+            ui_printer_preview_image_ref(),
 
         .metadata_info =
-            thumbnail_session_v32_metadata_info(),
+            thumbnail_session_metadata_info(),
         .metadata_info_size =
-            thumbnail_session_v32_metadata_info_size(),
+            thumbnail_session_metadata_info_size(),
 
         .set_live_target = context->set_live_target,
         .free_thumbnail = context->free_thumbnail,
@@ -186,7 +186,7 @@ static void update_live_preview(
         .start_delayed = context->start_delayed,
     };
 
-    thumbnail_preview_coordinator_v32_update(&preview);
+    thumbnail_preview_coordinator_update(&preview);
 }
 
 static void update_print_complete_cleanup(
@@ -201,15 +201,15 @@ static void update_print_complete_cleanup(
           strcmp(context->last_print_state, "PAUSED") == 0) &&
          (strcmp(now_state, "READY") == 0 ||
           strcmp(now_state, "CONNECTED") == 0))) {
-        ui_dashboard_v32_set_active_print_file(
+        ui_dashboard_set_active_print_file(
             "No active file");
 
-        ui_dashboard_status_v32_set_progress(
+        ui_dashboard_status_set_progress(
             "-- %",
             0,
             UI_TEXT);
 
-        ui_dashboard_status_v32_set_times(
+        ui_dashboard_status_set_times(
             "--:--",
             "--:--",
             "--:--");
@@ -220,11 +220,11 @@ static void update_print_complete_cleanup(
             *context->dashboard_image = NULL;
         }
 
-        ui_dashboard_v32_thumb_set_placeholder(
+        ui_dashboard_thumb_set_placeholder(
             "PRINT\nTHUMBNAIL");
 
-        thumbnail_session_v32_selected_file()[0] = 0;
-        thumbnail_session_v32_selected_thumbnail_path()[0] = 0;
+        thumbnail_session_selected_file()[0] = 0;
+        thumbnail_session_selected_thumbnail_path()[0] = 0;
 
         if (context->free_thumbnail) {
             context->free_thumbnail();

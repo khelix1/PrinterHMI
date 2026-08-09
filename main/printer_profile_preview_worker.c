@@ -82,19 +82,19 @@ static bool state_has_current_print(const char *state)
 }
 
 
-void printer_profile_preview_worker_v32_reset(void)
+void printer_profile_preview_worker_reset(void)
 {
     /* Cursor and generation are owned by printer_profile_health. */
     memset(s_preview_retry_after_us, 0, sizeof(s_preview_retry_after_us));
 }
 
 
-static void printer_profile_preview_worker_v32_task(void *arg)
+static void printer_profile_preview_worker_task(void *arg)
 {
     (void)arg;
 
     while (true) {
-        printer_profile_preview_worker_v32_poll_one(
+        printer_profile_preview_worker_poll_one(
             s_preview_worker_api_key);
         vTaskDelay(
             pdMS_TO_TICKS(PROFILE_PREVIEW_WORKER_INTERVAL_MS));
@@ -102,7 +102,7 @@ static void printer_profile_preview_worker_v32_task(void *arg)
 }
 
 
-void printer_profile_preview_worker_v32_start(const char *api_key)
+void printer_profile_preview_worker_start(const char *api_key)
 {
     if (s_preview_worker_task) {
         return;
@@ -114,7 +114,7 @@ void printer_profile_preview_worker_v32_start(const char *api_key)
         sizeof(s_preview_worker_api_key));
 
     BaseType_t created = xTaskCreatePinnedToCore(
-        printer_profile_preview_worker_v32_task,
+        printer_profile_preview_worker_task,
         "profile_preview",
         PROFILE_PREVIEW_WORKER_STACK,
         NULL,
@@ -132,7 +132,7 @@ void printer_profile_preview_worker_v32_start(const char *api_key)
 }
 
 
-void printer_profile_preview_worker_v32_poll_one(const char *api_key)
+void printer_profile_preview_worker_poll_one(const char *api_key)
 {
     /* The active endpoint owns recovery.  Inactive HTTP requests while
      * that WebSocket reconnects only contend for ESP-Hosted transport and
@@ -165,7 +165,7 @@ void printer_profile_preview_worker_v32_poll_one(const char *api_key)
 
     if (!profile || !profile->configured) {
         printer_profile_health_set(index, true, false);
-        printer_preview_cache_v32_invalidate(index);
+        printer_preview_cache_invalidate(index);
         return;
     }
 
@@ -258,7 +258,7 @@ void printer_profile_preview_worker_v32_poll_one(const char *api_key)
         return;
     }
 
-    if (printer_preview_cache_v32_matches(index, file)) {
+    if (printer_preview_cache_matches(index, file)) {
         return;
     }
 
@@ -333,7 +333,7 @@ void printer_profile_preview_worker_v32_poll_one(const char *api_key)
     bool installed = false;
 
     if (bsp_display_lock(1000)) {
-        installed = printer_preview_cache_v32_publish_png(
+        installed = printer_preview_cache_publish_png(
             index,
             host,
             port,
@@ -347,7 +347,7 @@ void printer_profile_preview_worker_v32_poll_one(const char *api_key)
     }
 
     if (installed) {
-        printer_preview_store_v32_store_png(
+        printer_preview_store_store_png(
             index,
             host,
             port,

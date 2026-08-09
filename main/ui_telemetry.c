@@ -20,7 +20,7 @@ static lv_obj_t *s_air_value = NULL;
 static lv_obj_t *s_humidity_value = NULL;
 
 
-void ui_telemetry_v32_show(void)
+void ui_telemetry_show(void)
 {
     if (s_panel) {
         lv_obj_move_foreground(s_panel);
@@ -100,7 +100,7 @@ void ui_telemetry_v32_show(void)
     ui_telemetry_charts_create(s_panel);
 }
 
-void ui_telemetry_v32_hide(void)
+void ui_telemetry_hide(void)
 {
     if (!s_panel) {
         return;
@@ -156,7 +156,7 @@ static void telemetry_set_humidity(
     lv_label_set_text(label, buf);
 }
 
-void ui_telemetry_v32_refresh(
+void ui_telemetry_refresh(
     const moonraker_state_t *state,
     int64_t now_us)
 {

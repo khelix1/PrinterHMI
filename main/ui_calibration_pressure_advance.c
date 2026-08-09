@@ -156,7 +156,7 @@ static void arm_tower_cb(
     close_popup();
 
     if (!sent) {
-        ui_toast_v32_show(
+        ui_toast_show(
             UI_STATUS_DANGER,
             "PA SETUP FAILED",
             "Moonraker did not accept the Pressure Advance tower setup.");

@@ -16,7 +16,7 @@
 #define THUMB_MAX_FILE 160
 #define THUMB_MAX_PATH 240
 
-static const char *TAG = "thumbnail_manager_v32";
+static const char *TAG = "thumbnail_manager";
 
 
 static volatile bool s_thumb_task_running = false;
@@ -24,81 +24,81 @@ static volatile bool s_thumb_ready = false;
 static volatile bool s_thumb_failed = false;
 static volatile bool s_thumb_force_refresh = false;
 
-void thumbnail_manager_v32_mark_pending(void)
+void thumbnail_manager_mark_pending(void)
 {
     s_thumb_ready = false;
     s_thumb_failed = false;
 }
 
-void thumbnail_manager_v32_mark_ready(void)
+void thumbnail_manager_mark_ready(void)
 {
     s_thumb_ready = true;
     s_thumb_failed = false;
 }
 
-void thumbnail_manager_v32_mark_failed(void)
+void thumbnail_manager_mark_failed(void)
 {
     s_thumb_ready = false;
     s_thumb_failed = true;
 }
 
-void thumbnail_manager_v32_mark_result(bool ok)
+void thumbnail_manager_mark_result(bool ok)
 {
     s_thumb_ready = ok;
     s_thumb_failed = !ok;
 }
 
-bool thumbnail_manager_v32_is_ready(void)
+bool thumbnail_manager_is_ready(void)
 {
     return s_thumb_ready;
 }
 
-bool thumbnail_manager_v32_has_failed(void)
+bool thumbnail_manager_has_failed(void)
 {
     return s_thumb_failed;
 }
 
-bool thumbnail_manager_v32_task_running(void)
+bool thumbnail_manager_task_running(void)
 {
     return s_thumb_task_running;
 }
 
-void thumbnail_manager_v32_set_task_running(bool running)
+void thumbnail_manager_set_task_running(bool running)
 {
     s_thumb_task_running = running;
 }
 
 
-thumbnail_manager_v32_result_t
-thumbnail_manager_v32_result(void)
+thumbnail_manager_result_t
+thumbnail_manager_result(void)
 {
     if (s_thumb_task_running) {
-        return THUMBNAIL_MANAGER_V32_RESULT_LOADING;
+        return THUMBNAIL_MANAGER_RESULT_LOADING;
     }
 
     if (s_thumb_failed) {
-        return THUMBNAIL_MANAGER_V32_RESULT_FAILED;
+        return THUMBNAIL_MANAGER_RESULT_FAILED;
     }
 
-    if (s_thumb_ready && thumbnail_manager_v32_has_png()) {
-        return THUMBNAIL_MANAGER_V32_RESULT_READY;
+    if (s_thumb_ready && thumbnail_manager_has_png()) {
+        return THUMBNAIL_MANAGER_RESULT_READY;
     }
 
-    return THUMBNAIL_MANAGER_V32_RESULT_IDLE;
+    return THUMBNAIL_MANAGER_RESULT_IDLE;
 }
 
-bool thumbnail_manager_v32_force_refresh(void)
+bool thumbnail_manager_force_refresh(void)
 {
     return s_thumb_force_refresh;
 }
 
-void thumbnail_manager_v32_set_force_refresh(bool force_refresh)
+void thumbnail_manager_set_force_refresh(bool force_refresh)
 {
     s_thumb_force_refresh = force_refresh;
 }
 
 
-static thumbnail_v32_state_t s_state = THUMBNAIL_V32_STATE_IDLE;
+static thumbnail_state_t s_state = THUMBNAIL_STATE_IDLE;
 static char s_file[THUMB_MAX_FILE];
 static char s_cache_path[THUMB_MAX_PATH];
 static char s_status[96];
@@ -146,19 +146,19 @@ static void thumb_build_cache_path(const char *gcode_file)
     snprintf(s_cache_path, sizeof(s_cache_path), "%s/%s.png", THUMB_CACHE_DIR, safe);
 }
 
-void thumbnail_manager_v32_init(void)
+void thumbnail_manager_init(void)
 {
     s_file[0] = 0;
     s_cache_path[0] = 0;
-    s_state = THUMBNAIL_V32_STATE_IDLE;
+    s_state = THUMBNAIL_STATE_IDLE;
     thumb_set_status("Thumbnail idle");
 }
 
-void thumbnail_manager_v32_set_file(const char *gcode_file)
+void thumbnail_manager_set_file(const char *gcode_file)
 {
     if (!gcode_file || !gcode_file[0]) {
-        thumbnail_manager_v32_clear();
-        s_state = THUMBNAIL_V32_STATE_NO_FILE;
+        thumbnail_manager_clear();
+        s_state = THUMBNAIL_STATE_NO_FILE;
         thumb_set_status("No file selected");
         return;
     }
@@ -171,63 +171,63 @@ void thumbnail_manager_v32_set_file(const char *gcode_file)
      * We are not downloading or checking SD yet.
      * This proves the manager owns file/cache state safely.
      */
-    s_state = THUMBNAIL_V32_STATE_PENDING;
+    s_state = THUMBNAIL_STATE_PENDING;
     thumb_set_status("Thumbnail pending");
 }
 
-void thumbnail_manager_v32_clear(void)
+void thumbnail_manager_clear(void)
 {
     s_file[0] = 0;
     s_cache_path[0] = 0;
-    s_state = THUMBNAIL_V32_STATE_IDLE;
+    s_state = THUMBNAIL_STATE_IDLE;
     thumb_set_status("Thumbnail idle");
 }
 
-void thumbnail_manager_v32_set_ready_image(const char *cache_path)
+void thumbnail_manager_set_ready_image(const char *cache_path)
 {
     if (!cache_path || !cache_path[0]) {
-        s_state = THUMBNAIL_V32_STATE_ERROR;
+        s_state = THUMBNAIL_STATE_ERROR;
         thumb_set_status("Thumbnail ready path missing");
         return;
     }
 
     snprintf(s_cache_path, sizeof(s_cache_path), "%s", cache_path);
-    s_state = THUMBNAIL_V32_STATE_READY;
+    s_state = THUMBNAIL_STATE_READY;
     thumb_set_status("Thumbnail ready");
 }
 
-void thumbnail_manager_v32_set_error(const char *status_text)
+void thumbnail_manager_set_error(const char *status_text)
 {
-    s_state = THUMBNAIL_V32_STATE_ERROR;
+    s_state = THUMBNAIL_STATE_ERROR;
     thumb_set_status(status_text ? status_text : "Thumbnail error");
 }
 
-thumbnail_v32_state_t thumbnail_manager_v32_state(void)
+thumbnail_state_t thumbnail_manager_state(void)
 {
     return s_state;
 }
 
-const char *thumbnail_manager_v32_file(void)
+const char *thumbnail_manager_file(void)
 {
     return s_file;
 }
 
-const char *thumbnail_manager_v32_cache_path(void)
+const char *thumbnail_manager_cache_path(void)
 {
     return s_cache_path;
 }
 
-const char *thumbnail_manager_v32_status_text(void)
+const char *thumbnail_manager_status_text(void)
 {
     return s_status;
 }
 
-bool thumbnail_manager_v32_has_ready_image(void)
+bool thumbnail_manager_has_ready_image(void)
 {
-    return s_state == THUMBNAIL_V32_STATE_READY && s_cache_path[0] != 0;
+    return s_state == THUMBNAIL_STATE_READY && s_cache_path[0] != 0;
 }
 
-bool thumbnail_manager_v32_copy_cache_path(char *out, size_t out_len)
+bool thumbnail_manager_copy_cache_path(char *out, size_t out_len)
 {
     if (!out || out_len == 0 || s_cache_path[0] == 0) {
         return false;
@@ -237,7 +237,7 @@ bool thumbnail_manager_v32_copy_cache_path(char *out, size_t out_len)
     return true;
 }
 
-void thumbnail_manager_v32_url_encode(const char *in, char *out, size_t out_sz)
+void thumbnail_manager_url_encode(const char *in, char *out, size_t out_sz)
 {
     size_t oi = 0;
     static const char hex[] = "0123456789ABCDEF";
@@ -260,7 +260,7 @@ void thumbnail_manager_v32_url_encode(const char *in, char *out, size_t out_sz)
     out[oi] = 0;
 }
 
-bool thumbnail_manager_v32_cache_path_for_file(const char *gcode_file,
+bool thumbnail_manager_cache_path_for_file(const char *gcode_file,
                                                char *out,
                                                size_t out_sz)
 {
@@ -287,7 +287,7 @@ bool thumbnail_manager_v32_cache_path_for_file(const char *gcode_file,
 }
 
 
-bool thumbnail_manager_v32_load_cache_file(const char *path,
+bool thumbnail_manager_load_cache_file(const char *path,
                                            uint8_t **out_buf,
                                            size_t *out_len)
 {
@@ -333,7 +333,7 @@ bool thumbnail_manager_v32_load_cache_file(const char *path,
 }
 
 
-bool thumbnail_manager_v32_store_cache_file(const char *path,
+bool thumbnail_manager_store_cache_file(const char *path,
                                             const uint8_t *buf,
                                             size_t len)
 {
@@ -363,7 +363,7 @@ bool thumbnail_manager_v32_store_cache_file(const char *path,
 
 
 
-bool thumbnail_manager_v32_run_download_task(void *arg,
+bool thumbnail_manager_run_download_task(void *arg,
                                              const char *host,
                                              int port,
                                              const char *selected_file,
@@ -375,7 +375,7 @@ bool thumbnail_manager_v32_run_download_task(void *arg,
 
     snprintf(path, sizeof(path), "%s", path_arg ? path_arg : "");
 
-    return thumbnail_manager_v32_download_ram(host,
+    return thumbnail_manager_download_ram(host,
                                               port,
                                               selected_file,
                                               path,
@@ -387,7 +387,7 @@ bool thumbnail_manager_v32_run_download_task(void *arg,
 
 
 
-bool thumbnail_manager_v32_download_ram(const char *host,
+bool thumbnail_manager_download_ram(const char *host,
                                        int port,
                                        const char *selected_file,
                                        const char *thumb_path,
@@ -399,12 +399,12 @@ bool thumbnail_manager_v32_download_ram(const char *host,
     }
 
     if (!force_refresh && sd_ok &&
-        thumbnail_manager_v32_load_selected_cache(selected_file)) {
+        thumbnail_manager_load_selected_cache(selected_file)) {
         return true;
     }
 
     char enc[256];
-    thumbnail_manager_v32_url_encode(thumb_path, enc, sizeof(enc));
+    thumbnail_manager_url_encode(thumb_path, enc, sizeof(enc));
 
     uint8_t *buf = NULL;
     size_t len = 0;
@@ -419,12 +419,12 @@ bool thumbnail_manager_v32_download_ram(const char *host,
         return false;
     }
 
-    thumbnail_manager_v32_take_png(buf, len);
-    thumbnail_manager_v32_prepare_raw_image();
+    thumbnail_manager_take_png(buf, len);
+    thumbnail_manager_prepare_raw_image();
 
-    ESP_LOGI(TAG, "THUMB loaded len=%u", (unsigned)thumbnail_manager_v32_png_size());
+    ESP_LOGI(TAG, "THUMB loaded len=%u", (unsigned)thumbnail_manager_png_size());
 
-    if (sd_ok && !thumbnail_manager_v32_store_selected_cache(selected_file)) {
+    if (sd_ok && !thumbnail_manager_store_selected_cache(selected_file)) {
         ESP_LOGW(TAG, "SD_THUMB cache write failed");
     }
 
@@ -432,11 +432,11 @@ bool thumbnail_manager_v32_download_ram(const char *host,
 }
 
 
-bool thumbnail_manager_v32_load_selected_cache(const char *selected_file)
+bool thumbnail_manager_load_selected_cache(const char *selected_file)
 {
     char path[220];
 
-    if (!thumbnail_manager_v32_cache_path_for_file(selected_file,
+    if (!thumbnail_manager_cache_path_for_file(selected_file,
                                                    path,
                                                    sizeof(path))) {
         return false;
@@ -445,33 +445,33 @@ bool thumbnail_manager_v32_load_selected_cache(const char *selected_file)
     uint8_t *buf = NULL;
     size_t len = 0;
 
-    if (!thumbnail_manager_v32_load_cache_file(path, &buf, &len)) {
+    if (!thumbnail_manager_load_cache_file(path, &buf, &len)) {
         return false;
     }
 
-    thumbnail_manager_v32_take_png(buf, len);
-    thumbnail_manager_v32_prepare_raw_image();
+    thumbnail_manager_take_png(buf, len);
+    thumbnail_manager_prepare_raw_image();
 
     return true;
 }
 
-bool thumbnail_manager_v32_store_selected_cache(const char *selected_file)
+bool thumbnail_manager_store_selected_cache(const char *selected_file)
 {
-    if (!thumbnail_manager_v32_has_png() || !selected_file || !selected_file[0]) {
+    if (!thumbnail_manager_has_png() || !selected_file || !selected_file[0]) {
         return false;
     }
 
     char path[220];
 
-    if (!thumbnail_manager_v32_cache_path_for_file(selected_file,
+    if (!thumbnail_manager_cache_path_for_file(selected_file,
                                                    path,
                                                    sizeof(path))) {
         return false;
     }
 
-    return thumbnail_manager_v32_store_cache_file(path,
-                                                  thumbnail_manager_v32_png_data(),
-                                                  thumbnail_manager_v32_png_size());
+    return thumbnail_manager_store_cache_file(path,
+                                                  thumbnail_manager_png_data(),
+                                                  thumbnail_manager_png_size());
 }
 
 
@@ -480,49 +480,49 @@ static size_t s_thumb_png_len = 0;
 static lv_image_dsc_t s_thumb_img_dsc;
 
 
-lv_image_dsc_t *thumbnail_manager_v32_image_dsc(void)
+lv_image_dsc_t *thumbnail_manager_image_dsc(void)
 {
     return &s_thumb_img_dsc;
 }
 
-void thumbnail_manager_v32_prepare_raw_image(void)
+void thumbnail_manager_prepare_raw_image(void)
 {
     memset(&s_thumb_img_dsc, 0, sizeof(s_thumb_img_dsc));
 #if defined(LV_IMAGE_HEADER_MAGIC)
     s_thumb_img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
 #endif
     s_thumb_img_dsc.header.cf = LV_COLOR_FORMAT_RAW;
-    s_thumb_img_dsc.data = thumbnail_manager_v32_png_data();
-    s_thumb_img_dsc.data_size = thumbnail_manager_v32_png_size();
+    s_thumb_img_dsc.data = thumbnail_manager_png_data();
+    s_thumb_img_dsc.data_size = thumbnail_manager_png_size();
 }
 
-uint8_t *thumbnail_manager_v32_png_data(void)
+uint8_t *thumbnail_manager_png_data(void)
 {
     return s_thumb_png;
 }
 
-size_t thumbnail_manager_v32_png_size(void)
+size_t thumbnail_manager_png_size(void)
 {
     return s_thumb_png_len;
 }
 
-bool thumbnail_manager_v32_has_png(void)
+bool thumbnail_manager_has_png(void)
 {
     return s_thumb_png && s_thumb_png_len > 0;
 }
 
-void thumbnail_manager_v32_clear_png(void)
+void thumbnail_manager_clear_png(void)
 {
-    thumbnail_manager_v32_free_png_buffer(&s_thumb_png, &s_thumb_png_len);
+    thumbnail_manager_free_png_buffer(&s_thumb_png, &s_thumb_png_len);
 }
 
-void thumbnail_manager_v32_take_png(uint8_t *buf, size_t len)
+void thumbnail_manager_take_png(uint8_t *buf, size_t len)
 {
-    thumbnail_manager_v32_clear_png();
-    thumbnail_manager_v32_set_png_buffer(&s_thumb_png, &s_thumb_png_len, buf, len);
+    thumbnail_manager_clear_png();
+    thumbnail_manager_set_png_buffer(&s_thumb_png, &s_thumb_png_len, buf, len);
 }
 
-void thumbnail_manager_v32_free_png_buffer(uint8_t **buf, size_t *len)
+void thumbnail_manager_free_png_buffer(uint8_t **buf, size_t *len)
 {
     if (buf && *buf) {
         heap_caps_free(*buf);
@@ -535,7 +535,7 @@ void thumbnail_manager_v32_free_png_buffer(uint8_t **buf, size_t *len)
 }
 
 
-void thumbnail_manager_v32_set_png_buffer(uint8_t **dst_buf,
+void thumbnail_manager_set_png_buffer(uint8_t **dst_buf,
                                           size_t *dst_len,
                                           uint8_t *src_buf,
                                           size_t src_len)
@@ -557,17 +557,17 @@ typedef struct {
     int port;
     bool force_refresh;
     bool sd_ok;
-} thumbnail_download_job_v32_t;
+} thumbnail_download_job_t;
 
-static void thumbnail_manager_v32_download_task(void *arg)
+static void thumbnail_manager_download_task(void *arg)
 {
-    thumbnail_download_job_v32_t *job =
-        (thumbnail_download_job_v32_t *)arg;
+    thumbnail_download_job_t *job =
+        (thumbnail_download_job_t *)arg;
 
     bool ok = false;
 
     if (job) {
-        ok = thumbnail_manager_v32_run_download_task(
+        ok = thumbnail_manager_run_download_task(
             job->thumb_path,
             job->host,
             job->port,
@@ -576,9 +576,9 @@ static void thumbnail_manager_v32_download_task(void *arg)
             job->sd_ok);
     }
 
-    thumbnail_manager_v32_set_force_refresh(false);
-    thumbnail_manager_v32_mark_result(ok);
-    thumbnail_manager_v32_set_task_running(false);
+    thumbnail_manager_set_force_refresh(false);
+    thumbnail_manager_mark_result(ok);
+    thumbnail_manager_set_task_running(false);
 
     if (job) {
         heap_caps_free(job);
@@ -587,7 +587,7 @@ static void thumbnail_manager_v32_download_task(void *arg)
     vTaskDelete(NULL);
 }
 
-bool thumbnail_manager_v32_start_download_task(
+bool thumbnail_manager_start_download_task(
     const char *host,
     int port,
     const char *selected_file,
@@ -602,11 +602,11 @@ bool thumbnail_manager_v32_start_download_task(
         return false;
     }
 
-    if (thumbnail_manager_v32_task_running()) {
+    if (thumbnail_manager_task_running()) {
         return false;
     }
 
-    thumbnail_download_job_v32_t *job =
+    thumbnail_download_job_t *job =
         heap_caps_calloc(
             1,
             sizeof(*job),
@@ -639,10 +639,10 @@ bool thumbnail_manager_v32_start_download_task(
     job->force_refresh = force_refresh;
     job->sd_ok = sd_ok;
 
-    thumbnail_manager_v32_set_task_running(true);
+    thumbnail_manager_set_task_running(true);
 
     BaseType_t rc = xTaskCreatePinnedToCore(
-        thumbnail_manager_v32_download_task,
+        thumbnail_manager_download_task,
         "thumb_dl",
         8192,
         job,
@@ -651,7 +651,7 @@ bool thumbnail_manager_v32_start_download_task(
         0);
 
     if (rc != pdPASS) {
-        thumbnail_manager_v32_set_task_running(false);
+        thumbnail_manager_set_task_running(false);
         heap_caps_free(job);
         return false;
     }

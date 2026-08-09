@@ -46,9 +46,9 @@ static lv_obj_t *make_transparent_container(
     return container;
 }
 
-bool ui_printer_layout_v32_create(
+bool ui_printer_layout_create(
     lv_obj_t *page,
-    ui_printer_layout_v32_t *layout)
+    ui_printer_layout_t *layout)
 {
     if (!page || !layout) {
         return false;
@@ -101,8 +101,8 @@ bool ui_printer_layout_v32_create(
     return true;
 }
 
-void ui_printer_layout_v32_clear_refs(
-    ui_printer_layout_v32_t *layout)
+void ui_printer_layout_clear_refs(
+    ui_printer_layout_t *layout)
 {
     if (!layout) {
         return;

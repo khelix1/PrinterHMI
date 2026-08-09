@@ -176,7 +176,7 @@ void printer_ui_controller_refresh(
         ctx->filament_state);
 
     if (ctx->printer_panel) {
-        ui_printer_v32_preview_show(
+        ui_printer_preview_show(
             ctx->printer_state,
             ctx->printer_file,
             ctx->selected_preview_file);

@@ -39,12 +39,12 @@ static void files_page_controller_preview_ready(
     const char *file,
     const lv_image_dsc_t *image)
 {
-    ui_files_v32_set_file_thumbnail(file, image);
+    ui_files_set_file_thumbnail(file, image);
 }
 
 void files_page_controller_request_preview(const char *path)
 {
-    files_row_preview_v32_request(path);
+    files_row_preview_request(path);
 }
 
 static bool contains_ci(const char *text, const char *needle)
@@ -92,10 +92,10 @@ static int compare_folder_name(const void *left, const void *right)
 
 static void render_entries(void)
 {
-    ui_files_v32_clear_rows();
-    ui_files_v32_set_breadcrumb(s_folder);
-    ui_files_v32_set_search_text(s_search);
-    ui_files_v32_set_sort_text(
+    ui_files_clear_rows();
+    ui_files_set_breadcrumb(s_folder);
+    ui_files_set_search_text(s_search);
+    ui_files_set_sort_text(
         s_sort_mode == FILE_SORT_NEWEST ? "NEWEST" :
         s_sort_mode == FILE_SORT_SIZE ? "SIZE" : "NAME");
 
@@ -159,11 +159,11 @@ static void render_entries(void)
         }
 
         strlcat(full_path, folders[i], sizeof(full_path));
-        ui_files_v32_add_folder_button(folders[i], full_path, y);
+        ui_files_add_folder_button(folders[i], full_path, y);
         y += ui_theme_density_metric(66, 78, 90);
     }
     for (size_t i = 0; i < visible_count; ++i) {
-        ui_files_v32_add_file_entry(visible[i]->path,
+        ui_files_add_file_entry(visible[i]->path,
                                     visible[i]->size,
                                     visible[i]->modified,
                                     y);
@@ -171,11 +171,11 @@ static void render_entries(void)
     }
 
     if (folder_count == 0 && visible_count == 0) {
-        ui_files_v32_set_status(
+        ui_files_set_status(
             s_search[0] ? "No files match the current search."
                         : "No files found in Moonraker gcodes root.");
     } else {
-        ui_files_v32_set_status("");
+        ui_files_set_status("");
     }
 }
 
@@ -243,17 +243,17 @@ void files_page_controller_reload(
     const char *api_key)
 {
     if (!wifi_connected) {
-        ui_files_v32_set_status("WiFi offline. Connect before loading files.");
+        ui_files_set_status("WiFi offline. Connect before loading files.");
         return;
     }
 
     if (!moonraker_connected) {
-        ui_files_v32_set_status("Moonraker offline. Check the active printer.");
+        ui_files_set_status("Moonraker offline. Check the active printer.");
         return;
     }
 
     if (!host || !host[0]) {
-        ui_files_v32_set_status(
+        ui_files_set_status(
             "Moonraker host is not configured.");
         return;
     }
@@ -262,25 +262,25 @@ void files_page_controller_reload(
         api_key = "";
     }
 
-    ui_files_v32_set_browser_callbacks(
+    ui_files_set_browser_callbacks(
         files_page_controller_set_search,
         files_page_controller_cycle_sort,
         files_page_controller_open_folder,
         files_page_controller_up_folder);
 
     if (!ensure_entries()) {
-        ui_files_v32_set_status("Unable to allocate the file browser index.");
+        ui_files_set_status("Unable to allocate the file browser index.");
         return;
     }
 
-    files_row_preview_v32_begin(
+    files_row_preview_begin(
         host,
         port,
         api_key,
         sd_available,
         files_page_controller_preview_ready);
 
-    ui_files_v32_set_status("Loading files...");
+    ui_files_set_status("Loading files...");
 
     char *file_list_body = heap_caps_malloc(
         FILES_PAGE_LIST_CAPACITY,
@@ -293,7 +293,7 @@ void files_page_controller_reload(
     }
 
     if (!file_list_body) {
-        ui_files_v32_set_status(
+        ui_files_set_status(
             "Unable to allocate file-list buffer.");
         return;
     }
@@ -325,7 +325,7 @@ void files_page_controller_reload(
             http_code,
             esp_err_to_name(transport_error));
 
-        ui_files_v32_set_status(message);
+        ui_files_set_status(message);
         heap_caps_free(file_list_body);
         return;
     }
@@ -348,7 +348,7 @@ void files_page_controller_reload(
     heap_caps_free(file_list_body);
 
     if (count == 0) {
-        ui_files_v32_set_status(
+        ui_files_set_status(
             "No files found in Moonraker gcodes root.");
     } else {
         render_entries();
@@ -361,7 +361,7 @@ void files_page_controller_process_live_notification(void)
         return;
     }
 
-    if (!ui_files_v32_get_popup()) {
+    if (!ui_files_get_popup()) {
         /*
          * Opening Files always performs a fresh HTTP reload, so a notification
          * received while the page is hidden does not need to remain pending.
@@ -370,7 +370,7 @@ void files_page_controller_process_live_notification(void)
         return;
     }
 
-    if (ui_files_v32_detail_is_open()) {
+    if (ui_files_detail_is_open()) {
         /*
          * Preserve the confirmation/detail popup. The pending notification is
          * consumed by a later refresh cycle after the popup closes.
@@ -383,5 +383,5 @@ void files_page_controller_process_live_notification(void)
     }
 
     ESP_LOGI(TAG, "WS_FILELIST_REFRESH visible Files page");
-    ui_files_v32_refresh();
+    ui_files_refresh();
 }

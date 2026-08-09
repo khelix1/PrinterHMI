@@ -12,10 +12,10 @@
 #include "ui_page_title.h"
 #include "ui_page_geometry.h"
 
-ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
+ui_dashboard_page_t ui_dashboard_page_create(
     lv_obj_t *parent)
 {
-    ui_dashboard_page_v32_t page = {0};
+    ui_dashboard_page_t page = {0};
 
     if (!parent) {
         return page;
@@ -62,7 +62,7 @@ ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
         layout->subtitle);
 
     page.banner_host =
-        ui_status_banner_v32_create(
+        ui_status_banner_create(
             page.root,
             layout->banner.x,
             layout->banner.y,
@@ -70,23 +70,23 @@ ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
             layout->banner.height);
 
     page.active_print_host =
-        ui_active_print_v32_create_profile(
+        ui_active_print_create_profile(
             page.root,
             &layout->active_print,
             &layout->active_content);
 
     page.machine_status_host =
-        ui_machine_status_v32_create_profile(
+        ui_machine_status_create_profile(
             page.root,
             &layout->machine_status,
             &layout->machine_content);
 
     /* Print timing now lives in the Active Print card footer. */
-    page.print_status = (ui_dashboard_status_v32_t){0};
+    page.print_status = (ui_dashboard_status_t){0};
     page.print_status_host = NULL;
 
     page.command_host =
-        ui_command_bar_v32_create(
+        ui_command_bar_create(
             page.root,
             layout->command_bar.x,
             layout->command_bar.y,
@@ -96,8 +96,8 @@ ui_dashboard_page_v32_t ui_dashboard_page_v32_create(
     return page;
 }
 
-void ui_dashboard_page_v32_destroy(
-    ui_dashboard_page_v32_t *page)
+void ui_dashboard_page_destroy(
+    ui_dashboard_page_t *page)
 {
     if (!page) {
         return;

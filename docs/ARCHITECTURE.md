@@ -93,23 +93,23 @@ status banners, cards, previews, charts, action panels and popup controllers.
 
 ### Calibration, Bed Mesh, Devices, Macros and Console
 
-- `ui_calibration_v32` composes the calibration page.
+- `ui_calibration` composes the calibration page.
   `ui_calibration_motion`, `ui_calibration_pressure_advance` and
   `ui_calibration_manual_probe` own their focused workflows. The shared
   manual-probe surface provides coarse and 0.005 mm fine TESTZ steps for
   both Probe/Z and Axis Twist, while `calibration_capability_controller`
   and `calibration_session_controller`
   retain capability and session policy.
-- `ui_bed_mesh_v32` composes the 3D mesh page. Gesture recognition, rendering
+- `ui_bed_mesh` composes the 3D mesh page. Gesture recognition, rendering
   and profile dialogs belong to `ui_bed_mesh_gestures`,
   `ui_bed_mesh_renderer` and `ui_bed_mesh_profiles`; `bed_mesh_controller`
   remains the snapshot source.
-- `ui_devices_v32` composes the Devices page and Telemetry bridge.
+- `ui_devices` composes the Devices page and Telemetry bridge.
   `ui_devices_catalog_view` owns filters, cards, pagination and refresh timing;
   `ui_devices_live_values` translates synchronized Moonraker state for visible
   labels; `device_catalog_controller` owns discovery and classification.
-- `ui_macros_v32` and `macro_controller` own public-macro presentation and
-  policy. `ui_console_v32` and `console_controller` own command entry and
+- `ui_macros` and `macro_controller` own public-macro presentation and
+  policy. `ui_console` and `console_controller` own command entry and
   bounded response history. These already had clean page/controller
   boundaries and were intentionally left intact.
 - Long-lived feature contexts and bounded catalogs prefer PSRAM with an

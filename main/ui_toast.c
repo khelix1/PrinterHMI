@@ -5,7 +5,7 @@
 static lv_obj_t *s_toast;
 static lv_timer_t *s_timer;
 
-void ui_toast_v32_close(void)
+void ui_toast_close(void)
 {
     if (s_timer) {
         lv_timer_delete(s_timer);
@@ -20,14 +20,14 @@ void ui_toast_v32_close(void)
 static void toast_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    ui_toast_v32_close();
+    ui_toast_close();
 }
 
-void ui_toast_v32_show(ui_status_kind_t kind,
+void ui_toast_show(ui_status_kind_t kind,
                        const char *title,
                        const char *detail)
 {
-    ui_toast_v32_close();
+    ui_toast_close();
 
     s_toast = lv_obj_create(lv_screen_active());
     if (!s_toast) return;

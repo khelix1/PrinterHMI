@@ -65,7 +65,7 @@ void dashboard_live_controller_push_banner(bool moonraker_ok)
         "ETA %s",
         eta_clock);
 
-    ui_dashboard_v32_set_banner(
+    ui_dashboard_set_banner(
         state,
         file,
         eta,
@@ -221,7 +221,7 @@ void dashboard_live_controller_push_machine(void)
             "--%%");
     }
 
-    ui_dashboard_v32_set_machine(
+    ui_dashboard_set_machine(
         nozzle,
         bed,
         chamber,
@@ -230,11 +230,11 @@ void dashboard_live_controller_push_machine(void)
         flow,
         fan);
 
-    ui_dashboard_v32_set_active_hotend(
+    ui_dashboard_set_active_hotend(
         hotend_name,
         nozzle);
 
-    ui_dashboard_v32_set_machine_connection(
+    ui_dashboard_set_machine_connection(
         state_snapshot.moonraker_ok &&
         state_snapshot.live_data_ok);
 
@@ -242,7 +242,7 @@ void dashboard_live_controller_push_machine(void)
     moonraker_filament_state_snapshot(
         &filament_state);
 
-    ui_dashboard_v32_set_filament(
+    ui_dashboard_set_filament(
         state_snapshot.moonraker_ok &&
             state_snapshot.live_data_ok,
         &filament_state);

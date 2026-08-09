@@ -85,7 +85,7 @@ static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s
         s.mesh.minimum,
         s.mesh.maximum,
         s.mesh.range);lv_label_set_text(s.stats,b);}
-void ui_bed_mesh_v32_refresh(void)
+void ui_bed_mesh_refresh(void)
 {
     if (!s.popup) {
         return;
@@ -270,12 +270,12 @@ static void calibrate_cb(lv_event_t *e)
         NULL);
 }
 
-bool ui_bed_mesh_v32_is_open(void)
+bool ui_bed_mesh_is_open(void)
 {
     return s.popup != NULL;
 }
 
-void ui_bed_mesh_v32_close(void)
+void ui_bed_mesh_close(void)
 {
     /*
      * The shared confirmation is a top-layer sibling, not a child of the
@@ -302,9 +302,9 @@ void ui_bed_mesh_v32_close(void)
     memset(&s, 0, sizeof(s));
 }
 
-void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
+void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
 {
-    ui_bed_mesh_v32_close();
+    ui_bed_mesh_close();
     s.command = command;
     s.zscale = 20.0f;
     ui_bed_mesh_gestures_init(
@@ -468,5 +468,5 @@ void ui_bed_mesh_v32_show(ui_bed_mesh_command_cb_t command)
         NULL,
         NULL);
 
-    ui_bed_mesh_v32_refresh();
+    ui_bed_mesh_refresh();
 }

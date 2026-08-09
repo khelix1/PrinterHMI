@@ -22,7 +22,7 @@ typedef struct {
     char file[160];
     int port;
     uint32_t generation;
-    file_detail_loader_v32_ready_cb_t ready_cb;
+    file_detail_loader_ready_cb_t ready_cb;
 } detail_job_t;
 
 static portMUX_TYPE s_generation_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -46,7 +46,7 @@ static bool generation_current(uint32_t generation)
     return current;
 }
 
-void file_detail_loader_v32_cancel(void)
+void file_detail_loader_cancel(void)
 {
     (void)next_generation();
 }
@@ -74,7 +74,7 @@ static void detail_task(void *argument)
 
     if (job && body) {
         char encoded[256];
-        thumbnail_manager_v32_url_encode(job->file, encoded, sizeof(encoded));
+        thumbnail_manager_url_encode(job->file, encoded, sizeof(encoded));
         int http_code = 0;
         esp_err_t error = ESP_FAIL;
 
@@ -117,12 +117,12 @@ static void detail_task(void *argument)
     vTaskDelete(NULL);
 }
 
-bool file_detail_loader_v32_start(
+bool file_detail_loader_start(
     const char *host,
     int port,
     const char *api_key,
     const char *file,
-    file_detail_loader_v32_ready_cb_t ready_cb)
+    file_detail_loader_ready_cb_t ready_cb)
 {
     if (!host || !host[0] || port <= 0 || !file || !file[0] || !ready_cb) {
         return false;

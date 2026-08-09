@@ -23,7 +23,7 @@ typedef struct {
     lv_obj_t *target_label;
     lv_obj_t *heater_label;
     lv_obj_t *fan_label;
-} ui_drybox_page_v32_t;
+} ui_drybox_page_t;
 
 typedef struct {
     const char *banner_text;
@@ -33,21 +33,21 @@ typedef struct {
     float heater_target;
     bool heater_on;
     float fan_speed;
-    ui_drybox_program_v32_t active_program;
-} ui_drybox_page_v32_state_t;
+    ui_drybox_program_t active_program;
+} ui_drybox_page_state_t;
 
 
-bool ui_drybox_page_v32_create(
-    ui_drybox_page_v32_t *page,
+bool ui_drybox_page_create(
+    ui_drybox_page_t *page,
     ui_drybox_page_action_cb_t action_cb,
     ui_drybox_page_banner_text_cb_t banner_text_cb);
 
-void ui_drybox_page_v32_refresh(
-    const ui_drybox_page_v32_t *page,
-    const ui_drybox_page_v32_state_t *state);
+void ui_drybox_page_refresh(
+    const ui_drybox_page_t *page,
+    const ui_drybox_page_state_t *state);
 
-void ui_drybox_page_v32_cleanup(
-    ui_drybox_page_v32_t *page);
+void ui_drybox_page_cleanup(
+    ui_drybox_page_t *page);
 
 #ifdef __cplusplus
 }

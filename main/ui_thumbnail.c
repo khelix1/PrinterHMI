@@ -3,7 +3,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
-struct ui_thumbnail_v32 {
+struct ui_thumbnail {
     lv_obj_t *box;
     lv_obj_t *label;
     lv_obj_t *canvas;
@@ -13,8 +13,8 @@ struct ui_thumbnail_v32 {
 
 static void thumbnail_clicked_cb(lv_event_t *event)
 {
-    ui_thumbnail_v32_t *thumb =
-        (ui_thumbnail_v32_t *)lv_event_get_user_data(event);
+    ui_thumbnail_t *thumb =
+        (ui_thumbnail_t *)lv_event_get_user_data(event);
 
     if (lv_event_get_code(event) != LV_EVENT_CLICKED ||
         !thumb ||
@@ -22,10 +22,10 @@ static void thumbnail_clicked_cb(lv_event_t *event)
         return;
     }
 
-    ui_preview_lightbox_v32_show_object(thumb->canvas);
+    ui_preview_lightbox_show_object(thumb->canvas);
 }
 
-static void thumbnail_enable_lightbox(ui_thumbnail_v32_t *thumb)
+static void thumbnail_enable_lightbox(ui_thumbnail_t *thumb)
 {
     if (!thumb || !thumb->box) {
         return;
@@ -39,9 +39,9 @@ static void thumbnail_enable_lightbox(ui_thumbnail_v32_t *thumb)
         thumb);
 }
 
-ui_thumbnail_v32_t *ui_thumbnail_v32_create(lv_obj_t *parent, int x, int y, int w, int h)
+ui_thumbnail_t *ui_thumbnail_create(lv_obj_t *parent, int x, int y, int w, int h)
 {
-    ui_thumbnail_v32_t *thumb = lv_malloc(sizeof(ui_thumbnail_v32_t));
+    ui_thumbnail_t *thumb = lv_malloc(sizeof(ui_thumbnail_t));
     if (!thumb) return NULL;
 
     thumb->canvas = NULL;
@@ -61,11 +61,11 @@ ui_thumbnail_v32_t *ui_thumbnail_v32_create(lv_obj_t *parent, int x, int y, int 
 }
 
 
-ui_thumbnail_v32_t *ui_thumbnail_v32_wrap(lv_obj_t *box)
+ui_thumbnail_t *ui_thumbnail_wrap(lv_obj_t *box)
 {
     if (!box) return NULL;
 
-    ui_thumbnail_v32_t *thumb = lv_malloc(sizeof(ui_thumbnail_v32_t));
+    ui_thumbnail_t *thumb = lv_malloc(sizeof(ui_thumbnail_t));
     if (!thumb) return NULL;
 
     thumb->box = box;
@@ -85,12 +85,12 @@ ui_thumbnail_v32_t *ui_thumbnail_v32_wrap(lv_obj_t *box)
 
 
 
-lv_obj_t *ui_thumbnail_v32_box(ui_thumbnail_v32_t *thumb)
+lv_obj_t *ui_thumbnail_box(ui_thumbnail_t *thumb)
 {
     return thumb ? thumb->box : NULL;
 }
 
-int ui_thumbnail_v32_fit_scale(
+int ui_thumbnail_fit_scale(
     lv_obj_t *box,
     int source_width,
     int source_height,
@@ -122,7 +122,7 @@ int ui_thumbnail_v32_fit_scale(
     return scale;
 }
 
-void ui_thumbnail_v32_fit_object(
+void ui_thumbnail_fit_object(
     lv_obj_t *object,
     lv_obj_t *box,
     int source_width,
@@ -133,7 +133,7 @@ void ui_thumbnail_v32_fit_object(
 
     lv_image_set_scale(
         object,
-        ui_thumbnail_v32_fit_scale(
+        ui_thumbnail_fit_scale(
             box,
             source_width,
             source_height,
@@ -142,7 +142,7 @@ void ui_thumbnail_v32_fit_object(
 }
 
 
-void ui_thumbnail_v32_show_image(ui_thumbnail_v32_t *thumb, const lv_image_dsc_t *dsc, int scale)
+void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, int scale)
 {
     if (!thumb || !thumb->box || !dsc) return;
 
@@ -160,7 +160,7 @@ void ui_thumbnail_v32_show_image(ui_thumbnail_v32_t *thumb, const lv_image_dsc_t
         lv_image_set_scale(thumb->canvas, scale);
         lv_obj_center(thumb->canvas);
     } else {
-        ui_thumbnail_v32_fit_object(
+        ui_thumbnail_fit_object(
             thumb->canvas,
             thumb->box,
             (int)dsc->header.w,
@@ -170,7 +170,7 @@ void ui_thumbnail_v32_show_image(ui_thumbnail_v32_t *thumb, const lv_image_dsc_t
 }
 
 
-void ui_thumbnail_v32_set_placeholder(ui_thumbnail_v32_t *thumb, const char *text)
+void ui_thumbnail_set_placeholder(ui_thumbnail_t *thumb, const char *text)
 {
     if (!thumb) return;
 
@@ -190,7 +190,7 @@ void ui_thumbnail_v32_set_placeholder(ui_thumbnail_v32_t *thumb, const char *tex
     lv_obj_center(thumb->label);
 }
 
-void ui_thumbnail_v32_clear(ui_thumbnail_v32_t *thumb)
+void ui_thumbnail_clear(ui_thumbnail_t *thumb)
 {
-    ui_thumbnail_v32_set_placeholder(thumb, "THUMBNAIL");
+    ui_thumbnail_set_placeholder(thumb, "THUMBNAIL");
 }

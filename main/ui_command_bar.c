@@ -17,7 +17,7 @@ static void cmd_event_cb(lv_event_t *e)
     const char *action = (const char *)lv_event_get_user_data(e);
     if (!action) return;
 
-    ui_command_bar_v32_action(action);
+    ui_command_bar_action(action);
 }
 
 /*
@@ -105,7 +105,7 @@ static void set_button_enabled(lv_obj_t *button, bool enabled)
 }
 
 
-void ui_command_bar_v32_update(
+void ui_command_bar_update(
     const char *printer_state,
     bool cancel_object_available)
 {
@@ -133,7 +133,7 @@ void ui_command_bar_v32_update(
     set_button_enabled(s_cancel_button, active);
 }
 
-lv_obj_t *ui_command_bar_v32_create(lv_obj_t *parent, int x, int y, int w, int h)
+lv_obj_t *ui_command_bar_create(lv_obj_t *parent, int x, int y, int w, int h)
 {
     /*
      * TEST3_SHARED_OPERATOR_PANEL
@@ -200,7 +200,7 @@ lv_obj_t *ui_command_bar_v32_create(lv_obj_t *parent, int x, int y, int w, int h
         244,
         UI_DANGER_BRIGHT);
 
-    ui_command_bar_v32_update(NULL, false);
+    ui_command_bar_update(NULL, false);
 
     return bar;
 }

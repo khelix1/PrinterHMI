@@ -855,7 +855,7 @@ void ui_printer_popups_show_cancel_object(
     }
 
     if (!s_exclude_snapshot) {
-        ui_dashboard_v32_status_popup_show(
+        ui_dashboard_status_popup_show(
             "CANCEL OBJECT",
             "Not enough memory to load the object list.");
         return;
@@ -874,7 +874,7 @@ void ui_printer_popups_show_cancel_object(
     if (!s_exclude_snapshot->available || !has_available_object) {
         heap_caps_free(s_exclude_snapshot);
         s_exclude_snapshot = NULL;
-        ui_dashboard_v32_status_popup_show(
+        ui_dashboard_status_popup_show(
             "CANCEL OBJECT",
             "No cancellable objects are available for the active print.");
         return;
@@ -2170,7 +2170,7 @@ static void filament_toggle_event_cb(lv_event_t *event)
 
     if (!filament_sensor_command_name_is_safe(
             sensor_name)) {
-        ui_dashboard_v32_status_popup_show(
+        ui_dashboard_status_popup_show(
             "FILAMENT SENSOR",
             "This sensor name cannot be sent safely as a "
             "Klipper G-code parameter.");
@@ -2393,14 +2393,14 @@ void ui_printer_popups_show_printer_status(
                  ? "CONNECTED"
                  : "OFFLINE");
 
-    ui_dashboard_v32_status_popup_show(
+    ui_dashboard_status_popup_show(
         "PRINTER STATUS",
         body);
 }
 
 void ui_printer_popups_close_all(void)
 {
-    ui_dashboard_v32_status_popup_close();
+    ui_dashboard_status_popup_close();
     close_custom_temp_cb(NULL);
     if (s_control_popup) lv_obj_delete(s_control_popup);
 

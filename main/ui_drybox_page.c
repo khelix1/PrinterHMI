@@ -110,7 +110,7 @@ static const char *drybox_status_text(const char *banner)
 
 
 static drybox_program_t drybox_program_from_state(
-    ui_drybox_program_v32_t program)
+    ui_drybox_program_t program)
 {
     switch (program) {
         case UI_DRYBOX_PROGRAM_PLA:
@@ -408,7 +408,7 @@ static lv_obj_t *make_program_button(
 }
 
 static void build_environment_panel(
-    ui_drybox_page_v32_t *page)
+    ui_drybox_page_t *page)
 {
     const ui_dashboard_rect_t *rect =
         &ui_page_layout_profile_current()->drybox.environment;
@@ -527,7 +527,7 @@ static void build_environment_panel(
 }
 
 static void build_system_panel(
-    ui_drybox_page_v32_t *page)
+    ui_drybox_page_t *page)
 {
     const ui_dashboard_rect_t *rect =
         &ui_page_layout_profile_current()->drybox.drying_system;
@@ -646,7 +646,7 @@ static void build_system_panel(
 }
 
 static void build_program_panel(
-    ui_drybox_page_v32_t *page)
+    ui_drybox_page_t *page)
 {
     const ui_dashboard_rect_t *rect =
         &ui_page_layout_profile_current()->drybox.material_program;
@@ -752,8 +752,8 @@ static void build_program_panel(
         UI_BG_DANGER_POPUP);
 }
 
-bool ui_drybox_page_v32_create(
-    ui_drybox_page_v32_t *page,
+bool ui_drybox_page_create(
+    ui_drybox_page_t *page,
     ui_drybox_page_action_cb_t action_cb,
     ui_drybox_page_banner_text_cb_t banner_text_cb)
 {
@@ -799,7 +799,7 @@ bool ui_drybox_page_v32_create(
      * READY defaults to blue.
      */
     lv_obj_t *banner =
-        ui_status_banner_v32_create(
+        ui_status_banner_create(
             page->panel,
             UI_STATUS_BAR_X,
             UI_STATUS_BAR_Y,
@@ -810,13 +810,13 @@ bool ui_drybox_page_v32_create(
         return false;
     }
 
-    ui_status_banner_v32_set_simple(
+    ui_status_banner_set_simple(
         banner,
         drybox_status_text(banner_text_cb()),
         "FILAMENT CONDITIONING");
 
     page->banner_label =
-        ui_status_banner_v32_state_label(banner);
+        ui_status_banner_state_label(banner);
 
     build_environment_panel(page);
     build_system_panel(page);
@@ -825,9 +825,9 @@ bool ui_drybox_page_v32_create(
     return true;
 }
 
-void ui_drybox_page_v32_refresh(
-    const ui_drybox_page_v32_t *page,
-    const ui_drybox_page_v32_state_t *state)
+void ui_drybox_page_refresh(
+    const ui_drybox_page_t *page,
+    const ui_drybox_page_state_t *state)
 {
     if (!page || !page->panel || !state) {
         return;
@@ -880,7 +880,7 @@ void ui_drybox_page_v32_refresh(
         }
 
         if (banner_box) {
-            ui_status_banner_v32_set_simple(
+            ui_status_banner_set_simple(
                 banner_box,
                 drybox_status_text(display_text),
                 "FILAMENT CONDITIONING");
@@ -1092,8 +1092,8 @@ void ui_drybox_page_v32_refresh(
     }
 }
 
-void ui_drybox_page_v32_cleanup(
-    ui_drybox_page_v32_t *page)
+void ui_drybox_page_cleanup(
+    ui_drybox_page_t *page)
 {
     if (!page) {
         return;

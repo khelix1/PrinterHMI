@@ -8,6 +8,7 @@
 #include "calibration_capability_controller.h"
 #include "calibration_session_controller.h"
 #include "ui_calibration_motion.h"
+#include "ui_calibration_layout.h"
 #include "ui_calibration_manual_probe.h"
 #include "ui_calibration_pressure_advance.h"
 #include "console_controller.h"
@@ -24,11 +25,6 @@
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_widgets.h"
-
-typedef struct {
-    lv_obj_t *summary;
-    lv_obj_t *status;
-} calibration_card_refs_t;
 
 #define PID_HEATER_MAX 8
 #define CUSTOM_CALIBRATION_MACRO_MAX 16
@@ -55,10 +51,10 @@ typedef struct {
     lv_obj_t *probe_popup;
     lv_obj_t *custom_popup;
     lv_obj_t *screws_results_label;
-    calibration_card_refs_t bed;
-    calibration_card_refs_t motion;
-    calibration_card_refs_t thermal;
-    calibration_card_refs_t probe;
+    ui_calibration_card_refs_t bed;
+    ui_calibration_card_refs_t motion;
+    ui_calibration_card_refs_t thermal;
+    ui_calibration_card_refs_t probe;
     lv_timer_t *refresh_timer;
     ui_calibration_open_bed_mesh_cb_t open_bed_mesh;
     ui_calibration_send_gcode_cb_t send_gcode;
@@ -127,161 +123,6 @@ static bool calibration_state_init(void)
 }
 
 
-static lv_obj_t *calibration_label(
-    lv_obj_t *parent,
-    const char *text,
-    const lv_font_t *font,
-    lv_color_t color,
-    int x,
-    int y,
-    int width)
-{
-    lv_obj_t *label = lv_label_create(parent);
-
-    lv_label_set_text(label, text ? text : "--");
-    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(label, width);
-    lv_obj_set_pos(label, x, y);
-    ui_apply_custom_label_style(label, font, color);
-
-    return label;
-}
-
-
-static lv_obj_t *calibration_card(
-    lv_obj_t *parent,
-    const char *title,
-    int x,
-    int y,
-    calibration_card_refs_t *refs)
-{
-    lv_obj_t *card = ui_create_operator_card(
-        parent,
-        x,
-        y,
-        390,
-        176);
-
-    if (!card) {
-        return NULL;
-    }
-
-    ui_create_operator_card_heading(card, title, 16, 14);
-    ui_create_operator_card_divider(card, 16, 45, 358);
-
-    if (refs) {
-        refs->summary = calibration_label(
-            card,
-            "Waiting for active-printer discovery.",
-            UI_FONT_BODY,
-            UI_TEXT_DIM,
-            16,
-            58,
-            358);
-
-        refs->status = calibration_label(
-            card,
-            "AWAITING DISCOVERY",
-            UI_FONT_CAPTION,
-            UI_ACCENT_BRIGHT,
-            16,
-            142,
-            190);
-    }
-
-    return card;
-}
-
-
-static void append_tool(
-    char *output,
-    size_t output_size,
-    const char *tool)
-{
-    if (!output || output_size == 0 || !tool || !tool[0]) {
-        return;
-    }
-
-    size_t used = strlen(output);
-
-    if (used >= output_size - 1) {
-        return;
-    }
-
-    lv_snprintf(
-        output + used,
-        output_size - used,
-        "%s%s",
-        used ? "  /  " : "",
-        tool);
-}
-
-
-static void set_card(
-    calibration_card_refs_t *refs,
-    const char *summary,
-    size_t count,
-    size_t macro_count)
-{
-    if (!refs || !refs->summary || !refs->status) {
-        return;
-    }
-
-    lv_label_set_text(
-        refs->summary,
-        summary && summary[0]
-            ? summary
-            : "No applicable tools reported by this printer.");
-
-    char status[48];
-
-    if (macro_count > 0) {
-        lv_snprintf(
-            status,
-            sizeof(status),
-            "%u TOOL%s + %u MACRO%s",
-            (unsigned)count,
-            count == 1 ? "" : "S",
-            (unsigned)macro_count,
-            macro_count == 1 ? "" : "S");
-    } else if (count > 0) {
-        lv_snprintf(
-            status,
-            sizeof(status),
-            "%u TOOL%s DETECTED",
-            (unsigned)count,
-            count == 1 ? "" : "S");
-    } else {
-        lv_snprintf(
-            status,
-            sizeof(status),
-            "NOT CONFIGURED");
-    }
-
-    lv_label_set_text(refs->status, status);
-
-    if (count > 0 || macro_count > 0) {
-        ui_apply_label_bright(refs->status);
-    } else {
-        ui_apply_label_dim(refs->status);
-    }
-}
-
-
-static void set_action_label(
-    lv_obj_t *button,
-    const char *text)
-{
-    lv_obj_t *label = button
-        ? lv_obj_get_child(button, 0)
-        : NULL;
-
-    if (label) {
-        lv_label_set_text(label, text ? text : "");
-    }
-}
-
-
 static void layout_bed_geometry_actions(
     const calibration_capabilities_t *capabilities)
 {
@@ -317,7 +158,7 @@ static void layout_bed_geometry_actions(
         return;
     }
 
-    set_action_label(
+    ui_calibration_layout_set_action_label(
         s_calibration->bed_mesh_button,
         "BED MESH");
 
@@ -407,7 +248,7 @@ static void refresh_capabilities(void)
             s_calibration->banner_status,
             "WAITING FOR PRINTER");
 
-        calibration_card_refs_t *cards[] = {
+        ui_calibration_card_refs_t *cards[] = {
             &s_calibration->bed,
             &s_calibration->motion,
             &s_calibration->thermal,
@@ -512,27 +353,27 @@ static void refresh_capabilities(void)
     size_t bed_count = 0;
 
     if (capabilities.bed_mesh) {
-        append_tool(bed, sizeof(bed), "BED MESH");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "BED MESH");
         ++bed_count;
     }
     if (capabilities.screws_tilt) {
-        append_tool(bed, sizeof(bed), "SCREWS TILT");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "SCREWS TILT");
         ++bed_count;
     }
     if (capabilities.quad_gantry_level) {
-        append_tool(bed, sizeof(bed), "QGL");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "QGL");
         ++bed_count;
     }
     if (capabilities.z_tilt) {
-        append_tool(bed, sizeof(bed), "Z TILT");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "Z TILT");
         ++bed_count;
     }
     if (capabilities.axis_twist) {
-        append_tool(bed, sizeof(bed), "AXIS TWIST");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "AXIS TWIST");
         ++bed_count;
     }
 
-    set_card(
+    ui_calibration_layout_set_card(
         &s_calibration->bed,
         bed,
         bed_count,
@@ -621,21 +462,21 @@ static void refresh_capabilities(void)
     size_t motion_count = 0;
 
     if (capabilities.input_shaper) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             motion,
             sizeof(motion),
             "INPUT SHAPER");
         ++motion_count;
     }
     if (capabilities.accelerometer) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             motion,
             sizeof(motion),
             "ACCELEROMETER");
         ++motion_count;
     }
 
-    set_card(
+    ui_calibration_layout_set_card(
         &s_calibration->motion,
         motion,
         motion_count,
@@ -650,35 +491,35 @@ static void refresh_capabilities(void)
     size_t thermal_count = 0;
 
     if (capabilities.hotend_pid) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
             "HOTEND PID");
         ++thermal_count;
     }
     if (capabilities.bed_pid) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
             "BED PID");
         ++thermal_count;
     }
     if (capabilities.generic_heater_pid) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
             "GENERIC HEATER PID");
         ++thermal_count;
     }
     if (capabilities.pressure_advance) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
             "PRESSURE ADVANCE");
         ++thermal_count;
     }
 
-    set_card(
+    ui_calibration_layout_set_card(
         &s_calibration->thermal,
         thermal,
         thermal_count,
@@ -721,7 +562,7 @@ static void refresh_capabilities(void)
     size_t probe_count = 0;
 
     if (capabilities.probe) {
-        append_tool(
+        ui_calibration_layout_append_tool(
             probe,
             sizeof(probe),
             capabilities.load_cell_probe
@@ -739,10 +580,10 @@ static void refresh_capabilities(void)
             sizeof(macros),
             "CUSTOM CALIBRATION MACROS (%u)",
             (unsigned)capabilities.calibration_macro_count);
-        append_tool(probe, sizeof(probe), macros);
+        ui_calibration_layout_append_tool(probe, sizeof(probe), macros);
     }
 
-    set_card(
+    ui_calibration_layout_set_card(
         &s_calibration->probe,
         probe,
         probe_count,
@@ -3029,7 +2870,7 @@ void ui_calibration_show(
         86,
         UI_STATUS_INFO);
 
-    calibration_label(
+    ui_calibration_layout_label(
         banner,
         "CALIBRATION",
         UI_FONT_TITLE,
@@ -3038,7 +2879,7 @@ void ui_calibration_show(
         15,
         520);
 
-    calibration_label(
+    ui_calibration_layout_label(
         banner,
         "Available workflows from the active printer's capabilities",
         UI_FONT_CAPTION,
@@ -3047,7 +2888,7 @@ void ui_calibration_show(
         50,
         620);
 
-    s_calibration->banner_status = calibration_label(
+    s_calibration->banner_status = ui_calibration_layout_label(
         banner,
         "WAITING FOR PRINTER",
         UI_FONT_CAPTION,
@@ -3061,7 +2902,7 @@ void ui_calibration_show(
         LV_TEXT_ALIGN_RIGHT,
         0);
 
-    lv_obj_t *bed = calibration_card(
+    lv_obj_t *bed = ui_calibration_layout_card(
         s_calibration->root,
         "BED GEOMETRY",
         20,
@@ -3174,7 +3015,7 @@ void ui_calibration_show(
         }
     }
 
-    lv_obj_t *motion = calibration_card(
+    lv_obj_t *motion = ui_calibration_layout_card(
         s_calibration->root,
         "MOTION",
         430,
@@ -3190,7 +3031,7 @@ void ui_calibration_show(
             refresh_calibration_results);
     }
 
-    lv_obj_t *thermal = calibration_card(
+    lv_obj_t *thermal = ui_calibration_layout_card(
         s_calibration->root,
         "TEMPERATURE & EXTRUSION",
         20,
@@ -3230,7 +3071,7 @@ void ui_calibration_show(
             calibration_action_ready);
     }
 
-    lv_obj_t *probe = calibration_card(
+    lv_obj_t *probe = ui_calibration_layout_card(
         s_calibration->root,
         "PROBE, Z & CUSTOM",
         430,

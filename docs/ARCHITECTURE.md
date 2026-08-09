@@ -107,7 +107,7 @@ status banners, cards, previews, charts, action panels and popup controllers.
 
 ### Calibration, Bed Mesh, Devices, Macros and Console
 
-- `ui_calibration` composes the calibration page.
+- `ui_calibration` composes calibration workflows; `ui_calibration_layout` owns its reusable cards, labels and capability summaries.
   `ui_calibration_motion`, `ui_calibration_pressure_advance` and
   `ui_calibration_manual_probe` own their focused workflows. The shared
   manual-probe surface provides coarse and 0.005 mm fine TESTZ steps for

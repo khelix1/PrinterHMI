@@ -60,6 +60,20 @@ status banners, cards, previews, charts, action panels and popup controllers.
   interface beneath it. `ui_about_popup` is a focused Settings-owned
   consumer of those shared popup primitives.
 
+### Ownership boundaries and next seams
+
+- `main.c` coordinates startup, lifecycle transitions and narrow adapters only. New
+  page layout, parsing, persistent storage and transport policy belong to focused
+  owners rather than being added there.
+- Page owners may compose widgets and route operator intent. They do not perform
+  blocking HTTP, SD or OTA work.
+- Controllers translate state and enforce policy; services own I/O, background
+  work, persistence and parsing. Background work publishes data, never LVGL
+  mutations.
+- The next maintenance extractions, when behavior requires change, are focused
+  slices from `main.c`, `ui_calibration` and `ui_printer_popups`. They are not
+  prerequisite refactors for ordinary feature work.
+
 ### Moonraker integration
 
 - `moonraker_config_controller` owns up to four persistent printer profiles and

@@ -12,6 +12,8 @@ v4.0.0 is preserved under `docs/history/`.
 ### Changed
 
 
+
+- Clarified current module ownership boundaries and future extraction seams without changing runtime behavior.
 - Completed the active-source legacy naming cleanup: `_v32` API and type suffixes are now removed without changing behavior.
 - Removed the non-interactive in-app Theme Laboratory. Custom themes remain available as validated SD-card packages, with clear external-authoring guidance.
 - Updated active documentation and release tooling for the `khelix1/PrinterHMI` repository rename, the supported ESP-IDF 6.0.2 platform, and the active CI gate.

@@ -17,6 +17,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 
 
+
+- Extracted Screws Tilt and Z Tilt/QGL workflows into `ui_calibration_geometry` with explicit page-owned context.
 - Extracted reusable Calibration cards, labels and capability summaries from `ui_calibration` into `ui_calibration_layout` without changing calibration workflows.
 - Extracted OTA release-catalog and custom-URL popup dispatch from `main.c` into `ota_ui_controller` without changing OTA transport behavior.
 - Extracted NVS-only Wi-Fi credential persistence from `main.c` into `wifi_credentials_store`; connection and UI behavior remain unchanged.

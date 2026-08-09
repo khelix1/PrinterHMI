@@ -273,6 +273,7 @@ static void back_to_pid_heaters_cb(
 }
 
 
+static void pid_start_warning_cb(lv_event_t *event);
 static void show_pid_target_popup(void)
 {
     if (!s_context ||
@@ -357,9 +358,38 @@ static void show_pid_target_popup(void)
         LV_SYMBOL_PLAY " RUN",
         170,
         UI_POPUP_FOOTER_RIGHT,
-        run_pid_tune_cb,
+        pid_start_warning_cb,
         NULL,
         NULL);
+}
+
+
+static void back_to_pid_target_cb(lv_event_t *event)
+{
+    (void)event;
+    show_pid_target_popup();
+}
+
+
+static void pid_start_warning_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!s_context) return;
+    ui_calibration_pid_close();
+    *s_context->popup = ui_popup_create(lv_layer_top(), 650, 420, UI_POPUP_DANGER);
+    if (!*s_context->popup) return;
+    ui_popup_add_title(*s_context->popup, "START PID HEAT CYCLE?", false, 4);
+    ui_popup_add_header_divider(*s_context->popup, 48);
+    ui_popup_add_body(*s_context->popup,
+        "The selected heater will cycle repeatedly at the chosen target. Keep the printer attended, clear the area, and do not start a print until calibration completes.",
+        28, 76, 594);
+    ui_popup_add_standard_footer_divider(*s_context->popup);
+    ui_popup_add_footer_action(*s_context->popup, UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_LEFT " BACK", 170, UI_POPUP_FOOTER_LEFT,
+        back_to_pid_target_cb, NULL, NULL);
+    ui_popup_add_footer_action(*s_context->popup, UI_POPUP_ACTION_DANGER,
+        LV_SYMBOL_PLAY " START HEAT", 210, UI_POPUP_FOOTER_RIGHT,
+        run_pid_tune_cb, NULL, NULL);
 }
 
 

@@ -46,6 +46,7 @@
 #include "ui_ota_popup.h"
 #include "ui_ota_release_browser.h"
 #include "ota_manager.h"
+#include "ota_ui_controller.h"
 #include "ota_boot_validation.h"
 #include "operator_event_log.h"
 
@@ -1544,97 +1545,6 @@ static void ui_network_refresh_bridge(void)
         ui_network_tools_network_scan_status);
 }
 
-static bool ota_start_url(const char *url, bool save_custom_url)
-{
-    if (!url || !url[0]) {
-        return false;
-    }
-
-    if (ota_manager_is_running()) {
-        ESP_LOGW(TAG, "OTA: update already running");
-        return false;
-    }
-
-    if (!ota_manager_start(url)) {
-        ESP_LOGE(TAG, "OTA: unable to start update");
-        ui_toast_show(
-            UI_STATUS_DANGER,
-            "OTA NOT STARTED",
-            "Another network operation is active. Try again.");
-        return false;
-    }
-
-    /*
-     * Only a URL explicitly entered in the Custom OTA editor becomes
-     * persistent operator configuration. Catalog assets are one-shot
-     * release URLs and must never replace that setting.
-     */
-    if (save_custom_url) {
-        ota_manager_set_url(url);
-    }
-
-    return true;
-}
-
-
-static void ota_popup_start_bridge(const char *url)
-{
-    (void)ota_start_url(url, true);
-}
-
-
-static void ota_catalog_start_bridge(const char *url)
-{
-    (void)ota_start_url(url, false);
-}
-
-static void ota_popup_remote_bridge(void);
-
-
-static void ota_open_custom_url_bridge(void)
-{
-    const esp_app_desc_t *app = esp_app_get_description();
-    const esp_partition_t *running = esp_ota_get_running_partition();
-
-    char ota_info[320];
-    snprintf(ota_info, sizeof(ota_info),
-             "HTTPS verifies the server. Use HTTP only for a trusted local development server.  |  Current: %s  |  Built: %s %s  |  Slot: %s",
-             app ? app->version : "unknown",
-             app ? app->date : __DATE__,
-             app ? app->time : __TIME__,
-             running ? running->label : "unknown");
-
-    ui_ota_popup_show(ota_manager_get_url(),
-                      ota_info,
-                      ota_manager_url_capacity() - 1,
-                      ota_popup_start_bridge,
-                      ota_popup_remote_bridge);
-}
-
-
-static void ota_popup_remote_bridge(void)
-{
-    /*
-     * The URL editor may invoke this bridge. Remove it before restoring the
-     * primary release catalog so the two full-size popups never stack.
-     */
-    ui_ota_popup_close();
-    ui_ota_release_browser_show(
-        ota_catalog_start_bridge,
-        ota_open_custom_url_bridge);
-}
-
-
-static void ota_open_popup_cb(lv_event_t *e)
-{
-    (void)e;
-
-    ui_ota_release_browser_show(
-        ota_catalog_start_bridge,
-        ota_open_custom_url_bridge);
-}
-
-
 void ui_files_destroy(void);
 static void dashboard_dry_status_event_cb(lv_event_t *e);
 
@@ -2593,7 +2503,7 @@ static void show_settings_tab(void)
     ui_settings_show_page(
         sd_card_ok ? "Mounted" : "Not mounted",
         storage_text,
-        ota_open_popup_cb,
+        ota_ui_controller_open_event_cb,
         settings_open_network_bridge,
         app_theme_changed);
 }

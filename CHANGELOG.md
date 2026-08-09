@@ -15,6 +15,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 
 
+
+- Extracted OTA release-catalog and custom-URL popup dispatch from `main.c` into `ota_ui_controller` without changing OTA transport behavior.
 - Extracted NVS-only Wi-Fi credential persistence from `main.c` into `wifi_credentials_store`; connection and UI behavior remain unchanged.
 - Extracted post-splash OTA rollback confirmation from `main.c` into the focused `ota_boot_validation` service without changing update behavior.
 - Clarified current module ownership boundaries and future extraction seams without changing runtime behavior.

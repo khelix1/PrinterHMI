@@ -136,6 +136,7 @@ idf_component_register(
         "ui_ota_popup.c"
         "ui_ota_release_browser.c"
         "ota_manager.c"
+        "ota_ui_controller.c"
         "ota_boot_validation.c"
         "ota_release_catalog.c"
 

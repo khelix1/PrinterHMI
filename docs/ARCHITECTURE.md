@@ -140,6 +140,8 @@ card content.
 
 ### OTA lifecycle
 
+`ota_ui_controller` owns release-catalog, custom-URL and popup dispatch; `ota_manager` owns the update transaction.
+
 The OTA manager downloads to the inactive application slot. The progress
 popup can request cancellation; the worker aborts the OTA handle and returns
 without rebooting or selecting the incomplete image. On successful installation

@@ -109,7 +109,7 @@ status banners, cards, previews, charts, action panels and popup controllers.
 
 - `ui_calibration` composes calibration workflows; `ui_calibration_layout` owns its reusable cards, labels and capability summaries.
   `ui_calibration_geometry`, `ui_calibration_motion`, `ui_calibration_pressure_advance` and
-  `ui_calibration_manual_probe`, `ui_calibration_custom` and `ui_calibration_pid` own their focused workflows. The shared
+  `ui_calibration_manual_probe`, `ui_calibration_custom`, `ui_calibration_pid` and `ui_calibration_results` own their focused workflows. The shared
   manual-probe surface provides coarse and 0.005 mm fine TESTZ steps for
   both Probe/Z and Axis Twist, while `calibration_capability_controller`
   and `calibration_session_controller`

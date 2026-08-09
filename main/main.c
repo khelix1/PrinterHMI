@@ -173,6 +173,7 @@ static void sntp_wait_task(void *arg);
 #include "moonraker_discovery.h"
 #include "moonraker_probe.h"
 #include "network_wifi_scan.h"
+#include "wifi_credentials_store.h"
 #include "ui_drybox.h"
 #include "ui_files.h"
 #include "ui_thumbnail.h"
@@ -669,73 +670,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 
-static bool load_wifi_credentials_from_nvs(void)
-{
-    nvs_handle_t h;
-    esp_err_t err = nvs_open("netcfg", NVS_READONLY, &h);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "NVS WiFi load: no netcfg namespace");
-        return false;
-    }
-
-    size_t ssid_len = sizeof(saved_wifi_ssid);
-    size_t pass_len = sizeof(saved_wifi_password);
-
-    err = nvs_get_str(h, "ssid", saved_wifi_ssid, &ssid_len);
-    if (err != ESP_OK || saved_wifi_ssid[0] == 0) {
-        nvs_close(h);
-        ESP_LOGW(TAG, "NVS WiFi load: no saved SSID");
-        return false;
-    }
-
-    err = nvs_get_str(h, "pass", saved_wifi_password, &pass_len);
-    if (err != ESP_OK) {
-        saved_wifi_password[0] = 0;
-    }
-
-    nvs_close(h);
-    ESP_LOGI(TAG, "NVS WiFi load: saved credentials available");
-    return true;
-}
-
-static bool save_wifi_credentials_to_nvs(const char *ssid, const char *pass)
-{
-    if (!ssid || !ssid[0]) return false;
-    if (!pass) pass = "";
-
-    nvs_handle_t h;
-    esp_err_t err = nvs_open("netcfg", NVS_READWRITE, &h);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "NVS WiFi save open failed: %s", esp_err_to_name(err));
-        return false;
-    }
-
-    err = nvs_set_str(h, "ssid", ssid);
-    if (err == ESP_OK) err = nvs_set_str(h, "pass", pass);
-    if (err == ESP_OK) err = nvs_commit(h);
-
-    nvs_close(h);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "NVS WiFi save failed: %s", esp_err_to_name(err));
-        return false;
-    }
-
-    safe_copy(saved_wifi_ssid, sizeof(saved_wifi_ssid), ssid);
-    safe_copy(saved_wifi_password, sizeof(saved_wifi_password), pass);
-
-    ESP_LOGI(TAG, "NVS WiFi saved");
-    return true;
-}
-
-
 static void wifi_prepare_transport(void)
 {
     if (s_wifi_transport_ready) {
         return;
     }
 
-    bool have_saved_wifi = load_wifi_credentials_from_nvs();
+    bool have_saved_wifi = wifi_credentials_store_load(saved_wifi_ssid, sizeof(saved_wifi_ssid), saved_wifi_password, sizeof(saved_wifi_password));
     s_wifi_credentials_configured = have_saved_wifi;
     moonraker_config_load();
 
@@ -2335,7 +2276,14 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
         ui_network_tools_selected_wifi_password,
         sizeof(ui_network_tools_selected_wifi_password));
 
-    save_wifi_credentials_to_nvs(ui_network_tools_selected_wifi_ssid, ui_network_tools_selected_wifi_password);
+    if (wifi_credentials_store_save(
+            ui_network_tools_selected_wifi_ssid,
+            ui_network_tools_selected_wifi_password)) {
+        safe_copy(saved_wifi_ssid, sizeof(saved_wifi_ssid),
+                  ui_network_tools_selected_wifi_ssid);
+        safe_copy(saved_wifi_password, sizeof(saved_wifi_password),
+                  ui_network_tools_selected_wifi_password);
+    }
     connect_selected_wifi();
 
     clear_sensitive_buffer(

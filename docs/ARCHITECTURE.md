@@ -131,6 +131,8 @@ status banners, cards, previews, charts, action panels and popup controllers.
 
 ### Settings and persistence
 
+`wifi_credentials_store` owns the NVS read/write boundary for Wi-Fi credentials.
+
 NVS stores network configuration, printer profiles, theme selection,
 accessibility settings, brightness, display sleep, timezone, OTA URL and the
 last selected file. Factory reset erases NVS and reboots; it does not erase SD

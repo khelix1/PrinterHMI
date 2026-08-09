@@ -103,6 +103,7 @@ idf_component_register(
         "network_activity_controller.c"
         "network_status_controller.c"
         "network_wifi_scan.c"
+        "wifi_credentials_store.c"
         "moonraker.c"
         "moonraker_config_controller.c"
         "moonraker_discovery.c"

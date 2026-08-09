@@ -10,6 +10,7 @@
 #include "ui_calibration_motion.h"
 #include "ui_calibration_layout.h"
 #include "ui_calibration_geometry.h"
+#include "ui_calibration_custom.h"
 #include "ui_calibration_manual_probe.h"
 #include "ui_calibration_pressure_advance.h"
 #include "console_controller.h"
@@ -85,6 +86,7 @@ typedef struct {
     uint32_t macro_generation;
     uint32_t command_generation;
     ui_calibration_geometry_context_t geometry;
+    ui_calibration_custom_context_t custom;
 } ui_calibration_state_t;
 
 static const char TAG[] = "ui_calibration";
@@ -1729,291 +1731,6 @@ static void probe_z_button_cb(
 }
 
 
-static bool custom_macro_matches(
-    const char *name)
-{
-    if (!name || !name[0]) {
-        return false;
-    }
-
-    static const char *terms[] = {
-        "CALIBRAT", "SCREW", "GANTRY", "Z_TILT",
-        "BED_MESH", "SHAPER", "RESONANCE", "PID",
-        "Z_OFFSET", "PRESSURE_ADVANCE",
-    };
-
-    for (size_t term_index = 0;
-         term_index < sizeof(terms) / sizeof(terms[0]);
-         ++term_index) {
-        const char *needle = terms[term_index];
-        size_t needle_length = strlen(needle);
-
-        for (const char *start = name; *start; ++start) {
-            size_t index = 0;
-            while (index < needle_length &&
-                   start[index] &&
-                   toupper((unsigned char)start[index]) ==
-                       toupper((unsigned char)needle[index])) {
-                ++index;
-            }
-            if (index == needle_length) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-
-static void close_custom_popup(void)
-{
-    if (!s_calibration) {
-        return;
-    }
-
-    if (s_calibration->custom_popup) {
-        lv_obj_t *popup = s_calibration->custom_popup;
-        s_calibration->custom_popup = NULL;
-        lv_obj_delete(popup);
-    }
-}
-
-
-static void close_custom_popup_cb(
-    lv_event_t *event)
-{
-    (void)event;
-    close_custom_popup();
-}
-
-
-static void run_custom_macro_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration ||
-        s_calibration->custom_macro_selected >=
-            s_calibration->custom_macro_count ||
-        !calibration_action_ready(
-            "Custom calibration")) {
-        return;
-    }
-
-    const char *command =
-        s_calibration->custom_macro_names[
-            s_calibration->custom_macro_selected];
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_CUSTOM,
-        start_sequence);
-    console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
-
-    close_custom_popup();
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept the custom calibration macro.");
-    }
-
-    show_calibration_results_popup(
-        "CUSTOM CALIBRATION",
-        sent
-            ? "The selected printer macro is running. Monitor Console for its printer-specific instructions.\\n\\n"
-              "Apply & Restart will appear only if Klipper reports SAVE_CONFIG."
-            : "The selected custom calibration macro could not be started.");
-    refresh_calibration_results();
-}
-
-
-static void custom_macro_selected_cb(
-    lv_event_t *event)
-{
-    if (!s_calibration || !event) {
-        return;
-    }
-
-    size_t index =
-        (size_t)(uintptr_t)lv_event_get_user_data(
-            event);
-    if (index >= s_calibration->custom_macro_count) {
-        return;
-    }
-
-    s_calibration->custom_macro_selected = index;
-    close_custom_popup();
-    s_calibration->custom_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            620,
-            370,
-            UI_POPUP_STANDARD);
-
-    if (!s_calibration->custom_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->custom_popup,
-        "RUN CUSTOM CALIBRATION?",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->custom_popup,
-        48);
-
-    char body[400];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "Macro: %s\\n\\n"
-        "This is printer-defined behavior. It may move hardware or heat components. Keep the machine attended.\\n\\n"
-        "PrinterHMI will not save automatically.",
-        s_calibration->custom_macro_names[index]);
-    ui_popup_add_body(
-        s_calibration->custom_popup,
-        body,
-        28,
-        76,
-        564);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->custom_popup);
-    ui_popup_add_footer_action(
-        s_calibration->custom_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_custom_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->custom_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " RUN",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        run_custom_macro_cb,
-        NULL,
-        NULL);
-}
-
-
-static void custom_calibration_button_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration ||
-        !calibration_action_ready(
-            "Custom calibration")) {
-        return;
-    }
-
-    s_calibration->custom_macro_count = 0;
-    memset(
-        s_calibration->custom_macro_names,
-        0,
-        sizeof(s_calibration->custom_macro_names));
-
-    macro_controller_status_t status;
-    macro_controller_status(&status);
-
-    for (size_t index = 0;
-         index < status.count &&
-         s_calibration->custom_macro_count <
-             CUSTOM_CALIBRATION_MACRO_MAX;
-         ++index) {
-        char name[MACRO_CONTROLLER_NAME_MAX];
-        if (!macro_controller_get(
-                index,
-                name,
-                sizeof(name)) ||
-            !custom_macro_matches(name)) {
-            continue;
-        }
-
-        lv_snprintf(
-            s_calibration->custom_macro_names[
-                s_calibration->custom_macro_count++],
-            MACRO_CONTROLLER_NAME_MAX,
-            "%s",
-            name);
-    }
-
-    if (s_calibration->custom_macro_count == 0) {
-        ui_toast_show(
-            UI_STATUS_WARNING,
-            "NO CUSTOM CALIBRATIONS",
-            "No matching public calibration macros are available.");
-        return;
-    }
-
-    close_custom_popup();
-    s_calibration->custom_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            450,
-            UI_POPUP_STANDARD);
-
-    if (!s_calibration->custom_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->custom_popup,
-        "CUSTOM CALIBRATION MACROS",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->custom_popup,
-        48);
-    lv_obj_t *list =
-        ui_popup_add_list(
-            s_calibration->custom_popup,
-            28,
-            68,
-            594,
-            302);
-
-    if (list) {
-        for (size_t index = 0;
-             index < s_calibration->custom_macro_count;
-             ++index) {
-            ui_popup_add_selectable_row(
-                list,
-                s_calibration->custom_macro_names[index],
-                8,
-                8 + (int)index * 54,
-                558,
-                46,
-                custom_macro_selected_cb,
-                (void *)(uintptr_t)index);
-        }
-    }
-
-    ui_popup_add_standard_footer_divider(
-        s_calibration->custom_popup);
-    ui_popup_add_footer_action(
-        s_calibration->custom_popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        close_custom_popup_cb,
-        NULL,
-        NULL);
-}
-
-
-
-
 static void close_axis_twist_popup(void)
 {
     if (!s_calibration) {
@@ -2369,6 +2086,18 @@ void ui_calibration_show(
         .send_gcode = s_calibration->send_gcode,
     };
     ui_calibration_geometry_init(&s_calibration->geometry);
+    s_calibration->custom = (ui_calibration_custom_context_t){
+        .popup = &s_calibration->custom_popup,
+        .names = s_calibration->custom_macro_names,
+        .names_capacity = CUSTOM_CALIBRATION_MACRO_MAX,
+        .count = &s_calibration->custom_macro_count,
+        .selected = &s_calibration->custom_macro_selected,
+        .send = s_calibration->send_gcode,
+        .ready = calibration_action_ready,
+        .show_results = show_calibration_results_popup,
+        .refresh_results = refresh_calibration_results,
+    };
+    ui_calibration_custom_init(&s_calibration->custom);
 
     if (s_calibration->root) {
         lv_obj_move_foreground(
@@ -2655,7 +2384,7 @@ void ui_calibration_show(
                 -12);
             lv_obj_add_event_cb(
                 s_calibration->custom_calibration_button,
-                custom_calibration_button_cb,
+                ui_calibration_custom_event,
                 LV_EVENT_CLICKED,
                 NULL);
             lv_obj_add_flag(
@@ -2691,7 +2420,7 @@ void ui_calibration_hide(void)
     close_pid_popup();
     ui_calibration_pressure_advance_hide();
     close_probe_popup();
-    close_custom_popup();
+    ui_calibration_custom_close();
     ui_calibration_motion_hide();
     close_axis_twist_popup();
     ui_calibration_manual_probe_hide();

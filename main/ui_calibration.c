@@ -13,6 +13,7 @@
 #include "ui_calibration_custom.h"
 #include "ui_calibration_manual_probe.h"
 #include "ui_calibration_pressure_advance.h"
+#include "ui_calibration_pid.h"
 #include "console_controller.h"
 #include "device_catalog_controller.h"
 #include "macro_controller.h"
@@ -28,7 +29,6 @@
 #include "ui_toast.h"
 #include "ui_widgets.h"
 
-#define PID_HEATER_MAX 8
 #define CUSTOM_CALIBRATION_MACRO_MAX 16
 
 typedef struct {
@@ -64,9 +64,9 @@ typedef struct {
     bool gantry_home_required;
     bool gantry_use_qgl;
     bool axis_twist_home_required;
-    char pid_object_names[PID_HEATER_MAX]
+    char pid_object_names[UI_CALIBRATION_PID_HEATER_MAX]
                          [DEVICE_CATALOG_OBJECT_NAME_MAX];
-    char pid_display_names[PID_HEATER_MAX]
+    char pid_display_names[UI_CALIBRATION_PID_HEATER_MAX]
                           [DEVICE_CATALOG_DISPLAY_NAME_MAX];
     size_t pid_heater_count;
     size_t pid_selected_index;
@@ -87,6 +87,7 @@ typedef struct {
     uint32_t command_generation;
     ui_calibration_geometry_context_t geometry;
     ui_calibration_custom_context_t custom;
+    ui_calibration_pid_context_t pid;
 } ui_calibration_state_t;
 
 static const char TAG[] = "ui_calibration";
@@ -639,504 +640,6 @@ static void refresh_capabilities(void)
 }
 
 
-static bool pid_object_supported(
-    const char *object_name)
-{
-    return object_name &&
-        (strcmp(object_name, "heater_bed") == 0 ||
-         strncmp(object_name, "extruder", 8) == 0 ||
-         strncmp(
-             object_name,
-             "heater_generic ",
-             strlen("heater_generic ")) == 0);
-}
-
-
-static void close_pid_popup(void)
-{
-    if (!s_calibration) {
-        return;
-    }
-
-    if (s_calibration->pid_popup) {
-        lv_obj_t *popup =
-            s_calibration->pid_popup;
-        s_calibration->pid_popup = NULL;
-        s_calibration->pid_target_label = NULL;
-        lv_obj_delete(popup);
-    }
-}
-
-
-static void close_pid_popup_cb(
-    lv_event_t *event)
-{
-    (void)event;
-    close_pid_popup();
-}
-
-
-static bool pid_printer_ready(void)
-{
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
-
-    if (!state.moonraker_ok ||
-        !state.live_data_ok) {
-        ui_toast_show(
-            UI_STATUS_DANGER,
-            "PID UNAVAILABLE",
-            "The active printer is offline or not ready.");
-        return false;
-    }
-
-    if (strcmp(state.printer_state, "printing") == 0 ||
-        strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_show(
-            UI_STATUS_DANGER,
-            "PID BLOCKED",
-            "PID calibration cannot run during a print.");
-        return false;
-    }
-
-    if (strcmp(state.printer_state, "error") == 0 ||
-        strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(
-            UI_STATUS_DANGER,
-            "PID BLOCKED",
-            "Clear the printer error before calibration.");
-        return false;
-    }
-
-    return true;
-}
-
-
-static void pid_set_defaults(
-    const char *object_name)
-{
-    if (!s_calibration || !object_name) {
-        return;
-    }
-
-    if (strncmp(object_name, "extruder", 8) == 0) {
-        s_calibration->pid_target = 200;
-        s_calibration->pid_target_min = 150;
-        s_calibration->pid_target_max = 300;
-    } else if (strcmp(object_name, "heater_bed") == 0) {
-        s_calibration->pid_target = 60;
-        s_calibration->pid_target_min = 40;
-        s_calibration->pid_target_max = 130;
-    } else {
-        s_calibration->pid_target = 60;
-        s_calibration->pid_target_min = 20;
-        s_calibration->pid_target_max = 120;
-    }
-}
-
-
-static void refresh_pid_target_label(void)
-{
-    if (!s_calibration ||
-        !s_calibration->pid_target_label ||
-        s_calibration->pid_selected_index >=
-            s_calibration->pid_heater_count) {
-        return;
-    }
-
-    char text[240];
-    lv_snprintf(
-        text,
-        sizeof(text),
-        "%s\n\nTARGET: %d C\n"
-        "Allowed range: %d-%d C\n\n"
-        "The heater will cycle repeatedly. Keep the machine attended.",
-        s_calibration->pid_display_names[
-            s_calibration->pid_selected_index],
-        s_calibration->pid_target,
-        s_calibration->pid_target_min,
-        s_calibration->pid_target_max);
-    lv_label_set_text(
-        s_calibration->pid_target_label,
-        text);
-}
-
-
-static void pid_adjust_target_cb(
-    lv_event_t *event)
-{
-    if (!s_calibration || !event) {
-        return;
-    }
-
-    int delta =
-        (int)(intptr_t)lv_event_get_user_data(
-            event);
-    int target =
-        s_calibration->pid_target + delta;
-
-    if (target < s_calibration->pid_target_min) {
-        target = s_calibration->pid_target_min;
-    }
-    if (target > s_calibration->pid_target_max) {
-        target = s_calibration->pid_target_max;
-    }
-
-    s_calibration->pid_target = target;
-    refresh_pid_target_label();
-}
-
-
-static const char *pid_heater_argument(
-    const char *object_name)
-{
-    static const char GENERIC_PREFIX[] =
-        "heater_generic ";
-
-    if (object_name &&
-        strncmp(
-            object_name,
-            GENERIC_PREFIX,
-            sizeof(GENERIC_PREFIX) - 1) == 0) {
-        return object_name +
-            sizeof(GENERIC_PREFIX) - 1;
-    }
-
-    return object_name;
-}
-
-
-static void show_calibration_results_popup(
-    const char *title,
-    const char *waiting_text);
-static void refresh_calibration_results(void);
-
-
-static void run_pid_tune_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration ||
-        s_calibration->pid_selected_index >=
-            s_calibration->pid_heater_count ||
-        !pid_printer_ready()) {
-        return;
-    }
-
-    const char *object_name =
-        s_calibration->pid_object_names[
-            s_calibration->pid_selected_index];
-    const char *heater =
-        pid_heater_argument(object_name);
-
-    char command[176];
-    int written = lv_snprintf(
-        command,
-        sizeof(command),
-        "PID_CALIBRATE HEATER=%s TARGET=%d",
-        heater ? heater : "",
-        s_calibration->pid_target);
-
-    if (written <= 0 ||
-        (size_t)written >= sizeof(command)) {
-        ui_toast_show(
-            UI_STATUS_DANGER,
-            "PID FAILED",
-            "The selected heater command is too long.");
-        return;
-    }
-
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_PID,
-        start_sequence);
-    console_controller_add_command(command);
-
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
-
-    close_pid_popup();
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept the PID command.");
-    }
-
-    show_calibration_results_popup(
-        "PID CALIBRATION",
-        "The heater is cycling. Keep the machine attended.\n\n"
-        "Apply & Restart will appear only after Klipper reports a successful result requiring SAVE_CONFIG.");
-    refresh_calibration_results();
-}
-
-
-static void pid_tune_button_cb(
-    lv_event_t *event);
-
-
-static void back_to_pid_heaters_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration) {
-        return;
-    }
-
-    /*
-     * With multiple heaters, rebuild the live detected-heater selector.
-     * A single-heater printer has no prior selection screen, so Back closes.
-     */
-    if (s_calibration->pid_heater_count <= 1) {
-        close_pid_popup();
-        return;
-    }
-
-    pid_tune_button_cb(NULL);
-}
-
-
-static void show_pid_target_popup(void)
-{
-    if (!s_calibration ||
-        s_calibration->pid_selected_index >=
-            s_calibration->pid_heater_count) {
-        return;
-    }
-
-    close_pid_popup();
-
-    const char *object_name =
-        s_calibration->pid_object_names[
-            s_calibration->pid_selected_index];
-    pid_set_defaults(object_name);
-
-    s_calibration->pid_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            440,
-            UI_POPUP_STANDARD);
-
-    if (!s_calibration->pid_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->pid_popup,
-        "CONFIRM PID CALIBRATION",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->pid_popup,
-        48);
-
-    s_calibration->pid_target_label =
-        ui_popup_add_body(
-            s_calibration->pid_popup,
-            "",
-            28,
-            72,
-            594);
-    refresh_pid_target_label();
-
-    static const int deltas[] =
-        {-10, -5, 5, 10};
-    static const char *labels[] =
-        {"-10", "-5", "+5", "+10"};
-
-    for (size_t index = 0;
-         index < sizeof(deltas) / sizeof(deltas[0]);
-         ++index) {
-        ui_popup_add_action_at(
-            s_calibration->pid_popup,
-            UI_POPUP_ACTION_CHOICE,
-            labels[index],
-            45 + (int)index * 145,
-            260,
-            120,
-            46,
-            pid_adjust_target_cb,
-            (void *)(intptr_t)deltas[index],
-            NULL);
-    }
-
-    ui_popup_add_standard_footer_divider(
-        s_calibration->pid_popup);
-
-    ui_popup_add_footer_action(
-        s_calibration->pid_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        back_to_pid_heaters_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_calibration->pid_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " RUN",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        run_pid_tune_cb,
-        NULL,
-        NULL);
-}
-
-
-static void pid_heater_selected_cb(
-    lv_event_t *event)
-{
-    if (!s_calibration || !event) {
-        return;
-    }
-
-    size_t index =
-        (size_t)(uintptr_t)lv_event_get_user_data(
-            event);
-
-    if (index >= s_calibration->pid_heater_count) {
-        return;
-    }
-
-    s_calibration->pid_selected_index = index;
-    show_pid_target_popup();
-}
-
-
-static void pid_tune_button_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration || !pid_printer_ready()) {
-        return;
-    }
-
-    s_calibration->pid_heater_count = 0;
-    memset(
-        s_calibration->pid_object_names,
-        0,
-        sizeof(s_calibration->pid_object_names));
-    memset(
-        s_calibration->pid_display_names,
-        0,
-        sizeof(s_calibration->pid_display_names));
-
-    device_catalog_status_t status;
-    device_catalog_controller_status(&status);
-
-    for (size_t index = 0;
-         index < status.stored_count &&
-         s_calibration->pid_heater_count <
-             PID_HEATER_MAX;
-         ++index) {
-        device_descriptor_t device;
-
-        if (!device_catalog_controller_get(
-                index,
-                &device) ||
-            !pid_object_supported(
-                device.object_name)) {
-            continue;
-        }
-
-        size_t output_index =
-            s_calibration->pid_heater_count++;
-        lv_snprintf(
-            s_calibration->pid_object_names[
-                output_index],
-            DEVICE_CATALOG_OBJECT_NAME_MAX,
-            "%s",
-            device.object_name);
-        lv_snprintf(
-            s_calibration->pid_display_names[
-                output_index],
-            DEVICE_CATALOG_DISPLAY_NAME_MAX,
-            "%s",
-            device.display_name);
-    }
-
-    if (s_calibration->pid_heater_count == 0) {
-        ui_toast_show(
-            UI_STATUS_WARNING,
-            "NO PID HEATERS",
-            "No PID-capable heater objects are available.");
-        return;
-    }
-
-    if (s_calibration->pid_heater_count == 1) {
-        s_calibration->pid_selected_index = 0;
-        show_pid_target_popup();
-        return;
-    }
-
-    close_pid_popup();
-
-    s_calibration->pid_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            440,
-            UI_POPUP_STANDARD);
-
-    if (!s_calibration->pid_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->pid_popup,
-        "SELECT HEATER FOR PID",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->pid_popup,
-        48);
-
-    lv_obj_t *list =
-        ui_popup_add_list(
-            s_calibration->pid_popup,
-            28,
-            68,
-            594,
-            292);
-
-    if (list) {
-        for (size_t index = 0;
-             index < s_calibration->pid_heater_count;
-             ++index) {
-            ui_popup_add_selectable_row(
-                list,
-                s_calibration->pid_display_names[index],
-                8,
-                8 + (int)index * 54,
-                558,
-                46,
-                pid_heater_selected_cb,
-                (void *)(uintptr_t)index);
-        }
-    }
-
-    ui_popup_add_standard_footer_divider(
-        s_calibration->pid_popup);
-
-    ui_popup_add_footer_action(
-        s_calibration->pid_popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        close_pid_popup_cb,
-        NULL,
-        NULL);
-}
-
-
 static void close_save_confirm_popup(void)
 {
     if (!s_calibration) {
@@ -1192,7 +695,7 @@ static void run_save_config_cb(
 {
     (void)event;
 
-    if (!s_calibration || !pid_printer_ready()) {
+    if (!s_calibration || !ui_calibration_pid_printer_ready()) {
         return;
     }
 
@@ -2098,6 +1601,22 @@ void ui_calibration_show(
         .refresh_results = refresh_calibration_results,
     };
     ui_calibration_custom_init(&s_calibration->custom);
+    s_calibration->pid = (ui_calibration_pid_context_t){
+        .popup = &s_calibration->pid_popup,
+        .target_label = &s_calibration->pid_target_label,
+        .object_names = s_calibration->pid_object_names,
+        .display_names = s_calibration->pid_display_names,
+        .heater_capacity = UI_CALIBRATION_PID_HEATER_MAX,
+        .heater_count = &s_calibration->pid_heater_count,
+        .selected_index = &s_calibration->pid_selected_index,
+        .target = &s_calibration->pid_target,
+        .target_min = &s_calibration->pid_target_min,
+        .target_max = &s_calibration->pid_target_max,
+        .send_gcode = s_calibration->send_gcode,
+        .show_results = show_calibration_results_popup,
+        .refresh_results = refresh_calibration_results,
+    };
+    ui_calibration_pid_init(&s_calibration->pid);
 
     if (s_calibration->root) {
         lv_obj_move_foreground(
@@ -2318,7 +1837,7 @@ void ui_calibration_show(
                 -12);
             lv_obj_add_event_cb(
                 s_calibration->pid_tune_button,
-                pid_tune_button_cb,
+                ui_calibration_pid_event,
                 LV_EVENT_CLICKED,
                 NULL);
             lv_obj_add_flag(
@@ -2417,7 +1936,7 @@ void ui_calibration_hide(void)
     }
 
     ui_calibration_geometry_close();
-    close_pid_popup();
+    ui_calibration_pid_close();
     ui_calibration_pressure_advance_hide();
     close_probe_popup();
     ui_calibration_custom_close();

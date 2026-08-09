@@ -11,6 +11,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Changed
 
+- Extracted the PID calibration picker and guarded heater command dispatch from the Calibration page into its own explicit-context workflow owner.
+
 
 
 

@@ -35,6 +35,7 @@ idf_component_register(
         "ui_calibration_manual_probe.c"
         "ui_calibration_pressure_advance.c"
         "ui_calibration_pid.c"
+        "ui_calibration_results.c"
 
         # Shell and splash
         "ui_shell.c"

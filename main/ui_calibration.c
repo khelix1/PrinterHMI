@@ -14,6 +14,7 @@
 #include "ui_calibration_manual_probe.h"
 #include "ui_calibration_pressure_advance.h"
 #include "ui_calibration_pid.h"
+#include "ui_calibration_results.h"
 #include "console_controller.h"
 #include "device_catalog_controller.h"
 #include "macro_controller.h"
@@ -88,6 +89,7 @@ typedef struct {
     ui_calibration_geometry_context_t geometry;
     ui_calibration_custom_context_t custom;
     ui_calibration_pid_context_t pid;
+    ui_calibration_results_context_t results;
 } ui_calibration_state_t;
 
 static const char TAG[] = "ui_calibration";
@@ -640,306 +642,6 @@ static void refresh_capabilities(void)
 }
 
 
-static void close_save_confirm_popup(void)
-{
-    if (!s_calibration) {
-        return;
-    }
-
-    if (s_calibration->save_confirm_popup) {
-        lv_obj_t *popup =
-            s_calibration->save_confirm_popup;
-        s_calibration->save_confirm_popup = NULL;
-        lv_obj_delete(popup);
-    }
-}
-
-
-static void close_save_confirm_popup_cb(
-    lv_event_t *event)
-{
-    (void)event;
-    close_save_confirm_popup();
-}
-
-
-static void close_calibration_results_popup(void)
-{
-    if (!s_calibration) {
-        return;
-    }
-
-    close_save_confirm_popup();
-
-    if (s_calibration->calibration_results_popup) {
-        lv_obj_t *popup =
-            s_calibration->calibration_results_popup;
-        s_calibration->calibration_results_popup = NULL;
-        s_calibration->calibration_results_label = NULL;
-        s_calibration->apply_restart_button = NULL;
-        lv_obj_delete(popup);
-    }
-}
-
-
-static void close_calibration_results_popup_cb(
-    lv_event_t *event)
-{
-    (void)event;
-    close_calibration_results_popup();
-}
-
-
-static void run_save_config_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration || !ui_calibration_pid_printer_ready()) {
-        return;
-    }
-
-    calibration_session_snapshot_t snapshot;
-    calibration_session_controller_snapshot(
-        &snapshot);
-
-    if (!snapshot.completed ||
-        !snapshot.save_available ||
-        snapshot.status != CALIBRATION_SESSION_RESULTS) {
-        close_save_confirm_popup();
-        ui_toast_show(
-            UI_STATUS_WARNING,
-            "SAVE NOT AVAILABLE",
-            "Klipper has not reported a completed save-worthy calibration.");
-        return;
-    }
-
-    static const char command[] = "SAVE_CONFIG";
-    console_controller_add_command(command);
-
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
-
-    close_calibration_results_popup();
-
-    if (!sent) {
-        ui_toast_show(
-            UI_STATUS_DANGER,
-            "SAVE FAILED",
-            "Moonraker did not accept SAVE_CONFIG.");
-        return;
-    }
-
-    calibration_session_controller_reset();
-    ui_toast_show(
-        UI_STATUS_OK,
-        "APPLYING CONFIGURATION",
-        "Klipper is saving the calibration and restarting. The printer will reconnect automatically.");
-}
-
-
-static void apply_restart_button_cb(
-    lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_calibration) {
-        return;
-    }
-
-    calibration_session_snapshot_t snapshot;
-    calibration_session_controller_snapshot(
-        &snapshot);
-
-    if (!snapshot.completed ||
-        !snapshot.save_available) {
-        return;
-    }
-
-    close_save_confirm_popup();
-
-    s_calibration->save_confirm_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            620,
-            370,
-            UI_POPUP_DANGER);
-
-    if (!s_calibration->save_confirm_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->save_confirm_popup,
-        "APPLY CALIBRATION & RESTART?",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->save_confirm_popup,
-        48);
-    ui_popup_add_body(
-        s_calibration->save_confirm_popup,
-        "PrinterHMI will run SAVE_CONFIG. Klipper will write the reported calibration values and restart.\\n\\n"
-        "The printer will disconnect temporarily. Do not start a print until it reconnects as Ready.",
-        28,
-        76,
-        564);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->save_confirm_popup);
-    ui_popup_add_footer_action(
-        s_calibration->save_confirm_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_save_confirm_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->save_confirm_popup,
-        UI_POPUP_ACTION_DANGER,
-        "APPLY & RESTART",
-        210,
-        UI_POPUP_FOOTER_RIGHT,
-        run_save_config_cb,
-        NULL,
-        NULL);
-}
-
-
-static void show_calibration_results_popup(
-    const char *title,
-    const char *waiting_text)
-{
-    if (!s_calibration) {
-        return;
-    }
-
-    close_calibration_results_popup();
-
-    s_calibration->calibration_results_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            680,
-            460,
-            UI_POPUP_STANDARD);
-
-    if (!s_calibration->calibration_results_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_calibration->calibration_results_popup,
-        title ? title : "CALIBRATION RESULTS",
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->calibration_results_popup,
-        48);
-    s_calibration->calibration_results_label =
-        ui_popup_add_body(
-            s_calibration->calibration_results_popup,
-            waiting_text ? waiting_text : "Waiting for Klipper...",
-            28,
-            72,
-            624);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->calibration_results_popup);
-    ui_popup_add_footer_action(
-        s_calibration->calibration_results_popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        150,
-        UI_POPUP_FOOTER_LEFT,
-        close_calibration_results_popup_cb,
-        NULL,
-        NULL);
-    s_calibration->apply_restart_button =
-        ui_popup_add_footer_action(
-            s_calibration->calibration_results_popup,
-            UI_POPUP_ACTION_DANGER,
-            "APPLY & RESTART",
-            210,
-            UI_POPUP_FOOTER_RIGHT,
-            apply_restart_button_cb,
-            NULL,
-            NULL);
-
-    if (s_calibration->apply_restart_button) {
-        lv_obj_add_flag(
-            s_calibration->apply_restart_button,
-            LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-
-static void refresh_calibration_results(void)
-{
-    calibration_session_controller_poll();
-
-    if (!s_calibration ||
-        !s_calibration->calibration_results_label) {
-        return;
-    }
-
-    calibration_session_snapshot_t *snapshot =
-        &s_calibration->session_snapshot;
-    calibration_session_controller_snapshot(
-        snapshot);
-
-    if (snapshot->generation ==
-        s_calibration->session_generation) {
-        return;
-    }
-
-    s_calibration->session_generation =
-        snapshot->generation;
-
-    if (snapshot->status == CALIBRATION_SESSION_ERROR) {
-        lv_snprintf(
-            s_calibration->calibration_display,
-            sizeof(s_calibration->calibration_display),
-            "Calibration failed:\\n\\n%s",
-            snapshot->results[0]
-                ? snapshot->results
-                : "Unknown Klipper error.");
-        lv_label_set_text(
-            s_calibration->calibration_results_label,
-            s_calibration->calibration_display);
-    } else if (snapshot->status ==
-                   CALIBRATION_SESSION_RESULTS &&
-               snapshot->results[0]) {
-        lv_snprintf(
-            s_calibration->calibration_display,
-            sizeof(s_calibration->calibration_display),
-            "%s%s",
-            snapshot->results,
-            snapshot->save_available
-                ? "\\n\\nCalibration complete. Review the result, then Apply & Restart to save it."
-                : "");
-        lv_label_set_text(
-            s_calibration->calibration_results_label,
-            s_calibration->calibration_display);
-    }
-
-    if (s_calibration->apply_restart_button) {
-        if (snapshot->status ==
-                CALIBRATION_SESSION_RESULTS &&
-            snapshot->completed &&
-            snapshot->save_available) {
-            lv_obj_clear_flag(
-                s_calibration->apply_restart_button,
-                LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(
-                s_calibration->apply_restart_button,
-                LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-}
-
-
 static bool calibration_action_ready(
     const char *workflow)
 {
@@ -1051,7 +753,7 @@ static void abort_probe_calibration_cb(
         s_calibration->send_gcode &&
         s_calibration->send_gcode(command);
     ui_calibration_manual_probe_hide();
-    close_calibration_results_popup();
+    ui_calibration_results_close();
     calibration_session_controller_reset();
 
     ui_toast_show(
@@ -1087,11 +789,11 @@ static void accept_probe_calibration_cb(
             "Moonraker did not accept ACCEPT.");
     }
 
-    show_calibration_results_popup(
+    ui_calibration_results_show(
         "PROBE / Z RESULTS",
         "Waiting for Klipper to accept the measured Z offset.\\n\\n"
         "Apply & Restart will appear only if Klipper reports SAVE_CONFIG.");
-    refresh_calibration_results();
+    ui_calibration_results_refresh();
 }
 
 
@@ -1138,10 +840,10 @@ static void run_probe_calibration_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept PROBE_CALIBRATE.");
-        show_calibration_results_popup(
+        ui_calibration_results_show(
             "PROBE / Z RESULTS",
             "Probe/Z calibration could not be started.");
-        refresh_calibration_results();
+        ui_calibration_results_refresh();
         return;
     }
 
@@ -1305,7 +1007,7 @@ static void abort_axis_twist_calibration_cb(
         s_calibration->send_gcode(command);
 
     ui_calibration_manual_probe_hide();
-    close_calibration_results_popup();
+    ui_calibration_results_close();
     calibration_session_controller_reset();
 
     ui_toast_show(
@@ -1390,10 +1092,10 @@ static void run_axis_twist_calibration_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept AXIS_TWIST_COMPENSATION_CALIBRATE.");
-        show_calibration_results_popup(
+        ui_calibration_results_show(
             "AXIS TWIST RESULTS",
             "Axis Twist calibration could not be started.");
-        refresh_calibration_results();
+        ui_calibration_results_refresh();
         return;
     }
 
@@ -1503,10 +1205,10 @@ static void refresh_axis_twist_session(void)
 
     if (snapshot.status == CALIBRATION_SESSION_ERROR) {
         ui_calibration_manual_probe_hide();
-        show_calibration_results_popup(
+        ui_calibration_results_show(
             "AXIS TWIST RESULTS",
             "Klipper reported an Axis Twist calibration error.");
-        refresh_calibration_results();
+        ui_calibration_results_refresh();
         return;
     }
 
@@ -1515,10 +1217,10 @@ static void refresh_axis_twist_session(void)
         snapshot.completed &&
         snapshot.save_available) {
         ui_calibration_manual_probe_hide();
-        show_calibration_results_popup(
+        ui_calibration_results_show(
             "AXIS TWIST RESULTS",
             "Klipper completed the Axis Twist calibration.");
-        refresh_calibration_results();
+        ui_calibration_results_refresh();
     }
 }
 
@@ -1547,7 +1249,7 @@ static void calibration_refresh_timer_cb(
 
     ui_calibration_geometry_refresh();
     refresh_axis_twist_session();
-    refresh_calibration_results();
+    ui_calibration_results_refresh();
 }
 
 
@@ -1597,10 +1299,22 @@ void ui_calibration_show(
         .selected = &s_calibration->custom_macro_selected,
         .send = s_calibration->send_gcode,
         .ready = calibration_action_ready,
-        .show_results = show_calibration_results_popup,
-        .refresh_results = refresh_calibration_results,
+        .show_results = ui_calibration_results_show,
+        .refresh_results = ui_calibration_results_refresh,
     };
     ui_calibration_custom_init(&s_calibration->custom);
+    s_calibration->results = (ui_calibration_results_context_t){
+        .save_confirm_popup = &s_calibration->save_confirm_popup,
+        .results_popup = &s_calibration->calibration_results_popup,
+        .results_label = &s_calibration->calibration_results_label,
+        .apply_restart_button = &s_calibration->apply_restart_button,
+        .session_snapshot = &s_calibration->session_snapshot,
+        .session_generation = &s_calibration->session_generation,
+        .display = s_calibration->calibration_display,
+        .display_size = sizeof(s_calibration->calibration_display),
+        .send_gcode = s_calibration->send_gcode,
+    };
+    ui_calibration_results_init(&s_calibration->results);
     s_calibration->pid = (ui_calibration_pid_context_t){
         .popup = &s_calibration->pid_popup,
         .target_label = &s_calibration->pid_target_label,
@@ -1613,8 +1327,8 @@ void ui_calibration_show(
         .target_min = &s_calibration->pid_target_min,
         .target_max = &s_calibration->pid_target_max,
         .send_gcode = s_calibration->send_gcode,
-        .show_results = show_calibration_results_popup,
-        .refresh_results = refresh_calibration_results,
+        .show_results = ui_calibration_results_show,
+        .refresh_results = ui_calibration_results_refresh,
     };
     ui_calibration_pid_init(&s_calibration->pid);
 
@@ -1807,8 +1521,8 @@ void ui_calibration_show(
             motion,
             s_calibration->send_gcode,
             calibration_action_ready,
-            show_calibration_results_popup,
-            refresh_calibration_results);
+            ui_calibration_results_show,
+            ui_calibration_results_refresh);
     }
 
     lv_obj_t *thermal = ui_calibration_layout_card(
@@ -1943,7 +1657,7 @@ void ui_calibration_hide(void)
     ui_calibration_motion_hide();
     close_axis_twist_popup();
     ui_calibration_manual_probe_hide();
-    close_calibration_results_popup();
+    ui_calibration_results_close();
 
     if (s_calibration->root) {
         lv_obj_delete(s_calibration->root);

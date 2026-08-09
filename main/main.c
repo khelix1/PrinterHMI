@@ -136,6 +136,7 @@ static void sntp_wait_task(void *arg);
 #include "timezone_config.h"
 #include "ui_splash.h"
 #include "ui_shell.h"
+#include "ui_global_estop.h"
 #include "ui_devices.h"
 #include "ui_calibration.h"
 #include "ui_telemetry.h"
@@ -3381,6 +3382,9 @@ static void build_drybox_dashboard(void)
     lv_obj_set_style_text_color(scr, UI_TEXT, 0);
 
     /* Top bar now belongs to ui_shell. */
+    if (!ui_global_estop_init(moonraker_send_gcode)) {
+        ESP_LOGE(TAG, "Global E-stop unavailable");
+    }
     ui_shell_create();
     ui_drybox_set_callbacks(
         moonraker_send_gcode,

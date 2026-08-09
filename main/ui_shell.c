@@ -2,6 +2,7 @@
 #include "ui_button.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_global_estop.h"
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -153,7 +154,7 @@ void ui_shell_create(void)
             UI_BUTTON_OUTLINED);
 
     if (s_shell_printer_button) {
-        lv_obj_set_size(s_shell_printer_button, 500, 52);
+        lv_obj_set_size(s_shell_printer_button, 460, 52);
         lv_obj_set_pos(s_shell_printer_button, 12, 10);
         lv_obj_clear_flag(
             s_shell_printer_button,
@@ -170,6 +171,8 @@ void ui_shell_create(void)
             LV_EVENT_CLICKED,
             NULL);
     }
+
+    ui_global_estop_create(shell_top_bar);
 
     shell_clock_label = lv_label_create(shell_top_bar);
     lv_label_set_text(shell_clock_label, "--:--");
@@ -436,6 +439,7 @@ void ui_shell_set_active_printer_name(const char *printer_name)
     }
 
     lv_label_set_text(s_shell_title_label, title);
+    ui_global_estop_set_printer_name(printer_name);
 }
 
 

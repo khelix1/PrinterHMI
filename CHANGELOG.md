@@ -11,6 +11,8 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Changed
 
+- Added a persistent active-printer E-STOP, named stop/recovery feedback, and confirmed Settings restart control.
+
 - Added a clear attended-operation confirmation before a PID heater heat cycle starts.
 
 - Extracted the shared calibration-results and confirmed Apply & Restart workflow into its own explicit-context owner.

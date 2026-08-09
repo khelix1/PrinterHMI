@@ -39,6 +39,7 @@ idf_component_register(
 
         # Shell and splash
         "ui_shell.c"
+        "ui_global_estop.c"
         "ui_devices.c"
         "ui_calibration.c"
         "ui_calibration_layout.c"

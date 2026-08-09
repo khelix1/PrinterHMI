@@ -1,4 +1,5 @@
 #include "ui_settings.h"
+#include "ui_global_estop.h"
 #include "ui_page_layout_profile.h"
 #include "ui_settings_popups.h"
 #include "ui_settings_components.h"
@@ -537,6 +538,7 @@ static lv_obj_t *settings_make_label(
     return label;
 }
 
+static void settings_klipper_restart_cb(lv_event_t *e);
 void ui_settings_show_page(
     const char *sd_card_text,
     const char *storage_text,
@@ -749,8 +751,9 @@ void ui_settings_show_page(
      */
     const int device_row_1 = first_row_y;
     const int device_row_2 = device_row_1 + action_height + 1;
-    const int device_row_3 = device_row_2 + row_height + 1;
-    const int device_height = device_row_3 + action_height + 6;
+    const int device_row_3 = device_row_2 + action_height + 1;
+    const int device_row_4 = device_row_3 + row_height + 1;
+    const int device_height = device_row_4 + action_height + 6;
     lv_obj_t *device = ui_settings_section_create(
         content,
         "DEVICE",
@@ -769,23 +772,35 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         device, device_row_1 + action_height);
 
+    ui_settings_section_add_action_row(
+        device,
+        "Restart Klipper",
+        "Restart the active printer firmware",
+        "RESTART KLIPPER",
+        device_row_2,
+        settings_klipper_restart_cb,
+        true);
+
+    ui_settings_section_add_divider(
+        device, device_row_2 + action_height);
+
     settings_sleep_label = ui_settings_section_add_row(
         device,
         "Sleep Timeout",
         "Tap to change display sleep behavior",
         settings_sleep_timeout_text(),
-        device_row_2,
+        device_row_3,
         settings_sleep_card_cb);
 
     ui_settings_section_add_divider(
-        device, device_row_2 + row_height);
+        device, device_row_3 + row_height);
 
     ui_settings_section_add_action_row(
         device,
         "Factory Reset",
         "Erase saved connections and preferences",
         "FACTORY RESET",
-        device_row_3,
+        device_row_4,
         reset_settings_cb,
         true);
 
@@ -1164,6 +1179,12 @@ void hide_settings_tab(void)
     ui_shell_raise();
 }
 
+
+static void settings_klipper_restart_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_global_estop_show_restart_confirmation();
+}
 
 void settings_reboot_cb(lv_event_t *e)
 {

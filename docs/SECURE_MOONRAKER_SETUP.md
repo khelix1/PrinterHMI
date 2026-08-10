@@ -19,7 +19,10 @@ on the printer host and do not copy it to the SD card.
 ## Install on the printer host
 
 Copy the repository installer to the printer host, then run it there. Replace
-`192.168.1.50` with the address used by PrinterHMI:
+`192.168.1.50` with the Moonraker/Nginx printer-host IP address or hostname
+that PrinterHMI will use for this profile. Do **not** use the HMI's own address:
+`--host` becomes the certificate IP/DNS subject alternative name and must match
+the host saved in the PrinterHMI profile.
 
 ```bash
 sudo bash ./install_moonraker_tls_nginx.sh   --host 192.168.1.50   --export-ca /tmp/moonraker-local-ca.pem

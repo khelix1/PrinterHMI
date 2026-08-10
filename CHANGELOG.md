@@ -5,9 +5,14 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-08-09
+
 ### Added
 
-- Documented the planned opt-in per-profile HTTPS/WSS Moonraker transport, certificate-trust boundaries and no-downgrade policy.
+- Released opt-in per-profile HTTPS/WSS Moonraker transport with verified local CA trust, no HTTP downgrade, and unchanged optional API-key behavior.
+- Added per-profile SD-card-root `.pem` selection, PSRAM-first certificate storage, and automatic HTTPS port 443 selection.
+- Added a public generic Nginx installer that validates Moonraker first, creates an IP/DNS-SAN certificate, verifies the HTTPS endpoint, exports the public CA, and restores the prior site if verification fails.
+
 
 - Added a non-publishing GitHub Actions CI gate for source-policy audits, portable dependency-lock validation, and a clean ESP-IDF 6.0.2 P4 build with a firmware-size budget.
 

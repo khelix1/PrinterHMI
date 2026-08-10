@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v6.0.6 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v6.1.0 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -88,10 +88,11 @@ when ownership or build membership changes.
 | `ui_network`, `ui_network_tools` | Network page and Wi-Fi tools |
 | `ui_printer_profiles`, `ui_printer_chooser` | Profile Add/Edit with discovery and startup chooser |
 | `printer_profile_health` | Per-profile reachability state |
-| `printer_preview_cache`, `printer_profile_preview_worker`, `printer_preview_store` | Per-profile preview lifecycle; the low-priority worker owns inactive-profile HTTP health and preview requests |
+| `printer_preview_cache`, `printer_profile_preview_worker`, `printer_preview_store` | Per-profile preview lifecycle; the low-priority worker owns inactive-profile HTTP(S) health and preview requests |
 | `network_status_controller`, `network_wifi_scan` | Network state policy and scan service |
 | `moonraker` | HTTP requests, response parsing and synchronized printer state |
 | `moonraker_config_controller` | Persistent multi-printer configuration |
+| `moonraker_transport_security_controller`, `moonraker_tls_trust_store` | Per-profile HTTPS/WSS policy, no-downgrade endpoint resolution, and PSRAM-first CA trust storage |
 | `moonraker_discovery`, `moonraker_probe` | Endpoint discovery and testing |
 | `moonraker_poll`, `moonraker_live_transport` | Scheduled live-state polling |
 | `moonraker_live_websocket` | WebSocket identification, subscription and event merge |

@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v6.0.6 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v6.1.0 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -87,10 +87,11 @@ status banners, cards, previews, charts, action panels and popup controllers.
 - `moonraker_probe` and `moonraker_discovery` test and discover endpoints on
   ports 7125 through 7128; discovery is presented inside printer profile
   Add/Edit.
-- Planned secure transport keeps profile persistence in
-  `moonraker_config_controller`, TLS policy in
-  `moonraker_transport_security_controller`, and trust material in
-  `moonraker_tls_trust_store`; endpoint consumers share that policy.
+- Released secure transport keeps per-profile persistence in
+  `moonraker_config_controller`, TLS policy and no-downgrade resolution in
+  `moonraker_transport_security_controller`, and per-profile PSRAM-first CA
+  trust material in `moonraker_tls_trust_store`; endpoint consumers share that
+  policy.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
   `moonraker` and consumed through controllers.
 - `macro_controller` derives a bounded, alphabetized public-macro catalog from

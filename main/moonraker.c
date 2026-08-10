@@ -1,4 +1,5 @@
 #include "moonraker.h"
+#include "moonraker_transport_security_controller.h"
 #include "network_activity_controller.h"
 #include <string.h>
 #include <stdio.h>
@@ -1308,13 +1309,9 @@ static bool moonraker_http_get_raw(
 
     char url[512];
 
-    int url_len = snprintf(
-        url,
-        sizeof(url),
-        "http://%s:%d%s",
-        host,
-        port,
-        path);
+    const char *ca_pem = NULL;
+    int url_len = moonraker_transport_security_build_http_url_for_endpoint(
+        host, port, path, url, sizeof(url), &ca_pem) ? (int)strlen(url) : -1;
 
     if (url_len < 0 || (size_t)url_len >= sizeof(url)) {
         if (err_out) {
@@ -1332,6 +1329,7 @@ static bool moonraker_http_get_raw(
 
     esp_http_client_config_t config = {
         .url = url,
+        .cert_pem = ca_pem,
         .method = HTTP_METHOD_GET,
         .timeout_ms = timeout_ms,
         .event_handler = moonraker_http_event_handler,
@@ -1692,11 +1690,10 @@ bool moonraker_send_gcode_script(const char *host,
     }
 
     char url[256];
-    int url_len = snprintf(url,
-                           sizeof(url),
-                           "http://%s:%d/printer/gcode/script",
-                           host,
-                           port);
+    const char *ca_pem = NULL;
+    int url_len = moonraker_transport_security_build_http_url_for_endpoint(
+        host, port, "/printer/gcode/script", url, sizeof(url), &ca_pem)
+        ? (int)strlen(url) : -1;
 
     if (url_len < 0 || (size_t)url_len >= sizeof(url)) {
         return false;
@@ -1772,6 +1769,7 @@ bool moonraker_send_gcode_script(const char *host,
 
     esp_http_client_config_t config = {
         .url = url,
+        .cert_pem = ca_pem,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 3000,
     };
@@ -1833,15 +1831,18 @@ bool moonraker_start_print_file(const char *host,
     }
 
     char url[160];
-    snprintf(url, sizeof(url),
-             "http://%s:%d/printer/print/start",
-             host, port);
+    const char *ca_pem = NULL;
+    if (!moonraker_transport_security_build_http_url_for_endpoint(
+            host, port, "/printer/print/start", url, sizeof(url), &ca_pem)) {
+        return false;
+    }
 
     char body[260];
     snprintf(body, sizeof(body), "{\"filename\":\"%s\"}", filename);
 
     esp_http_client_config_t config = {
         .url = url,
+        .cert_pem = ca_pem,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 5000,
         .event_handler = moonraker_http_event_handler,

@@ -16,6 +16,8 @@ typedef struct {
     /* Optional Moonraker API key. Never exported in SD backups. */
     char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
     int port;
+    /* Opt-in HTTPS/WSS; false preserves current HTTP behavior. */
+    bool secure_transport;
 } moonraker_profile_t;
 
 /*
@@ -91,6 +93,8 @@ bool moonraker_config_replace_profiles(
 /*
  * Compatibility editing APIs. These update the active profile.
  */
+bool moonraker_config_set_transport_security(int profile_index, bool secure);
+
 bool moonraker_config_select_host(
     const char *host,
     int port);

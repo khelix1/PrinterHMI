@@ -1,4 +1,5 @@
 #include "moonraker_live_websocket.h"
+#include "moonraker_transport_security_controller.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -1226,14 +1227,9 @@ static bool create_client(
     const char *api_key,
     uint32_t generation)
 {
-    int written = snprintf(
-        s_uri,
-        sizeof(s_uri),
-        "ws://%s:%d/websocket",
-        host,
-        port);
-
-    if (written <= 0 || (size_t)written >= sizeof(s_uri)) {
+    const char *ca_pem = NULL;
+    if (!moonraker_transport_security_build_websocket_uri_for_endpoint(
+            host, port, s_uri, sizeof(s_uri), &ca_pem)) {
         ESP_LOGE(TAG, "WS URI overflow");
         return false;
     }
@@ -1254,6 +1250,7 @@ static bool create_client(
 
     esp_websocket_client_config_t config = {
         .uri = s_uri,
+        .cert_pem = ca_pem,
         .task_stack = 4096,
         .buffer_size = 4096,
         /* A dead LAN endpoint must never occupy the hosted transport

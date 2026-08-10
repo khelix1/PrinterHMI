@@ -112,6 +112,8 @@ idf_component_register(
         "wifi_credentials_store.c"
         "moonraker.c"
         "moonraker_config_controller.c"
+        "moonraker_tls_trust_store.c"
+        "moonraker_transport_security_controller.c"
         "moonraker_discovery.c"
         "moonraker_probe.c"
         "moonraker_endpoint_test.c"

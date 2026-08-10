@@ -1,11 +1,14 @@
 #include "ui_printer_profiles.h"
 
 #include <stdint.h>
+#include <dirent.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "moonraker_config_controller.h"
+#include "moonraker_transport_security_controller.h"
 #include "moonraker_endpoint_test.h"
 #include "printer_preview_cache.h"
 #include "printer_preview_store.h"
@@ -34,6 +37,11 @@ static lv_timer_t *s_editor_test_timer = NULL;
 
 static int s_selected_profile = 0;
 static int s_editor_profile = -1;
+static bool s_editor_secure = false;
+static lv_obj_t *s_editor_security_popup = NULL;
+#define EDITOR_PEM_MAX_FILES 6
+static lv_obj_t *s_editor_pem_picker = NULL;
+static char s_editor_pem_paths[EDITOR_PEM_MAX_FILES][128];
 
 static ui_printer_profiles_active_changed_cb_t
     s_active_changed_cb = NULL;
@@ -41,20 +49,18 @@ static ui_printer_profiles_active_changed_cb_t
 static ui_printer_profiles_discover_cb_t
     s_discover_cb = NULL;
 
+static void editor_security_close(void);
+static void editor_set_status(const char *text);
+static void editor_auth_open_cb(lv_event_t *event);
 
 static void editor_close(void)
 {
-    if (s_editor_popup) {
-        lv_obj_delete(s_editor_popup);
-    }
-
+    if (s_editor_popup) lv_obj_delete(s_editor_popup);
     s_editor_popup = NULL;
     s_editor_name = NULL;
     s_editor_host = NULL;
     s_editor_port = NULL;
-    if (s_editor_auth_popup) {
-        lv_obj_delete(s_editor_auth_popup);
-    }
+    if (s_editor_auth_popup) lv_obj_delete(s_editor_auth_popup);
     s_editor_auth_popup = NULL;
     s_editor_auth_key = NULL;
     s_editor_auth_keyboard = NULL;
@@ -64,38 +70,25 @@ static void editor_close(void)
         lv_timer_delete(s_editor_test_timer);
         s_editor_test_timer = NULL;
     }
-
     s_editor_status = NULL;
     s_editor_profile = -1;
+    s_editor_secure = false;
+    editor_security_close();
 }
-
 
 void ui_printer_profiles_close_all(void)
 {
     editor_close();
-
-    if (s_delete_popup) {
-        lv_obj_delete(s_delete_popup);
-    }
+    if (s_delete_popup) lv_obj_delete(s_delete_popup);
     s_delete_popup = NULL;
-
-    if (s_manager_popup) {
-        lv_obj_delete(s_manager_popup);
-    }
-
+    if (s_manager_popup) lv_obj_delete(s_manager_popup);
     s_manager_popup = NULL;
     s_manager_list = NULL;
     s_manager_status = NULL;
-
-    memset(
-        s_profile_rows,
-        0,
-        sizeof(s_profile_rows));
-
+    memset(s_profile_rows, 0, sizeof(s_profile_rows));
     s_active_changed_cb = NULL;
     s_discover_cb = NULL;
 }
-
 
 static void manager_close_cb(lv_event_t *event)
 {
@@ -103,16 +96,103 @@ static void manager_close_cb(lv_event_t *event)
     ui_printer_profiles_close_all();
 }
 
-
 static void editor_cancel_cb(lv_event_t *event)
 {
     (void)event;
     editor_close();
 }
 
+static void editor_pem_picker_close(void)
+{
+    if (s_editor_pem_picker) lv_obj_delete(s_editor_pem_picker);
+    s_editor_pem_picker = NULL;
+}
 
-static void editor_auth_open_cb(lv_event_t *event);
+static void editor_pem_picker_close_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_pem_picker_close();
+}
 
+static void editor_security_close(void)
+{
+    editor_pem_picker_close();
+    if (s_editor_security_popup) lv_obj_delete(s_editor_security_popup);
+    s_editor_security_popup = NULL;
+}
+
+static void editor_security_standard_cb(lv_event_t *event)
+{
+    (void)event;
+    s_editor_secure = false;
+    editor_security_close();
+    editor_set_status("Standard HTTP selected. API-key behavior is unchanged.");
+}
+
+static bool editor_pem_name(const char *name)
+{
+    size_t length = name ? strlen(name) : 0;
+    return length > 4 && strcasecmp(name + length - 4, ".pem") == 0;
+}
+
+static void editor_security_pem_selected_cb(lv_event_t *event)
+{
+    const char *path = lv_event_get_user_data(event);
+    if (!path || s_editor_profile < 0 ||
+        !moonraker_transport_security_import_ca_file_for_profile(s_editor_profile, path)) {
+        editor_set_status("CA import failed for selected PEM file.");
+        return;
+    }
+    s_editor_secure = true;
+    if (s_editor_port) lv_textarea_set_text(s_editor_port, "443");
+    editor_security_close();
+    editor_set_status("Secure HTTPS/WSS selected; Moonraker port set to 443.");
+}
+
+static void editor_security_pem_picker_open_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_editor_pem_picker) { lv_obj_move_foreground(s_editor_pem_picker); return; }
+    s_editor_pem_picker = ui_popup_create(lv_layer_top(), 700, 500, UI_POPUP_STANDARD);
+    if (!s_editor_pem_picker) return;
+    ui_popup_add_title(s_editor_pem_picker, "SELECT CA CERTIFICATE", false, 4);
+    ui_popup_add_header_divider(s_editor_pem_picker, 48);
+    ui_popup_add_body(s_editor_pem_picker, "SD-card root .pem files only", 28, 70, 644);
+    DIR *directory = opendir("/sdcard");
+    size_t count = 0;
+    struct dirent *entry;
+    while (directory && count < EDITOR_PEM_MAX_FILES && (entry = readdir(directory))) {
+        if (!editor_pem_name(entry->d_name)) continue;
+        snprintf(s_editor_pem_paths[count], sizeof(s_editor_pem_paths[count]), "/sdcard/%s", entry->d_name);
+        ui_popup_add_action_at(s_editor_pem_picker, UI_POPUP_ACTION_SECONDARY,
+            entry->d_name, 28, 105 + (int)count * 48, 644, 42,
+            editor_security_pem_selected_cb, s_editor_pem_paths[count], NULL);
+        ++count;
+    }
+    if (directory) closedir(directory);
+    if (count == 0) ui_popup_add_body(s_editor_pem_picker, "No .pem files found in SD-card root.", 28, 130, 644);
+    ui_popup_add_standard_footer_divider(s_editor_pem_picker);
+    ui_popup_add_footer_action(s_editor_pem_picker, UI_POPUP_ACTION_CANCEL,
+        "CLOSE", 230, UI_POPUP_FOOTER_RIGHT, editor_pem_picker_close_cb, NULL, NULL);
+}
+
+static void editor_security_open_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_editor_security_popup) { lv_obj_move_foreground(s_editor_security_popup); return; }
+    s_editor_security_popup = ui_popup_create(lv_layer_top(), 700, 350, UI_POPUP_STANDARD);
+    if (!s_editor_security_popup) return;
+    ui_popup_add_title(s_editor_security_popup, "CONNECTION SECURITY", false, 4);
+    ui_popup_add_header_divider(s_editor_security_popup, 48);
+    ui_popup_add_body(s_editor_security_popup,
+        "Standard keeps current HTTP behavior. Secure lets this printer profile use an approved SD-card PEM certificate.",
+        28, 76, 644);
+    ui_popup_add_standard_footer_divider(s_editor_security_popup);
+    ui_popup_add_footer_action(s_editor_security_popup, UI_POPUP_ACTION_SECONDARY,
+        "STANDARD HTTP", 230, UI_POPUP_FOOTER_LEFT, editor_security_standard_cb, NULL, NULL);
+    ui_popup_add_footer_action(s_editor_security_popup, UI_POPUP_ACTION_CONFIRM,
+        "SELECT .PEM", 270, UI_POPUP_FOOTER_RIGHT, editor_security_pem_picker_open_cb, NULL, NULL);
+}
 
 static void editor_discover_cb(lv_event_t *event)
 {
@@ -721,6 +801,11 @@ static void editor_save_cb(
         return;
     }
 
+    if (s_editor_secure && !moonraker_transport_security_ca_pem_for_profile(s_editor_profile)) {
+        editor_set_status("Secure mode requires an approved CA certificate.");
+        return;
+    }
+
     bool active_profile_edited =
         s_editor_profile ==
             moonraker_config_active_profile_index();
@@ -733,6 +818,11 @@ static void editor_save_cb(
             s_editor_api_key)) {
         editor_set_status(
             "Use a hostname or IPv4 address only; omit http://, paths and spaces.");
+        return;
+    }
+
+    if (!moonraker_config_set_transport_security(s_editor_profile, s_editor_secure)) {
+        editor_set_status("Unable to save connection-security setting.");
         return;
     }
 
@@ -847,12 +937,13 @@ static void manager_edit_cb(
 
     s_editor_profile =
         s_selected_profile;
+    s_editor_secure = profile && profile->secure_transport;
 
     s_editor_popup =
         ui_popup_create(
             lv_screen_active(),
             800,
-            560,
+            520,
             UI_POPUP_STANDARD);
 
     if (!s_editor_popup) {
@@ -939,23 +1030,37 @@ static void manager_edit_cb(
             "0123456789");
 
     ui_popup_add_action_at(
-        s_editor_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_SETTINGS " AUTHENTICATION",
-        440,
-        175,
-        320,
-        48,
-        editor_auth_open_cb,
-        NULL,
-        NULL);
+    s_editor_popup,
+    UI_POPUP_ACTION_SECONDARY,
+    LV_SYMBOL_SETTINGS " AUTHENTICATION",
+    440,
+    175,
+    320,
+    48,
+    editor_auth_open_cb,
+    NULL,
+    NULL);
+
+ui_popup_add_action_at(
+    s_editor_popup,
+    UI_POPUP_ACTION_SECONDARY,
+    s_editor_secure
+        ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS"
+        : LV_SYMBOL_SETTINGS " STANDARD HTTP",
+    200,
+    235,
+    560,
+    48,
+    editor_security_open_cb,
+    NULL,
+    NULL);
 
     s_editor_status =
         ui_popup_add_status_label(
             s_editor_popup,
             "Changes are saved to this printer profile.",
             28,
-            230,
+            286,
             720);
 
     s_editor_keyboard =
@@ -963,10 +1068,10 @@ static void manager_edit_cb(
             s_editor_popup,
             s_editor_name,
             720,
-            230,
+            125,
             LV_ALIGN_TOP_MID,
             0,
-            270,
+            315,
             LV_KEYBOARD_MODE_TEXT_LOWER);
 
     if (s_editor_name) {
@@ -1000,9 +1105,9 @@ static void manager_edit_cb(
         UI_POPUP_ACTION_CANCEL,
         LV_SYMBOL_CLOSE " CANCEL",
         32,
-        500,
+        460,
         172,
-        48,
+        44,
         editor_cancel_cb,
         NULL,
         NULL);
@@ -1012,9 +1117,9 @@ static void manager_edit_cb(
         UI_POPUP_ACTION_SECONDARY,
         LV_SYMBOL_REFRESH " DISCOVER",
         220,
-        500,
+        460,
         172,
-        48,
+        44,
         editor_discover_cb,
         NULL,
         NULL);
@@ -1024,9 +1129,9 @@ static void manager_edit_cb(
         UI_POPUP_ACTION_SECONDARY,
         LV_SYMBOL_PLAY " TEST",
         408,
-        500,
+        460,
         172,
-        48,
+        44,
         editor_test_cb,
         NULL,
         NULL);
@@ -1036,9 +1141,9 @@ static void manager_edit_cb(
         UI_POPUP_ACTION_CONFIRM,
         LV_SYMBOL_SAVE " SAVE",
         596,
-        500,
+        460,
         172,
-        48,
+        44,
         editor_save_cb,
         NULL,
         NULL);

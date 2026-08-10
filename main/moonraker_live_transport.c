@@ -1,4 +1,5 @@
 #include "moonraker_live_transport.h"
+#include "moonraker_transport_security_controller.h"
 #include "network_activity_controller.h"
 
 #include <stdio.h>
@@ -90,27 +91,9 @@ bool moonraker_live_transport_fetch(
     response_buffer[0] = '\0';
 
     char url[512];
-    int written = snprintf(
-        url,
-        sizeof(url),
-        "http://%s:%d/printer/objects/query?"
-        "temperature_sensor%%20drybox_center"
-        "&sht3x%%20drybox_env"
-        "&heater_generic%%20drybox_heater"
-        "&fan_generic%%20drybox_fan"
-        "&gcode_macro%%20DRYBOX_VARS"
-        "&print_stats&motion_report"
-        "&display_status"
-        "&virtual_sdcard"
-        "&gcode_move"
-        "&fan"
-        "&extruder"
-        "&heater_bed"
-        "&toolhead",
-        host,
-        port);
-
-    if (written < 0 || (size_t)written >= sizeof(url)) {
+    const char *ca_pem = NULL;
+    if (!moonraker_transport_security_build_http_url_for_endpoint(
+            host, port, "/printer/objects/query?temperature_sensor%20drybox_center&sht3x%20drybox_env&heater_generic%20drybox_heater&fan_generic%20drybox_fan&gcode_macro%20DRYBOX_VARS&print_stats&motion_report&display_status&virtual_sdcard&gcode_move&fan&extruder&heater_bed&toolhead", url, sizeof(url), &ca_pem)) {
         ESP_LOGE(TAG, "Live-object URL was truncated");
         return false;
     }
@@ -124,6 +107,7 @@ bool moonraker_live_transport_fetch(
 
     esp_http_client_config_t config = {
         .url = url,
+        .cert_pem = ca_pem,
         .method = HTTP_METHOD_GET,
         .timeout_ms = 3000,
         .event_handler = moonraker_live_http_event_handler,

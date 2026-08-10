@@ -330,7 +330,10 @@ static esp_err_t persist_profile(
     }
 
     profile_key(key, sizeof(key), profile_index, "key");
-    return nvs_set_str(handle, key, profile->api_key);
+    error = nvs_set_str(handle, key, profile->api_key);
+    if (error != ESP_OK) return error;
+    profile_key(key, sizeof(key), profile_index, "tls");
+    return nvs_set_u8(handle, key, profile->secure_transport ? 1 : 0);
 }
 
 
@@ -521,6 +524,12 @@ static bool load_profile(
 
     if (!valid_api_key(loaded.api_key)) {
         loaded.api_key[0] = '\0';
+    }
+
+    uint8_t secure_transport = 0;
+    profile_key(key, sizeof(key), profile_index, "tls");
+    if (nvs_get_u8(handle, key, &secure_transport) == ESP_OK) {
+        loaded.secure_transport = secure_transport == 1;
     }
 
     if (!profile_valid(&loaded)) {
@@ -811,6 +820,7 @@ bool moonraker_config_save_profile(
     moonraker_profile_t updated = {
         .configured = true,
         .port = port,
+        .secure_transport = previous.secure_transport,
     };
 
     if (name && name[0]) {
@@ -860,6 +870,17 @@ bool moonraker_config_save_profile(
     return true;
 }
 
+
+bool moonraker_config_set_transport_security(int profile_index, bool secure)
+{
+    if (!valid_profile_index(profile_index) || !profile_valid(&s_profiles[profile_index])) return false;
+    if (s_profiles[profile_index].secure_transport == secure) return true;
+    bool previous = s_profiles[profile_index].secure_transport;
+    s_profiles[profile_index].secure_transport = secure;
+    if (!persist_collection()) { s_profiles[profile_index].secure_transport = previous; return false; }
+    if (profile_index == s_active_profile) advance_configuration_generation();
+    return true;
+}
 
 bool moonraker_config_delete_profile(
     int profile_index)

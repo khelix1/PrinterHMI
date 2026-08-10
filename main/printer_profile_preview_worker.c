@@ -27,7 +27,7 @@
 #define TAG "profile_preview_worker"
 
 
-#define PROFILE_PREVIEW_WORKER_STACK 6144
+#define PROFILE_PREVIEW_WORKER_STACK 12288
 #define PROFILE_PREVIEW_WORKER_INTERVAL_MS 1000
 #define PROFILE_PREVIEW_API_KEY_MAX 160
 /* A failed inactive endpoint is not useful work every scheduler pass. */

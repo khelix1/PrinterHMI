@@ -1,4 +1,5 @@
 #include "moonraker_probe.h"
+#include "moonraker_transport_security_controller.h"
 #include "network_activity_controller.h"
 
 #include "esp_err.h"
@@ -196,8 +197,9 @@ static bool probe_get(
     }
 
     char url[128];
-    int written = snprintf(
-        url, sizeof(url), "http://%s:%d%s", host, port, path);
+    const char *ca_pem = NULL;
+    int written = moonraker_transport_security_build_http_url_for_endpoint(
+        host, port, path, url, sizeof(url), &ca_pem) ? (int)strlen(url) : -1;
     if (written < 0 || written >= (int)sizeof(url)) {
         return false;
     }
@@ -211,6 +213,7 @@ static bool probe_get(
 
     esp_http_client_config_t config = {
         .url = url,
+        .cert_pem = ca_pem,
         .method = HTTP_METHOD_GET,
         .timeout_ms = 800,
         .event_handler = probe_http_event_handler,

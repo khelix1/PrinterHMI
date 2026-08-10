@@ -183,6 +183,7 @@ static void sntp_wait_task(void *arg);
 #include "file_detail_loader.h"
 #include "moonraker.h"
 #include "moonraker_config_controller.h"
+#include "moonraker_transport_security_controller.h"
 #include "moonraker_live_transport.h"
 #include "moonraker_poll.h"
 #include "moonraker_live_websocket.h"
@@ -3793,6 +3794,9 @@ void app_main(void)
      * before any UI or transport path can take a state snapshot.
      */
     moonraker_module_init();
+    if (!moonraker_transport_security_controller_init()) {
+        ESP_LOGE(TAG, "Secure Moonraker transport unavailable");
+    }
 
     /*
      * ESP-Hosted resets and initializes the C6 transport. Keep the panel

@@ -44,6 +44,7 @@ publishing repository history.
 - Auto-scaling combined temperature and humidity telemetry
 - Operator event history and configuration backup/restore
 - Network configuration with Moonraker discovery inside printer profile Add/Edit
+- Optional per-profile verified HTTPS/WSS Moonraker transport with local CA selection
 - Classic, Operator and Dark Glass runtime themes plus validated SD-card
   custom themes authored externally and applied from the SD card
 - Accent, density, high-contrast, large-text, reduced-transparency and
@@ -113,6 +114,7 @@ network credentials or API keys.
 - [Testing](docs/TESTING.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Secure Moonraker setup](docs/SECURE_MOONRAKER_SETUP.md)
 - [Git workflow](docs/GIT_WORKFLOW.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)

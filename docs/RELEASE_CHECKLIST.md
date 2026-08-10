@@ -53,6 +53,7 @@
       requires confirmation.
 - [ ] Console command history, live responses and severity colors pass.
 - [ ] Wi-Fi, SNTP, Moonraker HTTP/WebSocket and multi-printer switching pass.
+- [ ] When released, Secure profiles verify HTTPS/WSS with their own selected CA, reject an incorrect CA, and never silently downgrade.
 - [ ] A disconnected active or inactive Moonraker profile leaves touch and
       page navigation responsive while the connection recovers.
 - [ ] A new print starts at 0% with unknown layers until fresh Moonraker

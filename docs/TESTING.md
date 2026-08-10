@@ -49,6 +49,7 @@ Requirements:
 
 - Each configured profile probes and selects correctly.
 - Profile Add/Edit discovery fills host and port; `SAVE` remains explicit.
+- Secure profiles verify HTTPS API and WSS with their selected CA, do not downgrade after a failed certificate check, and Standard profiles retain their prior behavior.
 - Switching profiles cannot publish stale data from the previous profile.
 - Live WebSocket status updates; HTTP polling recovers after disconnect.
 - Pause, resume, cancel and motion controls send the intended command.

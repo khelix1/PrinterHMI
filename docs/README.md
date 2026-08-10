@@ -18,6 +18,8 @@ under `history/`.
 | [Release checklist](RELEASE_CHECKLIST.md) | Release-quality gate |
 | [Git workflow](GIT_WORKFLOW.md) | Branches, known-good tags and nightly backup |
 | [Project file catalog](PROJECT_FILE_CATALOG.md) | Current source ownership map |
+| [Secure Moonraker transport](SECURE_MOONRAKER_TRANSPORT.md) | Per-profile HTTPS/WSS policy and trust boundaries |
+| [Secure Moonraker setup](SECURE_MOONRAKER_SETUP.md) | Public Nginx installer and panel setup |
 | [History](history/README.md) | Preserved v3.x engineering record |
 
 Top-level project documents:
@@ -31,7 +33,7 @@ When implementation and documentation disagree, treat the implementation as
 evidence of a defect in one or the other. Resolve the mismatch in the same
 reviewed change rather than silently accepting drift.
 
-- [`FULL_STACK_BUILD.md`](FULL_STACK_BUILD.md) — reproducible ESP-IDF 6.1.0 P4 and C6 firmware build
+- [`FULL_STACK_BUILD.md`](FULL_STACK_BUILD.md) — reproducible ESP-IDF 6.0.2 P4 and C6 firmware build
 
 ## Encrypted configuration backups
 

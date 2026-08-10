@@ -57,6 +57,7 @@ display startup or another path is disturbing the display/backlight.
 ## Moonraker is offline
 
 - Verify the active printer profile name, host and port.
+- For Secure mode, verify port 443, the certificate IP/DNS name and the CA PEM selected for that profile; see `SECURE_MOONRAKER_SETUP.md`.
 - Test `/server/info` from another device on the same network.
 - Confirm Moonraker is listening on the expected interface and port.
 - Check local firewall and network isolation.

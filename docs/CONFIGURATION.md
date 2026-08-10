@@ -74,7 +74,10 @@ not save automatically; select `SAVE` after reviewing the profile.
 Discovery verifies a candidate before showing it, displays the reported Moonraker host name when available, and can pre-fill a fresh profile name. It never saves or switches automatically; select `SAVE` after reviewing the profile.
 Current API paths include server information, file listing, file metadata,
 thumbnail download, object subscription, G-code script execution and print
-start. Connections currently use local-network HTTP and `ws://`.
+start. Standard profiles use local-network HTTP and `ws://`. A profile can
+instead select verified HTTPS/WSS with its own SD-card-root CA PEM; that choice
+sets port 443 and never silently falls back to HTTP. See
+[Secure Moonraker setup](SECURE_MOONRAKER_SETUP.md).
 
 Use a DHCP reservation for the HMI. If Moonraker `trusted_clients` is required,
 prefer the HMI's single address as a `/32` entry instead of trusting the entire

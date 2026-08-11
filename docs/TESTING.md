@@ -45,6 +45,7 @@ Requirements:
 - Every popup blocks interaction with content behind it.
 - Popup footer buttons are visible, aligned and restore interaction on close.
 - Theme A, B and C rebuild all visible pages without reboot.
+- Language selection shows `English` and `Español` in their own names before and after switching; selection persists across restart and rebuilds the shell navigation.
 - Accent, density and each accessibility option produce the expected change.
 
 ## Printer and Moonraker

@@ -3,6 +3,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "ui_global_estop.h"
+#include "ui_i18n.h"
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -354,16 +355,16 @@ void ui_shell_create_nav(void)
      * primary work, printer setup, diagnostics, then auxiliary/system.
      */
     const shell_nav_item_t nav[] = {
-        { LV_SYMBOL_HOME,     "Dashboard" },
-        { LV_SYMBOL_LIST,     "Printer" },
-        { LV_SYMBOL_FILE,     "Files" },
-        { LV_SYMBOL_IMAGE,    "Bed Mesh" },
-        { LV_SYMBOL_REFRESH,  "Calibration" },
-        { LV_SYMBOL_CHARGE,   "Devices" },
-        { LV_SYMBOL_PLAY,     "Macros" },
-        { LV_SYMBOL_EDIT,     "Console" },
-        { LV_SYMBOL_LOOP,     "Drybox" },
-        { LV_SYMBOL_SETTINGS, "Settings" }
+        { LV_SYMBOL_HOME,     ui_i18n_text(UI_TEXT_NAV_DASHBOARD) },
+        { LV_SYMBOL_LIST,     ui_i18n_text(UI_TEXT_NAV_PRINTER) },
+        { LV_SYMBOL_FILE,     ui_i18n_text(UI_TEXT_NAV_FILES) },
+        { LV_SYMBOL_IMAGE,    ui_i18n_text(UI_TEXT_NAV_BED_MESH) },
+        { LV_SYMBOL_REFRESH,  ui_i18n_text(UI_TEXT_NAV_CALIBRATION) },
+        { LV_SYMBOL_CHARGE,   ui_i18n_text(UI_TEXT_NAV_DEVICES) },
+        { LV_SYMBOL_PLAY,     ui_i18n_text(UI_TEXT_NAV_MACROS) },
+        { LV_SYMBOL_EDIT,     ui_i18n_text(UI_TEXT_NAV_CONSOLE) },
+        { LV_SYMBOL_LOOP,     ui_i18n_text(UI_TEXT_NAV_DRYBOX) },
+        { LV_SYMBOL_SETTINGS, ui_i18n_text(UI_TEXT_NAV_SETTINGS) }
     };
 
     for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {
@@ -387,6 +388,8 @@ void ui_shell_create_nav(void)
 
         shell_nav_buttons[i] =
             button;
+        ui_operator_nav_button_set_text_font(
+            button, ui_i18n_text_font(UI_FONT_BODY));
 
         /*
          * Center against the rail's actual content area rather than

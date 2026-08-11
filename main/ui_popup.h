@@ -151,6 +151,8 @@ lv_obj_t *ui_popup_add_selectable_row(lv_obj_t *parent,
 
 void ui_popup_set_selectable_row_selected(lv_obj_t *row,
                                           bool selected);
+void ui_popup_set_selectable_row_text_font(lv_obj_t *row,
+                                           const lv_font_t *font);
 
 lv_obj_t *ui_popup_add_textarea(lv_obj_t *popup,
                                 int32_t width,

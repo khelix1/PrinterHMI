@@ -122,3 +122,6 @@ lv_obj_t *ui_create_operator_nav_button(
 void ui_operator_nav_button_set_selected(
     lv_obj_t *button,
     bool selected);
+void ui_operator_nav_button_set_text_font(
+    lv_obj_t *button,
+    const lv_font_t *font);

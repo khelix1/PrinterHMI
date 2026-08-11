@@ -512,6 +512,14 @@ lv_obj_t *ui_popup_add_selectable_row(lv_obj_t *parent,
     return row;
 }
 
+void ui_popup_set_selectable_row_text_font(lv_obj_t *row,
+                                           const lv_font_t *font)
+{
+    if (!row || !font) return;
+    lv_obj_t *label = lv_obj_get_child(row, 0);
+    if (label) lv_obj_set_style_text_font(label, font, 0);
+}
+
 void ui_popup_set_selectable_row_selected(lv_obj_t *row,
                                           bool selected)
 {

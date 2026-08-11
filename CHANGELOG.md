@@ -7,6 +7,7 @@ v4.0.0 is preserved under `docs/history/`.
 
 ### Added
 
+- Started persistent English/Spanish localization with native-name selection and English fallback.
 - Added current/minimum internal-heap and PSRAM diagnostics plus the largest
   contiguous internal block to Settings → System Information.
 

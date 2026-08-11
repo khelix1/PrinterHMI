@@ -575,6 +575,14 @@ lv_obj_t *ui_create_operator_nav_button(
 }
 
 
+void ui_operator_nav_button_set_text_font(
+    lv_obj_t *button,
+    const lv_font_t *font)
+{
+    lv_obj_t *text_label = operator_nav_text(button);
+    if (text_label && font) lv_obj_set_style_text_font(text_label, font, 0);
+}
+
 void ui_operator_nav_button_set_selected(
     lv_obj_t *button,
     bool selected)

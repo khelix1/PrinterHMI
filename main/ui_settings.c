@@ -10,6 +10,9 @@
 #include "timezone_config.h"
 #include "theme_manager.h"
 #include "ui_appearance_popups.h"
+#include "language_controller.h"
+#include "ui_i18n.h"
+#include "ui_language_picker.h"
 
 #include "bsp/display.h"
 #include "esp_err.h"
@@ -43,7 +46,25 @@ static lv_obj_t *s_sleep_wake_overlay = NULL;
 static bool s_display_sleeping = false;
 static lv_obj_t *s_timezone_label = NULL;
 static lv_obj_t *s_theme_label = NULL;
+static lv_obj_t *s_language_label = NULL;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
+
+static void settings_language_changed(void)
+{
+    if (s_language_label) {
+        lv_label_set_text(s_language_label,
+            language_controller_native_name(language_controller_active()));
+        lv_obj_set_style_text_font(
+            s_language_label, ui_i18n_text_font(UI_FONT_CAPTION), 0);
+    }
+    if (s_theme_rebuild_cb) s_theme_rebuild_cb();
+}
+
+static void settings_language_card_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_language_picker_show(settings_language_changed);
+}
 
 static void settings_timezone_changed(void)
 {
@@ -826,6 +847,19 @@ void ui_settings_show_page(
 
     section_y += time_height + section_gap;
 
+    const int language_height = first_row_y + row_height + 6;
+    lv_obj_t *language = ui_settings_section_create(
+        content, ui_i18n_text(UI_TEXT_LANGUAGE_SECTION), section_y, language_height);
+    s_language_label = ui_settings_section_add_row(
+        language, ui_i18n_text(UI_TEXT_LANGUAGE),
+        ui_i18n_text(UI_TEXT_LANGUAGE_DESCRIPTION),
+        language_controller_native_name(language_controller_active()),
+        first_row_y, settings_language_card_cb);
+    lv_obj_set_style_text_font(
+        s_language_label, ui_i18n_text_font(UI_FONT_CAPTION), 0);
+
+    section_y += language_height + section_gap;
+
     /*
      * System information
      */
@@ -1168,6 +1202,8 @@ void hide_settings_tab(void)
         settings_sleep_label = NULL;
         s_timezone_label = NULL;
         s_theme_label = NULL;
+    s_language_label = NULL;
+    ui_language_picker_close();
         s_theme_rebuild_cb = NULL;
         settings_system_info_unbind();
         ui_appearance_popups_close_all();

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check PrinterHMI Moonraker TLS certificate weekly
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

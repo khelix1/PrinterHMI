@@ -1,0 +1,7 @@
+[Unit]
+Description=Renew PrinterHMI Moonraker TLS certificate
+After=network-online.target nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/renew_moonraker_tls_nginx.sh

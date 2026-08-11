@@ -165,3 +165,12 @@ if [[ -n "$export_ca" ]]; then
 fi
 echo "PASS: TLS endpoint https://$host is ready"
 echo "Public CA: $tls/ca.crt"
+
+install -m 700 "$(dirname "$0")/renew_moonraker_tls_nginx.sh" /usr/local/sbin/renew_moonraker_tls_nginx.sh
+printf 'HOST=%q\nUPSTREAM=%q\n' "$host" "$upstream" > /etc/printerhmi-moonraker-tls.conf
+chmod 600 /etc/printerhmi-moonraker-tls.conf
+install -m 644 "$(dirname "$0")/printerhmi-moonraker-tls-renew.service" /etc/systemd/system/
+install -m 644 "$(dirname "$0")/printerhmi-moonraker-tls-renew.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now printerhmi-moonraker-tls-renew.timer
+echo "PASS: weekly TLS renewal timer enabled"

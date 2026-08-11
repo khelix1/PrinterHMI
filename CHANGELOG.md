@@ -5,6 +5,11 @@ v4.0.0 is preserved under `docs/history/`.
 
 ## [Unreleased]
 
+### Added
+
+- Added current/minimum internal-heap and PSRAM diagnostics plus the largest
+  contiguous internal block to Settings → System Information.
+
 ## [6.1.0] - 2026-08-09
 
 ### Added

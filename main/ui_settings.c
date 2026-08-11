@@ -858,7 +858,7 @@ void ui_settings_show_page(
         ui_settings_section_add_row(
             system,
             "Free Heap",
-            "Available internal memory",
+            "Now / minimum / largest contiguous internal block",
             "--",
             system_row_2,
             NULL));
@@ -870,7 +870,7 @@ void ui_settings_show_page(
         ui_settings_section_add_row(
             system,
             "Free PSRAM",
-            "Available external memory",
+            "Now / minimum PSRAM since startup",
             "--",
             system_row_3,
             NULL));

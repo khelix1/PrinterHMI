@@ -32,6 +32,8 @@ Requirements:
 - A second reboot and full power cycle also succeed.
 - Clock shows the selected timezone after SNTP synchronization.
 - Theme, appearance, brightness, sleep, timezone and printer profile persist.
+- Settings System Information reports current/minimum internal heap, largest
+  contiguous internal block, and current/minimum PSRAM without overlap.
 
 ## Display and interaction
 

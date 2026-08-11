@@ -41,6 +41,27 @@ static void format_bytes(
     }
 }
 
+static void format_memory_health(
+    char *buf,
+    size_t buf_size,
+    size_t current,
+    size_t minimum,
+    size_t largest)
+{
+    char current_buf[16];
+    char minimum_buf[16];
+    char largest_buf[16];
+
+    format_bytes(current_buf, sizeof(current_buf), current);
+    format_bytes(minimum_buf, sizeof(minimum_buf), minimum);
+    if (largest > 0) {
+        format_bytes(largest_buf, sizeof(largest_buf), largest);
+        snprintf(buf, buf_size, "%s / %s / %s", current_buf, minimum_buf, largest_buf);
+    } else {
+        snprintf(buf, buf_size, "%s / %s", current_buf, minimum_buf);
+    }
+}
+
 static void format_uptime(
     char *buf,
     size_t buf_size,
@@ -108,19 +129,23 @@ void settings_system_info_bind_uptime_label(lv_obj_t *label)
 
 void settings_system_info_refresh(void)
 {
-    char heap_buf[32];
-    char psram_buf[32];
+    char heap_buf[64];
+    char psram_buf[64];
     char uptime_buf[48];
 
-    format_bytes(
+    format_memory_health(
         heap_buf,
         sizeof(heap_buf),
-        heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
-    format_bytes(
+    format_memory_health(
         psram_buf,
         sizeof(psram_buf),
-        heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+        heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM),
+        0);
 
     format_uptime(
         uptime_buf,

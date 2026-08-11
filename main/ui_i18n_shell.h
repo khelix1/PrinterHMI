@@ -1,0 +1,17 @@
+#pragma once
+
+typedef enum {
+    UI_I18N_SHELL_NAV_DASHBOARD = 0,
+    UI_I18N_SHELL_NAV_PRINTER,
+    UI_I18N_SHELL_NAV_FILES,
+    UI_I18N_SHELL_NAV_BED_MESH,
+    UI_I18N_SHELL_NAV_CALIBRATION,
+    UI_I18N_SHELL_NAV_DEVICES,
+    UI_I18N_SHELL_NAV_MACROS,
+    UI_I18N_SHELL_NAV_CONSOLE,
+    UI_I18N_SHELL_NAV_DRYBOX,
+    UI_I18N_SHELL_NAV_SETTINGS,
+    UI_I18N_SHELL_COUNT
+} ui_i18n_shell_text_t;
+
+const char *ui_i18n_shell_text(ui_i18n_shell_text_t text);

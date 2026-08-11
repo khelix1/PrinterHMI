@@ -12,6 +12,7 @@
 #include "ui_appearance_popups.h"
 #include "language_controller.h"
 #include "ui_i18n.h"
+#include "ui_i18n_settings.h"
 #include "ui_language_picker.h"
 
 #include "bsp/display.h"
@@ -849,10 +850,11 @@ void ui_settings_show_page(
 
     const int language_height = first_row_y + row_height + 6;
     lv_obj_t *language = ui_settings_section_create(
-        content, ui_i18n_text(UI_TEXT_LANGUAGE_SECTION), section_y, language_height);
+        content, ui_i18n_settings_text(UI_I18N_SETTINGS_LANGUAGE_SECTION),
+        section_y, language_height);
     s_language_label = ui_settings_section_add_row(
-        language, ui_i18n_text(UI_TEXT_LANGUAGE),
-        ui_i18n_text(UI_TEXT_LANGUAGE_DESCRIPTION),
+        language, ui_i18n_settings_text(UI_I18N_SETTINGS_LANGUAGE),
+        ui_i18n_settings_text(UI_I18N_SETTINGS_LANGUAGE_DESCRIPTION),
         language_controller_native_name(language_controller_active()),
         first_row_y, settings_language_card_cb);
     lv_obj_set_style_text_font(

@@ -4,6 +4,7 @@
 #include "ui_widgets.h"
 #include "ui_global_estop.h"
 #include "ui_i18n.h"
+#include "ui_i18n_shell.h"
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -355,16 +356,16 @@ void ui_shell_create_nav(void)
      * primary work, printer setup, diagnostics, then auxiliary/system.
      */
     const shell_nav_item_t nav[] = {
-        { LV_SYMBOL_HOME,     ui_i18n_text(UI_TEXT_NAV_DASHBOARD) },
-        { LV_SYMBOL_LIST,     ui_i18n_text(UI_TEXT_NAV_PRINTER) },
-        { LV_SYMBOL_FILE,     ui_i18n_text(UI_TEXT_NAV_FILES) },
-        { LV_SYMBOL_IMAGE,    ui_i18n_text(UI_TEXT_NAV_BED_MESH) },
-        { LV_SYMBOL_REFRESH,  ui_i18n_text(UI_TEXT_NAV_CALIBRATION) },
-        { LV_SYMBOL_CHARGE,   ui_i18n_text(UI_TEXT_NAV_DEVICES) },
-        { LV_SYMBOL_PLAY,     ui_i18n_text(UI_TEXT_NAV_MACROS) },
-        { LV_SYMBOL_EDIT,     ui_i18n_text(UI_TEXT_NAV_CONSOLE) },
-        { LV_SYMBOL_LOOP,     ui_i18n_text(UI_TEXT_NAV_DRYBOX) },
-        { LV_SYMBOL_SETTINGS, ui_i18n_text(UI_TEXT_NAV_SETTINGS) }
+        { LV_SYMBOL_HOME,     ui_i18n_shell_text(UI_I18N_SHELL_NAV_DASHBOARD) },
+        { LV_SYMBOL_LIST,     ui_i18n_shell_text(UI_I18N_SHELL_NAV_PRINTER) },
+        { LV_SYMBOL_FILE,     ui_i18n_shell_text(UI_I18N_SHELL_NAV_FILES) },
+        { LV_SYMBOL_IMAGE,    ui_i18n_shell_text(UI_I18N_SHELL_NAV_BED_MESH) },
+        { LV_SYMBOL_REFRESH,  ui_i18n_shell_text(UI_I18N_SHELL_NAV_CALIBRATION) },
+        { LV_SYMBOL_CHARGE,   ui_i18n_shell_text(UI_I18N_SHELL_NAV_DEVICES) },
+        { LV_SYMBOL_PLAY,     ui_i18n_shell_text(UI_I18N_SHELL_NAV_MACROS) },
+        { LV_SYMBOL_EDIT,     ui_i18n_shell_text(UI_I18N_SHELL_NAV_CONSOLE) },
+        { LV_SYMBOL_LOOP,     ui_i18n_shell_text(UI_I18N_SHELL_NAV_DRYBOX) },
+        { LV_SYMBOL_SETTINGS, ui_i18n_shell_text(UI_I18N_SHELL_NAV_SETTINGS) }
     };
 
     for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {

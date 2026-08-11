@@ -1,5 +1,7 @@
 #include "language_controller.h"
 
+#include "ui_i18n_registry.h"
+
 #include "esp_log.h"
 #include "nvs.h"
 
@@ -18,7 +20,8 @@ bool language_controller_init(void)
     uint8_t saved = UI_LANGUAGE_ENGLISH;
     esp_err_t err = nvs_get_u8(handle, LANGUAGE_NVS_KEY, &saved);
     nvs_close(handle);
-    if (err == ESP_OK && saved < UI_LANGUAGE_COUNT) {
+    if (err == ESP_OK && saved < UI_LANGUAGE_COUNT &&
+        ui_i18n_language_is_selectable((ui_language_id_t)saved)) {
         s_active = (ui_language_id_t)saved;
     }
     return true;
@@ -31,7 +34,8 @@ ui_language_id_t language_controller_active(void)
 
 bool language_controller_select(ui_language_id_t language)
 {
-    if (language >= UI_LANGUAGE_COUNT) return false;
+    if (language >= UI_LANGUAGE_COUNT ||
+        !ui_i18n_language_is_selectable(language)) return false;
     nvs_handle_t handle;
     if (nvs_open(LANGUAGE_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
         ESP_LOGE(TAG, "Could not open language preferences");

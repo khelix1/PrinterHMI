@@ -2,6 +2,9 @@
 
 #include "language_controller.h"
 #include "ui_i18n.h"
+#include "ui_i18n_common.h"
+#include "ui_i18n_registry.h"
+#include "ui_i18n_settings.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
 
@@ -45,13 +48,18 @@ void ui_language_picker_show(ui_language_picker_changed_cb_t changed_cb)
     if (s_popup) { lv_obj_move_foreground(s_popup); return; }
     s_popup = ui_popup_create(lv_layer_top(), 680, 360, UI_POPUP_STANDARD);
     if (!s_popup) return;
-    ui_popup_add_title(s_popup, ui_i18n_text(UI_TEXT_LANGUAGE_PICKER_TITLE), false, 8);
+    ui_popup_add_title(s_popup,
+        ui_i18n_settings_text(UI_I18N_SETTINGS_PICKER_TITLE), false, 8);
     ui_popup_add_header_divider(s_popup, 44);
-    ui_popup_add_status_label(s_popup, ui_i18n_text(UI_TEXT_LANGUAGE_PICKER_BODY), 24, 52, 632);
+    ui_popup_add_status_label(s_popup,
+        ui_i18n_settings_text(UI_I18N_SETTINGS_PICKER_BODY), 24, 52, 632);
     lv_obj_t *list = ui_popup_add_list(s_popup, 24, 110, 632, 126);
     if (!list) { ui_language_picker_close(); return; }
     const ui_language_id_t active = language_controller_active();
     for (int language = UI_LANGUAGE_ENGLISH; language < UI_LANGUAGE_COUNT; ++language) {
+        if (!ui_i18n_language_is_selectable((ui_language_id_t)language)) {
+            continue;
+        }
         lv_obj_t *row = ui_popup_add_selectable_row(
             list, language_controller_native_name((ui_language_id_t)language),
             8, 8 + language * 56, 600, 48,
@@ -63,6 +71,6 @@ void ui_language_picker_show(ui_language_picker_changed_cb_t changed_cb)
     }
     ui_popup_add_standard_footer_divider(s_popup);
     ui_popup_add_footer_action(s_popup, UI_POPUP_ACTION_CLOSE,
-        ui_i18n_text(UI_TEXT_CLOSE), 160, UI_POPUP_FOOTER_CENTER,
+        ui_i18n_common_text(UI_I18N_COMMON_CLOSE), 160, UI_POPUP_FOOTER_CENTER,
         picker_close_cb, NULL, NULL);
 }

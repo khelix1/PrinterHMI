@@ -1,4 +1,5 @@
 #include "ui_ota_popup.h"
+#include "ui_i18n_common.h"
 
 #include "ota_release_catalog.h"
 #include "ui_theme.h"
@@ -138,7 +139,7 @@ void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
         ui_popup_add_footer_action(
             s_progress_popup,
             UI_POPUP_ACTION_CANCEL,
-            "CANCEL",
+            ui_i18n_common_text(UI_I18N_COMMON_CANCEL),
             220,
             UI_POPUP_FOOTER_CENTER,
             progress_cancel_cb,

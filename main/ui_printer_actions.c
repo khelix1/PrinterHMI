@@ -1,4 +1,5 @@
 #include "ui_printer_actions.h"
+#include "ui_i18n_common.h"
 
 #include "ui_button.h"
 #include "ui_theme.h"
@@ -149,7 +150,7 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_STOP,
-            "CANCEL",
+            ui_i18n_common_text(UI_I18N_COMMON_CANCEL),
             "CANCEL_PRINT",
             675,
             2,

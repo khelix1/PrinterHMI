@@ -127,6 +127,7 @@ static void sntp_wait_task(void *arg);
 
 #include "ui_theme.h"
 #include "theme_manager.h"
+#include "language_controller.h"
 #include "ui_cards.h"
 #include "ui_page_title.h"
 #include "ui_page_geometry.h"
@@ -3786,6 +3787,9 @@ void app_main(void)
         (int)esp_reset_reason());
 
     theme_manager_init();
+    if (!language_controller_init()) {
+        ESP_LOGW(TAG, "Language preference unavailable; using English");
+    }
 
     /* Apply the saved local timezone before any clock or SNTP path starts. */
     timezone_config_init();

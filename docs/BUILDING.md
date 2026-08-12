@@ -55,7 +55,7 @@ cd PrinterHMI_v3_2
 Use ESP-IDF's supported clean action:
 
 ```bash
-source "$HOME/esp/esp-idf-v6.1.1/export.sh"
+source "$HOME/esp/esp-idf-v6.0.2/export.sh"
 idf.py -B build-idf6-hosted3 fullclean
 ./tools/build_idf6_hosted3.sh
 ```

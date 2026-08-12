@@ -13,7 +13,7 @@ timezone settings, runtime themes, and OTA firmware updates.
 
 ## Status
 
-- Firmware version: `6.1.0`
+- Firmware version: `6.1.1`
 - Target: `esp32p4`
 - Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`

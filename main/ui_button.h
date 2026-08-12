@@ -20,6 +20,15 @@ typedef enum {
 
 } ui_button_kind_t;
 
+/* Keep visible geometry exact while accepting a near-edge operator touch.
+ * Four pixels preserves separation in tightly packed standard controls. */
+#define UI_BUTTON_TOUCH_SLOP 4
+
+static inline void ui_button_expand_touch_target(lv_obj_t *button)
+{
+    if (button) lv_obj_set_ext_click_area(button, UI_BUTTON_TOUCH_SLOP);
+}
+
 /*
  * Shared icon/text arrangement used by Operator controls.
  *

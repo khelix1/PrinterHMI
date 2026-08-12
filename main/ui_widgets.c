@@ -1,4 +1,5 @@
 #include "ui_widgets.h"
+#include "ui_button.h"
 
 /*
  * TEST2_OPERATOR_WIDGETS
@@ -78,6 +79,8 @@ lv_obj_t *ui_create_button(
     lv_color_t bg)
 {
     lv_obj_t *btn = lv_button_create(parent);
+
+    ui_button_expand_touch_target(btn);
 
     ui_apply_button_style(btn);
 

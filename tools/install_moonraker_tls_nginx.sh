@@ -7,11 +7,12 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage: sudo ./install_moonraker_tls_nginx.sh --host HOST \
-       [--upstream HOST:PORT] [--export-ca PATH] [--replace]
+       [--upstream HOST:PORT] [--listen-port PORT] [--export-ca PATH] [--replace]
 
 --host       LAN hostname or IPv4 address that the HMI will use.
 --upstream   Moonraker endpoint; if omitted, a local 7125–7128 endpoint is
              discovered and verified before nginx is changed.
+--listen-port  HTTPS port for this Moonraker instance (default: 443).
 --export-ca  Copy the public CA PEM to this path after successful verification.
 --replace    Replace an existing PrinterHMI TLS nginx site after backing it up.
 EOF
@@ -21,10 +22,12 @@ host=""
 upstream=""
 export_ca=""
 replace=0
+listen_port=443
 while (($#)); do
     case "$1" in
         --host) host="${2:-}"; shift 2 ;;
         --upstream) upstream="${2:-}"; shift 2 ;;
+        --listen-port) listen_port="${2:-}"; shift 2 ;;
         --export-ca) export_ca="${2:-}"; shift 2 ;;
         --replace) replace=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -36,6 +39,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "run with sudo"
 [[ "$host" =~ ^[A-Za-z0-9._-]+$ ]] || die "--host must be a hostname or IPv4 address"
 [[ -z "$upstream" || "$upstream" =~ ^[A-Za-z0-9._-]+:[0-9]+$ ]] || die "invalid --upstream"
+[[ "$listen_port" =~ ^[0-9]+$ && "$listen_port" -ge 1 && "$listen_port" -le 65535 ]] || die "invalid --listen-port"
 for command in nginx openssl curl systemctl; do
     command -v "$command" >/dev/null 2>&1 || die "required command not found: $command"
 done
@@ -58,8 +62,8 @@ else
 fi
 echo "PASS: verified Moonraker upstream http://$upstream/server/info"
 
-site=/etc/nginx/sites-available/printerhmi-moonraker-tls
-link=/etc/nginx/sites-enabled/printerhmi-moonraker-tls
+site=/etc/nginx/sites-available/printerhmi-moonraker-tls-$listen_port
+link=/etc/nginx/sites-enabled/printerhmi-moonraker-tls-$listen_port
 tls=/etc/nginx/printerhmi-tls
 stamp="$(date +%Y%m%d%H%M%S)"
 backup_dir="/var/backups/printerhmi-moonraker-tls-$stamp"
@@ -125,7 +129,7 @@ chmod 644 "$tls"/*.crt
 
 cat > "$site" <<EOF
 server {
-    listen 443 ssl;
+    listen $listen_port ssl;
     server_name $host;
     ssl_certificate $tls/moonraker.crt;
     ssl_certificate_key $tls/moonraker.key;
@@ -156,14 +160,14 @@ rollback=1
 nginx -t
 systemctl reload nginx
 curl --fail --silent --show-error --max-time 10 --cacert "$tls/ca.crt" \
-    "https://$host/server/info" >/dev/null
+    "https://$host:$listen_port/server/info" >/dev/null
 rollback=0
 
 if [[ -n "$export_ca" ]]; then
     install -m 644 "$tls/ca.crt" "$export_ca"
     echo "Public CA exported: $export_ca"
 fi
-echo "PASS: TLS endpoint https://$host is ready"
+echo "PASS: TLS endpoint https://$host:$listen_port is ready"
 echo "Public CA: $tls/ca.crt"
 
 install -m 700 "$(dirname "$0")/renew_moonraker_tls_nginx.sh" /usr/local/sbin/renew_moonraker_tls_nginx.sh

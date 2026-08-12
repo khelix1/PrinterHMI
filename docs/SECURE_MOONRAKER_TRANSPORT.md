@@ -48,3 +48,11 @@ For every secure profile, verify HTTPS API, WSS subscription, G-code dispatch,
 file transfer, printer switching, certificate rejection, no HTTP downgrade,
 restart, OTA and power-cycle behavior. Also verify Standard mode with and
 without an API key remains unchanged.
+
+## Multi-instance secure routing
+
+One host can provide separate secure endpoints for multiple Moonraker
+instances. Profiles retain their HTTPS ports, discovery finds TLS proxy ports
+443-446, and the installer creates only the listener requested by
+--listen-port. A weekly host-side timer renews the leaf certificate without
+changing the CA trusted by PrinterHMI.

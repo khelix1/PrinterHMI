@@ -92,6 +92,8 @@ lv_obj_t *ui_button_create_empty(
         button,
         kind);
 
+    ui_button_expand_touch_target(button);
+
     return button;
 }
 

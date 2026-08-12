@@ -52,7 +52,7 @@ completion signal if that does not destabilize startup.
 
 PrinterHMI defaults to HTTP and WebSocket on a trusted local network. This behavior remains available for every profile, with or without an optional Moonraker API key.
 
-v6.1.0 also provides opt-in, per-profile HTTPS/WSS using a selected local CA.
+v6.1.1 also provides opt-in, per-profile HTTPS/WSS using a selected local CA.
 It requires a separately configured local TLS proxy; the public Nginx installer
 and operator steps are in `docs/SECURE_MOONRAKER_SETUP.md`. Secure profiles do
 not silently downgrade to HTTP after a certificate or endpoint failure.

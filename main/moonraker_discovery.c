@@ -119,6 +119,10 @@ static void scan_task(void *arg)
         7126,
         7127,
         7128,
+        443,
+        444,
+        445,
+        446,
     };
 
     uint8_t a = esp_ip4_addr1(&s_scan_ip);
@@ -157,7 +161,7 @@ static void scan_task(void *arg)
     snprintf(
         msg,
         sizeof(msg),
-        "Scanning all %u.%u.%u.x addresses on ports 7125-7128.",
+            "Scanning all %u.%u.%u.x addresses on ports 443-446 and 7125-7128.",
         a,
         b,
         c);
@@ -190,7 +194,7 @@ static void scan_task(void *arg)
         snprintf(
             msg,
             sizeof(msg),
-            "Checking %u of %u addresses on ports 7125-7128   |   %u found",
+            "Checking %u of %u addresses on ports 443-446, 7125-7128   |   %u found",
             (unsigned)next_candidate,
             (unsigned)candidate_count,
             (unsigned)found_count);
@@ -247,6 +251,32 @@ static void scan_task(void *arg)
                  ++port_index) {
                 moonraker_probe_result_t probe = {0};
                 int port = ports[port_index];
+                if (port >= 443 && port <= 446) {
+                    /* ESP-Hosted can drop sibling SYNs in the first broad
+                     * sweep. Recheck each TLS proxy port alone so multiple
+                     * Moonraker instances on one host are deterministic. */
+                    bool tls_open = false;
+                    (void)moonraker_probe_open_ports(
+                        host_refs[host_index], &port, 1, 450,
+                        &tls_open, 1);
+                    if (tls_open) {
+                        strlcpy(probe.identity, "HTTPS proxy (select CA)",
+                            sizeof(probe.identity));
+                        bool published = false;
+                        while (!moonraker_discovery_is_cancelled() &&
+                               moonraker_discovery_is_open()) {
+                            if (bsp_display_lock(100)) {
+                                published = moonraker_discovery_add_candidate(
+                                    host_refs[host_index], port, &probe);
+                                bsp_display_unlock();
+                                break;
+                            }
+                            vTaskDelay(pdMS_TO_TICKS(10));
+                        }
+                        if (published) found_count++;
+                    }
+                    continue;
+                }
                 if (!moonraker_probe_endpoint(
                         host_refs[host_index], port, &probe)) {
                     continue;
@@ -281,7 +311,7 @@ static void scan_task(void *arg)
             snprintf(
                 msg,
                 sizeof(msg),
-                "No Moonraker endpoints found on %u.%u.%u.x ports 7125-7128. "
+                "No Moonraker endpoints found on %u.%u.%u.x ports 443-446 or 7125-7128. "
                 "Verify the printer address and try again.",
                 a,
                 b,

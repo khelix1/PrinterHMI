@@ -2,7 +2,7 @@
 
 This directory preserves the original v3.x architecture, roadmaps, reviews,
 crash records and refactor logs. They are valuable evidence of design decisions
-but do not describe the current v6.1.0 product.
+but do not describe the current v6.1.1 product.
 
 ## Layout
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui_theme.h"
+#include "ui_button.h"
 
 /*
  * Shared Operator button.
@@ -29,6 +30,8 @@ static inline lv_obj_t *ui_operator_button_create(
     lv_obj_add_flag(
         button,
         LV_OBJ_FLAG_CLICKABLE);
+
+    ui_button_expand_touch_target(button);
 
     ui_apply_button_status_style(
         button,

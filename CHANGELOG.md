@@ -3,7 +3,7 @@
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 
-## [Unreleased]
+## [6.1.1] - 2026-08-11
 
 ### Added
 

@@ -76,3 +76,16 @@ the certificate SAN, that port 443 is reachable, and that the selected PEM is
 the CA exported by that host. Choose **Standard HTTP** to intentionally return
 that profile to its previous unencrypted port and behavior; a failed secure
 connection never does this on its own.
+
+## Multiple Moonraker instances on one host
+
+Create one HTTPS listener for each local Moonraker instance; create no ports
+you do not need. The CA and certificate are shared across ports on the same
+host. Configure 443 to 7125 and 444 to 7126 by running the installer twice
+with --upstream 127.0.0.1:7125 --listen-port 443, then --upstream
+127.0.0.1:7126 --listen-port 444.
+
+Use the matching HTTPS ports in secure PrinterHMI profiles and import the same
+CA PEM for both. Discovery lists TLS proxy ports 443-446. The installer also
+enables a weekly timer that renews only within 30 days of expiry; the CA never
+changes, so no new PEM import is required.

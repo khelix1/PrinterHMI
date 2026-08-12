@@ -20,7 +20,7 @@ to ESP-IDF's generated flash arguments.
 
 ## Matching P4 and C6 firmware
 
-PrinterHMI v6.1.0 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
+PrinterHMI v6.1.1 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
 ESP32-C6 co-processor. The complete release archive contains normal P4 OTA
 and full-flash images plus the matching C6 full-flash image.
 

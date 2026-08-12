@@ -144,9 +144,11 @@ static void editor_security_pem_selected_cb(lv_event_t *event)
         return;
     }
     s_editor_secure = true;
-    if (s_editor_port) lv_textarea_set_text(s_editor_port, "443");
+    if (s_editor_port && atoi(lv_textarea_get_text(s_editor_port)) == 7125) {
+        lv_textarea_set_text(s_editor_port, "443");
+    }
     editor_security_close();
-    editor_set_status("Secure HTTPS/WSS selected; Moonraker port set to 443.");
+    editor_set_status("Secure HTTPS/WSS selected. Set the TLS proxy port (443-446).");
 }
 
 static void editor_security_pem_picker_open_cb(lv_event_t *event)

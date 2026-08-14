@@ -187,6 +187,7 @@ static void sntp_wait_task(void *arg);
 #include "moonraker_live_transport.h"
 #include "moonraker_poll.h"
 #include "moonraker_live_websocket.h"
+#include "moonraker_http_fallback_decoder.h"
 
 
 #include "thumbnail_preview_coordinator.h"
@@ -799,382 +800,116 @@ static bool moonraker_get_live_objects(void)
     }
 
     int live_http_status = 0;
-
-    uint32_t request_generation =
-        moonraker_config_generation();
-
-    char request_host[
-        MOONRAKER_CONFIG_HOST_LENGTH];
-
-    safe_copy(
-        request_host,
-        sizeof(request_host),
-        moonraker_config_host());
-
-    int request_port =
-        moonraker_config_port();
+    uint32_t request_generation = moonraker_config_generation();
+    char request_host[MOONRAKER_CONFIG_HOST_LENGTH];
+    safe_copy(request_host, sizeof(request_host), moonraker_config_host());
+    int request_port = moonraker_config_port();
 
     bool transport_ok = moonraker_live_transport_fetch(
-        request_host,
-        request_port,
-        moonraker_config_api_key(),
-        s_moonraker_objects,
-        MOONRAKER_OBJECTS_CAPACITY,
-        &live_http_status);
+        request_host, request_port, moonraker_config_api_key(),
+        s_moonraker_objects, MOONRAKER_OBJECTS_CAPACITY, &live_http_status);
 
-    if (request_generation !=
-        moonraker_config_generation()) {
-        ESP_LOGW(
-            TAG,
-            "Discarding stale Moonraker response from %s:%d",
-            request_host,
-            request_port);
-
+    if (request_generation != moonraker_config_generation()) {
+        ESP_LOGW(TAG, "Discarding stale Moonraker response from %s:%d",
+                 request_host, request_port);
         return false;
     }
-
     s_moonraker_code = live_http_status;
-
     if (!transport_ok) {
         s_live_data_ok = false;
         moonraker_state_set_connection(false, false);
         return false;
     }
 
-    double val = 0.0;
-
-    if (json_find_number_after(s_moonraker_objects, "\"temperature_sensor drybox_center\"", "temperature", &val)) {
-        live_chamber_temp = val;
+    double metadata_object_height = 0.0;
+    double metadata_layer_height = 0.0;
+    bool metadata_valid = false;
+    if (printer_current_layer <= 0 || printer_total_layer <= 0) {
+        metadata_valid = thumbnail_session_get_layer_metadata(
+            &metadata_object_height, &metadata_layer_height);
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"sht3x drybox_env\"", "temperature", &val)) {
-        live_air_temp = val;
+    moonraker_http_fallback_update_t previous = {
+        .chamber_temp = live_chamber_temp,
+        .air_temp = live_air_temp,
+        .humidity = live_humidity,
+        .heater_target = live_heater_target,
+        .heater_on = live_heater_power,
+        .drybox_fan_speed = live_fan_speed,
+        .part_fan_speed = printer_part_fan_speed,
+        .speed_factor = printer_speed_factor,
+        .flow_factor = printer_flow_factor,
+        .live_velocity = printer_live_velocity,
+        .live_flow = printer_live_flow,
+        .nozzle_temp = printer_nozzle_temp,
+        .nozzle_target = printer_nozzle_target,
+        .bed_temp = printer_bed_temp,
+        .bed_target = printer_bed_target,
+        .progress = printer_progress,
+        .print_duration = printer_print_duration,
+        .current_layer = printer_current_layer,
+        .total_layer = printer_total_layer,
+        .live_data_ok = s_live_data_ok,
+        .moonraker_ok = s_moonraker_ok,
+        .printer_state = printer_state,
+        .printer_file = printer_file,
+    };
+    moonraker_http_fallback_decoder_input_t input = {
+        .objects = s_moonraker_objects,
+        .previous = previous,
+        .previous_drybox_selected_program = (int)s_drybox_selected_program,
+        .previous_drybox_active_program = (int)s_drybox_active_program,
+        .cached_current_layer = printer_current_layer,
+        .cached_total_layer = printer_total_layer,
+        .cached_current_z = printer_current_z,
+        .cached_metadata_object_height = printer_meta_object_height,
+        .cached_metadata_layer_height = printer_meta_layer_height,
+        .file_metadata_valid = metadata_valid,
+        .file_object_height = metadata_object_height,
+        .file_layer_height = metadata_layer_height,
+    };
+    moonraker_http_fallback_decoder_output_t decoded;
+    if (!moonraker_http_fallback_decoder_decode(&input, &decoded)) {
+        s_live_data_ok = false;
+        moonraker_state_set_connection(false, false);
+        return false;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"sht3x drybox_env\"", "humidity", &val)) {
-        live_humidity = val;
-    }
-
-    if (json_find_number_after(s_moonraker_objects, "\"heater_generic drybox_heater\"", "target", &val)) {
-        live_heater_target = val;
-    }
-
-    if (json_find_number_after(s_moonraker_objects, "\"heater_generic drybox_heater\"", "power", &val)) {
-        live_heater_power = val > 0.01;
-    }
-
-    
-    if (json_find_number_after(s_moonraker_objects, "\"fan\"", "speed", &val)) {
-        printer_part_fan_speed = val * 100.0;
-    }
-
-    if (json_find_number_after(s_moonraker_objects, "\"gcode_move\"", "speed_factor", &val)) {
-        printer_speed_factor = val * 100.0;
-    }
-
-    if (json_find_number_after(s_moonraker_objects, "\"gcode_move\"", "extrude_factor", &val)) {
-        printer_flow_factor = val * 100.0;
-    }
-
-    if (json_find_number_after(s_moonraker_objects, "\"fan_generic drybox_fan\"", "speed", &val)) {
-        live_fan_speed = val * 100.0;
-    }
-
-    /*
-     * Klipper is the authoritative Drybox program source.
-     *
-     * Codes exposed by gcode_macro DRYBOX_VARS:
-     *   0 = none
-     *   1 = PLA
-     *   2 = PETG
-     *   3 = hold
-     */
-    if (json_find_number_after(
-            s_moonraker_objects,
-            "\"gcode_macro DRYBOX_VARS\"",
-            "selected_program",
-            &val)) {
-        int program_code = (int)val;
-
-        switch (program_code) {
-            case 1:
-                s_drybox_selected_program =
-                    UI_DRYBOX_PROGRAM_PLA;
-                break;
-
-            case 2:
-                s_drybox_selected_program =
-                    UI_DRYBOX_PROGRAM_PETG;
-                break;
-
-            case 0:
-            default:
-                s_drybox_selected_program =
-                    UI_DRYBOX_PROGRAM_NONE;
-                break;
-        }
-    }
-
-    if (json_find_number_after(
-            s_moonraker_objects,
-            "\"gcode_macro DRYBOX_VARS\"",
-            "active_program",
-            &val)) {
-        int program_code = (int)val;
-
-        switch (program_code) {
-            case 1:
-                s_drybox_active_program =
-                    UI_DRYBOX_PROGRAM_PLA;
-                break;
-
-            case 2:
-                s_drybox_active_program =
-                    UI_DRYBOX_PROGRAM_PETG;
-                break;
-
-            case 3:
-                s_drybox_active_program =
-                    UI_DRYBOX_PROGRAM_HOLD;
-                break;
-
-            case 0:
-            default:
-                s_drybox_active_program =
-                    UI_DRYBOX_PROGRAM_NONE;
-                break;
-        }
-    }
-
-//             live_chamber_temp, live_humidity, live_heater_target,
-//             live_fan_speed, live_heater_power ? 1 : 0);
-
-    json_find_string(strstr(s_moonraker_objects, "\"print_stats\"") ? strstr(s_moonraker_objects, "\"print_stats\"") : s_moonraker_objects,
-                     "state", printer_state, sizeof(s_app_buffers->printer_state));
-
-    json_find_string(strstr(s_moonraker_objects, "\"print_stats\"") ? strstr(s_moonraker_objects, "\"print_stats\"") : s_moonraker_objects,
-                     "filename", printer_file, sizeof(s_app_buffers->printer_file));
-
-    if (strlen(printer_state) == 0) {
-        safe_copy(printer_state, sizeof(s_app_buffers->printer_state), "--");
-    }
-
-    if (strlen(printer_file) == 0) {
-        safe_copy(printer_file, sizeof(s_app_buffers->printer_file), "No file");
-    }
-    /*
-     * Use virtual_sdcard.progress as the authoritative completion value.
-     * This is the file-position progress normally presented by Moonraker
-     * frontends. display_status.progress may instead reflect slicer M73
-     * commands and can disagree substantially.
-     */
-    printer_progress = 0.0;
-
-    if (!json_find_number_after(
-            s_moonraker_objects,
-            "\"virtual_sdcard\"",
-            "progress",
-            &printer_progress)) {
-        /*
-         * Fallback for printers without virtual_sdcard or while no file
-         * is active.
-         */
-        json_find_number_after(
-            s_moonraker_objects,
-            "\"display_status\"",
-            "progress",
-            &printer_progress);
-    }
-
-    if (printer_progress < 0.0) {
-        printer_progress = 0.0;
-    } else if (printer_progress > 1.0) {
-        printer_progress = 1.0;
-    }
-
-    json_find_number_after(
-        s_moonraker_objects,
-        "\"print_stats\"",
-        "print_duration",
-        &printer_print_duration);
-
-    double lv = 0.0;
-    if (json_find_number_after(s_moonraker_objects, "\"motion_report\"", "live_velocity", &lv)) {
-        printer_live_velocity = lv;
-    }
-
-    double lf = 0.0;
-    if (json_find_number_after(
-            s_moonraker_objects,
-            "\"motion_report\"",
-            "live_extruder_velocity",
-            &lf)) {
-        /*
-         * Klipper motion_report.live_extruder_velocity is linear
-         * filament speed in mm/s. Moonraker frontends normally show
-         * volumetric flow in mm^3/s.
-         *
-         * For standard 1.75 mm filament:
-         *     area = pi * (1.75 / 2)^2 = 2.40528 mm^2
-         */
-        static const double filament_area_mm2 = 2.405281875;
-        printer_live_flow = fabs(lf) * filament_area_mm2;
-
-        /* Suppress tiny interpolation noise while the extruder is idle. */
-        if (printer_live_flow < 0.01) {
-            printer_live_flow = 0.0;
-        }
-    }
-
-    /*
-     * current_layer and total_layer belong to print_stats.info.
-     * Anchor the lookup inside print_stats so another generic "info"
-     * object in the Moonraker response cannot capture the search.
-     */
-    /*
-     * Do not clear the cached layer values here. The thumbnail/file
-     * metadata fallback may have already calculated them. Replace each
-     * value only when print_stats.info publishes a valid value.
-     */
-    const char *print_stats_json =
-        strstr(s_moonraker_objects, "\"print_stats\"");
-
-    const char *print_info_json =
-        print_stats_json
-            ? strstr(print_stats_json, "\"info\"")
-            : NULL;
-
-    double layer_val = 0.0;
-
-    if (print_info_json &&
-        json_find_number_after(
-            print_info_json,
-            "\"info\"",
-            "current_layer",
-            &layer_val)) {
-        printer_current_layer = (int)(layer_val + 0.5);
-    }
-
-    if (print_info_json &&
-        json_find_number_after(
-            print_info_json,
-            "\"info\"",
-            "total_layer",
-            &layer_val)) {
-        printer_total_layer = (int)(layer_val + 0.5);
-    }
-
-    /*
-     * Klipper commonly leaves print_stats.info layer values null.
-     * Match Moonraker's displayed layer using current G-code Z and
-     * the active file's layer metadata.
-     */
-    const char *gcode_move_json =
-        strstr(s_moonraker_objects, "\"gcode_move\"");
-
-    const char *gcode_position_json =
-        gcode_move_json
-            ? strstr(gcode_move_json, "\"position\"")
-            : NULL;
-
-    const char *gcode_position_array =
-        gcode_position_json
-            ? strchr(gcode_position_json, '[')
-            : NULL;
-
-    if (gcode_position_array) {
-        double x = 0.0;
-        double y = 0.0;
-        double z = 0.0;
-
-        if (sscanf(gcode_position_array,
-                   "[ %lf , %lf , %lf",
-                   &x,
-                   &y,
-                   &z) == 3) {
-            printer_current_z = z;
-        }
-    }
-
-    if (printer_current_layer <= 0 ||
-        printer_total_layer <= 0) {
-        double object_height = 0.0;
-        double layer_height = 0.0;
-
-        if (thumbnail_session_get_layer_metadata(
-                &object_height,
-                &layer_height) &&
-            object_height > 0.0 &&
-            layer_height > 0.0) {
-
-            printer_meta_object_height = object_height;
-            printer_meta_layer_height = layer_height;
-
-            printer_total_layer =
-                (int)floor(
-                    (object_height / layer_height) +
-                    0.001);
-
-            if (printer_current_z >= 0.0) {
-                printer_current_layer =
-                    (int)floor(
-                        (printer_current_z / layer_height) +
-                        0.001);
-
-                if (printer_current_layer < 1 &&
-                    printer_current_z > 0.0) {
-                    printer_current_layer = 1;
-                }
-
-                if (printer_current_layer >
-                    printer_total_layer) {
-                    printer_current_layer =
-                        printer_total_layer;
-                }
-            }
-        }
-    }
-
-    json_find_number_after(s_moonraker_objects, "\"extruder\"", "temperature", &printer_nozzle_temp);
-    json_find_number_after(s_moonraker_objects, "\"extruder\"", "target", &printer_nozzle_target);
-    json_find_number_after(s_moonraker_objects, "\"heater_bed\"", "temperature", &printer_bed_temp);
-    json_find_number_after(s_moonraker_objects, "\"heater_bed\"", "target", &printer_bed_target);
-
-    s_live_data_ok = true;
-    
-    moonraker_state_publish_http_fallback(
-        &(moonraker_http_fallback_update_t) {
-            .chamber_temp = live_chamber_temp,
-            .air_temp = live_air_temp,
-            .humidity = live_humidity,
-            .heater_target = live_heater_target,
-            .heater_on = live_heater_power,
-            .drybox_fan_speed = live_fan_speed,
-            .part_fan_speed = printer_part_fan_speed,
-            .speed_factor = printer_speed_factor,
-            .flow_factor = printer_flow_factor,
-            .live_velocity = printer_live_velocity,
-            .live_flow = printer_live_flow,
-            .nozzle_temp = printer_nozzle_temp,
-            .nozzle_target = printer_nozzle_target,
-            .bed_temp = printer_bed_temp,
-            .bed_target = printer_bed_target,
-            .progress = printer_progress,
-            .print_duration = printer_print_duration,
-            .current_layer = printer_current_layer,
-            .total_layer = printer_total_layer,
-            .live_data_ok = s_live_data_ok,
-            .moonraker_ok = true,
-            .printer_state = printer_state,
-            .printer_file = printer_file,
-        });
-
-    moonraker_state_set_drybox_programs(
-        (int)s_drybox_selected_program,
-        (int)s_drybox_active_program);
-
-return true;
+    live_chamber_temp = decoded.update.chamber_temp;
+    live_air_temp = decoded.update.air_temp;
+    live_humidity = decoded.update.humidity;
+    live_heater_target = decoded.update.heater_target;
+    live_heater_power = decoded.update.heater_on;
+    live_fan_speed = decoded.update.drybox_fan_speed;
+    printer_part_fan_speed = decoded.update.part_fan_speed;
+    printer_speed_factor = decoded.update.speed_factor;
+    printer_flow_factor = decoded.update.flow_factor;
+    printer_live_velocity = decoded.update.live_velocity;
+    printer_live_flow = decoded.update.live_flow;
+    printer_nozzle_temp = decoded.update.nozzle_temp;
+    printer_nozzle_target = decoded.update.nozzle_target;
+    printer_bed_temp = decoded.update.bed_temp;
+    printer_bed_target = decoded.update.bed_target;
+    printer_progress = decoded.update.progress;
+    printer_print_duration = decoded.update.print_duration;
+    printer_current_layer = decoded.update.current_layer;
+    printer_total_layer = decoded.update.total_layer;
+    printer_current_z = decoded.current_z;
+    printer_meta_object_height = decoded.metadata_object_height;
+    printer_meta_layer_height = decoded.metadata_layer_height;
+    s_drybox_selected_program = (ui_drybox_program_t)decoded.drybox_selected_program;
+    s_drybox_active_program = (ui_drybox_program_t)decoded.drybox_active_program;
+    safe_copy(printer_state, sizeof(s_app_buffers->printer_state),
+              decoded.printer_state);
+    safe_copy(printer_file, sizeof(s_app_buffers->printer_file),
+              decoded.printer_file);
+    s_live_data_ok = decoded.update.live_data_ok;
+    moonraker_state_publish_http_fallback(&decoded.update);
+    moonraker_state_set_drybox_programs((int)s_drybox_selected_program,
+                                        (int)s_drybox_active_program);
+    return true;
 }
+
 
 static void printer_thumb_start_delayed(void);
 static void printer_build_metadata_text(const char *file, char *out, size_t out_sz);

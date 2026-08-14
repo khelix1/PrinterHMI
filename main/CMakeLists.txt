@@ -118,6 +118,7 @@ idf_component_register(
         "moonraker_probe.c"
         "moonraker_endpoint_test.c"
         "moonraker_poll.c"
+        "moonraker_http_fallback_decoder.c"
         "moonraker_live_transport.c"
         "moonraker_live_websocket.c"
 

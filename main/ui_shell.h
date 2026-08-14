@@ -3,16 +3,21 @@
 #include "lvgl.h"
 
 typedef enum {
+    /* Visible eight-item operator rail. */
     UI_SHELL_PAGE_DASHBOARD = 0,
     UI_SHELL_PAGE_PRINTER,
     UI_SHELL_PAGE_FILES,
+    UI_SHELL_PAGE_CAMERA,
+    UI_SHELL_PAGE_TOOLS,
+    UI_SHELL_PAGE_CONSOLE,
+    UI_SHELL_PAGE_DRYBOX,
+    UI_SHELL_PAGE_SETTINGS,
+
+    /* Tools subpages remain routable, but are not rail entries. */
     UI_SHELL_PAGE_BED_MESH,
     UI_SHELL_PAGE_CALIBRATION,
     UI_SHELL_PAGE_DEVICES,
     UI_SHELL_PAGE_MACROS,
-    UI_SHELL_PAGE_CONSOLE,
-    UI_SHELL_PAGE_DRYBOX,
-    UI_SHELL_PAGE_SETTINGS,
     UI_SHELL_PAGE_COUNT
 } ui_shell_page_t;
 

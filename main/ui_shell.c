@@ -345,6 +345,7 @@ void ui_shell_create_nav(void)
     lv_obj_clear_flag(shell_nav_rail, LV_OBJ_FLAG_SCROLLABLE);
 
     typedef struct {
+        ui_shell_page_t page;
         const char *icon;
         const char *text;
     } shell_nav_item_t;
@@ -354,19 +355,17 @@ void ui_shell_create_nav(void)
      * primary work, printer setup, diagnostics, then auxiliary/system.
      */
     const shell_nav_item_t nav[] = {
-        { LV_SYMBOL_HOME,     "Dashboard" },
-        { LV_SYMBOL_LIST,     "Printer" },
-        { LV_SYMBOL_FILE,     "Files" },
-        { LV_SYMBOL_IMAGE,    "Bed Mesh" },
-        { LV_SYMBOL_REFRESH,  "Calibration" },
-        { LV_SYMBOL_CHARGE,   "Devices" },
-        { LV_SYMBOL_PLAY,     "Macros" },
-        { LV_SYMBOL_EDIT,     "Console" },
-        { LV_SYMBOL_LOOP,     "Drybox" },
-        { LV_SYMBOL_SETTINGS, "Settings" }
+        { UI_SHELL_PAGE_DASHBOARD, LV_SYMBOL_HOME,     "Dashboard" },
+        { UI_SHELL_PAGE_PRINTER,   LV_SYMBOL_LIST,     "Printer" },
+        { UI_SHELL_PAGE_FILES,     LV_SYMBOL_FILE,     "Files" },
+        { UI_SHELL_PAGE_CAMERA,    LV_SYMBOL_IMAGE,    "Camera" },
+        { UI_SHELL_PAGE_TOOLS,     LV_SYMBOL_SETTINGS, "Tools" },
+        { UI_SHELL_PAGE_CONSOLE,   LV_SYMBOL_EDIT,     "Console" },
+        { UI_SHELL_PAGE_DRYBOX,    LV_SYMBOL_LOOP,     "Drybox" },
+        { UI_SHELL_PAGE_SETTINGS,  LV_SYMBOL_SETTINGS, "Settings" }
     };
 
-    for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {
+    for (size_t i = 0; i < sizeof(nav) / sizeof(nav[0]); i++) {
         lv_obj_t *button =
             ui_create_operator_nav_button(
                 shell_nav_rail,
@@ -385,7 +384,7 @@ void ui_shell_create_nav(void)
             continue;
         }
 
-        shell_nav_buttons[i] =
+        shell_nav_buttons[nav[i].page] =
             button;
 
         /*
@@ -402,7 +401,7 @@ void ui_shell_create_nav(void)
             button,
             shell_nav_btn_event_cb,
             LV_EVENT_CLICKED,
-            (void *)(intptr_t)i);
+            (void *)(intptr_t)nav[i].page);
     }
 
     ui_shell_set_active_nav(0);

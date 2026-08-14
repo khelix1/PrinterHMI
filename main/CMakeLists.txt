@@ -53,6 +53,9 @@ idf_component_register(
         # Camera
         "ui_camera.c"
 
+        # Tools
+        "ui_tools.c"
+
         # Dashboard
         "ui_dashboard.c"
         "dashboard_live_controller.c"

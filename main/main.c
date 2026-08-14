@@ -3095,9 +3095,7 @@ void ui_printer_create(void)
     
     
 
-    ui_drybox_refresh();
 
-    ui_network_refresh_bridge();
 
     printer_ui_controller_update_action_buttons(
         printer_home_btn,

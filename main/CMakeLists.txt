@@ -50,6 +50,9 @@ idf_component_register(
         "ui_splash.c"
         "ui_logo_assets.c"
 
+        # Camera
+        "ui_camera.c"
+
         # Dashboard
         "ui_dashboard.c"
         "dashboard_live_controller.c"

@@ -3,6 +3,22 @@
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 
+## [6.2.1] - 2026-08-15
+
+### Fixed
+
+- Stabilized the startup splash by keeping it on LVGL's top layer during page construction, reducing progress redraws, and delaying backlight restoration until the first MIPI frame is stable.
+- Made the Files page transition immediate while its Moonraker library request starts after the first rendered frame.
+- Added automatic retries for transient Moonraker file-list fetch failures.
+
+### Changed
+
+- Normalized the existing per-printer camera configuration declarations and NVS persistence path in preparation for Camera v2.
+
+### Validation
+
+- Verified startup splash behavior, Files navigation and refresh, Camera streaming, and the complete Operator Shell on the ESP32-P4 panel.
+
 ## [6.2.0] - 2026-08-15
 
 ### Added

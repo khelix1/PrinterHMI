@@ -18,6 +18,15 @@ static void ui_splash_set_progress(int pct, const char *status)
     if (pct < 0) pct = 0;
     if (pct > 100) pct = 100;
 
+    /*
+     * The splash is top-layered, but this panel still visibly reacts to
+     * frequent full-scene invalidations. Retain useful progress movement
+     * while limiting it to four stable stages.
+     */
+    if (pct != 5 && pct != 45 && pct != 88 && pct != 100) {
+        return;
+    }
+
     if (splash_bar) lv_bar_set_value(splash_bar, pct, LV_ANIM_OFF);
 
     if (splash_percent) {

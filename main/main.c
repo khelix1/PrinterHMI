@@ -3742,7 +3742,9 @@ static void app_splash_locked(void (*fn)(void))
         return;
     }
 
+    ESP_LOGI(TAG, "STARTUP_TRACE splash-callback begin");
     fn();
+    ESP_LOGI(TAG, "STARTUP_TRACE splash-callback end");
     bsp_display_unlock();
 }
 
@@ -3761,14 +3763,18 @@ static void app_splash_wifi_waiting_locked(bool connected)
 
 static void app_startup_show_initial_ui(void)
 {
+    ESP_LOGI(TAG, "STARTUP_TRACE initial-ui lock");
     bsp_display_lock(0);
 
     /* Cover the screen before any startup page allocates or invalidates. */
     ui_splash_create();
+    ESP_LOGI(TAG, "STARTUP_TRACE splash-created");
 
     build_drybox_dashboard();
+    ESP_LOGI(TAG, "STARTUP_TRACE dashboard-shell-built");
     hide_settings_tab();
     ui_dashboard_create();
+    ESP_LOGI(TAG, "STARTUP_TRACE dashboard-created");
 
     /* STARTUP_OPEN_PRINTER_CHOOSER
      * Keep the active Dashboard built behind the startup splash, then place
@@ -3780,7 +3786,9 @@ static void app_startup_show_initial_ui(void)
         printer_chooser_manage_bridge);
     ui_splash_create();
     ui_splash_display_ready();
+    ESP_LOGI(TAG, "STARTUP_TRACE splash-presented");
     bsp_display_unlock();
+    ESP_LOGI(TAG, "STARTUP_TRACE initial-ui unlocked");
 }
 
 
@@ -3881,7 +3889,12 @@ void app_main(void)
      * created and its first frame has reached the display.
      */
     app_startup_show_initial_ui();
-    vTaskDelay(pdMS_TO_TICKS(50));
+
+    /*
+     * The JD9165 panel can expose incomplete early MIPI frames if its
+     * backlight returns immediately after the splash is submitted.
+     */
+    vTaskDelay(pdMS_TO_TICKS(250));
 
     /*
      * Load persistent display settings and restore the saved brightness.

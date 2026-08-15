@@ -9,7 +9,6 @@
 #define MOONRAKER_CONFIG_HOST_LENGTH  64
 #define MOONRAKER_CONFIG_API_KEY_LENGTH 160
 #define MOONRAKER_CONFIG_CAMERA_URL_LENGTH 192
-#define MOONRAKER_CONFIG_CAMERA_URL_LENGTH 192
 
 typedef struct {
     bool configured;
@@ -17,7 +16,6 @@ typedef struct {
     char host[MOONRAKER_CONFIG_HOST_LENGTH];
     /* Optional Moonraker API key. Never exported in SD backups. */
     char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
-    /* Optional per-printer MJPEG/HTTP stream URL. */
     /* Optional per-printer MJPEG/HTTP stream URL. */
     char camera_stream_url[MOONRAKER_CONFIG_CAMERA_URL_LENGTH];
     int port;
@@ -99,9 +97,6 @@ bool moonraker_config_replace_profiles(
  * Compatibility editing APIs. These update the active profile.
  */
 bool moonraker_config_set_transport_security(int profile_index, bool secure);
-
-const char *moonraker_config_camera_stream_url(int profile_index);
-bool moonraker_config_set_camera_stream_url(int profile_index, const char *url);
 
 const char *moonraker_config_camera_stream_url(int profile_index);
 bool moonraker_config_set_camera_stream_url(int profile_index, const char *url);

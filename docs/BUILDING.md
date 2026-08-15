@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v6.2.0.
+- `partitions.csv` is the only supported partition layout for v6.2.1.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy

@@ -11,6 +11,9 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -306,14 +309,25 @@ void files_page_controller_reload(
     int http_code = 0;
     esp_err_t transport_error = ESP_FAIL;
 
-    bool fetched = moonraker_fetch_file_list(
-        host,
-        port,
-        api_key,
-        file_list_body,
-        FILES_PAGE_LIST_CAPACITY,
-        &http_code,
-        &transport_error);
+    bool fetched = false;
+    /*
+     * Moonraker can briefly reject the first request while another page's
+     * stream is releasing the shared connection. Retry locally so one
+     * Files tap reliably populates the browser.
+     */
+    for (int attempt = 0; attempt < 3 && !fetched; ++attempt) {
+        fetched = moonraker_fetch_file_list(
+            host,
+            port,
+            api_key,
+            file_list_body,
+            FILES_PAGE_LIST_CAPACITY,
+            &http_code,
+            &transport_error);
+        if (!fetched && attempt < 2) {
+            vTaskDelay(pdMS_TO_TICKS(180));
+        }
+    }
 
     if (!fetched) {
         char message[160];

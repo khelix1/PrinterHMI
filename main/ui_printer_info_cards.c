@@ -106,22 +106,35 @@ void ui_printer_info_cards_create(
         return;
     }
 
-    enum {
-        CARD_X = 0,
-        CARD_Y = 0,
-        CARD_W = 123,
-        CARD_H = 94,
-        CARD_GAP = 12,
-    };
+    lv_obj_update_layout(parent);
+    int parent_width = lv_obj_get_width(parent);
+    int parent_height = lv_obj_get_height(parent);
+    int card_width = 123;
+    int card_height = 94;
+    int card_gap = 12;
+    int card_x[6] = {0, 135, 270, 405, 540, 675};
+    int card_y[6] = {0, 0, 0, 0, 0, 0};
+
+    /* Operator Shell dedicates a narrow right-hand telemetry column. */
+    if (ui_theme_is_operator_shell() && parent_width >= 240 &&
+        parent_width <= 320 && parent_height >= 200) {
+        card_gap = 10;
+        card_width = (parent_width - card_gap) / 2;
+        card_height = (parent_height - (card_gap * 2)) / 3;
+        for (int index = 0; index < 6; ++index) {
+            card_x[index] = (index % 2) * (card_width + card_gap);
+            card_y[index] = (index / 2) * (card_height + card_gap);
+        }
+    }
 
     cards->progress = ui_create_operator_info_card(
         parent,
         "PROGRESS",
         "--%",
-        CARD_X,
-        CARD_Y,
-        CARD_W,
-        CARD_H);
+        card_x[0],
+        card_y[0],
+        card_width,
+        card_height);
 
     if (cards->progress) {
         /*
@@ -142,46 +155,46 @@ void ui_printer_info_cards_create(
         parent,
         "NOZZLE",
         "-- / -- C",
-        CARD_X + (CARD_W + CARD_GAP),
-        CARD_Y,
-        CARD_W,
-        CARD_H);
+        card_x[1],
+        card_y[1],
+        card_width,
+        card_height);
 
     cards->bed = ui_create_operator_info_card(
         parent,
         "BED",
         "-- / -- C",
-        CARD_X + ((CARD_W + CARD_GAP) * 2),
-        CARD_Y,
-        CARD_W,
-        CARD_H);
+        card_x[2],
+        card_y[2],
+        card_width,
+        card_height);
 
     cards->part_fan = ui_create_operator_info_card(
         parent,
         "PART FAN",
         "-- %",
-        CARD_X + ((CARD_W + CARD_GAP) * 3),
-        CARD_Y,
-        CARD_W,
-        CARD_H);
+        card_x[3],
+        card_y[3],
+        card_width,
+        card_height);
 
     cards->elapsed = ui_create_operator_info_card(
         parent,
         "ELAPSED",
         "--:--",
-        CARD_X + ((CARD_W + CARD_GAP) * 4),
-        CARD_Y,
-        CARD_W,
-        CARD_H);
+        card_x[4],
+        card_y[4],
+        card_width,
+        card_height);
 
     cards->remaining = ui_create_operator_info_card(
         parent,
         "REMAINING",
         "--:--",
-        CARD_X + ((CARD_W + CARD_GAP) * 5),
-        CARD_Y,
-        CARD_W,
-        CARD_H);
+        card_x[5],
+        card_y[5],
+        card_width,
+        card_height);
 
     cards->eta = NULL;
 

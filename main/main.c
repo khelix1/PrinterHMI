@@ -136,6 +136,8 @@ static void sntp_wait_task(void *arg);
 #include "timezone_config.h"
 #include "ui_splash.h"
 #include "ui_shell.h"
+#include "ui_camera.h"
+#include "ui_tools.h"
 #include "ui_global_estop.h"
 #include "ui_devices.h"
 #include "ui_calibration.h"
@@ -1640,6 +1642,8 @@ static void printer_chooser_manage_bridge(int profile_index)
 
 static void app_hide_operator_pages(void)
 {
+    ui_camera_hide();
+    ui_tools_hide();
     ui_bed_mesh_close();
     ui_calibration_hide();
     ui_devices_hide();
@@ -1667,6 +1671,11 @@ static void calibration_open_bed_mesh_bridge(void)
     ui_shell_set_active_nav(UI_SHELL_PAGE_BED_MESH);
     ui_shell_page_action(UI_SHELL_PAGE_BED_MESH);
 }
+
+static void tools_open_calibration_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_CALIBRATION); ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS); }
+static void tools_open_bed_mesh_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_BED_MESH); ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS); }
+static void tools_open_devices_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_DEVICES); ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS); }
+static void tools_open_macros_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_MACROS); ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS); }
 
 
 static void settings_open_network_bridge(lv_event_t *event)
@@ -1708,13 +1717,25 @@ void ui_shell_page_action(ui_shell_page_t page)
         ui_printer_show();
         return;
 
+    case UI_SHELL_PAGE_CAMERA:
+        ui_camera_show();
+        return;
+
+    case UI_SHELL_PAGE_TOOLS:
+        ui_tools_set_callbacks(tools_open_calibration_bridge, tools_open_bed_mesh_bridge, tools_open_devices_bridge, tools_open_macros_bridge);
+        ui_tools_show();
+        return;
+
     case UI_SHELL_PAGE_FILES:
         ui_files_set_callbacks(
             files_refresh_bridge,
             files_select_bridge,
             files_preview_bridge);
+        /*
+         * ui_files_show() schedules its own load after LVGL draws the page.
+         * Calling the synchronous fetch here delays the sidebar transition.
+         */
         ui_files_show();
-        app_files_reload();
         return;
 
     case UI_SHELL_PAGE_BED_MESH:
@@ -3741,6 +3762,10 @@ static void app_splash_wifi_waiting_locked(bool connected)
 static void app_startup_show_initial_ui(void)
 {
     bsp_display_lock(0);
+
+    /* Cover the screen before any startup page allocates or invalidates. */
+    ui_splash_create();
+
     build_drybox_dashboard();
     hide_settings_tab();
     ui_dashboard_create();

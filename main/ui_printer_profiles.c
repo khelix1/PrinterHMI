@@ -10,6 +10,7 @@
 #include "moonraker_config_controller.h"
 #include "moonraker_transport_security_controller.h"
 #include "moonraker_endpoint_test.h"
+#include "camera_discovery_controller.h"
 #include "printer_preview_cache.h"
 #include "printer_preview_store.h"
 #include "printer_profile_health.h"
@@ -31,7 +32,16 @@ static lv_obj_t *s_editor_auth_popup = NULL;
 static lv_obj_t *s_editor_auth_key = NULL;
 static lv_obj_t *s_editor_auth_keyboard = NULL;
 static lv_obj_t *s_editor_keyboard = NULL;
+static lv_obj_t *s_editor_keyboard_popup = NULL;
+static lv_obj_t *s_editor_keyboard_value = NULL;
+static lv_obj_t *s_editor_keyboard_target = NULL;
 static char s_editor_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
+static lv_obj_t *s_editor_camera_popup = NULL;
+static lv_obj_t *s_editor_camera_stream = NULL;
+static lv_obj_t *s_editor_camera_keyboard = NULL;
+static char s_editor_camera_url[MOONRAKER_CONFIG_CAMERA_URL_LENGTH];
+static lv_obj_t *s_editor_camera_status = NULL;
+static lv_timer_t *s_editor_camera_discovery_timer = NULL;
 static lv_obj_t *s_editor_status = NULL;
 static lv_timer_t *s_editor_test_timer = NULL;
 
@@ -52,9 +62,13 @@ static ui_printer_profiles_discover_cb_t
 static void editor_security_close(void);
 static void editor_set_status(const char *text);
 static void editor_auth_open_cb(lv_event_t *event);
+static void editor_camera_open_cb(lv_event_t *event);
+static void editor_camera_discover_cb(lv_event_t *event);
 
 static void editor_close(void)
 {
+    if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
+    s_editor_keyboard_popup = NULL;
     if (s_editor_popup) lv_obj_delete(s_editor_popup);
     s_editor_popup = NULL;
     s_editor_name = NULL;
@@ -541,30 +555,65 @@ static void manager_select_cb(
 }
 
 
-static void editor_field_focused_cb(
-    lv_event_t *event)
+static void editor_keyboard_popup_close(void)
 {
-    if (!s_editor_keyboard) {
-        return;
+    if (s_editor_keyboard_target && s_editor_keyboard_value) {
+        lv_textarea_set_text(
+            s_editor_keyboard_target,
+            lv_textarea_get_text(s_editor_keyboard_value));
     }
-
-    lv_obj_t *field =
-        lv_event_get_target(event);
-
-    if (!field) {
-        return;
-    }
-
-    lv_keyboard_set_textarea(
-        s_editor_keyboard,
-        field);
-
-    lv_keyboard_set_mode(
-        s_editor_keyboard,
-        field == s_editor_port
-            ? LV_KEYBOARD_MODE_NUMBER
-            : LV_KEYBOARD_MODE_TEXT_LOWER);
+    if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
+    s_editor_keyboard_popup = NULL;
+    s_editor_keyboard = NULL;
+    s_editor_keyboard_value = NULL;
+    s_editor_keyboard_target = NULL;
 }
+
+
+
+static void editor_keyboard_popup_done_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_keyboard_popup_close();
+}
+
+
+static void editor_field_focused_cb(lv_event_t *event)
+{
+    lv_obj_t *field = lv_event_get_target(event);
+    if (!field) return;
+    if (s_editor_keyboard_popup && s_editor_keyboard && s_editor_keyboard_value) {
+        s_editor_keyboard_target = field;
+        lv_textarea_set_text(s_editor_keyboard_value, lv_textarea_get_text(field));
+        lv_keyboard_set_textarea(s_editor_keyboard, s_editor_keyboard_value);
+        lv_obj_move_foreground(s_editor_keyboard_popup);
+        return;
+    }
+
+    s_editor_keyboard_target = field;
+    s_editor_keyboard_popup = ui_popup_create(
+        lv_screen_active(), 800, 350, UI_POPUP_STANDARD);
+    if (!s_editor_keyboard_popup) {
+        s_editor_keyboard_target = NULL;
+        return;
+    }
+    ui_popup_add_title(s_editor_keyboard_popup, "EDIT VALUE", false, 0);
+    ui_popup_add_header_divider(s_editor_keyboard_popup, 44);
+    s_editor_keyboard_value = ui_popup_add_textarea(
+        s_editor_keyboard_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 56,
+        true, false, 127, "", lv_textarea_get_text(field), NULL);
+    s_editor_keyboard = ui_popup_add_keyboard(
+        s_editor_keyboard_popup, s_editor_keyboard_value, 720, 178,
+        LV_ALIGN_TOP_MID, 0, 112, LV_KEYBOARD_MODE_TEXT_LOWER);
+    ui_popup_add_standard_footer_divider(s_editor_keyboard_popup);
+    ui_popup_add_action_at(
+        s_editor_keyboard_popup, UI_POPUP_ACTION_CONFIRM,
+        LV_SYMBOL_OK " DONE", 508, 296, 260, 44,
+        editor_keyboard_popup_done_cb, NULL, NULL);
+    lv_obj_move_foreground(s_editor_keyboard_popup);
+}
+
+
 
 
 static void editor_apply_identity_suggestion(
@@ -754,6 +803,155 @@ static void editor_test_cb(lv_event_t *event)
 }
 
 
+static void editor_camera_close(void)
+{
+    if (s_editor_camera_discovery_timer) {
+        lv_timer_delete(s_editor_camera_discovery_timer);
+        s_editor_camera_discovery_timer = NULL;
+    }
+    if (s_editor_camera_popup) lv_obj_delete(s_editor_camera_popup);
+    s_editor_camera_popup = NULL;
+    s_editor_camera_stream = NULL;
+    s_editor_camera_keyboard = NULL;
+    s_editor_camera_status = NULL;
+}
+
+static void editor_camera_cancel_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_camera_close();
+}
+
+static void editor_camera_save_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_editor_camera_stream) strlcpy(s_editor_camera_url, lv_textarea_get_text(s_editor_camera_stream), sizeof(s_editor_camera_url));
+    editor_camera_close();
+    editor_set_status(s_editor_camera_url[0] ? "Camera stream URL ready. Press SAVE to keep it." : "Camera stream URL cleared.");
+}
+
+
+static void editor_camera_set_status(const char *text)
+{
+    if (s_editor_camera_status) {
+        lv_label_set_text(s_editor_camera_status, text ? text : "");
+    }
+}
+
+
+static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
+{
+    moonraker_webcam_t webcam = {0};
+    bool found = false;
+
+    if (!camera_discovery_take_result(&webcam, &found)) {
+        return;
+    }
+
+    if (timer) {
+        lv_timer_delete(timer);
+    }
+    s_editor_camera_discovery_timer = NULL;
+
+    if (!s_editor_camera_popup) {
+        return;
+    }
+    if (!found) {
+        editor_camera_set_status(
+            "No configured Moonraker camera found. Enter a stream URL manually.");
+        return;
+    }
+
+    strlcpy(
+        s_editor_camera_url,
+        webcam.stream_url,
+        sizeof(s_editor_camera_url));
+    if (s_editor_camera_stream) {
+        lv_textarea_set_text(s_editor_camera_stream, s_editor_camera_url);
+    }
+
+    char status[192];
+    snprintf(
+        status,
+        sizeof(status),
+        "Found %s. Its stream URL is selected.",
+        webcam.name[0] ? webcam.name : "Moonraker camera");
+    editor_camera_set_status(status);
+}
+
+
+static void editor_camera_discover_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!s_editor_host || !s_editor_port) {
+        return;
+    }
+
+    const char *host = lv_textarea_get_text(s_editor_host);
+    const char *port_text = lv_textarea_get_text(s_editor_port);
+    char *port_end = NULL;
+    long port = strtol(port_text ? port_text : "", &port_end, 10);
+    if (!host || !host[0] || !port_text || !port_text[0] ||
+        !port_end || *port_end != '\0' || port <= 0 || port >= 65536) {
+        editor_camera_set_status(
+            "Enter a valid Moonraker host and port before searching.");
+        return;
+    }
+    if (!camera_discovery_start(host, (int)port, s_editor_api_key)) {
+        editor_camera_set_status(
+            camera_discovery_busy()
+                ? "Camera search is already running."
+                : "Unable to start the camera search.");
+        return;
+    }
+
+    editor_camera_set_status("Searching Moonraker for configured cameras...");
+    s_editor_camera_discovery_timer = lv_timer_create(
+        editor_camera_discovery_poll_cb, 80, NULL);
+    if (!s_editor_camera_discovery_timer) {
+        editor_camera_set_status("Camera search is running; wait for it to finish.");
+    }
+}
+
+
+static void editor_camera_field_focused_cb(lv_event_t *event)
+{
+    if (!s_editor_camera_keyboard) {
+        return;
+    }
+
+    lv_obj_t *field = lv_event_get_target(event);
+    if (field) {
+        lv_keyboard_set_textarea(s_editor_camera_keyboard, field);
+        lv_keyboard_set_mode(
+            s_editor_camera_keyboard,
+            LV_KEYBOARD_MODE_TEXT_LOWER);
+    }
+}
+
+static void editor_camera_open_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_editor_camera_popup) { lv_obj_move_foreground(s_editor_camera_popup); return; }
+    s_editor_camera_popup = ui_popup_create(lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
+    if (!s_editor_camera_popup) return;
+    ui_popup_add_title(s_editor_camera_popup, "CAMERA SETUP", false, 0);
+    ui_popup_add_header_divider(s_editor_camera_popup, 44);
+    ui_popup_add_caption(s_editor_camera_popup, "MJPEG / HTTP STREAM URL (OPTIONAL)", 28, 72, 420);
+    ui_popup_add_status_label(s_editor_camera_popup, "Search uses this printer's Moonraker connection and API key.", 28, 108, 720);
+    s_editor_camera_stream = ui_popup_add_textarea(s_editor_camera_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 150, true, false, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, "http://...", s_editor_camera_url, NULL);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND CAMERAS", 28, 218, 720, 48, editor_camera_discover_cb, NULL, NULL);
+    s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, "Or enter an MJPEG / HTTP stream URL manually.", 28, 278, 720);
+    s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 230, LV_ALIGN_TOP_MID, 0, 220, LV_KEYBOARD_MODE_TEXT_LOWER);
+    if (s_editor_camera_stream) {
+        lv_obj_add_event_cb(s_editor_camera_stream, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
+    }
+    ui_popup_add_standard_footer_divider(s_editor_camera_popup);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", 32, 500, 260, 48, editor_camera_cancel_cb, NULL, NULL);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " USE CAMERA", 508, 500, 260, 48, editor_camera_save_cb, NULL, NULL);
+    lv_obj_move_foreground(s_editor_camera_popup);
+}
+
 static void editor_save_cb(
     lv_event_t *event)
 {
@@ -820,6 +1018,11 @@ static void editor_save_cb(
             s_editor_api_key)) {
         editor_set_status(
             "Use a hostname or IPv4 address only; omit http://, paths and spaces.");
+        return;
+    }
+
+    if (!moonraker_config_set_camera_stream_url(s_editor_profile, s_editor_camera_url)) {
+        editor_set_status("Camera URL must be empty or start with http:// or https://.");
         return;
     }
 
@@ -928,6 +1131,7 @@ static void manager_edit_cb(
         s_editor_api_key,
         profile && profile->configured ? profile->api_key : "",
         sizeof(s_editor_api_key));
+    strlcpy(s_editor_camera_url, profile && profile->configured ? profile->camera_stream_url : "", sizeof(s_editor_camera_url));
 
     char port_text[16];
 
@@ -941,141 +1145,25 @@ static void manager_edit_cb(
         s_selected_profile;
     s_editor_secure = profile && profile->secure_transport;
 
-    s_editor_popup =
-        ui_popup_create(
-            lv_screen_active(),
-            800,
-            520,
-            UI_POPUP_STANDARD);
-
-    if (!s_editor_popup) {
-        s_editor_profile = -1;
-        return;
-    }
-
-    ui_popup_add_title(
-        s_editor_popup,
-        profile && profile->configured
-            ? "EDIT PRINTER"
-            : "ADD PRINTER",
-        false,
-        0);
-
-    ui_popup_add_header_divider(
-        s_editor_popup,
-        44);
-
-    ui_popup_add_caption(
-        s_editor_popup,
-        "PRINTER NAME",
-        28,
-        68,
-        150);
-
-    s_editor_name =
-        ui_popup_add_textarea(
-            s_editor_popup,
-            560,
-            48,
-            LV_ALIGN_TOP_LEFT,
-            200,
-            55,
-            true,
-            false,
-            MOONRAKER_CONFIG_NAME_LENGTH - 1,
-            "Printer name",
-            name,
-            NULL);
-
-    ui_popup_add_caption(
-        s_editor_popup,
-        "MOONRAKER HOST",
-        28,
-        128,
-        160);
-
-    s_editor_host =
-        ui_popup_add_textarea(
-            s_editor_popup,
-            560,
-            48,
-            LV_ALIGN_TOP_LEFT,
-            200,
-            115,
-            true,
-            false,
-            MOONRAKER_CONFIG_HOST_LENGTH - 1,
-            "IP address or hostname",
-            host,
-            NULL);
-
-    ui_popup_add_caption(
-        s_editor_popup,
-        "MOONRAKER PORT",
-        28,
-        188,
-        160);
-
-    s_editor_port =
-        ui_popup_add_textarea(
-            s_editor_popup,
-            220,
-            48,
-            LV_ALIGN_TOP_LEFT,
-            200,
-            175,
-            true,
-            false,
-            5,
-            "7125",
-            port_text,
-            "0123456789");
-
-    ui_popup_add_action_at(
-    s_editor_popup,
-    UI_POPUP_ACTION_SECONDARY,
-    LV_SYMBOL_SETTINGS " AUTHENTICATION",
-    440,
-    175,
-    320,
-    48,
-    editor_auth_open_cb,
-    NULL,
-    NULL);
-
-ui_popup_add_action_at(
-    s_editor_popup,
-    UI_POPUP_ACTION_SECONDARY,
-    s_editor_secure
-        ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS"
-        : LV_SYMBOL_SETTINGS " STANDARD HTTP",
-    200,
-    235,
-    560,
-    48,
-    editor_security_open_cb,
-    NULL,
-    NULL);
-
-    s_editor_status =
-        ui_popup_add_status_label(
-            s_editor_popup,
-            "Changes are saved to this printer profile.",
-            28,
-            286,
-            720);
-
-    s_editor_keyboard =
-        ui_popup_add_keyboard(
-            s_editor_popup,
-            s_editor_name,
-            720,
-            125,
-            LV_ALIGN_TOP_MID,
-            0,
-            315,
-            LV_KEYBOARD_MODE_TEXT_LOWER);
-
+    s_editor_popup = ui_popup_create(lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
+    if (!s_editor_popup) { s_editor_profile = -1; return; }
+    ui_popup_add_title(s_editor_popup, profile && profile->configured ? "EDIT PRINTER" : "ADD PRINTER", false, 0);
+    ui_popup_add_header_divider(s_editor_popup, 44);
+    ui_popup_add_caption(s_editor_popup, "IDENTITY", 28, 68, 160);
+    ui_popup_add_caption(s_editor_popup, "PRINTER NAME", 28, 96, 160);
+    s_editor_name = ui_popup_add_textarea(s_editor_popup, 520, 48, LV_ALIGN_TOP_LEFT, 240, 83, true, false, MOONRAKER_CONFIG_NAME_LENGTH - 1, "Printer name", name, NULL);
+    ui_popup_add_caption(s_editor_popup, "MOONRAKER CONNECTION", 28, 151, 240);
+    ui_popup_add_caption(s_editor_popup, "HOST", 28, 181, 160);
+    s_editor_host = ui_popup_add_textarea(s_editor_popup, 520, 48, LV_ALIGN_TOP_LEFT, 240, 168, true, false, MOONRAKER_CONFIG_HOST_LENGTH - 1, "IP address or hostname", host, NULL);
+    ui_popup_add_caption(s_editor_popup, "PORT", 28, 237, 160);
+    s_editor_port = ui_popup_add_textarea(s_editor_popup, 160, 48, LV_ALIGN_TOP_LEFT, 240, 224, true, false, 5, "7125", port_text, "0123456789");
+    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " DISCOVER", 420, 224, 340, 48, editor_discover_cb, NULL, NULL);
+    ui_popup_add_caption(s_editor_popup, "SECURITY & ACCESS", 28, 278, 240);
+    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS" : LV_SYMBOL_SETTINGS " STANDARD HTTP", 28, 302, 356, 48, editor_security_open_cb, NULL, NULL);
+    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SETTINGS " AUTHENTICATION", 404, 302, 356, 48, editor_auth_open_cb, NULL, NULL);
+    s_editor_status = ui_popup_add_status_label(s_editor_popup, "Configure the printer connection, then test and save.", 28, 358, 720);
+    s_editor_keyboard = ui_popup_add_keyboard(s_editor_popup, s_editor_name, 0, 0, LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_add_flag(s_editor_keyboard, LV_OBJ_FLAG_HIDDEN);
     if (s_editor_name) {
         lv_obj_add_event_cb(
             s_editor_name,
@@ -1107,22 +1195,23 @@ ui_popup_add_action_at(
         UI_POPUP_ACTION_CANCEL,
         LV_SYMBOL_CLOSE " CANCEL",
         32,
-        460,
+        508,
         172,
         44,
         editor_cancel_cb,
         NULL,
         NULL);
 
+
     ui_popup_add_action_at(
         s_editor_popup,
         UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_REFRESH " DISCOVER",
+        LV_SYMBOL_IMAGE " CAMERA",
         220,
-        460,
+        508,
         172,
         44,
-        editor_discover_cb,
+        editor_camera_open_cb,
         NULL,
         NULL);
 
@@ -1131,7 +1220,7 @@ ui_popup_add_action_at(
         UI_POPUP_ACTION_SECONDARY,
         LV_SYMBOL_PLAY " TEST",
         408,
-        460,
+        508,
         172,
         44,
         editor_test_cb,
@@ -1143,7 +1232,7 @@ ui_popup_add_action_at(
         UI_POPUP_ACTION_CONFIRM,
         LV_SYMBOL_SAVE " SAVE",
         596,
-        460,
+        508,
         172,
         44,
         editor_save_cb,
@@ -1318,4 +1407,17 @@ void ui_printer_profiles_show_for_slot(
         profile->host,
         profile->port);
     manager_set_status(status);
+}
+
+
+void ui_printer_profiles_open_camera_setup(
+    int profile_index,
+    ui_printer_profiles_active_changed_cb_t active_changed_cb,
+    ui_printer_profiles_discover_cb_t discover_cb)
+{
+    ui_printer_profiles_show_for_slot(
+        profile_index, active_changed_cb, discover_cb);
+    if (!s_manager_popup) return;
+    manager_edit_cb(NULL);
+    if (s_editor_popup) editor_camera_open_cb(NULL);
 }

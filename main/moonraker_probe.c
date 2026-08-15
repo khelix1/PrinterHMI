@@ -4,6 +4,8 @@
 
 #include "esp_err.h"
 #include "esp_http_client.h"
+#include "cJSON.h"
+#include "esp_heap_caps.h"
 
 #include "lwip/inet.h"
 #include "lwip/sockets.h"
@@ -11,6 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -280,6 +283,127 @@ static bool extract_json_string(
     }
     out[copied] = '\0';
     return copied > 0 && *value == '\"';
+}
+
+
+
+static bool normalize_webcam_url(
+    const char *host,
+    int port,
+    const char *source,
+    char *destination,
+    size_t destination_size)
+{
+    (void)port;
+    if (!host || !host[0] || !source || !source[0] ||
+        !destination || destination_size == 0) {
+        return false;
+    }
+
+    if (strncmp(source, "http://", 7) == 0 ||
+        strncmp(source, "https://", 8) == 0) {
+        strlcpy(destination, source, destination_size);
+        return destination[0] != '\0';
+    }
+
+    /* Relative webcam paths are served by the host web proxy on port 80,
+     * not by Moonraker's API port or its secured HTTPS proxy port. */
+    int written = snprintf(
+        destination,
+        destination_size,
+        "http://%s/%s",
+        host,
+        source[0] == '/' ? source + 1 : source);
+    return written > 0 && written < (int)destination_size;
+}
+
+
+
+bool moonraker_probe_first_webcam_with_api_key(
+    const char *host,
+    int port,
+    const char *api_key,
+    moonraker_webcam_t *webcam)
+{
+    if (!host || !host[0] || port <= 0 || port >= 65536 || !webcam) {
+        return false;
+    }
+
+    char *body = heap_caps_malloc(
+        4096,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) {
+        body = heap_caps_malloc(4096, MALLOC_CAP_8BIT);
+    }
+    if (!body) {
+        return false;
+    }
+
+    bool found = false;
+    moonraker_webcam_t result = {0};
+    if (!probe_get(
+            host,
+            port,
+            "/server/webcams/list",
+            api_key,
+            body,
+            4096)) {
+        free(body);
+        return false;
+    }
+
+    cJSON *root = cJSON_Parse(body);
+    cJSON *api_result = root ? cJSON_GetObjectItemCaseSensitive(root, "result") : NULL;
+    cJSON *webcams = api_result
+        ? cJSON_GetObjectItemCaseSensitive(api_result, "webcams")
+        : (root ? cJSON_GetObjectItemCaseSensitive(root, "webcams") : NULL);
+
+    if (cJSON_IsArray(webcams)) {
+        cJSON *entry = NULL;
+        cJSON_ArrayForEach(entry, webcams) {
+            cJSON *enabled = cJSON_GetObjectItemCaseSensitive(entry, "enabled");
+            cJSON *stream = cJSON_GetObjectItemCaseSensitive(entry, "stream_url");
+            if (!cJSON_IsObject(entry) ||
+                (enabled && !cJSON_IsTrue(enabled)) ||
+                !cJSON_IsString(stream) || !stream->valuestring ||
+                !stream->valuestring[0] ||
+                !normalize_webcam_url(
+                    host,
+                    port,
+                    stream->valuestring,
+                    result.stream_url,
+                    sizeof(result.stream_url))) {
+                continue;
+            }
+
+            cJSON *name = cJSON_GetObjectItemCaseSensitive(entry, "name");
+            cJSON *snapshot = cJSON_GetObjectItemCaseSensitive(entry, "snapshot_url");
+            strlcpy(
+                result.name,
+                cJSON_IsString(name) && name->valuestring && name->valuestring[0]
+                    ? name->valuestring
+                    : "Moonraker camera",
+                sizeof(result.name));
+            if (cJSON_IsString(snapshot) && snapshot->valuestring &&
+                snapshot->valuestring[0]) {
+                (void)normalize_webcam_url(
+                    host,
+                    port,
+                    snapshot->valuestring,
+                    result.snapshot_url,
+                    sizeof(result.snapshot_url));
+            }
+            found = true;
+            break;
+        }
+    }
+
+    cJSON_Delete(root);
+    free(body);
+    if (found) {
+        *webcam = result;
+    }
+    return found;
 }
 
 

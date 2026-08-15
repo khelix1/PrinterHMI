@@ -27,4 +27,10 @@ void ui_printer_profiles_set_discovered_endpoint(
     int port,
     const char *identity);
 
+/* Opens the selected profile editor directly at its Camera Setup panel. */
+void ui_printer_profiles_open_camera_setup(
+    int profile_index,
+    ui_printer_profiles_active_changed_cb_t active_changed_cb,
+    ui_printer_profiles_discover_cb_t discover_cb);
+
 void ui_printer_profiles_close_all(void);

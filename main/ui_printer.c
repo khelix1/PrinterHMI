@@ -126,7 +126,14 @@ void ui_printer_preview_create(lv_obj_t *parent)
     int preview_width = (parent_width * 36) / 100;
     int preview_height = parent_height - 36;
 
-    if (preview_width < 220) preview_width = 220;
+    if (ui_theme_is_operator_shell()) {
+        /* Keep the job details usable in the narrower split Active Print card. */
+        preview_width = (parent_width * 34) / 100;
+        if (preview_width < 158) preview_width = 158;
+        if (preview_width > 184) preview_width = 184;
+    } else if (preview_width < 220) {
+        preview_width = 220;
+    }
     if (preview_height < 120) preview_height = 120;
 
     /*

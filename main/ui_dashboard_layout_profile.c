@@ -34,6 +34,37 @@ static const ui_dashboard_layout_profile_t s_operator = {
 };
 
 /*
+ * Operator Shell prioritizes the active job while reserving a dedicated
+ * instrumentation column.  The shared active-print and machine-status
+ * modules retain their proven data bindings.
+ */
+static const ui_dashboard_layout_profile_t s_operator_shell = {
+    .subtitle = "Live Print Cell Overview",
+    .banner = {20, 52, 800, 54},
+    .active_print = {20, 126, 500, 306},
+    .machine_status = {532, 126, 288, 306},
+    .command_bar = {20, 444, 800, 64},
+    .active_content = {
+        .heading_x = 18,
+        .heading_y = 12,
+        .filename_x = 142,
+        .filename_y = 14,
+        .preview_x = 20,
+        .preview_y = 42,
+        .preview_width = 0,
+        .preview_height = 0,
+        .footer_x = 18,
+        .footer_bottom = 31,
+    },
+    .machine_content = {
+        .composition = UI_DASHBOARD_MACHINE_SINGLE_CARD,
+        .label_x = 14,
+        .value_x = 142,
+        .split_gap = 10,
+    },
+};
+
+/*
  * Foundry treats the print as the primary workshop artifact. The preview
  * receives the larger card while machine instrumentation stays compact.
  */
@@ -102,6 +133,8 @@ ui_dashboard_layout_profile_for_theme(ui_theme_id_t theme)
             return &s_foundry;
         case UI_THEME_GLASS:
             return &s_glass;
+        case UI_THEME_OPERATOR_SHELL:
+            return &s_operator_shell;
         case UI_THEME_OPERATOR:
         default:
             return &s_operator;

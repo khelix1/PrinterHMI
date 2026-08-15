@@ -332,6 +332,27 @@ static void theme_select_cb(lv_event_t *event)
     lv_async_call(theme_changed_async_cb, NULL);
 }
 
+static void operator_shell_select_cb(lv_event_t *event)
+{
+    if (!event || s_theme_change_pending) {
+        return;
+    }
+
+    lv_event_code_t code = lv_event_get_code(event);
+    if (code != LV_EVENT_CLICKED && code != LV_EVENT_PRESSED) {
+        return;
+    }
+
+    if (!theme_manager_select(UI_THEME_OPERATOR_SHELL)) {
+        ESP_LOGE(TAG, "Could not select Operator Shell theme");
+        return;
+    }
+
+    s_pending_theme_changed_cb = s_theme_changed_cb;
+    s_theme_change_pending = true;
+    lv_async_call(theme_changed_async_cb, NULL);
+}
+
 static void custom_theme_close_cb(lv_event_t *event)
 {
     (void)event;
@@ -666,21 +687,50 @@ void ui_settings_popups_show_theme(
     };
 
     ui_theme_id_t selected = theme_manager_active();
+    lv_obj_t *preview_grid = ui_popup_add_list(
+        s_theme_popup, 24, 84, 872, 286);
+    if (!preview_grid) {
+        settings_popup_delete(&s_theme_popup);
+        s_theme_changed_cb = NULL;
+        return;
+    }
+    lv_obj_set_style_pad_all(preview_grid, 0, 0);
+    lv_obj_set_style_bg_opa(preview_grid, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(preview_grid, 0, 0);
 
+    /* First row stays at the original comfortable three-card width. */
     for (size_t index = 0;
          index < sizeof(choices) / sizeof(choices[0]);
          ++index) {
         ui_theme_preview_create(
-            s_theme_popup,
+            preview_grid,
             choices[index].id,
             !theme_manager_custom_active() &&
                 choices[index].id == selected,
-            24 + (int32_t)index * 290,
-            84,
+            8 + (int32_t)index * 288,
+            6,
             276,
             250,
             theme_select_cb,
             (void *)(uintptr_t)choices[index].id);
+    }
+
+    /* Swipe the preview area upward to reach the additional layout theme. */
+    lv_obj_t *operator_shell_preview = ui_theme_preview_create(
+        preview_grid,
+        UI_THEME_OPERATOR_SHELL,
+        !theme_manager_custom_active() &&
+            UI_THEME_OPERATOR_SHELL == selected,
+        8,
+        268,
+        276,
+        250,
+        operator_shell_select_cb,
+        NULL);
+    if (operator_shell_preview) {
+        lv_obj_add_event_cb(operator_shell_preview,
+                            operator_shell_select_cb,
+                            LV_EVENT_PRESSED, NULL);
     }
 
     ui_popup_add_standard_footer_divider(s_theme_popup);

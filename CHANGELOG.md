@@ -3,6 +3,25 @@
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 
+## [6.2.0] - 2026-08-15
+
+### Added
+
+- Added the Operator Shell theme: an eight-item print-cell navigation rail and a consistent operational layout across Dashboard, Printer, Files, Camera, Tools, Console, Drybox, and Settings.
+- Added live MJPEG camera streaming for the active printer, including Moonraker camera discovery, per-printer stream configuration, PSRAM-first frame storage, continuous hardware JPEG decode on ESP32-P4, fullscreen viewing, and Dashboard preview.
+- Added a four-card Tools hub for Calibration, Bed Mesh, Devices, and Macros.
+
+### Changed
+
+- Redesigned the printer-profile editor and camera setup workflow with shared popup controls and usable on-screen keyboards.
+- Reworked the Printer page into an Active Print workspace with compact live controls, complete machine metrics, and a lower action rail.
+- Made Files open immediately, autoload its library after the first frame, and retry transient Moonraker file-list failures automatically.
+- Made the splash overlay render on LVGL's top layer, preventing startup page construction from flashing through it.
+
+### Validation
+
+- Verified on the ESP32-P4 panel: eight-item navigation, live Camera stream, Camera configuration, Files browsing and refresh, Tools routing, Console, Drybox, Settings, and Operator Shell layout fitting.
+
 ## [6.1.1] - 2026-08-11
 
 ### Added

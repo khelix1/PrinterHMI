@@ -419,6 +419,10 @@ void ui_printer_live_status_create(
 
     lv_obj_set_style_pad_all(card, 0, 0);
 
+    const bool compact_operator_shell = ui_theme_is_operator_shell();
+    const int detail_x = compact_operator_shell ? 210 : 330;
+    const int detail_col_2_x = compact_operator_shell ? 340 : 445;
+
     lv_obj_t *title =
         lv_label_create(card);
 
@@ -429,7 +433,7 @@ void ui_printer_live_status_create(
     ui_apply_text_body_large(title);
     ui_apply_label_dim(title);
 
-    lv_obj_set_pos(title, 330, 12);
+    lv_obj_set_pos(title, detail_x, 12);
 
     /*
      * The shared status banner already owns the active filename.
@@ -448,7 +452,7 @@ void ui_printer_live_status_create(
         LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_set_size(divider, 1, 156);
-    lv_obj_set_pos(divider, 310, 48);
+    lv_obj_set_pos(divider, compact_operator_shell ? 196 : 310, 48);
 
     lv_obj_set_style_bg_color(
         divider,
@@ -490,7 +494,7 @@ void ui_printer_live_status_create(
 
         lv_obj_set_pos(
             *layer_label,
-            330,
+            detail_x,
             62);
     }
 
@@ -518,7 +522,7 @@ void ui_printer_live_status_create(
 
         lv_obj_set_pos(
             *speed_label,
-            445,
+            detail_col_2_x,
             62);
     }
 
@@ -542,8 +546,8 @@ void ui_printer_live_status_create(
 
         lv_obj_set_pos(
             *flow_label,
-            560,
-            62);
+            compact_operator_shell ? detail_x : 560,
+            compact_operator_shell ? 106 : 62);
     }
 
     if (filament_label) {
@@ -566,8 +570,8 @@ void ui_printer_live_status_create(
 
         lv_obj_set_pos(
             *filament_label,
-            675,
-            62);
+            compact_operator_shell ? detail_col_2_x : 675,
+            compact_operator_shell ? 106 : 62);
 
         lv_obj_add_flag(
             *filament_label,
@@ -594,8 +598,8 @@ void ui_printer_live_status_create(
 
     lv_obj_set_pos(
         speed_title,
-        330,
-        126);
+        detail_x,
+        compact_operator_shell ? 150 : 126);
 
     s_speed_factor_value =
         lv_label_create(card);
@@ -617,8 +621,8 @@ void ui_printer_live_status_create(
 
     lv_obj_set_pos(
         s_speed_factor_value,
-        470,
-        124);
+        compact_operator_shell ? 390 : 470,
+        compact_operator_shell ? 148 : 124);
 
     set_factor_value_text(
         s_speed_factor_value,
@@ -627,8 +631,8 @@ void ui_printer_live_status_create(
     s_speed_factor_slider =
         create_tuning_slider(
             card,
-            330,
-            174,
+            detail_x,
+            compact_operator_shell ? 184 : 174,
             UI_ACCENT_CYAN,
             PRINTER_TUNING_SPEED);
 
@@ -644,8 +648,8 @@ void ui_printer_live_status_create(
 
     lv_obj_set_pos(
         flow_title,
-        575,
-        126);
+        compact_operator_shell ? detail_x : 575,
+        compact_operator_shell ? 206 : 126);
 
     s_flow_factor_value =
         lv_label_create(card);
@@ -667,8 +671,8 @@ void ui_printer_live_status_create(
 
     lv_obj_set_pos(
         s_flow_factor_value,
-        715,
-        124);
+        compact_operator_shell ? 390 : 715,
+        compact_operator_shell ? 204 : 124);
 
     set_factor_value_text(
         s_flow_factor_value,
@@ -677,8 +681,8 @@ void ui_printer_live_status_create(
     s_flow_factor_slider =
         create_tuning_slider(
             card,
-            575,
-            174,
+            compact_operator_shell ? detail_x : 575,
+            compact_operator_shell ? 240 : 174,
             UI_OK,
             PRINTER_TUNING_FLOW);
 

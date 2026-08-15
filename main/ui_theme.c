@@ -20,12 +20,58 @@ static ui_accent_id_t s_active_accent = UI_ACCENT_DEFAULT;
 static ui_density_id_t s_active_density = UI_DENSITY_COMFORTABLE;
 static ui_accessibility_t s_accessibility = {0};
 
+/*
+ * Theme D: Operator Shell.
+ *
+ * It deliberately keeps Theme B's proven shared widgets and geometry, but
+ * resolves the runtime tokens through its own graphite/teal control-room
+ * palette.  That makes the selection visually and operationally distinct
+ * without duplicating every page module.
+ */
+static uint32_t operator_shell_color(uint32_t operator_rgb)
+{
+    switch (operator_rgb) {
+        case 0x0B1118: return 0x071114;
+        case 0x06101B: return 0x041013;
+        case 0x0B1324: return 0x08171B;
+        case 0x171018: return 0x1A1012;
+        case 0x111A24: return 0x0B1B1F;
+        case 0x101821: return 0x0A181B;
+        case 0x101B2A: return 0x0D2023;
+        case 0x101A25: return 0x10262A;
+        case 0x1A2633: return 0x163338;
+        case 0x162235: return 0x123035;
+        case 0x25476A: return 0x236C70;
+        case 0x31445C: return 0x315E61;
+        case 0x35506F: return 0x398083;
+        case 0x3D6F99: return 0x2E9798;
+        case 0x8FD3FF: return 0x8EF5E1;
+        case 0x3A4654: return 0x3D585A;
+        case 0xE8F1FF: return 0xE3F6F1;
+        case 0xFFFFFF: return 0xF6FFFC;
+        case 0x8FA7C2: return 0x9CBAB4;
+        case 0xAFC7E8: return 0xBCD8D1;
+        case 0x255A91: return 0x126F72;
+        case 0x1266C3: return 0x19A7A4;
+        case 0x33C7FF: return 0x51E7D0;
+        case 0x19C7E8: return 0x2CD6C3;
+        case 0x3AA8FF: return 0x3AC9BA;
+        case 0xB65CFF: return 0x9B8CFF;
+        case 0x09743D: return 0x0C805D;
+        case 0x70E000: return 0x72E6A0;
+        case 0xFFC857: return 0xF3C969;
+        case 0xFF4D4D: return 0xFF6B72;
+        default: return operator_rgb;
+    }
+}
+
 void ui_theme_set_active(ui_theme_id_t theme)
 {
     switch (theme) {
         case UI_THEME_CLASSIC:
         case UI_THEME_OPERATOR:
         case UI_THEME_GLASS:
+        case UI_THEME_OPERATOR_SHELL:
             s_active_theme = theme;
             break;
 
@@ -40,6 +86,11 @@ ui_theme_id_t ui_theme_get_active(void)
     return s_active_theme;
 }
 
+bool ui_theme_is_operator_shell(void)
+{
+    return s_active_theme == UI_THEME_OPERATOR_SHELL;
+}
+
 const char *ui_theme_name(ui_theme_id_t theme)
 {
     switch (theme) {
@@ -48,6 +99,9 @@ const char *ui_theme_name(ui_theme_id_t theme)
 
         case UI_THEME_GLASS:
             return "Dark Glass";
+
+        case UI_THEME_OPERATOR_SHELL:
+            return "Operator Shell";
 
         case UI_THEME_OPERATOR:
         default:
@@ -74,6 +128,9 @@ lv_color_t ui_theme_color(uint32_t operator_rgb,
     if (s_active_theme == UI_THEME_GLASS) {
         return lv_color_hex(glass_rgb);
     }
+    if (s_active_theme == UI_THEME_OPERATOR_SHELL) {
+        return lv_color_hex(operator_shell_color(operator_rgb));
+    }
     return lv_color_hex(operator_rgb);
 }
 
@@ -95,6 +152,9 @@ int32_t ui_theme_metric(int32_t operator_value,
     }
     if (s_active_theme == UI_THEME_GLASS) {
         return glass_value;
+    }
+    if (s_active_theme == UI_THEME_OPERATOR_SHELL) {
+        return operator_value + (operator_value >= 10 ? 2 : 0);
     }
     return operator_value;
 }
@@ -429,7 +489,8 @@ void ui_apply_button_status_style(
         return;
     }
 
-    if (s_active_theme == UI_THEME_OPERATOR) {
+    if (s_active_theme == UI_THEME_OPERATOR ||
+        s_active_theme == UI_THEME_OPERATOR_SHELL) {
         ui_theme_b_apply_button_status_style(
             obj,
             kind);

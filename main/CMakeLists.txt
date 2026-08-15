@@ -50,6 +50,14 @@ idf_component_register(
         "ui_splash.c"
         "ui_logo_assets.c"
 
+        # Camera
+        "ui_camera.c"
+        "camera_stream_controller.c"
+        "camera_jpeg_decoder.c"
+
+        # Tools
+        "ui_tools.c"
+
         # Dashboard
         "ui_dashboard.c"
         "dashboard_live_controller.c"
@@ -117,6 +125,7 @@ idf_component_register(
         "moonraker_discovery.c"
         "moonraker_probe.c"
         "moonraker_endpoint_test.c"
+        "camera_discovery_controller.c"
         "moonraker_poll.c"
         "moonraker_live_transport.c"
         "moonraker_live_websocket.c"
@@ -161,6 +170,7 @@ idf_component_register(
         esp_event
         esp_netif
         esp_http_client
+        esp_driver_jpeg
         espressif__cjson
         espressif__esp_websocket_client
         espressif__esp_wifi_remote

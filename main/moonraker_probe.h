@@ -42,3 +42,19 @@ bool moonraker_probe_endpoint_with_api_key(
     moonraker_probe_result_t *result);
 
 bool moonraker_probe_host(const char *host, int port);
+
+#define MOONRAKER_WEBCAM_NAME_LENGTH 64
+#define MOONRAKER_WEBCAM_URL_LENGTH 192
+
+typedef struct {
+    char name[MOONRAKER_WEBCAM_NAME_LENGTH];
+    char stream_url[MOONRAKER_WEBCAM_URL_LENGTH];
+    char snapshot_url[MOONRAKER_WEBCAM_URL_LENGTH];
+} moonraker_webcam_t;
+
+/* Gets the first configured Moonraker webcam without changing any profile. */
+bool moonraker_probe_first_webcam_with_api_key(
+    const char *host,
+    int port,
+    const char *api_key,
+    moonraker_webcam_t *webcam);

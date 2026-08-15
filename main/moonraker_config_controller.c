@@ -156,6 +156,14 @@ static bool valid_api_key(const char *api_key)
 }
 
 
+static bool valid_camera_stream_url(const char *url)
+{
+    if (!url || !url[0]) return true;
+    size_t length = strnlen(url, MOONRAKER_CONFIG_CAMERA_URL_LENGTH);
+    if (length >= MOONRAKER_CONFIG_CAMERA_URL_LENGTH) return false;
+    return strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0;
+}
+
 static bool valid_profile_index(int profile_index)
 {
     return profile_index >= 0 &&
@@ -257,7 +265,8 @@ static bool profile_valid(
            profile->configured &&
            profile->name[0] &&
            valid_host(profile->host) &&
-           valid_port(profile->port);
+           valid_port(profile->port) &&
+           valid_camera_stream_url(profile->camera_stream_url);
 }
 
 
@@ -331,6 +340,12 @@ static esp_err_t persist_profile(
 
     profile_key(key, sizeof(key), profile_index, "key");
     error = nvs_set_str(handle, key, profile->api_key);
+    if (error != ESP_OK) return error;
+    profile_key(key, sizeof(key), profile_index, "cam");
+    error = nvs_set_str(handle, key, profile->camera_stream_url);
+    if (error != ESP_OK) return error;
+    profile_key(key, sizeof(key), profile_index, "cam");
+    error = nvs_set_str(handle, key, profile->camera_stream_url);
     if (error != ESP_OK) return error;
     profile_key(key, sizeof(key), profile_index, "tls");
     return nvs_set_u8(handle, key, profile->secure_transport ? 1 : 0);
@@ -525,6 +540,11 @@ static bool load_profile(
     if (!valid_api_key(loaded.api_key)) {
         loaded.api_key[0] = '\0';
     }
+
+    size_t camera_length = sizeof(loaded.camera_stream_url);
+    profile_key(key, sizeof(key), profile_index, "cam");
+    if (nvs_get_str(handle, key, loaded.camera_stream_url, &camera_length) != ESP_OK ||
+        !valid_camera_stream_url(loaded.camera_stream_url)) loaded.camera_stream_url[0] = '\0';
 
     uint8_t secure_transport = 0;
     profile_key(key, sizeof(key), profile_index, "tls");
@@ -1023,6 +1043,23 @@ bool moonraker_config_replace_profiles(
     return true;
 }
 
+
+const char *moonraker_config_camera_stream_url(int profile_index)
+{
+    const moonraker_profile_t *profile = moonraker_config_profile(profile_index);
+    return profile ? profile->camera_stream_url : "";
+}
+
+bool moonraker_config_set_camera_stream_url(int profile_index, const char *url)
+{
+    if (!valid_profile_index(profile_index) || !valid_camera_stream_url(url)) return false;
+    moonraker_profile_t previous = s_profiles[profile_index];
+    copy_text(s_profiles[profile_index].camera_stream_url,
+              sizeof(s_profiles[profile_index].camera_stream_url), url);
+    if (!persist_collection()) { s_profiles[profile_index] = previous; return false; }
+    if (profile_index == s_active_profile) advance_configuration_generation();
+    return true;
+}
 
 bool moonraker_config_select_host(
     const char *host,

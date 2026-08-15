@@ -52,6 +52,8 @@ idf_component_register(
 
         # Camera
         "ui_camera.c"
+        "camera_stream_controller.c"
+        "camera_jpeg_decoder.c"
 
         # Tools
         "ui_tools.c"
@@ -123,6 +125,7 @@ idf_component_register(
         "moonraker_discovery.c"
         "moonraker_probe.c"
         "moonraker_endpoint_test.c"
+        "camera_discovery_controller.c"
         "moonraker_poll.c"
         "moonraker_live_transport.c"
         "moonraker_live_websocket.c"

@@ -32,6 +32,9 @@ static lv_obj_t *s_editor_auth_popup = NULL;
 static lv_obj_t *s_editor_auth_key = NULL;
 static lv_obj_t *s_editor_auth_keyboard = NULL;
 static lv_obj_t *s_editor_keyboard = NULL;
+static lv_obj_t *s_editor_keyboard_popup = NULL;
+static lv_obj_t *s_editor_keyboard_value = NULL;
+static lv_obj_t *s_editor_keyboard_target = NULL;
 static char s_editor_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
 static lv_obj_t *s_editor_camera_popup = NULL;
 static lv_obj_t *s_editor_camera_stream = NULL;
@@ -64,6 +67,8 @@ static void editor_camera_discover_cb(lv_event_t *event);
 
 static void editor_close(void)
 {
+    if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
+    s_editor_keyboard_popup = NULL;
     if (s_editor_popup) lv_obj_delete(s_editor_popup);
     s_editor_popup = NULL;
     s_editor_name = NULL;
@@ -550,30 +555,65 @@ static void manager_select_cb(
 }
 
 
-static void editor_field_focused_cb(
-    lv_event_t *event)
+static void editor_keyboard_popup_close(void)
 {
-    if (!s_editor_keyboard) {
-        return;
+    if (s_editor_keyboard_target && s_editor_keyboard_value) {
+        lv_textarea_set_text(
+            s_editor_keyboard_target,
+            lv_textarea_get_text(s_editor_keyboard_value));
     }
-
-    lv_obj_t *field =
-        lv_event_get_target(event);
-
-    if (!field) {
-        return;
-    }
-
-    lv_keyboard_set_textarea(
-        s_editor_keyboard,
-        field);
-
-    lv_keyboard_set_mode(
-        s_editor_keyboard,
-        field == s_editor_port
-            ? LV_KEYBOARD_MODE_NUMBER
-            : LV_KEYBOARD_MODE_TEXT_LOWER);
+    if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
+    s_editor_keyboard_popup = NULL;
+    s_editor_keyboard = NULL;
+    s_editor_keyboard_value = NULL;
+    s_editor_keyboard_target = NULL;
 }
+
+
+
+static void editor_keyboard_popup_done_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_keyboard_popup_close();
+}
+
+
+static void editor_field_focused_cb(lv_event_t *event)
+{
+    lv_obj_t *field = lv_event_get_target(event);
+    if (!field) return;
+    if (s_editor_keyboard_popup && s_editor_keyboard && s_editor_keyboard_value) {
+        s_editor_keyboard_target = field;
+        lv_textarea_set_text(s_editor_keyboard_value, lv_textarea_get_text(field));
+        lv_keyboard_set_textarea(s_editor_keyboard, s_editor_keyboard_value);
+        lv_obj_move_foreground(s_editor_keyboard_popup);
+        return;
+    }
+
+    s_editor_keyboard_target = field;
+    s_editor_keyboard_popup = ui_popup_create(
+        lv_screen_active(), 800, 350, UI_POPUP_STANDARD);
+    if (!s_editor_keyboard_popup) {
+        s_editor_keyboard_target = NULL;
+        return;
+    }
+    ui_popup_add_title(s_editor_keyboard_popup, "EDIT VALUE", false, 0);
+    ui_popup_add_header_divider(s_editor_keyboard_popup, 44);
+    s_editor_keyboard_value = ui_popup_add_textarea(
+        s_editor_keyboard_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 56,
+        true, false, 127, "", lv_textarea_get_text(field), NULL);
+    s_editor_keyboard = ui_popup_add_keyboard(
+        s_editor_keyboard_popup, s_editor_keyboard_value, 720, 178,
+        LV_ALIGN_TOP_MID, 0, 112, LV_KEYBOARD_MODE_TEXT_LOWER);
+    ui_popup_add_standard_footer_divider(s_editor_keyboard_popup);
+    ui_popup_add_action_at(
+        s_editor_keyboard_popup, UI_POPUP_ACTION_CONFIRM,
+        LV_SYMBOL_OK " DONE", 508, 296, 260, 44,
+        editor_keyboard_popup_done_cb, NULL, NULL);
+    lv_obj_move_foreground(s_editor_keyboard_popup);
+}
+
+
 
 
 static void editor_apply_identity_suggestion(
@@ -1118,11 +1158,12 @@ static void manager_edit_cb(
     ui_popup_add_caption(s_editor_popup, "PORT", 28, 237, 160);
     s_editor_port = ui_popup_add_textarea(s_editor_popup, 160, 48, LV_ALIGN_TOP_LEFT, 240, 224, true, false, 5, "7125", port_text, "0123456789");
     ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " DISCOVER", 420, 224, 340, 48, editor_discover_cb, NULL, NULL);
-    ui_popup_add_caption(s_editor_popup, "SECURITY & ACCESS", 28, 294, 240);
-    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS" : LV_SYMBOL_SETTINGS " STANDARD HTTP", 28, 320, 356, 48, editor_security_open_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SETTINGS " AUTHENTICATION", 404, 320, 356, 48, editor_auth_open_cb, NULL, NULL);
-    s_editor_status = ui_popup_add_status_label(s_editor_popup, "Configure the printer connection, then test and save.", 28, 380, 720);
-    s_editor_keyboard = ui_popup_add_keyboard(s_editor_popup, s_editor_name, 720, 96, LV_ALIGN_TOP_MID, 0, 400, LV_KEYBOARD_MODE_TEXT_LOWER);
+    ui_popup_add_caption(s_editor_popup, "SECURITY & ACCESS", 28, 278, 240);
+    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS" : LV_SYMBOL_SETTINGS " STANDARD HTTP", 28, 302, 356, 48, editor_security_open_cb, NULL, NULL);
+    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SETTINGS " AUTHENTICATION", 404, 302, 356, 48, editor_auth_open_cb, NULL, NULL);
+    s_editor_status = ui_popup_add_status_label(s_editor_popup, "Configure the printer connection, then test and save.", 28, 358, 720);
+    s_editor_keyboard = ui_popup_add_keyboard(s_editor_popup, s_editor_name, 0, 0, LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_add_flag(s_editor_keyboard, LV_OBJ_FLAG_HIDDEN);
     if (s_editor_name) {
         lv_obj_add_event_cb(
             s_editor_name,
@@ -1178,7 +1219,7 @@ static void manager_edit_cb(
         s_editor_popup,
         UI_POPUP_ACTION_SECONDARY,
         LV_SYMBOL_PLAY " TEST",
-        314,
+        408,
         508,
         172,
         44,
@@ -1366,4 +1407,17 @@ void ui_printer_profiles_show_for_slot(
         profile->host,
         profile->port);
     manager_set_status(status);
+}
+
+
+void ui_printer_profiles_open_camera_setup(
+    int profile_index,
+    ui_printer_profiles_active_changed_cb_t active_changed_cb,
+    ui_printer_profiles_discover_cb_t discover_cb)
+{
+    ui_printer_profiles_show_for_slot(
+        profile_index, active_changed_cb, discover_cb);
+    if (!s_manager_popup) return;
+    manager_edit_cb(NULL);
+    if (s_editor_popup) editor_camera_open_cb(NULL);
 }

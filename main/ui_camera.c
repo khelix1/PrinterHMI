@@ -3,6 +3,8 @@
 #include "camera_stream_controller.h"
 #include "moonraker_config_controller.h"
 #include "ui_page_geometry.h"
+#include "ui_button.h"
+#include "ui_printer_profiles.h"
 #include "ui_page_title.h"
 #include "ui_shell.h"
 #include "ui_theme.h"
@@ -18,9 +20,18 @@
 static lv_obj_t *s_root = NULL;
 static lv_obj_t *s_image = NULL;
 static lv_obj_t *s_status = NULL;
+static lv_obj_t *s_card = NULL;
+static lv_obj_t *s_fullscreen_button = NULL;
+static lv_obj_t *s_configure_button = NULL;
+static bool s_fullscreen = false;
+static int s_view_width = 784;
+static int s_view_height = 338;
 static lv_timer_t *s_refresh_timer = NULL;
 static uint8_t *s_frame = NULL;
 static lv_image_dsc_t s_frame_dsc;
+static uint32_t s_camera_last_frame_tick = 0;
+static uint32_t s_camera_window_tick = 0;
+static unsigned s_camera_frame_count = 0;
 
 
 static void camera_set_status(const char *text)
@@ -44,9 +55,58 @@ static void camera_release_frame(void)
 
 
 
+static void camera_set_viewport(bool fullscreen)
+{
+    if (!s_card || !s_image || !s_status || !s_fullscreen_button || !s_configure_button) return;
+    s_fullscreen = fullscreen;
+    if (fullscreen) {
+        lv_obj_set_pos(s_card, 0, 0);
+        lv_obj_set_size(s_card, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
+        s_view_width = UI_PAGE_ROOT_WIDTH - 16;
+        s_view_height = UI_PAGE_ROOT_HEIGHT - 58;
+        lv_obj_set_pos(s_image, 0, 0);
+        lv_obj_set_size(s_image, s_view_width, s_view_height);
+        lv_obj_set_pos(s_configure_button, 8, UI_PAGE_ROOT_HEIGHT - 48);
+        lv_obj_set_pos(s_fullscreen_button, UI_PAGE_ROOT_WIDTH - 192, UI_PAGE_ROOT_HEIGHT - 48);
+        lv_obj_set_pos(s_status, 196, UI_PAGE_ROOT_HEIGHT - 40);
+        lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 392);
+        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), LV_SYMBOL_CLOSE " EXIT FULLSCREEN");
+        lv_obj_move_foreground(s_card);
+    } else {
+        lv_obj_set_pos(s_card, 20, 88);
+        lv_obj_set_size(s_card, 800, 392);
+        s_view_width = 784;
+        s_view_height = 338;
+        lv_obj_set_pos(s_image, 0, 0);
+        lv_obj_set_size(s_image, s_view_width, s_view_height);
+        lv_obj_set_pos(s_configure_button, 8, 346);
+        lv_obj_set_pos(s_fullscreen_button, 614, 346);
+        lv_obj_set_pos(s_status, 196, 354);
+        lv_obj_set_width(s_status, 408);
+        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), LV_SYMBOL_IMAGE " FULLSCREEN");
+    }
+}
+
+
+static void camera_fullscreen_cb(lv_event_t *event)
+{
+    (void)event;
+    camera_set_viewport(!s_fullscreen);
+}
+
+
+static void camera_configure_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_printer_profiles_open_camera_setup(
+        moonraker_config_active_profile_index(), NULL, NULL);
+}
+
+
 static void camera_poll_cb(lv_timer_t *timer)
 {
     (void)timer;
+    uint32_t now = lv_tick_get();
 
     uint8_t *pixels = NULL;
     size_t pixel_size = 0;
@@ -72,18 +132,30 @@ static void camera_poll_cb(lv_timer_t *timer)
             s_frame_dsc.data = s_frame;
             s_frame_dsc.data_size = pixel_size;
             lv_image_set_src(s_image, &s_frame_dsc);
-            int scale_x = (784 * 256) / width;
-            int scale_y = (338 * 256) / height;
+            int scale_x = (s_view_width * 256) / width;
+            int scale_y = (s_view_height * 256) / height;
             int scale = scale_x < scale_y ? scale_x : scale_y;
             if (scale < 1) scale = 1;
             lv_image_set_scale(s_image, scale);
             lv_obj_center(s_image);
-            camera_set_status("LIVE  |  updating camera frames");
+            s_camera_last_frame_tick = now;
+            if (!s_camera_window_tick) s_camera_window_tick = now;
+            ++s_camera_frame_count;
+            uint32_t elapsed = now - s_camera_window_tick;
+            if (elapsed >= 1000) {
+                char status[48];
+                unsigned fps = (s_camera_frame_count * 1000U + elapsed / 2U) / elapsed;
+                snprintf(status, sizeof(status), "LIVE  |  %u FPS", fps);
+                camera_set_status(status);
+                s_camera_window_tick = now;
+                s_camera_frame_count = 0;
+            }
         } else if (pixels) {
             heap_caps_free(pixels);
         }
     }
 
+    if (s_camera_last_frame_tick && now - s_camera_last_frame_tick > 3500) camera_set_status("RECONNECTING  |  waiting for camera stream");
     if (camera_stream_busy()) return;
     int profile_index = moonraker_config_active_profile_index();
     const char *url = moonraker_config_camera_stream_url(profile_index);
@@ -126,7 +198,8 @@ void ui_camera_show(void)
     ui_apply_root_style(s_root);
     ui_page_title_create(s_root, LV_SYMBOL_IMAGE " CAMERA", "Active printer live view");
 
-    lv_obj_t *card = lv_obj_create(s_root);
+    s_card = lv_obj_create(s_root);
+    lv_obj_t *card = s_card;
     lv_obj_set_size(card, 800, 392);
     lv_obj_set_pos(card, 20, 88);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -143,12 +216,26 @@ void ui_camera_show(void)
     lv_obj_set_style_bg_opa(s_image, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(s_image, 8, 0);
 
+    s_configure_button = ui_button_create(
+        card, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " CONFIGURE");
+    lv_obj_set_size(s_configure_button, 190, 36);
+    lv_obj_set_pos(s_configure_button, 8, 346);
+    ui_button_expand_touch_target(s_configure_button);
+    lv_obj_add_event_cb(s_configure_button, camera_configure_cb, LV_EVENT_CLICKED, NULL);
+
+    s_fullscreen_button = ui_button_create(
+        card, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " FULLSCREEN");
+    lv_obj_set_size(s_fullscreen_button, 184, 36);
+    lv_obj_set_pos(s_fullscreen_button, 606, 346);
+    ui_button_expand_touch_target(s_fullscreen_button);
+    lv_obj_add_event_cb(s_fullscreen_button, camera_fullscreen_cb, LV_EVENT_CLICKED, NULL);
+
     s_status = lv_label_create(card);
     ui_apply_text_body(s_status);
-    /* Camera viewport footer: status remains readable over the dark well. */
     lv_obj_set_style_text_color(s_status, lv_color_hex(0xC7D4E8), 0);
-    lv_obj_set_width(s_status, 760);
-    lv_obj_align(s_status, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_width(s_status, 392);
+    lv_obj_set_pos(s_status, 204, 354);
+    lv_label_set_long_mode(s_status, LV_LABEL_LONG_MODE_CLIP);
     lv_label_set_text(s_status, "Connecting to configured camera...");
 
     s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
@@ -158,6 +245,7 @@ void ui_camera_show(void)
 
 void ui_camera_hide(void)
 {
+    if (s_fullscreen) camera_set_viewport(false);
     if (s_root) {
         lv_obj_add_flag(s_root, LV_OBJ_FLAG_HIDDEN);
     }
@@ -166,6 +254,9 @@ void ui_camera_hide(void)
         s_refresh_timer = NULL;
     }
     camera_stream_stop();
+    s_camera_last_frame_tick = 0;
+    s_camera_window_tick = 0;
+    s_camera_frame_count = 0;
     ui_shell_raise_topbar();
     ui_shell_raise_nav();
 }

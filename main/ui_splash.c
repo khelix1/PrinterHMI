@@ -15,9 +15,6 @@ static void ui_splash_set_progress(int pct, const char *status)
 {
     if (!splash_root) return;
 
-    /* Keep startup page activity behind the splash overlay. */
-    lv_obj_move_foreground(splash_root);
-
     if (pct < 0) pct = 0;
     if (pct > 100) pct = 100;
 
@@ -38,6 +35,8 @@ static void ui_splash_set_progress(int pct, const char *status)
 
 void ui_splash_display_ready(void)
 {
+    /* Page construction is complete; raise the overlay exactly once. */
+    if (splash_root) lv_obj_move_foreground(splash_root);
     ui_splash_set_progress(25, "Display and touch online...");
 }
 
@@ -66,9 +65,15 @@ void ui_splash_create(void)
 {
     if (splash_root) return;
 
-    lv_obj_t *scr = lv_screen_active();
+    /*
+     * Startup pages are created on the active screen. Put the opaque splash
+     * on LVGL's top layer so those allocations cannot briefly draw above it.
+     */
+    lv_obj_t *scr = lv_layer_top();
 
     splash_root = lv_obj_create(scr);
+    /* Prevent intermediate object draws from flashing the display. */
+    lv_obj_add_flag(splash_root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_size(splash_root, 1024, 600);
     lv_obj_set_pos(splash_root, 0, 0);
     lv_obj_clear_flag(splash_root, LV_OBJ_FLAG_SCROLLABLE);
@@ -144,8 +149,9 @@ void ui_splash_create(void)
     ui_apply_label_dim(footer);
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -26);
 
-    lv_obj_move_foreground(splash_root);
     ui_splash_set_progress(5, "Booting display stack...");
+    lv_obj_clear_flag(splash_root, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(splash_root);
 }
 
 void ui_splash_destroy(void)

@@ -59,7 +59,7 @@ static const ui_page_layout_profile_t s_operator_shell = {
         .subtitle = "Live Machine Control",
         .active = {20, 118, 500, 278},
         .status = {532, 118, 288, 278},
-        .actions = {20, 408, 800, 102},
+        .actions = {20, 444, 800, 64},
     },
     .files = {
         .subtitle = "Cell Job Library",

@@ -1731,8 +1731,11 @@ void ui_shell_page_action(ui_shell_page_t page)
             files_refresh_bridge,
             files_select_bridge,
             files_preview_bridge);
+        /*
+         * ui_files_show() schedules its own load after LVGL draws the page.
+         * Calling the synchronous fetch here delays the sidebar transition.
+         */
         ui_files_show();
-        app_files_reload();
         return;
 
     case UI_SHELL_PAGE_BED_MESH:
@@ -3759,6 +3762,10 @@ static void app_splash_wifi_waiting_locked(bool connected)
 static void app_startup_show_initial_ui(void)
 {
     bsp_display_lock(0);
+
+    /* Cover the screen before any startup page allocates or invalidates. */
+    ui_splash_create();
+
     build_drybox_dashboard();
     hide_settings_tab();
     ui_dashboard_create();

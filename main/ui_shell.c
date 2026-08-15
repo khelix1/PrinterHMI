@@ -350,6 +350,20 @@ void ui_shell_create_nav(void)
         const char *text;
     } shell_nav_item_t;
 
+    /* This label makes the selectable layout explicit after the shell rebuilds. */
+    if (ui_theme_is_operator_shell()) {
+        lv_obj_t *mode = lv_label_create(shell_nav_rail);
+        if (mode) {
+            lv_label_set_text(mode, "OPERATOR\nSHELL");
+            lv_label_set_long_mode(mode, LV_LABEL_LONG_MODE_CLIP);
+            lv_obj_set_width(mode, 150);
+            ui_apply_text_caption(mode);
+            ui_apply_label_dim(mode);
+            lv_obj_set_style_text_align(mode, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_align(mode, LV_ALIGN_BOTTOM_MID, 0, -16);
+        }
+    }
+
     /*
      * Operator order follows the normal print-cell workflow:
      * primary work, printer setup, diagnostics, then auxiliary/system.

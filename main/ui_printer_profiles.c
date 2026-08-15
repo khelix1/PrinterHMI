@@ -942,7 +942,7 @@ static void editor_camera_open_cb(lv_event_t *event)
     s_editor_camera_stream = ui_popup_add_textarea(s_editor_camera_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 150, true, false, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, "http://...", s_editor_camera_url, NULL);
     ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND CAMERAS", 28, 218, 720, 48, editor_camera_discover_cb, NULL, NULL);
     s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, "Or enter an MJPEG / HTTP stream URL manually.", 28, 278, 720);
-    s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 166, LV_ALIGN_TOP_MID, 0, 310, LV_KEYBOARD_MODE_TEXT_LOWER);
+    s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 230, LV_ALIGN_TOP_MID, 0, 220, LV_KEYBOARD_MODE_TEXT_LOWER);
     if (s_editor_camera_stream) {
         lv_obj_add_event_cb(s_editor_camera_stream, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
     }

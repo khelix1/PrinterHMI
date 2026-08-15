@@ -203,18 +203,18 @@ void ui_camera_show(void)
     lv_obj_set_size(card, 800, 392);
     lv_obj_set_pos(card, 20, 88);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(card, lv_color_hex(0x101827), 0);
-    lv_obj_set_style_border_color(card, lv_color_hex(0x31425F), 0);
-    lv_obj_set_style_border_width(card, 1, 0);
-    lv_obj_set_style_radius(card, 12, 0);
+    lv_obj_set_style_bg_color(card, UI_CARD_DARK, 0);
+    lv_obj_set_style_border_color(card, UI_BORDER_SOFT, 0);
+    lv_obj_set_style_border_width(card, UI_BORDER_THIN, 0);
+    lv_obj_set_style_radius(card, UI_RADIUS_CARD, 0);
     lv_obj_set_style_pad_all(card, 8, 0);
 
     s_image = lv_image_create(card);
     lv_obj_set_size(s_image, 784, 338);
     lv_obj_align(s_image, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(s_image, lv_color_hex(0x060B14), 0);
+    lv_obj_set_style_bg_color(s_image, UI_BG_DEEP, 0);
     lv_obj_set_style_bg_opa(s_image, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(s_image, 8, 0);
+    lv_obj_set_style_radius(s_image, UI_RADIUS_BTN, 0);
 
     s_configure_button = ui_button_create(
         card, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " CONFIGURE");
@@ -232,7 +232,7 @@ void ui_camera_show(void)
 
     s_status = lv_label_create(card);
     ui_apply_text_body(s_status);
-    lv_obj_set_style_text_color(s_status, lv_color_hex(0xC7D4E8), 0);
+    ui_apply_label_dim(s_status);
     lv_obj_set_width(s_status, 392);
     lv_obj_set_pos(s_status, 204, 354);
     lv_label_set_long_mode(s_status, LV_LABEL_LONG_MODE_CLIP);

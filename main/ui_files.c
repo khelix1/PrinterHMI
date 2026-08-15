@@ -34,6 +34,8 @@ static lv_obj_t *s_search_label = NULL;
 static lv_obj_t *s_search_popup = NULL;
 static lv_obj_t *s_search_textarea = NULL;
 static char s_search_text[64];
+static lv_timer_t *s_files_refresh_timer = NULL;
+static bool s_files_refresh_pending = false;
 
 typedef struct file_row_context {
     struct file_row_context *next;
@@ -102,24 +104,36 @@ void ui_files_set_status(const char *text)
     }
 }
 
+static void files_refresh_deferred_cb(lv_timer_t *timer)
+{
+    s_files_refresh_timer = NULL;
+    lv_timer_delete(timer);
+
+    /*
+     * Run the blocking Moonraker request only after the UI has returned to
+     * LVGL. The current page stays visible and is replaced in place when
+     * the result arrives.
+     */
+    if (s_refresh_cb) {
+        s_refresh_cb();
+    }
+    s_files_refresh_pending = false;
+}
+
 static void files_refresh_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED ||
+        s_files_refresh_pending) {
         return;
     }
 
-    /*
-     * Recreate the Files page before reloading its contents.
-     *
-     * app_files_reload() intentionally no longer calls
-     * ui_files_show(), because its 4 KB response buffer was moved
-     * out of the LVGL task stack and page ownership now stays here.
-     */
-    ui_files_hide();
-    ui_files_show();
-
-    if (s_refresh_cb) {
-        s_refresh_cb();
+    s_files_refresh_pending = true;
+    ui_files_set_status("Loading files...");
+    s_files_refresh_timer = lv_timer_create(
+        files_refresh_deferred_cb, 1, NULL);
+    if (!s_files_refresh_timer) {
+        s_files_refresh_pending = false;
+        ui_files_set_status("Files refresh could not start.");
     }
 }
 
@@ -919,10 +933,30 @@ void ui_files_show(void)
         layout->list.y,
         layout->list.width,
         layout->list.height);
+
+    /*
+     * Let LVGL draw the Files page before its synchronous Moonraker request.
+     * This prevents a blank/late page transition on slower responses.
+     */
+    if (s_refresh_cb && !s_files_refresh_timer) {
+        s_files_refresh_pending = true;
+        ui_files_set_status("Loading files...");
+        s_files_refresh_timer = lv_timer_create(
+            files_refresh_deferred_cb, 20, NULL);
+        if (!s_files_refresh_timer) {
+            s_files_refresh_pending = false;
+            ui_files_set_status("Files refresh could not start.");
+        }
+    }
 }
 
 void ui_files_hide(void)
 {
+    if (s_files_refresh_timer) {
+        lv_timer_delete(s_files_refresh_timer);
+        s_files_refresh_timer = NULL;
+    }
+    s_files_refresh_pending = false;
     close_search_popup();
     if (s_printer_file_popup) {
         lv_obj_delete(s_printer_file_popup);

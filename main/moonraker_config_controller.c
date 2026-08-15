@@ -344,9 +344,6 @@ static esp_err_t persist_profile(
     profile_key(key, sizeof(key), profile_index, "cam");
     error = nvs_set_str(handle, key, profile->camera_stream_url);
     if (error != ESP_OK) return error;
-    profile_key(key, sizeof(key), profile_index, "cam");
-    error = nvs_set_str(handle, key, profile->camera_stream_url);
-    if (error != ESP_OK) return error;
     profile_key(key, sizeof(key), profile_index, "tls");
     return nvs_set_u8(handle, key, profile->secure_transport ? 1 : 0);
 }

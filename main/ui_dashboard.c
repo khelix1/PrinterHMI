@@ -13,6 +13,9 @@
 #include "ui_dashboard_page.h"
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "camera_stream_controller.h"
+#include "moonraker_config_controller.h"
+#include "esp_heap_caps.h"
 
 static lv_obj_t *dash32_root = NULL;
 
@@ -59,6 +62,13 @@ static lv_obj_t *dash32_machine = NULL;
 static lv_obj_t *dash32_active_print = NULL;
 static lv_obj_t *dash32_thumb_box = NULL;
 static lv_obj_t *dash32_thumb_label = NULL;
+static lv_obj_t *dash32_camera_image = NULL;
+static lv_obj_t *dash32_camera_toggle = NULL;
+static lv_obj_t *dash32_camera_status = NULL;
+static lv_timer_t *dash32_camera_timer = NULL;
+static uint8_t *dash32_camera_frame = NULL;
+static lv_image_dsc_t dash32_camera_dsc;
+static bool dash32_camera_mode = false;
 
 ui_dashboard_status_t ui_dashboard_create_status(
     lv_obj_t *parent)
@@ -86,6 +96,115 @@ ui_dashboard_status_t ui_dashboard_create_status(
     dash32_page.print_status_host = dash32_status.root;
 
     return dash32_status;
+}
+
+
+static void dashboard_camera_release_frame(void)
+{
+    if (dash32_camera_frame) {
+        heap_caps_free(dash32_camera_frame);
+        dash32_camera_frame = NULL;
+    }
+    memset(&dash32_camera_dsc, 0, sizeof(dash32_camera_dsc));
+}
+
+static void dashboard_camera_set_status(const char *text)
+{
+    if (dash32_camera_status) {
+        lv_label_set_text(dash32_camera_status, text ? text : "");
+    }
+}
+
+static void dashboard_camera_poll_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (!dash32_camera_mode) return;
+
+    uint8_t *pixels = NULL;
+    size_t pixel_size = 0;
+    int width = 0;
+    int height = 0;
+    bool ok = false;
+    if (camera_stream_take_result(&pixels, &pixel_size, &width, &height, &ok)) {
+        if (!ok || !pixels || width <= 0 || height <= 0) {
+            if (pixels) heap_caps_free(pixels);
+            dashboard_camera_set_status("Camera unavailable");
+        } else if (dash32_camera_image) {
+            dashboard_camera_release_frame();
+            dash32_camera_frame = pixels;
+            memset(&dash32_camera_dsc, 0, sizeof(dash32_camera_dsc));
+#if defined(LV_IMAGE_HEADER_MAGIC)
+            dash32_camera_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+#endif
+            dash32_camera_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+            dash32_camera_dsc.header.w = width;
+            dash32_camera_dsc.header.h = height;
+            dash32_camera_dsc.header.stride = width * sizeof(uint16_t);
+            dash32_camera_dsc.data = dash32_camera_frame;
+            dash32_camera_dsc.data_size = pixel_size;
+            lv_image_set_src(dash32_camera_image, &dash32_camera_dsc);
+            lv_obj_t *box = lv_obj_get_parent(dash32_camera_image);
+            int scale_x = ((lv_obj_get_width(box) - 12) * 256) / width;
+            int scale_y = ((lv_obj_get_height(box) - 12) * 256) / height;
+            int scale = scale_x < scale_y ? scale_x : scale_y;
+            if (scale < 1) scale = 1;
+            lv_image_set_scale(dash32_camera_image, scale);
+            lv_obj_center(dash32_camera_image);
+            lv_obj_move_foreground(dash32_camera_image);
+            dashboard_camera_set_status("LIVE CAMERA");
+        } else if (pixels) {
+            heap_caps_free(pixels);
+        }
+    }
+
+    if (camera_stream_busy()) return;
+    const char *url = moonraker_config_camera_stream_url(
+        moonraker_config_active_profile_index());
+    if (!url || !url[0]) {
+        dashboard_camera_set_status("No camera configured");
+        return;
+    }
+    if (!camera_stream_start(url)) {
+        dashboard_camera_set_status("Camera connecting...");
+    }
+}
+
+static void dashboard_camera_mode_set(bool enabled)
+{
+    dash32_camera_mode = enabled;
+    if (dash32_camera_image) {
+        if (enabled) lv_obj_clear_flag(dash32_camera_image, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(dash32_camera_image, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (dash32_camera_status) {
+        if (enabled) lv_obj_clear_flag(dash32_camera_status, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(dash32_camera_status, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (dash32_camera_toggle) {
+        lv_obj_t *label = lv_obj_get_child(dash32_camera_toggle, 0);
+        if (label) lv_label_set_text(label,
+            enabled ? LV_SYMBOL_IMAGE " THUMBNAIL" : LV_SYMBOL_IMAGE " CAMERA");
+    }
+    if (!enabled) {
+        if (dash32_camera_timer) {
+            lv_timer_delete(dash32_camera_timer);
+            dash32_camera_timer = NULL;
+        }
+        camera_stream_stop();
+        dashboard_camera_release_frame();
+        return;
+    }
+    if (!dash32_camera_timer) {
+        dash32_camera_timer = lv_timer_create(dashboard_camera_poll_cb, 100, NULL);
+    }
+    dashboard_camera_set_status("Connecting camera...");
+    dashboard_camera_poll_cb(NULL);
+}
+
+static void dashboard_camera_toggle_cb(lv_event_t *event)
+{
+    (void)event;
+    dashboard_camera_mode_set(!dash32_camera_mode);
 }
 
 
@@ -132,6 +251,34 @@ void ui_dashboard_create(void)
 
     ui_dashboard_thumb_set_placeholder(
         "PRINT\nTHUMBNAIL");
+
+    lv_obj_t *preview_box = ui_dashboard_thumb_box();
+    if (preview_box) {
+        dash32_camera_image = lv_image_create(preview_box);
+        lv_obj_set_style_bg_color(dash32_camera_image, UI_CARD_DARK, 0);
+        lv_obj_set_style_bg_opa(dash32_camera_image, LV_OPA_COVER, 0);
+        lv_obj_add_flag(dash32_camera_image, LV_OBJ_FLAG_HIDDEN);
+        dash32_camera_status = lv_label_create(preview_box);
+        ui_apply_text_caption(dash32_camera_status);
+        ui_apply_label_bright(dash32_camera_status);
+        lv_obj_align(dash32_camera_status, LV_ALIGN_BOTTOM_LEFT, 10, -8);
+        lv_obj_add_flag(dash32_camera_status, LV_OBJ_FLAG_HIDDEN);
+    }
+    dash32_camera_toggle = ui_button_create(
+        dash32_active_print, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " CAMERA");
+    if (dash32_camera_toggle) {
+        lv_obj_set_size(dash32_camera_toggle, 172, 32);
+        lv_obj_set_pos(dash32_camera_toggle, 308, 8);
+        const char *camera_url = moonraker_config_camera_stream_url(
+            moonraker_config_active_profile_index());
+        if (!camera_url || !camera_url[0]) {
+            lv_obj_add_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            ui_button_expand_touch_target(dash32_camera_toggle);
+            lv_obj_add_event_cb(dash32_camera_toggle, dashboard_camera_toggle_cb,
+                                LV_EVENT_CLICKED, NULL);
+        }
+    }
 
     ui_machine_status_set(
         dash32_machine,
@@ -194,6 +341,11 @@ void ui_dashboard_update(void)
 
 void ui_dashboard_destroy(void)
 {
+    dashboard_camera_mode_set(false);
+    dash32_camera_image = NULL;
+    dash32_camera_toggle = NULL;
+    dash32_camera_status = NULL;
+
     ui_dashboard_page_destroy(
         &dash32_page);
 

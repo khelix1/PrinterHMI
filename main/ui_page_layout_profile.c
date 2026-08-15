@@ -44,6 +44,51 @@ static const ui_page_layout_profile_t s_operator = {
     },
 };
 
+/*
+ * Operator Shell keeps actions together at the bottom, giving Printer an
+ * explicit live-status side column and a larger active-job workspace.
+ */
+static const ui_page_layout_profile_t s_operator_shell = {
+    .drybox = {
+        .subtitle = "Cell Material Conditioning",
+        .environment = {20, 120, 385, 230},
+        .drying_system = {425, 120, 395, 230},
+        .material_program = {20, 365, 800, 145},
+    },
+    .printer = {
+        .subtitle = "Live Machine Control",
+        .active = {20, 118, 500, 278},
+        .status = {532, 118, 288, 278},
+        .actions = {20, 408, 800, 102},
+    },
+    .files = {
+        .subtitle = "Cell Job Library",
+        .breadcrumb = {30, 62, 360, 22},
+        .up = {390, 10, 80, 42},
+        .search = {476, 10, 100, 42},
+        .sort = {582, 10, 120, 42},
+        .refresh = {708, 10, 110, 42},
+        .list = {20, 86, 814, 422},
+    },
+    .network = {
+        .subtitle = "Cell Connectivity",
+        .wifi = {16, 130, 402, 190},
+        .moonraker = {436, 130, 402, 190},
+        .networks = {16, 332, 474, 180},
+        .actions = {508, 332, 330, 180},
+    },
+    .settings = {
+        .subtitle = "Cell Interface and System Control",
+        .banner = {20, 20, 800, 86},
+        .content = {20, 118, 800, 398},
+    },
+    .telemetry = {
+        .subtitle = "Live Cell Instrumentation",
+        .metric_x = {20, 224, 428, 632},
+        .charts = {20, 208, 800, 300},
+    },
+};
+
 static const ui_page_layout_profile_t s_foundry = {
     .drybox = {
         .subtitle = "Material Workshop",
@@ -134,6 +179,8 @@ ui_page_layout_profile_for_theme(ui_theme_id_t theme)
             return &s_foundry;
         case UI_THEME_GLASS:
             return &s_glass;
+        case UI_THEME_OPERATOR_SHELL:
+            return &s_operator_shell;
         case UI_THEME_OPERATOR:
         default:
             return &s_operator;

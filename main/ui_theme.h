@@ -12,7 +12,9 @@
 typedef enum {
     UI_THEME_CLASSIC = 0,
     UI_THEME_OPERATOR,
-    UI_THEME_GLASS
+    UI_THEME_GLASS,
+    /* Operator Shell is a separate layout selection using the Operator palette. */
+    UI_THEME_OPERATOR_SHELL
 } ui_theme_id_t;
 
 typedef enum {
@@ -42,6 +44,9 @@ typedef struct {
 void ui_theme_set_active(ui_theme_id_t theme);
 ui_theme_id_t ui_theme_get_active(void);
 const char *ui_theme_name(ui_theme_id_t theme);
+
+/* Layout code uses this to opt into the eight-item operator shell. */
+bool ui_theme_is_operator_shell(void);
 
 /* Resolve shared tokens through the active runtime palette. */
 lv_color_t ui_theme_color(uint32_t operator_rgb,

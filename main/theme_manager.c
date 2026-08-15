@@ -67,9 +67,8 @@ static void load_custom_id(nvs_handle_t handle)
 
 static bool theme_valid(ui_theme_id_t theme)
 {
-    return theme == UI_THEME_CLASSIC ||
-           theme == UI_THEME_OPERATOR ||
-           theme == UI_THEME_GLASS;
+    return (unsigned)theme >= (unsigned)UI_THEME_CLASSIC &&
+           (unsigned)theme <= (unsigned)UI_THEME_OPERATOR_SHELL;
 }
 
 static const char *theme_label(ui_theme_id_t theme)
@@ -79,6 +78,8 @@ static const char *theme_label(ui_theme_id_t theme)
             return "FOUNDRY (THEME A)";
         case UI_THEME_GLASS:
             return "DARK GLASS (THEME C)";
+        case UI_THEME_OPERATOR_SHELL:
+            return "OPERATOR SHELL (LAYOUT)";
         case UI_THEME_OPERATOR:
         default:
             return "OPERATOR (THEME B)";

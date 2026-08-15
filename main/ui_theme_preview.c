@@ -61,6 +61,25 @@ static ui_theme_preview_palette_t preview_palette(ui_theme_id_t theme)
                 .description = "Smoked layers",
             };
 
+        case UI_THEME_OPERATOR_SHELL:
+            return (ui_theme_preview_palette_t){
+                .background = 0x09121E,
+                .surface = 0x101B2A,
+                .card = 0x162235,
+                .control = 0x1A2633,
+                .border = 0x3D6F99,
+                .accent = 0x33C7FF,
+                .text = 0xE8F1FF,
+                .muted = 0x8FA7C2,
+                .success = 0x70E000,
+                .danger = 0xFF4D4D,
+                .radius = 10,
+                .surface_opa = LV_OPA_COVER,
+                .name = "OPERATOR SHELL",
+                .code = "LAYOUT THEME",
+                .description = "Eight-item rail",
+            };
+
         case UI_THEME_OPERATOR:
         default:
             return (ui_theme_preview_palette_t){
@@ -133,10 +152,13 @@ static lv_obj_t *preview_label(lv_obj_t *parent,
 
 static void preview_add_sample_ui(
     lv_obj_t *button,
-    const ui_theme_preview_palette_t *palette)
+    const ui_theme_preview_palette_t *palette,
+    int32_t preview_width)
 {
+    int32_t inner_width = preview_width - 28;
+    int32_t action_width = (inner_width - 12) / 2;
     lv_obj_t *topbar = preview_rect(
-        button, 14, 76, 232, 34,
+        button, 14, 76, inner_width, 34,
         palette->surface,
         palette->border,
         palette->radius / 2,
@@ -152,12 +174,14 @@ static void preview_add_sample_ui(
         (void)dot;
         preview_label(topbar, "READY", UI_FONT_CAPTION,
                       palette->text, 30, 7);
-        preview_label(topbar, "12:42 PM", UI_FONT_CAPTION,
-                      palette->muted, 148, 7);
+        if (inner_width >= 220) {
+            preview_label(topbar, "12:42 PM", UI_FONT_CAPTION,
+                          palette->muted, inner_width - 98, 7);
+        }
     }
 
     lv_obj_t *sample_card = preview_rect(
-        button, 14, 118, 232, 64,
+        button, 14, 118, inner_width, 64,
         palette->card,
         palette->border,
         palette->radius,
@@ -170,7 +194,7 @@ static void preview_add_sample_ui(
                       palette->text, 12, 29);
 
         lv_obj_t *track = preview_rect(
-            sample_card, 126, 39, 92, 8,
+            sample_card, inner_width - 100, 39, 88, 8,
             palette->background,
             0,
             4,
@@ -183,7 +207,7 @@ static void preview_add_sample_ui(
     }
 
     lv_obj_t *action = preview_rect(
-        button, 14, 192, 110, 36,
+        button, 14, 192, action_width, 36,
         palette->control,
         palette->accent,
         palette->radius / 2,
@@ -197,7 +221,7 @@ static void preview_add_sample_ui(
     }
 
     lv_obj_t *stop = preview_rect(
-        button, 136, 192, 110, 36,
+        button, 14 + action_width + 12, 192, action_width, 36,
         palette->control,
         palette->danger,
         palette->radius / 2,
@@ -244,7 +268,8 @@ lv_obj_t *ui_theme_preview_create(
     lv_obj_set_style_shadow_width(button, 0, 0);
     lv_obj_set_style_outline_width(button, 0, 0);
 
-    preview_label(button, palette.name, UI_FONT_TITLE,
+    preview_label(button, palette.name,
+                  width <= 220 ? UI_FONT_BODY_LARGE : UI_FONT_TITLE,
                   palette.text, 14, 10);
     preview_label(button, palette.code, UI_FONT_CAPTION,
                   palette.accent, 14, 39);
@@ -258,7 +283,7 @@ lv_obj_t *ui_theme_preview_create(
         (void)check;
     }
 
-    preview_add_sample_ui(button, &palette);
+    preview_add_sample_ui(button, &palette, width);
 
     if (event_cb) {
         lv_obj_add_event_cb(

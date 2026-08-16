@@ -88,6 +88,18 @@ Active-print layers normally come from `print_stats.info`. When slicer layer
 statistics are absent, PrinterHMI estimates layers from file `object_height`,
 `layer_height` and print progress metadata.
 
+## Camera configuration
+
+Each printer profile owns its camera streams. **Camera → Configure → FIND CAMERAS**
+queries the active profile's Moonraker `/server/webcams/list` endpoint using its
+configured HTTPS and API-key policy, then imports enabled MJPEG/HTTP streams.
+One manually entered stream remains supported. The Camera page displays the
+selected stream and clears the view when the active printer has none configured.
+
+Camera catalog storage is scoped to the existing `netcfg` profile keys. Camera
+configuration is local to PrinterHMI: it never modifies Moonraker or webcam
+configuration on the printer host.
+
 ## Bed Mesh profiles and detected macros
 
 Bed Mesh profiles are owned by Klipper, not PrinterHMI NVS. The Bed Mesh page

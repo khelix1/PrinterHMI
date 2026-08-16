@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v6.2.1 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v6.3.0 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -98,6 +98,17 @@ status banners, cards, previews, charts, action panels and popup controllers.
   Moonraker object discovery while excluding underscore-prefixed helpers.
 - `console_controller` retains bounded command and response history and
   receives live `notify_gcode_response` WebSocket messages.
+
+### Camera
+
+- `ui_camera` owns live-view presentation, fullscreen geometry and camera-page controls.
+- `camera_stream_controller` owns the bounded continuous MJPEG connection and
+  PSRAM-first frame handoff; `camera_jpeg_decoder` owns ESP32-P4 JPEG decode.
+- `camera_discovery_controller` performs Moonraker webcam discovery without
+  LVGL access; `camera_catalog_controller` owns the persistent per-profile
+  catalog and preserves the legacy first configured stream.
+- Camera discovery follows the active profile's transport-security policy and
+  uses a PSRAM-first TLS-capable worker stack.
 
 ### Printer and files
 

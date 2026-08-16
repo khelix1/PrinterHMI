@@ -85,6 +85,16 @@ operator present.
 - Known commands show normal responses, warnings remain amber and unknown
   commands render red.
 
+## Camera
+
+- Camera opens an active-profile continuous MJPEG view and updates smoothly.
+- Fullscreen opens and returns without hiding the top bar or navigation after exit.
+- **Configure → FIND CAMERAS** completes over both Standard and Secure
+  Moonraker profiles without resetting the HMI.
+- A profile without a camera shows no stale image from another profile.
+- Camera selection, manual URL configuration and active-camera identity persist
+  per printer profile.
+
 ## Files and previews
 
 - File search uses the shared keyboard and filters correctly.

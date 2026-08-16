@@ -129,9 +129,36 @@ static void run_macro_cb(lv_event_t *event)
             CONSOLE_ENTRY_ERROR,
             "Macro %s was not accepted by Moonraker.",
             command);
+        ui_toast_show(
+            UI_STATUS_DANGER,
+            "MACRO NOT SENT",
+            command);
+        return;
     }
+
+    ui_toast_show(
+        UI_STATUS_OK,
+        "MACRO SENT",
+        command);
 }
 
+
+static void rebuild_macro_list(void);
+
+static void macro_favorite_cb(lv_event_t *event)
+{
+    uintptr_t encoded = (uintptr_t)lv_event_get_user_data(event);
+    if (!encoded) return;
+    char name[MACRO_CONTROLLER_NAME_MAX];
+    if (!macro_controller_get((size_t)(encoded - 1), name, sizeof(name))) return;
+    bool favorite = macro_controller_toggle_favorite(name);
+    ui_toast_show(
+        UI_STATUS_OK,
+        favorite ? "FAVORITE SAVED" : "FAVORITE REMOVED",
+        favorite ? "Long-press any macro to change Favorites."
+                 : "The macro remains available in the full list.");
+    rebuild_macro_list();
+}
 
 static void macro_button_cb(lv_event_t *event)
 {
@@ -277,6 +304,8 @@ static void rebuild_macro_list(void)
         return;
     }
 
+    size_t displayed = 0;
+    for (unsigned pass = 0; pass < 2; ++pass) {
     for (size_t index = 0;
          index < status.count;
          ++index) {
@@ -289,14 +318,16 @@ static void rebuild_macro_list(void)
             continue;
         }
 
-        int32_t column = (int32_t)(index % 2);
-        int32_t row = (int32_t)(index / 2);
+        bool favorite = macro_controller_is_favorite(name);
+        if ((pass == 0 && !favorite) || (pass == 1 && favorite)) continue;
+        int32_t column = (int32_t)(displayed % 2);
+        int32_t row = (int32_t)(displayed / 2);
 
         lv_obj_t *button =
             ui_button_create_icon(
                 s_list,
                 UI_BUTTON_OUTLINED,
-                LV_SYMBOL_PLAY,
+                favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY,
                 name,
                 UI_OK_BRIGHT,
                 UI_BUTTON_ICON_HORIZONTAL);
@@ -316,6 +347,10 @@ static void rebuild_macro_list(void)
             macro_button_cb,
             LV_EVENT_CLICKED,
             (void *)(uintptr_t)(index + 1));
+        lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED,
+                            (void *)(uintptr_t)(index + 1));
+        ++displayed;
+    }
     }
 }
 

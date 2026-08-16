@@ -7,10 +7,20 @@
 #include "cJSON.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 
 static const char TAG[] = "macro_controller";
 static const char MACRO_PREFIX[] = "gcode_macro ";
+#define MACRO_FAVORITES_MAX 8
+#define MACRO_NVS_NAMESPACE "netcfg"
+#define MACRO_FAVORITES_KEY "mac_favs"
+
+typedef struct {
+    char names[MACRO_FAVORITES_MAX][MACRO_CONTROLLER_NAME_MAX];
+} macro_favorites_t;
+static macro_favorites_t s_favorites;
+static bool s_favorites_loaded = false;
 
 typedef struct {
     macro_controller_status_t status;
@@ -31,6 +41,57 @@ static int compare_macro_names(
         (const char *)right);
 }
 
+
+static void load_favorites(void)
+{
+    if (s_favorites_loaded) return;
+    s_favorites_loaded = true;
+    nvs_handle_t handle;
+    if (nvs_open(MACRO_NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) return;
+    size_t size = sizeof(s_favorites);
+    (void)nvs_get_blob(handle, MACRO_FAVORITES_KEY, &s_favorites, &size);
+    nvs_close(handle);
+}
+
+static void save_favorites(void)
+{
+    nvs_handle_t handle;
+    if (nvs_open(MACRO_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) return;
+    (void)nvs_set_blob(handle, MACRO_FAVORITES_KEY, &s_favorites, sizeof(s_favorites));
+    (void)nvs_commit(handle);
+    nvs_close(handle);
+}
+
+bool macro_controller_is_favorite(const char *name)
+{
+    if (!name || !name[0]) return false;
+    load_favorites();
+    for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
+        if (strcmp(s_favorites.names[i], name) == 0) return true;
+    }
+    return false;
+}
+
+bool macro_controller_toggle_favorite(const char *name)
+{
+    if (!name || !name[0]) return false;
+    load_favorites();
+    for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
+        if (strcmp(s_favorites.names[i], name) == 0) {
+            s_favorites.names[i][0] = '\0';
+            save_favorites();
+            return false;
+        }
+    }
+    for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
+        if (!s_favorites.names[i][0]) {
+            snprintf(s_favorites.names[i], sizeof(s_favorites.names[i]), "%s", name);
+            save_favorites();
+            return true;
+        }
+    }
+    return false;
+}
 
 bool macro_controller_init(void)
 {

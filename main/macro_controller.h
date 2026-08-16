@@ -34,3 +34,7 @@ bool macro_controller_get(
     size_t index,
     char *output,
     size_t output_size);
+
+/* Favorites are panel-local shortcuts; the macro itself remains in Klipper. */
+bool macro_controller_is_favorite(const char *name);
+bool macro_controller_toggle_favorite(const char *name);

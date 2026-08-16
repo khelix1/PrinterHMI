@@ -11,6 +11,7 @@
 #include "moonraker_transport_security_controller.h"
 #include "moonraker_endpoint_test.h"
 #include "camera_discovery_controller.h"
+#include "camera_catalog_controller.h"
 #include "printer_preview_cache.h"
 #include "printer_preview_store.h"
 #include "printer_profile_health.h"
@@ -42,6 +43,7 @@ static lv_obj_t *s_editor_camera_keyboard = NULL;
 static char s_editor_camera_url[MOONRAKER_CONFIG_CAMERA_URL_LENGTH];
 static lv_obj_t *s_editor_camera_status = NULL;
 static lv_timer_t *s_editor_camera_discovery_timer = NULL;
+static size_t s_editor_camera_slot = 0;
 static lv_obj_t *s_editor_status = NULL;
 static lv_timer_t *s_editor_test_timer = NULL;
 
@@ -61,6 +63,7 @@ static ui_printer_profiles_discover_cb_t
 
 static void editor_security_close(void);
 static void editor_set_status(const char *text);
+static void editor_camera_set_status(const char *text);
 static void editor_auth_open_cb(lv_event_t *event);
 static void editor_camera_open_cb(lv_event_t *event);
 static void editor_camera_discover_cb(lv_event_t *event);
@@ -822,12 +825,65 @@ static void editor_camera_cancel_cb(lv_event_t *event)
     editor_camera_close();
 }
 
+static bool editor_camera_store_current(void)
+{
+    const char *url = s_editor_camera_stream
+        ? lv_textarea_get_text(s_editor_camera_stream) : "";
+    if (s_editor_camera_slot == 0) {
+        strlcpy(s_editor_camera_url, url ? url : "", sizeof(s_editor_camera_url));
+        return true;
+    }
+    return camera_catalog_set(s_editor_profile, s_editor_camera_slot,
+                              "", url ? url : "");
+}
+
+static void editor_camera_load_slot(void)
+{
+    char url[MOONRAKER_CONFIG_CAMERA_URL_LENGTH] = "";
+    if (s_editor_camera_slot == 0) {
+        strlcpy(url, s_editor_camera_url, sizeof(url));
+    } else {
+        camera_catalog_entry_t entry = {0};
+        if (camera_catalog_get(s_editor_profile, s_editor_camera_slot, &entry) &&
+            entry.configured) {
+            strlcpy(url, entry.stream_url, sizeof(url));
+        }
+    }
+    if (s_editor_camera_stream) lv_textarea_set_text(s_editor_camera_stream, url);
+
+    char status[128];
+    snprintf(status, sizeof(status),
+             "Editing Camera %u of %u. Enter its stream or search Moonraker.",
+             (unsigned)(s_editor_camera_slot + 1),
+             (unsigned)CAMERA_CATALOG_MAX_CAMERAS);
+    editor_camera_set_status(status);
+}
+
+static void editor_camera_next_slot_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!editor_camera_store_current()) {
+        editor_camera_set_status("Camera URL must be empty or start with http:// or https://.");
+        return;
+    }
+    s_editor_camera_slot =
+        (s_editor_camera_slot + 1) % CAMERA_CATALOG_MAX_CAMERAS;
+    editor_camera_load_slot();
+}
+
 static void editor_camera_save_cb(lv_event_t *event)
 {
     (void)event;
-    if (s_editor_camera_stream) strlcpy(s_editor_camera_url, lv_textarea_get_text(s_editor_camera_stream), sizeof(s_editor_camera_url));
+    if (!editor_camera_store_current()) {
+        editor_camera_set_status("Camera URL must be empty or start with http:// or https://.");
+        return;
+    }
+    bool configured = s_editor_camera_stream &&
+        lv_textarea_get_text(s_editor_camera_stream)[0];
     editor_camera_close();
-    editor_set_status(s_editor_camera_url[0] ? "Camera stream URL ready. Press SAVE to keep it." : "Camera stream URL cleared.");
+    editor_set_status(configured
+        ? "Camera source saved. Press SAVE to keep this printer profile."
+        : "Camera source cleared. Press SAVE to keep this printer profile.");
 }
 
 
@@ -861,30 +917,22 @@ static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
          * additional webcam entry to import.  Do not call this a missing
          * camera: it is the normal result for a single already-configured
          * camera or a legacy webcam configuration. */
-        if (s_editor_camera_url[0]) {
-            editor_camera_set_status(
-                "Camera stream is already configured. No additional Moonraker camera was found.");
-        } else {
-            editor_camera_set_status(
-                "Moonraker did not return a camera. Enter a stream URL manually.");
-        }
+        editor_camera_set_status(
+            "Moonraker did not return another camera. Enter this stream URL manually.");
         return;
     }
 
-    strlcpy(
-        s_editor_camera_url,
-        webcam.stream_url,
-        sizeof(s_editor_camera_url));
     if (s_editor_camera_stream) {
-        lv_textarea_set_text(s_editor_camera_stream, s_editor_camera_url);
+        lv_textarea_set_text(s_editor_camera_stream, webcam.stream_url);
     }
 
     char status[192];
     snprintf(
         status,
         sizeof(status),
-        "Found %s. Its stream URL is selected.",
-        webcam.name[0] ? webcam.name : "Moonraker camera");
+        "Found %s for Camera %u. Press USE CAMERA to keep it.",
+        webcam.name[0] ? webcam.name : "Moonraker camera",
+        (unsigned)(s_editor_camera_slot + 1));
     editor_camera_set_status(status);
 }
 
@@ -949,7 +997,8 @@ static void editor_camera_open_cb(lv_event_t *event)
     ui_popup_add_caption(s_editor_camera_popup, "MJPEG / HTTP STREAM URL (OPTIONAL)", 28, 72, 420);
     ui_popup_add_status_label(s_editor_camera_popup, "Search uses this printer's Moonraker connection and API key.", 28, 108, 720);
     s_editor_camera_stream = ui_popup_add_textarea(s_editor_camera_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 150, true, false, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, "http://...", s_editor_camera_url, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND CAMERAS", 28, 210, 720, 48, editor_camera_discover_cb, NULL, NULL);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND CAMERAS", 28, 210, 348, 48, editor_camera_discover_cb, NULL, NULL);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_RIGHT " NEXT CAMERA", 400, 210, 348, 48, editor_camera_next_slot_cb, NULL, NULL);
     s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, "Or enter an MJPEG / HTTP stream URL manually.", 28, 266, 720);
     s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 166, LV_ALIGN_TOP_MID, 0, 286, LV_KEYBOARD_MODE_TEXT_LOWER);
     if (s_editor_camera_stream) {
@@ -958,6 +1007,7 @@ static void editor_camera_open_cb(lv_event_t *event)
     ui_popup_add_standard_footer_divider(s_editor_camera_popup);
     ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", 32, 500, 260, 48, editor_camera_cancel_cb, NULL, NULL);
     ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " USE CAMERA", 508, 500, 260, 48, editor_camera_save_cb, NULL, NULL);
+    editor_camera_load_slot();
     lv_obj_move_foreground(s_editor_camera_popup);
 }
 
@@ -1141,6 +1191,7 @@ static void manager_edit_cb(
         profile && profile->configured ? profile->api_key : "",
         sizeof(s_editor_api_key));
     strlcpy(s_editor_camera_url, profile && profile->configured ? profile->camera_stream_url : "", sizeof(s_editor_camera_url));
+    s_editor_camera_slot = 0;
 
     char port_text[16];
 

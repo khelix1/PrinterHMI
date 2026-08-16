@@ -319,6 +319,49 @@ static bool normalize_webcam_url(
 
 
 
+size_t moonraker_probe_webcams_with_api_key(
+    const char *host, int port, const char *api_key,
+    moonraker_webcam_t *webcams, size_t webcam_capacity)
+{
+    if (!host || !host[0] || port <= 0 || port >= 65536 ||
+        !webcams || webcam_capacity == 0) return 0;
+
+    char *body = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) body = heap_caps_malloc(4096, MALLOC_CAP_8BIT);
+    if (!body) return 0;
+
+    size_t count = 0;
+    if (probe_get(host, port, "/server/webcams/list", api_key, body, 4096)) {
+        cJSON *root = cJSON_Parse(body);
+        cJSON *result = root ? cJSON_GetObjectItemCaseSensitive(root, "result") : NULL;
+        cJSON *items = result ? cJSON_GetObjectItemCaseSensitive(result, "webcams") :
+            (root ? cJSON_GetObjectItemCaseSensitive(root, "webcams") : NULL);
+        cJSON *entry = NULL;
+        if (cJSON_IsArray(items)) cJSON_ArrayForEach(entry, items) {
+            if (count >= webcam_capacity) break;
+            cJSON *enabled = cJSON_GetObjectItemCaseSensitive(entry, "enabled");
+            cJSON *stream = cJSON_GetObjectItemCaseSensitive(entry, "stream_url");
+            if (!cJSON_IsObject(entry) || (enabled && !cJSON_IsTrue(enabled)) ||
+                !cJSON_IsString(stream) || !stream->valuestring ||
+                !normalize_webcam_url(host, port, stream->valuestring,
+                    webcams[count].stream_url, sizeof(webcams[count].stream_url))) continue;
+            cJSON *name = cJSON_GetObjectItemCaseSensitive(entry, "name");
+            strlcpy(webcams[count].name,
+                cJSON_IsString(name) && name->valuestring ? name->valuestring : "Moonraker camera",
+                sizeof(webcams[count].name));
+            cJSON *snapshot = cJSON_GetObjectItemCaseSensitive(entry, "snapshot_url");
+            if (cJSON_IsString(snapshot) && snapshot->valuestring)
+                (void)normalize_webcam_url(host, port, snapshot->valuestring,
+                    webcams[count].snapshot_url, sizeof(webcams[count].snapshot_url));
+            ++count;
+        }
+        cJSON_Delete(root);
+    }
+    free(body);
+    return count;
+}
+
+
 bool moonraker_probe_first_webcam_with_api_key(
     const char *host,
     int port,

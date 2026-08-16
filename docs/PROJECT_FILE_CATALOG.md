@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v6.2.1 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v6.3.0 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -70,6 +70,14 @@ when ownership or build membership changes.
 | `device_catalog_controller` | Object discovery, classification and bounded catalog state |
 | `macro_controller` | Bounded public Klipper macro discovery and sorting |
 | `console_controller` | Bounded command/response history and response classification |
+
+## Camera
+
+| Modules | Ownership |
+| --- | --- |
+| `ui_camera` | Active-profile live camera view, fullscreen, selected-camera identity and stale-frame clearing |
+| `camera_stream_controller`, `camera_jpeg_decoder` | PSRAM-first continuous MJPEG capture, bounded handoff and ESP32-P4 JPEG decode |
+| `camera_discovery_controller`, `camera_catalog_controller` | Secure Moonraker webcam discovery/import and persistent per-profile camera catalog |
 
 ## Files and thumbnails
 

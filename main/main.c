@@ -2565,6 +2565,7 @@ static void app_theme_changed(void)
      */
     hide_settings_tab();
     ui_dashboard_status_popup_close();
+    ui_camera_destroy();
     ui_dashboard_destroy();
 
     if (wifi_label) {
@@ -3884,6 +3885,10 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting known-good BSP display/touch path");
     bsp_display_start_with_config(&cfg);
 
+    /* BSP panel initialization may restore its default brightness. Force the
+     * hardware line dark again before LVGL constructs the first splash frame. */
+    gpio_set_level(BSP_LCD_BACKLIGHT, 0);
+
     /*
      * Keep the BSP-initialized backlight at 0% until the splash has been
      * created and its first frame has reached the display.
@@ -3903,6 +3908,10 @@ void app_main(void)
     bsp_display_lock(0);
     ui_settings_module_init();
     bsp_display_unlock();
+
+    /* A solid backlight eliminates low-duty PWM flicker while the
+     * startup splash is the only visible UI. */
+    (void)bsp_display_brightness_set(100);
 
     vTaskDelay(pdMS_TO_TICKS(250));
 
@@ -3931,6 +3940,10 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(500));
 
     app_splash_locked(ui_splash_destroy);
+
+    /* Return to the operator's saved display brightness only after
+     * the splash has handed off to the stable startup page. */
+    (void)bsp_display_brightness_set(ui_settings_brightness_percent());
 
     const esp_app_desc_t *running_app =
         esp_app_get_description();

@@ -66,6 +66,18 @@ display startup or another path is disturbing the display/backlight.
   waiting for an unreachable endpoint is not expected to freeze touch input
   or navigation.
 
+## Camera is blank, stale, or discovery fails
+
+- Confirm the active printer profile is the intended one, then use
+  **Camera → Configure → FIND CAMERAS**.
+- Verify the printer's Moonraker `/server/webcams/list` response includes an
+  enabled webcam with a usable `stream_url`.
+- For Secure profiles, verify the profile's CA trust and HTTPS port first;
+  webcam discovery follows that same policy and never downgrades it.
+- A blank camera view for an unconfigured profile is expected. A previous
+  printer's frame must not remain visible after switching profiles.
+- Capture the `camera_find` task log if discovery resets or fails.
+
 ## A new print shows old progress or layer values
 
 A new job should begin at 0% and show unknown layer values until fresh

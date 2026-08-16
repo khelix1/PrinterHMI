@@ -3,6 +3,23 @@
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 
+## [6.3.0] - 2026-08-15
+
+### Added
+
+- Added Camera v2: a persistent per-printer catalog for up to four camera streams, secure Moonraker webcam discovery/import, identified active-camera selection, fullscreen live MJPEG viewing, PSRAM-first stream storage and hardware JPEG decode.
+
+### Fixed
+
+- Gave secure camera discovery a PSRAM-first TLS task stack, eliminating the camera-search stack-protection reset.
+- Cleared the last decoded camera frame when the active printer has no configured camera.
+- Kept the startup splash at a solid backlight level until handoff, preventing the hard-start flicker captured at reduced saved brightness.
+- Rebuilt the persistent Camera page after a theme change and normalized its footer controls so they remain within the live-view card.
+
+### Validation
+
+- Verified on the ESP32-P4 panel: secure camera discovery, live stream, fullscreen, unconfigured-camera behavior, cold boot, OTA and Operator Shell navigation.
+
 ## [6.2.1] - 2026-08-15
 
 ### Fixed

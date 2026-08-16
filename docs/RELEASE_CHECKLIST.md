@@ -62,6 +62,8 @@
       confirmation, without modifying Klipper or Moonraker.
 - [ ] Host and C6 both report ESP-Hosted 3.0.5 with RPC v2.
 - [ ] Live Wi-Fi RSSI bars and native high-speed SD-card mounting pass.
+- [ ] Camera discovery completes for Standard and Secure Moonraker profiles without reset.
+- [ ] Live camera, fullscreen, active-camera identity and no-camera stale-frame clearing pass.
 - [ ] Printer controls, Files, previews, Drybox and Telemetry pass.
 - [ ] Settings persist and factory-reset behavior is understood.
 - [ ] Release-candidate soak test passes.

@@ -857,8 +857,17 @@ static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
         return;
     }
     if (!found) {
-        editor_camera_set_status(
-            "No configured Moonraker camera found. Enter a stream URL manually.");
+        /* A manually configured stream remains valid when Moonraker has no
+         * additional webcam entry to import.  Do not call this a missing
+         * camera: it is the normal result for a single already-configured
+         * camera or a legacy webcam configuration. */
+        if (s_editor_camera_url[0]) {
+            editor_camera_set_status(
+                "Camera stream is already configured. No additional Moonraker camera was found.");
+        } else {
+            editor_camera_set_status(
+                "Moonraker did not return a camera. Enter a stream URL manually.");
+        }
         return;
     }
 
@@ -940,9 +949,9 @@ static void editor_camera_open_cb(lv_event_t *event)
     ui_popup_add_caption(s_editor_camera_popup, "MJPEG / HTTP STREAM URL (OPTIONAL)", 28, 72, 420);
     ui_popup_add_status_label(s_editor_camera_popup, "Search uses this printer's Moonraker connection and API key.", 28, 108, 720);
     s_editor_camera_stream = ui_popup_add_textarea(s_editor_camera_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 150, true, false, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, "http://...", s_editor_camera_url, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND CAMERAS", 28, 218, 720, 48, editor_camera_discover_cb, NULL, NULL);
-    s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, "Or enter an MJPEG / HTTP stream URL manually.", 28, 278, 720);
-    s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 230, LV_ALIGN_TOP_MID, 0, 220, LV_KEYBOARD_MODE_TEXT_LOWER);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND CAMERAS", 28, 210, 720, 48, editor_camera_discover_cb, NULL, NULL);
+    s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, "Or enter an MJPEG / HTTP stream URL manually.", 28, 266, 720);
+    s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 166, LV_ALIGN_TOP_MID, 0, 286, LV_KEYBOARD_MODE_TEXT_LOWER);
     if (s_editor_camera_stream) {
         lv_obj_add_event_cb(s_editor_camera_stream, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
     }

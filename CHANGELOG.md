@@ -3,6 +3,19 @@
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 
+## [6.4.0] - 2026-08-16
+
+### Added
+
+- Completed per-printer camera management for up to four Moonraker-discovered MJPEG streams.
+- Added persistent friendly camera names, direct named slot selection, default-camera selection, and safe camera removal confirmation.
+- Camera discovery now imports and reports every webcam returned by Moonraker, retaining each discovered name and URL.
+
+### Changed
+
+- USE CAMERA applies the selected camera immediately; the Camera page updates its selector and stream without requiring page navigation.
+- The Camera page honors the saved default camera on initial open after boot and after profile changes.
+
 ## [6.3.0] - 2026-08-15
 
 ### Added

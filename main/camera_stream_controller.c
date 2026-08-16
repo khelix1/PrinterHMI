@@ -15,6 +15,8 @@
 #include <string.h>
 
 #define CAMERA_STREAM_FRAME_CAPACITY (256 * 1024)
+#define CAMERA_STREAM_RETRY_MIN_MS 1000
+#define CAMERA_STREAM_RETRY_MAX_MS 10000
 
 typedef struct {
     uint8_t *pixels;
@@ -71,16 +73,24 @@ static void camera_stream_task(void *arg)
         return;
     }
 
+    uint32_t retry_delay_ms = CAMERA_STREAM_RETRY_MIN_MS;
     while (!s_stop_requested) {
         esp_http_client_handle_t client = NULL;
         if (!camera_stream_open(&client)) {
             camera_frame_result_t failed = {.ok = false};
             (void)xQueueSend(s_result_queue, &failed, 0);
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(retry_delay_ms));
+            if (retry_delay_ms < CAMERA_STREAM_RETRY_MAX_MS) {
+                retry_delay_ms *= 2;
+                if (retry_delay_ms > CAMERA_STREAM_RETRY_MAX_MS) {
+                    retry_delay_ms = CAMERA_STREAM_RETRY_MAX_MS;
+                }
+            }
             continue;
         }
 
         bool in_frame = false;
+        bool received_frame = false;
         uint8_t previous = 0;
         size_t used = 0;
         char chunk[2048];
@@ -113,6 +123,9 @@ static void camera_stream_task(void *arg)
                             };
                             if (xQueueSend(s_result_queue, &result, 0) != pdPASS) {
                                 heap_caps_free(pixels);
+                            } else {
+                                received_frame = true;
+                                retry_delay_ms = CAMERA_STREAM_RETRY_MIN_MS;
                             }
                         }
                         in_frame = false;
@@ -129,7 +142,20 @@ static void camera_stream_task(void *arg)
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         network_activity_controller_end_shared();
-        if (!s_stop_requested) vTaskDelay(pdMS_TO_TICKS(250));
+        if (!s_stop_requested) {
+            if (!received_frame) {
+                camera_frame_result_t failed = {.ok = false};
+                (void)xQueueSend(s_result_queue, &failed, 0);
+            }
+            uint32_t delay_ms = received_frame ? 10 : retry_delay_ms;
+            vTaskDelay(pdMS_TO_TICKS(delay_ms));
+            if (!received_frame && retry_delay_ms < CAMERA_STREAM_RETRY_MAX_MS) {
+                retry_delay_ms *= 2;
+                if (retry_delay_ms > CAMERA_STREAM_RETRY_MAX_MS) {
+                    retry_delay_ms = CAMERA_STREAM_RETRY_MAX_MS;
+                }
+            }
+        }
     }
 
     heap_caps_free(jpeg);

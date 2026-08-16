@@ -30,12 +30,14 @@ static lv_obj_t *s_view_button = NULL;
 static lv_obj_t *s_view_popup = NULL;
 static size_t s_camera_index = 0;
 static bool s_fullscreen = false;
+static bool s_setup_active = false;
 static int s_view_width = UI_PAGE_ROOT_WIDTH;
 static int s_view_height = UI_PAGE_ROOT_HEIGHT;
 static lv_timer_t *s_refresh_timer = NULL;
 static uint8_t *s_frame = NULL;
 static lv_image_dsc_t s_frame_dsc;
 static uint32_t s_camera_last_frame_tick = 0;
+static uint32_t s_camera_stream_started_tick = 0;
 static uint32_t s_camera_window_tick = 0;
 static unsigned s_camera_frame_count = 0;
 
@@ -55,6 +57,15 @@ static void camera_release_frame(void)
         s_frame = NULL;
     }
     memset(&s_frame_dsc, 0, sizeof(s_frame_dsc));
+}
+
+static void camera_mark_unavailable(void)
+{
+    camera_release_frame();
+    if (s_image) {
+        lv_image_set_src(s_image, NULL);
+    }
+    camera_set_status("CAMERA UNAVAILABLE | reconnecting");
 }
 
 
@@ -238,6 +249,7 @@ static void camera_configure_cb(lv_event_t *event)
 static void camera_poll_cb(lv_timer_t *timer)
 {
     (void)timer;
+    if (s_setup_active) return;
     uint32_t now = lv_tick_get();
 
     uint8_t *pixels = NULL;
@@ -249,7 +261,7 @@ static void camera_poll_cb(lv_timer_t *timer)
             &pixels, &pixel_size, &width, &height, &ok)) {
         if (!ok || !pixels || pixel_size == 0 || width <= 0 || height <= 0) {
             if (pixels) heap_caps_free(pixels);
-            camera_set_status("Camera JPEG decode failed.");
+            camera_mark_unavailable();
         } else if (s_image) {
             camera_release_frame();
             s_frame = pixels;
@@ -286,7 +298,11 @@ static void camera_poll_cb(lv_timer_t *timer)
         }
     }
 
-    if (s_camera_last_frame_tick && now - s_camera_last_frame_tick > 3500) camera_set_status("RECONNECTING  |  waiting for camera stream");
+    uint32_t latest_frame_tick = s_camera_last_frame_tick
+        ? s_camera_last_frame_tick : s_camera_stream_started_tick;
+    if (latest_frame_tick && now - latest_frame_tick > 2000) {
+        camera_mark_unavailable();
+    }
     if (camera_stream_busy()) return;
     int profile_index = moonraker_config_active_profile_index();
     camera_catalog_entry_t selected = {0};
@@ -298,12 +314,16 @@ static void camera_poll_cb(lv_timer_t *timer)
             if (s_image) {
                 lv_image_set_src(s_image, NULL);
             }
+            s_camera_stream_started_tick = 0;
             camera_set_status("No camera is configured for the active printer.");
             return;
         }
     }
     if (!camera_stream_start(selected.stream_url)) {
-        camera_set_status("Unable to start camera stream.");
+        camera_set_status("CAMERA UNAVAILABLE | retrying");
+    } else {
+        s_camera_stream_started_tick = now;
+        camera_set_status("CONNECTING | waiting for camera stream");
     }
 }
 
@@ -344,6 +364,25 @@ static void camera_update_selector(void)
     lv_obj_clear_state(s_camera_selector, LV_STATE_DISABLED);
 }
 
+void ui_camera_set_setup_active(bool active)
+{
+    s_setup_active = active;
+    if (active) {
+        if (s_refresh_timer) {
+            lv_timer_delete(s_refresh_timer);
+            s_refresh_timer = NULL;
+        }
+        camera_stream_stop();
+        return;
+    }
+
+    if (s_root && !lv_obj_has_flag(s_root, LV_OBJ_FLAG_HIDDEN) &&
+        !s_refresh_timer) {
+        s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
+        camera_start();
+    }
+}
+
 void ui_camera_refresh_catalog(void)
 {
     if (!s_root || !s_camera_selector) return;
@@ -376,6 +415,7 @@ static void camera_select_next_cb(lv_event_t *event)
         camera_stream_stop();
         camera_release_frame();
         s_camera_last_frame_tick = 0;
+        s_camera_stream_started_tick = 0;
         s_camera_window_tick = 0;
         s_camera_frame_count = 0;
         camera_update_selector();
@@ -502,6 +542,7 @@ void ui_camera_destroy(void)
     s_view_popup = NULL;
     s_fullscreen = false;
     s_camera_last_frame_tick = 0;
+    s_camera_stream_started_tick = 0;
     s_camera_window_tick = 0;
     s_camera_frame_count = 0;
 }
@@ -519,6 +560,7 @@ void ui_camera_hide(void)
     }
     camera_stream_stop();
     s_camera_last_frame_tick = 0;
+    s_camera_stream_started_tick = 0;
     s_camera_window_tick = 0;
     s_camera_frame_count = 0;
     ui_shell_raise_topbar();

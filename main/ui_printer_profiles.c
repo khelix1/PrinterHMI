@@ -12,6 +12,7 @@
 #include "moonraker_endpoint_test.h"
 #include "camera_discovery_controller.h"
 #include "camera_catalog_controller.h"
+#include "camera_test_controller.h"
 #include "ui_camera.h"
 #include "printer_preview_cache.h"
 #include "printer_preview_store.h"
@@ -47,6 +48,7 @@ static lv_obj_t *s_editor_camera_keyboard = NULL;
 static char s_editor_camera_url[MOONRAKER_CONFIG_CAMERA_URL_LENGTH];
 static lv_obj_t *s_editor_camera_status = NULL;
 static lv_timer_t *s_editor_camera_discovery_timer = NULL;
+static lv_timer_t *s_editor_camera_test_timer = NULL;
 static size_t s_editor_camera_slot = 0;
 static lv_obj_t *s_editor_camera_slot_buttons[CAMERA_CATALOG_MAX_CAMERAS];
 static lv_obj_t *s_editor_status = NULL;
@@ -821,8 +823,13 @@ static void editor_camera_close(void)
         lv_timer_delete(s_editor_camera_discovery_timer);
         s_editor_camera_discovery_timer = NULL;
     }
+    if (s_editor_camera_test_timer) {
+        lv_timer_delete(s_editor_camera_test_timer);
+        s_editor_camera_test_timer = NULL;
+    }
     if (s_editor_camera_popup) lv_obj_delete(s_editor_camera_popup);
     s_editor_camera_popup = NULL;
+    ui_camera_set_setup_active(false);
     s_editor_camera_stream = NULL;
     s_editor_camera_name = NULL;
     memset(s_editor_camera_slot_buttons, 0, sizeof(s_editor_camera_slot_buttons));
@@ -938,18 +945,6 @@ static void editor_camera_load_slot(void)
              (unsigned)CAMERA_CATALOG_MAX_CAMERAS);
     editor_camera_set_status(status);
     editor_camera_update_slot_buttons();
-}
-
-static void editor_camera_next_slot_cb(lv_event_t *event)
-{
-    (void)event;
-    if (!editor_camera_store_current()) {
-        editor_camera_set_status("Camera URL must be empty or start with http:// or https://.");
-        return;
-    }
-    s_editor_camera_slot =
-        (s_editor_camera_slot + 1) % CAMERA_CATALOG_MAX_CAMERAS;
-    editor_camera_load_slot();
 }
 
 static bool editor_camera_apply_primary_slot(void)
@@ -1132,6 +1127,47 @@ static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
 }
 
 
+static void editor_camera_test_poll_cb(lv_timer_t *timer)
+{
+    bool ok = false;
+    int width = 0, height = 0;
+    size_t bytes = 0;
+    if (!camera_test_take_result(&ok, &width, &height, &bytes)) return;
+    if (timer) lv_timer_delete(timer);
+    s_editor_camera_test_timer = NULL;
+    if (ok) {
+        char status[128];
+        snprintf(status, sizeof(status),
+                 "Camera verified: %d x %d JPEG (%u KB).",
+                 width, height, (unsigned)((bytes + 1023U) / 1024U));
+        editor_camera_set_status(status);
+    } else {
+        editor_camera_set_status("Camera test failed: no JPEG frame returned.");
+    }
+}
+
+static void editor_camera_test_cb(lv_event_t *event)
+{
+    (void)event;
+    const char *url = s_editor_camera_stream
+        ? lv_textarea_get_text(s_editor_camera_stream) : "";
+    if (!url || !url[0]) {
+        editor_camera_set_status("Enter or find a camera stream URL first.");
+        return;
+    }
+    if (!camera_test_start(url)) {
+        editor_camera_set_status(camera_test_busy()
+            ? "Camera test already running."
+            : "Unable to start camera test.");
+        return;
+    }
+    editor_camera_set_status("Testing camera stream...");
+    s_editor_camera_test_timer = lv_timer_create(editor_camera_test_poll_cb, 80, NULL);
+    if (!s_editor_camera_test_timer) {
+        editor_camera_set_status("Camera test is running; wait for its result.");
+    }
+}
+
 static void editor_camera_discover_cb(lv_event_t *event)
 {
     (void)event;
@@ -1187,6 +1223,9 @@ static void editor_camera_open_cb(lv_event_t *event)
     if (s_editor_camera_popup) { lv_obj_move_foreground(s_editor_camera_popup); return; }
     s_editor_camera_popup = ui_popup_create(lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
     if (!s_editor_camera_popup) return;
+    /* The live page runs a persistent MJPEG request.  Pause it before input
+     * and TEST take the same network path. */
+    ui_camera_set_setup_active(true);
     ui_popup_add_title(s_editor_camera_popup, "CAMERA SETUP", false, 0);
     ui_popup_add_header_divider(s_editor_camera_popup, 44);
 
@@ -1205,7 +1244,7 @@ static void editor_camera_open_cb(lv_event_t *event)
     ui_popup_add_caption(s_editor_camera_popup, "MJPEG / HTTP STREAM URL (OPTIONAL)", 28, 154, 420);
     s_editor_camera_stream = ui_popup_add_textarea(s_editor_camera_popup, 720, 40, LV_ALIGN_TOP_MID, 0, 168, true, false, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, "http://...", s_editor_camera_url, NULL);
     ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND", 28, 218, 170, 38, editor_camera_discover_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_RIGHT " NEXT", 208, 218, 170, 38, editor_camera_next_slot_cb, NULL, NULL);
+    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_PLAY " TEST", 208, 218, 170, 38, editor_camera_test_cb, NULL, NULL);
     ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_OK " DEFAULT", 388, 218, 170, 38, editor_camera_make_default_cb, NULL, NULL);
     ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE", 568, 218, 180, 38, editor_camera_remove_cb, NULL, NULL);
     s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, "Select a camera slot, then name, find, or edit its stream.", 28, 266, 720);

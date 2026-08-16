@@ -53,6 +53,7 @@ idf_component_register(
         # Camera
         "ui_camera.c"
         "camera_stream_controller.c"
+        "camera_test_controller.c"
         "camera_catalog_controller.c"
         "camera_jpeg_decoder.c"
 

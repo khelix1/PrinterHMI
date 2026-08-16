@@ -19,6 +19,7 @@ static int s_port = 0;
 static char s_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
 static moonraker_webcam_t s_webcam;
 static bool s_found = false;
+static size_t s_count = 0;
 static volatile bool s_result_ready = false;
 
 
@@ -36,6 +37,7 @@ static void camera_discovery_task(void *arg)
     }
 
     s_webcam = count ? webcams[0] : (moonraker_webcam_t){0};
+    s_count = count;
     s_found = count > 0;
     __atomic_store_n(&s_result_ready, true, __ATOMIC_RELEASE);
     s_task = NULL;
@@ -54,6 +56,7 @@ bool camera_discovery_start(const char *host, int port, const char *api_key)
     s_port = port;
     memset(&s_webcam, 0, sizeof(s_webcam));
     s_found = false;
+    s_count = 0;
     __atomic_store_n(&s_result_ready, false, __ATOMIC_RELEASE);
 
     if (xTaskCreatePinnedToCoreWithCaps(
@@ -78,7 +81,8 @@ bool camera_discovery_busy(void)
 }
 
 
-bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found)
+bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found,
+                                  size_t *count)
 {
     if (!__atomic_exchange_n(
             &s_result_ready,
@@ -91,6 +95,9 @@ bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found)
     }
     if (found) {
         *found = s_found;
+    }
+    if (count) {
+        *count = s_count;
     }
     return true;
 }

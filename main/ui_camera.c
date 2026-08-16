@@ -291,7 +291,7 @@ static void camera_poll_cb(lv_timer_t *timer)
     int profile_index = moonraker_config_active_profile_index();
     camera_catalog_entry_t selected = {0};
     if (!camera_catalog_get(profile_index, s_camera_index, &selected) || !selected.configured) {
-        s_camera_index = 0;
+        s_camera_index = camera_catalog_default(profile_index);
         if (!camera_catalog_get(profile_index, s_camera_index, &selected) || !selected.configured) {
             /* Never leave the previous printer's last frame visible. */
             camera_release_frame();
@@ -344,6 +344,18 @@ static void camera_update_selector(void)
     lv_obj_clear_state(s_camera_selector, LV_STATE_DISABLED);
 }
 
+void ui_camera_refresh_catalog(void)
+{
+    if (!s_root || !s_camera_selector) return;
+    int profile_index = moonraker_config_active_profile_index();
+    camera_catalog_entry_t entry = {0};
+    if (!camera_catalog_get(profile_index, s_camera_index, &entry) ||
+        !entry.configured) {
+        s_camera_index = 0;
+    }
+    camera_update_selector();
+}
+
 static void camera_select_next_cb(lv_event_t *event)
 {
     (void)event;
@@ -360,6 +372,7 @@ static void camera_select_next_cb(lv_event_t *event)
         camera_catalog_entry_t entry = {0};
         if (!camera_catalog_get(profile_index, candidate, &entry) || !entry.configured) continue;
         s_camera_index = candidate;
+        (void)camera_catalog_set_default(profile_index, s_camera_index);
         camera_stream_stop();
         camera_release_frame();
         s_camera_last_frame_tick = 0;
@@ -381,10 +394,17 @@ void ui_camera_show(void)
         if (!s_refresh_timer) {
             s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
         }
+        s_camera_index = camera_catalog_default(
+            moonraker_config_active_profile_index());
         camera_update_selector();
         camera_start();
         return;
     }
+
+    /* Persisted default must be chosen before the first stream starts.
+     * Otherwise a fresh boot would always open slot 1 when it is configured. */
+    s_camera_index = camera_catalog_default(
+        moonraker_config_active_profile_index());
 
     s_root = lv_obj_create(lv_screen_active());
     lv_obj_set_size(s_root, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);

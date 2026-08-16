@@ -23,6 +23,11 @@ bool camera_catalog_set(int profile_index, size_t camera_index,
                         const char *name, const char *stream_url);
 bool camera_catalog_clear(int profile_index, size_t camera_index);
 
+/* Persisted per-printer default camera.  A removed camera automatically
+ * falls back to the first remaining configured camera. */
+size_t camera_catalog_default(int profile_index);
+bool camera_catalog_set_default(int profile_index, size_t camera_index);
+
 /* View settings are stored per printer profile and per camera slot. */
 bool camera_catalog_set_view(int profile_index, size_t camera_index,
                              unsigned rotation,

@@ -2,6 +2,7 @@
 
 #include "ota_release_catalog.h"
 #include "ui_theme.h"
+#include "ui_camera.h"
 
 #include "esp_heap_caps.h"
 #include "ui_popup.h"
@@ -20,6 +21,28 @@ static lv_obj_t *s_progress_bytes_label = NULL;
 static lv_obj_t *s_progress_cancel_btn = NULL;
 static ui_ota_cancel_cb_t s_progress_cancel_cb = NULL;
 static bool s_progress_visible = false;
+static bool s_camera_quiesced = false;
+
+static void ota_quiesce_camera(void)
+{
+    if (s_camera_quiesced) {
+        return;
+    }
+
+    /* The persistent MJPEG request shares the network transport with OTA. */
+    ui_camera_set_setup_active(true);
+    s_camera_quiesced = true;
+}
+
+static void ota_resume_camera(void)
+{
+    if (!s_camera_quiesced) {
+        return;
+    }
+
+    s_camera_quiesced = false;
+    ui_camera_set_setup_active(false);
+}
 static lv_obj_t *s_ota_url_ta = NULL;
 static lv_obj_t *s_ota_kb = NULL;
 static ui_ota_start_cb_t s_start_cb = NULL;
@@ -234,6 +257,7 @@ void ui_ota_progress_close(void)
     s_progress_cancel_btn = NULL;
     s_progress_cancel_cb = NULL;
     s_progress_visible = false;
+    ota_resume_camera();
 }
 
 void ui_ota_popup_close(void)
@@ -246,6 +270,7 @@ void ui_ota_popup_close(void)
         s_start_cb = NULL;
         s_remote_cb = NULL;
     }
+    ota_resume_camera();
 }
 
 static void close_cb(lv_event_t *e)
@@ -370,6 +395,8 @@ void ui_ota_popup_show(const char *current_url,
         s_remote_cb = NULL;
         return;
     }
+
+    ota_quiesce_camera();
 
     ui_popup_add_title(
         s_ota_popup,

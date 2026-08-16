@@ -14,6 +14,7 @@
 #include "camera_catalog_controller.h"
 #include "camera_test_controller.h"
 #include "ui_camera.h"
+#include "ui_dashboard.h"
 #include "printer_preview_cache.h"
 #include "printer_preview_store.h"
 #include "printer_profile_health.h"
@@ -967,6 +968,7 @@ static void editor_camera_make_default_cb(lv_event_t *event)
         return;
     }
     ui_camera_refresh_catalog();
+    ui_dashboard_refresh_camera();
     editor_camera_update_slot_buttons();
     editor_camera_set_status("This is now the default camera for this printer.");
 }
@@ -995,6 +997,7 @@ static void editor_camera_remove_apply_cb(lv_event_t *event)
              sizeof(s_editor_camera_names[s_editor_camera_slot]),
              "Camera %u", (unsigned)(s_editor_camera_slot + 1));
     ui_camera_refresh_catalog();
+    ui_dashboard_refresh_camera();
     editor_camera_load_slot();
     editor_camera_update_slot_buttons();
     editor_camera_set_status("Camera removed.");
@@ -1055,6 +1058,7 @@ static void editor_camera_save_cb(lv_event_t *event)
         return;
     }
     ui_camera_refresh_catalog();
+    ui_dashboard_refresh_camera();
 
     bool configured = s_editor_camera_stream &&
         lv_textarea_get_text(s_editor_camera_stream)[0];
@@ -1339,6 +1343,7 @@ static void editor_save_cb(
         return;
     }
     ui_camera_refresh_catalog();
+    ui_dashboard_refresh_camera();
 
     if (!moonraker_config_set_transport_security(s_editor_profile, s_editor_secure)) {
         editor_set_status("Unable to save connection-security setting.");

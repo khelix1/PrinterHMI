@@ -568,6 +568,15 @@ void ui_camera_show(void)
 }
 
 
+void ui_camera_show_fullscreen(void)
+{
+    ui_camera_show();
+    if (s_root && !s_fullscreen) {
+        camera_set_viewport(true);
+    }
+}
+
+
 void ui_camera_destroy(void)
 {
     if (s_fullscreen) camera_set_viewport(false);

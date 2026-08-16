@@ -13,7 +13,9 @@
 #include "ui_dashboard_page.h"
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "ui_camera.h"
 #include "camera_stream_controller.h"
+#include "camera_catalog_controller.h"
 #include "moonraker_config_controller.h"
 #include "esp_heap_caps.h"
 
@@ -99,6 +101,21 @@ ui_dashboard_status_t ui_dashboard_create_status(
 }
 
 
+static const char *dashboard_selected_camera_url(void)
+{
+    static camera_catalog_entry_t camera;
+    const int profile_index = moonraker_config_active_profile_index();
+    const size_t camera_index = camera_catalog_default(profile_index);
+
+    if (!camera_catalog_get(profile_index, camera_index, &camera) ||
+        !camera.configured ||
+        !camera.stream_url[0]) {
+        return NULL;
+    }
+
+    return camera.stream_url;
+}
+
 static void dashboard_camera_release_frame(void)
 {
     if (dash32_camera_frame) {
@@ -158,8 +175,7 @@ static void dashboard_camera_poll_cb(lv_timer_t *timer)
     }
 
     if (camera_stream_busy()) return;
-    const char *url = moonraker_config_camera_stream_url(
-        moonraker_config_active_profile_index());
+    const char *url = dashboard_selected_camera_url();
     if (!url || !url[0]) {
         dashboard_camera_set_status("No camera configured");
         return;
@@ -201,10 +217,47 @@ static void dashboard_camera_mode_set(bool enabled)
     dashboard_camera_poll_cb(NULL);
 }
 
+void ui_dashboard_refresh_camera(void)
+{
+    if (!dash32_camera_toggle) {
+        return;
+    }
+
+    const int profile_index = moonraker_config_active_profile_index();
+    const size_t camera_index = camera_catalog_default(profile_index);
+    camera_catalog_entry_t camera = {0};
+    const bool configured =
+        camera_catalog_get(profile_index, camera_index, &camera) &&
+        camera.configured &&
+        camera.stream_url[0];
+
+    if (configured) {
+        lv_obj_clear_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    if (dash32_camera_mode) {
+        dashboard_camera_mode_set(false);
+    }
+    lv_obj_add_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void dashboard_camera_toggle_cb(lv_event_t *event)
 {
     (void)event;
     dashboard_camera_mode_set(!dash32_camera_mode);
+}
+
+static void dashboard_camera_open_fullscreen_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!dash32_camera_mode) {
+        return;
+    }
+
+    /* Release the Dashboard consumer before Camera takes over the stream. */
+    dashboard_camera_mode_set(false);
+    ui_camera_show_fullscreen();
 }
 
 
@@ -255,6 +308,11 @@ void ui_dashboard_create(void)
     lv_obj_t *preview_box = ui_dashboard_thumb_box();
     if (preview_box) {
         dash32_camera_image = lv_image_create(preview_box);
+        lv_obj_add_flag(dash32_camera_image, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(dash32_camera_image,
+                            dashboard_camera_open_fullscreen_cb,
+                            LV_EVENT_CLICKED,
+                            NULL);
         lv_obj_set_style_bg_color(dash32_camera_image, UI_CARD_DARK, 0);
         lv_obj_set_style_bg_opa(dash32_camera_image, LV_OPA_COVER, 0);
         lv_obj_add_flag(dash32_camera_image, LV_OBJ_FLAG_HIDDEN);
@@ -269,8 +327,7 @@ void ui_dashboard_create(void)
     if (dash32_camera_toggle) {
         lv_obj_set_size(dash32_camera_toggle, 172, 32);
         lv_obj_set_pos(dash32_camera_toggle, 308, 8);
-        const char *camera_url = moonraker_config_camera_stream_url(
-            moonraker_config_active_profile_index());
+        const char *camera_url = dashboard_selected_camera_url();
         if (!camera_url || !camera_url[0]) {
             lv_obj_add_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN);
         } else {

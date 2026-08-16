@@ -13,6 +13,8 @@ ui_dashboard_status_t ui_dashboard_create_status(
     lv_obj_t *parent);
 void ui_dashboard_create(void);
 void ui_dashboard_update(void);
+/* Re-evaluate the live-camera toggle after Camera Setup changes. */
+void ui_dashboard_refresh_camera(void);
 void ui_dashboard_set_active_print_file(const char *filename);
 void ui_dashboard_set_active_print(const char *layer, const char *elapsed, const char *remaining);
 void ui_dashboard_destroy(void);

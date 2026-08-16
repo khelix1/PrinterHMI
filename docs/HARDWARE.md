@@ -2,7 +2,7 @@
 
 ## Supported target
 
-PrinterHMI v6.4.0 targets the JC1060P470C-I/W operator panel built around the
+PrinterHMI v6.4.1 targets the JC1060P470C-I/W operator panel built around the
 ESP32-P4.
 
 | Function | Hardware |

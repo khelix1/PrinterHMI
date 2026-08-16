@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
 #define CAMERA_NVS_NAMESPACE "netcfg"
 
@@ -35,7 +36,11 @@ static void camera_name_key(char *key, size_t size, int profile, size_t camera)
 
 static void camera_default_key(char *key, size_t size, int profile)
 {
-    snprintf(key, size, "p%d_cdef", profile);
+    /* Profiles are bounded by moonraker_config_profile_capacity().  Keeping
+     * the formatted value in the uint8_t storage domain also lets GCC prove
+     * that every supported NVS key fits in the existing key buffer. */
+    unsigned profile_id = (unsigned)(uint8_t)profile;
+    snprintf(key, size, "p%u_cdef", profile_id);
 }
 
 static void load_camera_name(int profile, size_t camera, char *name, size_t size)
@@ -214,7 +219,8 @@ bool camera_catalog_set_default(int profile_index, size_t camera_index)
     if (nvs_open(CAMERA_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
         return false;
     }
-    char key[16];
+    /* GCC cannot infer valid_profile() for formatted NVS keys. */
+    char key[24];
     camera_default_key(key, sizeof(key), profile_index);
     esp_err_t error = nvs_set_u8(handle, key, (uint8_t)camera_index);
     if (error == ESP_OK) error = nvs_commit(handle);

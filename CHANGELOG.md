@@ -3,6 +3,13 @@
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 
+## [6.4.1] - 2026-08-16
+
+### Fixed
+
+- Removed the default-camera NVS-key format-truncation warning that caused the
+  v6.4.0 GitHub ESP-IDF build check to fail despite producing a valid firmware image.
+
 ## [6.4.0] - 2026-08-16
 
 ### Added

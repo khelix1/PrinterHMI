@@ -67,6 +67,17 @@ These photographs show the interface operating on the target hardware.
 | Auto-scaling live telemetry | Firmware and device settings |
 | ![PrinterHMI live telemetry](docs/images/hardware/telemetry.jpg) | ![PrinterHMI firmware and device settings](docs/images/hardware/settings-version.jpg) |
 
+## Camera v2 and Operator Shell on Hardware
+
+These v6.3.0 photos show the Operator Shell on its target ESP32-P4 hardware,
+including printer controls, the file library, operator utilities and live camera.
+
+| Printer control | Files library |
+| :---: | :---: |
+| ![PrinterHMI Operator Shell Printer page](docs/images/v6.3.0/operator-printer.jpg) | ![PrinterHMI Operator Shell Files page](docs/images/v6.3.0/operator-files.jpg) |
+| Tools workspace | Live camera view |
+| ![PrinterHMI Operator Shell Tools page](docs/images/v6.3.0/operator-tools.jpg) | ![PrinterHMI Camera v2 live view](docs/images/v6.3.0/camera-live.jpg) |
+
 ## Repository map
 
 | Path | Purpose |

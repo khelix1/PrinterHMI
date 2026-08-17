@@ -544,6 +544,7 @@ void ui_settings_show_page(
     const char *storage_text,
     lv_event_cb_t ota_cb,
     lv_event_cb_t network_cb,
+    lv_event_cb_t setup_cb,
     ui_settings_theme_rebuild_cb_t theme_rebuild_cb)
 {
     s_theme_rebuild_cb = theme_rebuild_cb;
@@ -676,6 +677,23 @@ void ui_settings_show_page(
     const int section_gap = ui_theme_density_metric(10, 14, 18);
     const int first_row_y = 48;
     int section_y = 0;
+
+    /* Setup Center */
+    const int setup_height = first_row_y + action_height + 6;
+    lv_obj_t *setup = ui_settings_section_create(
+        content,
+        "SETUP CENTER",
+        section_y,
+        setup_height);
+    ui_settings_section_add_action_row(
+        setup,
+        "Run System Setup Again",
+        "Guided Wi-Fi, printer, and camera configuration",
+        "OPEN SETUP",
+        first_row_y,
+        setup_cb,
+        false);
+    section_y += setup_height + section_gap;
 
     /*
      * Connections

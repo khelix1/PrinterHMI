@@ -62,6 +62,9 @@ lv_obj_t *ui_popup_create(lv_obj_t *parent,
     lv_obj_set_pos(blocker, 0, 0);
     lv_obj_clear_flag(blocker, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(blocker, LV_OBJ_FLAG_CLICKABLE);
+    /* Every modal shares the same calm, readable operator backdrop. */
+    lv_obj_set_style_bg_color(blocker, UI_BG_DEEP, 0);
+    lv_obj_set_style_bg_opa(blocker, LV_OPA_60, 0);
 
     lv_obj_t *popup = lv_obj_create(modal_parent);
     if (!popup) {

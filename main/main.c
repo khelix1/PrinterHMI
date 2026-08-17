@@ -135,6 +135,8 @@ static void sntp_wait_task(void *arg);
 #include "ui_settings.h"
 #include "timezone_config.h"
 #include "ui_splash.h"
+#include "onboarding_controller.h"
+#include "ui_setup_wizard.h"
 #include "ui_shell.h"
 #include "ui_camera.h"
 #include "ui_tools.h"
@@ -1606,6 +1608,7 @@ return;
 
 static void show_settings_tab(void);
 static void app_theme_changed(void);
+static void app_open_setup_wizard(void);
 
 
 static void printer_chooser_select_bridge(int profile_index)
@@ -1685,6 +1688,41 @@ static void settings_open_network_bridge(lv_event_t *event)
     app_hide_operator_pages();
     ui_network_show();
     ui_shell_set_active_nav(UI_SHELL_PAGE_SETTINGS);
+}
+
+static bool setup_connect_wifi(const char *ssid, const char *password)
+{
+    if (!ssid || !ssid[0]) {
+        return false;
+    }
+
+    wifi_config_t config = {0};
+    strlcpy((char *)config.sta.ssid, ssid, sizeof(config.sta.ssid));
+    strlcpy((char *)config.sta.password, password ? password : "", sizeof(config.sta.password));
+    (void)esp_wifi_disconnect();
+    if (esp_wifi_set_config(WIFI_IF_STA, &config) != ESP_OK ||
+        !wifi_credentials_store_save(ssid, password ? password : "")) {
+        memset(config.sta.password, 0, sizeof(config.sta.password));
+        return false;
+    }
+    safe_copy(saved_wifi_ssid, sizeof(saved_wifi_ssid), ssid);
+    safe_copy(saved_wifi_password, sizeof(saved_wifi_password), password ? password : "");
+    s_wifi_credentials_configured = true;
+    s_retry_num = 0;
+    const esp_err_t error = esp_wifi_connect();
+    memset(config.sta.password, 0, sizeof(config.sta.password));
+    return error == ESP_OK;
+}
+
+static void app_open_setup_wizard(void)
+{
+    ui_setup_wizard_show(setup_connect_wifi);
+}
+
+static void settings_open_setup_wizard_bridge(lv_event_t *event)
+{
+    (void)event;
+    app_open_setup_wizard();
 }
 
 
@@ -2528,6 +2566,7 @@ static void show_settings_tab(void)
         storage_text,
         ota_ui_controller_open_event_cb,
         settings_open_network_bridge,
+        settings_open_setup_wizard_bridge,
         app_theme_changed);
 }
 
@@ -3785,6 +3824,9 @@ static void app_startup_show_initial_ui(void)
     ui_printer_chooser_show(
         printer_chooser_select_bridge,
         printer_chooser_manage_bridge);
+    if (onboarding_controller_should_show()) {
+        app_open_setup_wizard();
+    }
     ui_splash_create();
     ui_splash_display_ready();
     ESP_LOGI(TAG, "STARTUP_TRACE splash-presented");
@@ -3820,6 +3862,7 @@ void app_main(void)
         (int)esp_reset_reason());
 
     theme_manager_init();
+    onboarding_controller_init();
 
     /* Apply the saved local timezone before any clock or SNTP path starts. */
     timezone_config_init();

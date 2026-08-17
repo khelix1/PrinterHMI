@@ -25,6 +25,7 @@ void ui_settings_show_page(
     const char *storage_text,
     lv_event_cb_t ota_cb,
     lv_event_cb_t network_cb,
+    lv_event_cb_t setup_cb,
     ui_settings_theme_rebuild_cb_t theme_rebuild_cb);
 
 void ui_settings_refresh(void);

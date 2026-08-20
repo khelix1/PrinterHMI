@@ -1,4 +1,5 @@
 #include "ui_shell.h"
+#include "ui_text.h"
 #include "ui_button.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
@@ -175,7 +176,7 @@ void ui_shell_create(void)
     ui_global_estop_create(shell_top_bar);
 
     shell_clock_label = lv_label_create(shell_top_bar);
-    lv_label_set_text(shell_clock_label, "--:--");
+    lv_label_set_text(shell_clock_label, ui_text("--:--"));
     ui_apply_text_title(shell_clock_label);
     ui_apply_label_primary(shell_clock_label);
     lv_obj_align(shell_clock_label, LV_ALIGN_RIGHT_MID, -20, 0);

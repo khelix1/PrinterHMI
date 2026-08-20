@@ -1,4 +1,5 @@
 #include "ui_calibration_manual_probe.h"
+#include "ui_text.h"
 
 #include "ui_popup.h"
 
@@ -50,7 +51,7 @@ bool ui_calibration_manual_probe_show(
 
     ui_popup_add_title(
         s_probe.popup,
-        title ? title : "MANUAL PROBE",
+        title ? title : ui_text("MANUAL PROBE"),
         false,
         4);
     ui_popup_add_header_divider(

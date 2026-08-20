@@ -1,4 +1,5 @@
 #include "ui_console.h"
+#include "ui_text.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -123,7 +124,7 @@ static void rebuild_output(void)
         lv_obj_t *empty = lv_label_create(s_output);
         lv_label_set_text(
             empty,
-            "Console history is empty.");
+            ui_text("Console history is empty."));
         lv_obj_set_pos(empty, 18, 18);
         ui_apply_custom_label_style(
             empty,
@@ -196,7 +197,7 @@ static void update_connection(void)
     if (state.moonraker_ok) {
         lv_label_set_text(
             s_connection,
-            "MOONRAKER LINKED");
+            ui_text("MOONRAKER LINKED"));
         ui_apply_custom_label_style(
             s_connection,
             UI_FONT_CAPTION,
@@ -204,7 +205,7 @@ static void update_connection(void)
     } else {
         lv_label_set_text(
             s_connection,
-            "MOONRAKER OFFLINE");
+            ui_text("MOONRAKER OFFLINE"));
         ui_apply_custom_label_style(
             s_connection,
             UI_FONT_CAPTION,
@@ -240,8 +241,8 @@ static void update_follow_button(void)
         lv_label_set_text(
             s_follow_label,
             s_follow
-                ? "FOLLOW ON"
-                : "FOLLOW OFF");
+                ? ui_text("FOLLOW ON")
+                : ui_text("FOLLOW OFF"));
     }
 
     if (s_follow_button) {
@@ -451,7 +452,7 @@ static void open_command_cb(lv_event_t *event)
 
     ui_popup_add_title(
         s_command_popup,
-        "SEND KLIPPER COMMAND",
+        ui_text("SEND KLIPPER COMMAND"),
         false,
         0);
     ui_popup_add_header_divider(
@@ -469,8 +470,8 @@ static void open_command_cb(lv_event_t *event)
             true,
             false,
             CONSOLE_COMMAND_MAX,
-            "G-code or macro, for example: STATUS",
-            "",
+            ui_text("G-code or macro, for example: STATUS"),
+            ui_text(""),
             NULL);
 
     lv_obj_t *keyboard =
@@ -498,7 +499,7 @@ static void open_command_cb(lv_event_t *event)
     ui_popup_add_action_at(
         s_command_popup,
         UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
+        ui_text(LV_SYMBOL_CLOSE " CLOSE"),
         24,
         452,
         140,
@@ -510,7 +511,7 @@ static void open_command_cb(lv_event_t *event)
     ui_popup_add_action_at(
         s_command_popup,
         UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_UP " PREV",
+        ui_text(LV_SYMBOL_UP " PREV"),
         184,
         452,
         112,
@@ -522,7 +523,7 @@ static void open_command_cb(lv_event_t *event)
     ui_popup_add_action_at(
         s_command_popup,
         UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_DOWN " NEXT",
+        ui_text(LV_SYMBOL_DOWN " NEXT"),
         306,
         452,
         112,
@@ -534,7 +535,7 @@ static void open_command_cb(lv_event_t *event)
     ui_popup_add_action_at(
         s_command_popup,
         UI_POPUP_ACTION_PRIMARY,
-        LV_SYMBOL_PLAY " SEND",
+        ui_text(LV_SYMBOL_PLAY " SEND"),
         650,
         452,
         146,
@@ -612,7 +613,7 @@ void ui_console_show(
     ui_apply_root_style(s_root);
 
     lv_obj_t *title = lv_label_create(s_root);
-    lv_label_set_text(title, "CONSOLE");
+    lv_label_set_text(title, ui_text("CONSOLE"));
     lv_obj_set_pos(title, UI_PAGE_RAIL_X, 18);
     ui_apply_text_title(title);
     ui_apply_label_bright(title);
@@ -620,7 +621,7 @@ void ui_console_show(
     lv_obj_t *subtitle = lv_label_create(s_root);
     lv_label_set_text(
         subtitle,
-        "LIVE KLIPPER RESPONSES AND DIRECT G-CODE");
+        ui_text("LIVE KLIPPER RESPONSES AND DIRECT G-CODE"));
     lv_obj_set_pos(subtitle, UI_PAGE_RAIL_X, 50);
     ui_apply_text_caption(subtitle);
     ui_apply_label_dim(subtitle);

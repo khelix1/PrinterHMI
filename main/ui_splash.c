@@ -1,4 +1,5 @@
 #include "ui_splash.h"
+#include "ui_text.h"
 
 #include "esp_app_desc.h"
 #include "lvgl.h"
@@ -128,7 +129,7 @@ void ui_splash_create(void)
     lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 130);
 
     splash_status = lv_label_create(panel);
-    lv_label_set_text(splash_status, "Starting...");
+    lv_label_set_text(splash_status, ui_text("Starting..."));
     ui_apply_text_title(splash_status);
     lv_obj_set_style_text_color(splash_status, UI_BORDER_BRIGHT, 0);
     lv_obj_align(splash_status, LV_ALIGN_TOP_MID, 0, 164);
@@ -153,7 +154,7 @@ void ui_splash_create(void)
     lv_obj_align(splash_percent, LV_ALIGN_TOP_MID, 0, 254);
 
     lv_obj_t *footer = lv_label_create(panel);
-    lv_label_set_text(footer, "Industrial control interface");
+    lv_label_set_text(footer, ui_text("Industrial control interface"));
     ui_apply_text_body(footer);
     ui_apply_label_dim(footer);
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -26);

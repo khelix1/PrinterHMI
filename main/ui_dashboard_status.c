@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "ui_dashboard_status.h"
+#include "ui_text.h"
 #include "printer_controller.h"
 
 #include "ui_theme.h"
@@ -30,13 +31,13 @@ ui_dashboard_status_t ui_dashboard_status_create(lv_obj_t *parent)
         0);
 
     lv_obj_t *rt = lv_label_create(right_panel);
-    lv_label_set_text(rt, "PRINT STATUS");
+    lv_label_set_text(rt, ui_text("PRINT STATUS"));
     ui_apply_text_body(rt);
     ui_apply_label_dim(rt);
     lv_obj_set_pos(rt, 0, 0);
 
     out.state = lv_label_create(right_panel);
-    lv_label_set_text(out.state, "--");
+    lv_label_set_text(out.state, ui_text("--"));
     ui_apply_text_heading(out.state);
     ui_apply_label_primary(out.state);
     lv_obj_set_pos(out.state, 0, 30);
@@ -54,61 +55,61 @@ ui_dashboard_status_t ui_dashboard_status_create(lv_obj_t *parent)
     lv_bar_set_value(out.progress_bar, 0, LV_ANIM_OFF);
 
     lv_obj_t *el = lv_label_create(right_panel);
-    lv_label_set_text(el, "ELAPSED");
+    lv_label_set_text(el, ui_text("ELAPSED"));
     ui_apply_text_caption(el);
     ui_apply_label_dim(el);
     lv_obj_set_pos(el, 0, 125);
 
     out.elapsed = lv_label_create(right_panel);
-    lv_label_set_text(out.elapsed, "--:--");
+    lv_label_set_text(out.elapsed, ui_text("--:--"));
     ui_apply_text_title(out.elapsed);
     ui_apply_label_primary(out.elapsed);
     lv_obj_set_pos(out.elapsed, 0, 150);
 
     lv_obj_t *rl = lv_label_create(right_panel);
-    lv_label_set_text(rl, "REMAINING");
+    lv_label_set_text(rl, ui_text("REMAINING"));
     ui_apply_text_caption(rl);
     ui_apply_label_dim(rl);
     lv_obj_set_pos(rl, 205, 125);
 
     out.remaining = lv_label_create(right_panel);
-    lv_label_set_text(out.remaining, "--:--");
+    lv_label_set_text(out.remaining, ui_text("--:--"));
     ui_apply_text_title(out.remaining);
     ui_apply_label_primary(out.remaining);
     lv_obj_set_pos(out.remaining, 205, 150);
 
     lv_obj_t *eta_l = lv_label_create(right_panel);
-    lv_label_set_text(eta_l, "EST FINISH");
+    lv_label_set_text(eta_l, ui_text("EST FINISH"));
     ui_apply_text_caption(eta_l);
     ui_apply_label_dim(eta_l);
     lv_obj_set_pos(eta_l, 205, 186);
 
     out.eta = lv_label_create(right_panel);
-    lv_label_set_text(out.eta, "--:--");
+    lv_label_set_text(out.eta, ui_text("--:--"));
     ui_apply_text_title(out.eta);
     ui_apply_label_primary(out.eta);
     lv_obj_set_pos(out.eta, 205, 204);
 
     lv_obj_t *nt = lv_label_create(right_panel);
-    lv_label_set_text(nt, "NOZZLE");
+    lv_label_set_text(nt, ui_text("NOZZLE"));
     ui_apply_text_caption(nt);
     ui_apply_label_dim(nt);
     lv_obj_set_pos(nt, 0, 186);
 
     out.nozzle = lv_label_create(right_panel);
-    lv_label_set_text(out.nozzle, "-- / -- C");
+    lv_label_set_text(out.nozzle, ui_text("-- / -- C"));
     ui_apply_text_value_small(out.nozzle);
     ui_apply_label_primary(out.nozzle);
     lv_obj_set_pos(out.nozzle, 0, 204);
 
     lv_obj_t *bt = lv_label_create(right_panel);
-    lv_label_set_text(bt, "BED");
+    lv_label_set_text(bt, ui_text("BED"));
     ui_apply_text_caption(bt);
     ui_apply_label_dim(bt);
     lv_obj_set_pos(bt, 0, 244);
 
     out.bed = lv_label_create(right_panel);
-    lv_label_set_text(out.bed, "-- / -- C");
+    lv_label_set_text(out.bed, ui_text("-- / -- C"));
     ui_apply_text_value_small(out.bed);
     ui_apply_label_primary(out.bed);
     lv_obj_set_pos(out.bed, 0, 262);
@@ -120,7 +121,7 @@ ui_dashboard_status_t ui_dashboard_status_create(lv_obj_t *parent)
 void ui_dashboard_status_set_print_state(const char *state)
 {
     if (s_dash_status.state) {
-        lv_label_set_text(s_dash_status.state, state ? state : "--");
+        lv_label_set_text(s_dash_status.state, state ? state : ui_text("--"));
     }
 }
 
@@ -199,14 +200,14 @@ void ui_dashboard_status_set_times(const char *elapsed,
                                        const char *eta)
 {
     if (s_dash_status.elapsed) {
-        lv_label_set_text(s_dash_status.elapsed, elapsed ? elapsed : "--:--");
+        lv_label_set_text(s_dash_status.elapsed, elapsed ? elapsed : ui_text("--:--"));
     }
 
     if (s_dash_status.remaining) {
-        lv_label_set_text(s_dash_status.remaining, remaining ? remaining : "--:--");
+        lv_label_set_text(s_dash_status.remaining, remaining ? remaining : ui_text("--:--"));
     }
 
     if (s_dash_status.eta) {
-        lv_label_set_text(s_dash_status.eta, eta ? eta : "--:--");
+        lv_label_set_text(s_dash_status.eta, eta ? eta : ui_text("--:--"));
     }
 }

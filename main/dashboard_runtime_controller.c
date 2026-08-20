@@ -1,4 +1,5 @@
 #include "dashboard_runtime_controller.h"
+#include "ui_text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -279,7 +280,7 @@ static void update_environment_cards(
     if (context->heater_label) {
         lv_label_set_text(
             context->heater_label,
-            state->heater_on ? "ON" : "OFF");
+            state->heater_on ? ui_text("ON") : ui_text("OFF"));
     }
 
     if (context->fan_label) {
@@ -295,8 +296,8 @@ static void update_environment_cards(
         lv_label_set_text(
             context->moonraker_label,
             state->live_data_ok
-                ? "linked"
-                : "not linked");
+                ? ui_text("linked")
+                : ui_text("not linked"));
     }
 }
 

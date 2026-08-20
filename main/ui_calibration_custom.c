@@ -1,4 +1,5 @@
 #include "ui_calibration_custom.h"
+#include "ui_text.h"
 #include <ctype.h>
 #include <string.h>
 #include "calibration_session_controller.h"
@@ -138,7 +139,7 @@ static void custom_macro_selected_cb(
 
     ui_popup_add_title(
         *s_custom->popup,
-        "RUN CUSTOM CALIBRATION?",
+        ui_text("RUN CUSTOM CALIBRATION?"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -246,7 +247,7 @@ static void custom_calibration_button_cb(
 
     ui_popup_add_title(
         *s_custom->popup,
-        "CUSTOM CALIBRATION MACROS",
+        ui_text("CUSTOM CALIBRATION MACROS"),
         false,
         4);
     ui_popup_add_header_divider(

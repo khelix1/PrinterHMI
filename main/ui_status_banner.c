@@ -1,4 +1,5 @@
 #include "ui_status_banner.h"
+#include "ui_text.h"
 
 #include "ui_theme.h"
 #include "ui_widgets.h"
@@ -42,7 +43,7 @@ static void set_optional_label(lv_obj_t *label, const char *text)
         lv_label_set_text(label, text);
         lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_label_set_text(label, "");
+        lv_label_set_text(label, ui_text(""));
         lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
     }
 }
@@ -194,7 +195,7 @@ lv_obj_t *ui_status_banner_create(
 
     lv_label_set_text(
         ctx->state,
-        LV_SYMBOL_OK " READY");
+        ui_text(LV_SYMBOL_OK " READY"));
 
     lv_obj_set_width(ctx->state, 170);
 
@@ -218,7 +219,7 @@ lv_obj_t *ui_status_banner_create(
 
     lv_label_set_text(
         ctx->file,
-        "No active print");
+        ui_text("No active print"));
 
     lv_obj_set_width(ctx->file, w - 480);
 
@@ -253,7 +254,7 @@ lv_obj_t *ui_status_banner_create(
 
     lv_label_set_text(
         ctx->eta,
-        "ETA --:--");
+        ui_text("ETA --:--"));
 
     lv_obj_set_width(
         ctx->eta,

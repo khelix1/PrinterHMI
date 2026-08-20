@@ -1,4 +1,5 @@
 #include "ui_network.h"
+#include "ui_text.h"
 #include "ui_page_layout_profile.h"
 
 #include <stdio.h>
@@ -65,7 +66,7 @@ static lv_obj_t *network_make_value_label(
         return NULL;
     }
 
-    lv_label_set_text(label, text ? text : "--");
+    lv_label_set_text(label, text ? text : ui_text("--"));
     lv_obj_set_size(label, width, 24);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
 
@@ -393,7 +394,7 @@ void ui_network_create_objects(
         if (s_network.networks_status) {
             lv_label_set_text(
                 s_network.networks_status,
-                "READY TO SCAN");
+                ui_text("READY TO SCAN"));
 
             lv_obj_set_size(
                 s_network.networks_status,
@@ -592,15 +593,15 @@ void ui_network_refresh_objects(
     if (s_network.wifi_name) {
         lv_label_set_text(
             s_network.wifi_name,
-            wifi_text ? wifi_text : "OFFLINE");
+            wifi_text ? wifi_text : ui_text("OFFLINE"));
     }
 
     if (s_network.wifi_state) {
         lv_label_set_text(
             s_network.wifi_state,
             wifi_connected
-                ? "CONNECTED"
-                : "OFFLINE");
+                ? ui_text("CONNECTED")
+                : ui_text("OFFLINE"));
 
         lv_obj_set_style_text_color(
             s_network.wifi_state,
@@ -613,21 +614,21 @@ void ui_network_refresh_objects(
     if (s_network.wifi_ip) {
         lv_label_set_text(
             s_network.wifi_ip,
-            ip_text ? ip_text : "--");
+            ip_text ? ip_text : ui_text("--"));
     }
 
     if (s_network.moonraker_host) {
         lv_label_set_text(
             s_network.moonraker_host,
-            host_text ? host_text : "--");
+            host_text ? host_text : ui_text("--"));
     }
 
     if (s_network.moonraker_state) {
         lv_label_set_text(
             s_network.moonraker_state,
             moonraker_connected
-                ? "CONNECTED"
-                : "DISCONNECTED");
+                ? ui_text("CONNECTED")
+                : ui_text("DISCONNECTED"));
 
         lv_obj_set_style_text_color(
             s_network.moonraker_state,
@@ -666,7 +667,7 @@ void ui_network_refresh_objects(
         } else {
             lv_label_set_text(
                 s_network.networks_status,
-                "READY TO SCAN");
+                ui_text("READY TO SCAN"));
         }
     }
 
@@ -683,7 +684,7 @@ void ui_network_set_scan_status(
         s_network.networks_status,
         status_text && status_text[0]
             ? status_text
-            : "READY TO SCAN");
+            : ui_text("READY TO SCAN"));
 }
 
 

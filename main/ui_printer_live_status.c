@@ -1,4 +1,5 @@
 #include "ui_printer_live_status.h"
+#include "ui_text.h"
 
 #include "printer_controller.h"
 #include "ui_theme.h"
@@ -428,7 +429,7 @@ void ui_printer_live_status_create(
 
     lv_label_set_text(
         title,
-        "ACTIVE PRINT");
+        ui_text("ACTIVE PRINT"));
 
     ui_apply_text_body_large(title);
     ui_apply_label_dim(title);
@@ -591,7 +592,7 @@ void ui_printer_live_status_create(
 
     lv_label_set_text(
         speed_title,
-        "SPEED FACTOR");
+        ui_text("SPEED FACTOR"));
 
     ui_apply_text_caption(speed_title);
     ui_apply_label_dim(speed_title);
@@ -641,7 +642,7 @@ void ui_printer_live_status_create(
 
     lv_label_set_text(
         flow_title,
-        "FLOW FACTOR");
+        ui_text("FLOW FACTOR"));
 
     ui_apply_text_caption(flow_title);
     ui_apply_label_dim(flow_title);

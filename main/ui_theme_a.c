@@ -8,6 +8,7 @@
 
 #include "ui_theme_a.h"
 #include "ui_theme.h"
+#include "ui_font_fallback.h"
 
 /* ------------------------------------------------------------
  * Internal helpers
@@ -64,7 +65,7 @@ static void ui_apply_label_color(lv_obj_t *obj, lv_color_t color)
 static void ui_apply_text_font(lv_obj_t *obj, const lv_font_t *font)
 {
     if (!obj || !font) return;
-    lv_obj_set_style_text_font(obj, font, 0);
+    lv_obj_set_style_text_font(obj, ui_font_with_fallback(font), 0);
 }
 
 /* ------------------------------------------------------------
@@ -205,8 +206,8 @@ void ui_theme_a_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
         break;
     case UI_SURFACE_KEYBOARD:
         ui_apply_surface(obj, UI_BG_POPUP, UI_BORDER, 1, UI_RADIUS_CARD, 8);
-        lv_obj_set_style_text_font(obj, UI_FONT_BODY_LARGE, 0);
-        lv_obj_set_style_text_font(obj, UI_FONT_TITLE, LV_PART_ITEMS);
+        lv_obj_set_style_text_font(obj, ui_font_with_fallback(UI_FONT_BODY_LARGE), 0);
+        lv_obj_set_style_text_font(obj, ui_font_with_fallback(UI_FONT_TITLE), LV_PART_ITEMS);
         lv_obj_set_style_bg_color(obj, UI_BG_DEEP, LV_PART_ITEMS);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, LV_PART_ITEMS);
         lv_obj_set_style_border_color(obj, UI_BORDER, LV_PART_ITEMS);

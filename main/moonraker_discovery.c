@@ -1,4 +1,5 @@
 #include "moonraker_discovery.h"
+#include "ui_text.h"
 #include "ui_button.h"
 #include "ui_popup.h"
 
@@ -363,7 +364,7 @@ void moonraker_discovery_show(
 
     ui_popup_add_title(
         s_popup,
-        LV_SYMBOL_WIFI " DISCOVER MOONRAKER",
+        ui_text(LV_SYMBOL_WIFI " DISCOVER MOONRAKER"),
         false,
         8);
 
@@ -382,7 +383,7 @@ void moonraker_discovery_show(
 
     ui_popup_add_caption(
         s_popup,
-        "SELECT A VERIFIED PRINTER. READY MEANS KLIPPER RESPONDED.",
+        ui_text("SELECT A VERIFIED PRINTER. READY MEANS KLIPPER RESPONDED."),
         24,
         106,
         812);

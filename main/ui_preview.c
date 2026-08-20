@@ -1,4 +1,5 @@
 #include "ui_preview.h"
+#include "ui_text.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "thumbnail_manager.h"
@@ -23,7 +24,7 @@ static void preview_show_placeholder(ui_preview_t *p, const char *text)
     }
 
     if (p->label) {
-        lv_label_set_text(p->label, text ? text : "PREVIEW");
+        lv_label_set_text(p->label, text ? text : ui_text("PREVIEW"));
         lv_obj_clear_flag(p->label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_center(p->label);
     }

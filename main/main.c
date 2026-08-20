@@ -3937,6 +3937,12 @@ void app_main(void)
      * created and its first frame has reached the display.
      */
     app_startup_show_initial_ui();
+    if (bsp_display_lock(0)) {
+        lv_refr_now(NULL);
+        ESP_LOGI(TAG, "STARTUP_TRACE splash-frame-presented");
+        bsp_display_unlock();
+    }
+    vTaskDelay(pdMS_TO_TICKS(120));
 
     /*
      * The JD9165 panel can expose incomplete early MIPI frames if its
@@ -3958,7 +3964,9 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(250));
 
-    app_splash_locked(ui_splash_wifi_starting);
+    /* Keep the already-presented splash frame stable while Wi-Fi and the
+     * ESP-Hosted transport start. Moonraker-ready advances it later. */
+    ESP_LOGI(TAG, "STARTUP_TRACE wifi-start splash frozen");
 
     /* Start WiFi after dashboard is visible. Touch scaling fix remains in BSP. */
     if (!sd_mount_attempted) {

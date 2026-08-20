@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 typedef bool (*ui_setup_wizard_wifi_connect_cb_t)(const char *ssid, const char *password);
 
 /* Dedicated first-run flow. It shares the saved configuration/controllers with

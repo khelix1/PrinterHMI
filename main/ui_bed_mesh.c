@@ -1,4 +1,5 @@
 #include "ui_bed_mesh.h"
+#include "ui_text.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,7 +73,7 @@ static void render(void)
     ui_bed_mesh_renderer_render(&config);
 }
 
-static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,"No active bed mesh. Calibrate or load a profile.");return;}char b[256];snprintf(
+static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,ui_text("No active bed mesh. Calibrate or load a profile."));return;}char b[256];snprintf(
         b,
         sizeof(b),
         "PROFILE %s   GRID %u x %u   Z %.0fx%s\n"
@@ -139,8 +140,8 @@ static void update_surface_grid_button(void)
         lv_label_set_text(
             s.surface_grid_label,
             s.surface_grid_visible
-                ? "SURFACE GRID ON"
-                : "SURFACE GRID OFF");
+                ? ui_text("SURFACE GRID ON")
+                : ui_text("SURFACE GRID OFF"));
     }
 
     if (s.surface_grid_button) {
@@ -233,7 +234,7 @@ static void calibrate_cb(lv_event_t *e)
 
     ui_popup_add_title(
         s.calibrate_confirm,
-        "START BED MESH?",
+        ui_text("START BED MESH?"),
         true,
         4);
     ui_popup_add_header_divider(
@@ -341,7 +342,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
 
     ui_popup_add_title(
         s.popup,
-        "BED MESH 3D",
+        ui_text("BED MESH 3D"),
         false,
         8);
     ui_popup_add_header_divider(
@@ -351,7 +352,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
     s.stats =
         ui_popup_add_caption(
             s.popup,
-            "",
+            ui_text(""),
             20,
             58,
             814);
@@ -402,7 +403,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         s.popup);
     ui_popup_add_caption(
         s.popup,
-        "DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM",
+        ui_text("DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM"),
         20,
         493,
         272);

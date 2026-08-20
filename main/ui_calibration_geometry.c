@@ -1,4 +1,5 @@
 #include "ui_calibration_geometry.h"
+#include "ui_text.h"
 #include <string.h>
 #include "calibration_capability_controller.h"
 #include "console_controller.h"
@@ -52,7 +53,7 @@ static void show_screws_results_popup(void)
 
     ui_popup_add_title(
         *s_geometry->screws_popup,
-        "SCREWS TILT RESULTS",
+        ui_text("SCREWS TILT RESULTS"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -110,7 +111,7 @@ static void refresh_screws_results(void)
             *s_geometry->screws_results_label,
             session->results[0]
                 ? session->results
-                : "Klipper completed without adjustment lines.");
+                : ui_text("Klipper completed without adjustment lines."));
         break;
 
     case CALIBRATION_SESSION_ERROR: {
@@ -130,7 +131,7 @@ static void refresh_screws_results(void)
     case CALIBRATION_SESSION_WAITING:
         lv_label_set_text(
             *s_geometry->screws_results_label,
-            "Waiting for Klipper adjustment results...");
+            ui_text("Waiting for Klipper adjustment results..."));
         break;
 
     case CALIBRATION_SESSION_IDLE:
@@ -242,7 +243,7 @@ static void screws_tilt_button_cb(
 
     ui_popup_add_title(
         *s_geometry->screws_popup,
-        "RUN SCREWS TILT?",
+        ui_text("RUN SCREWS TILT?"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -440,8 +441,8 @@ static void gantry_level_button_cb(
     ui_popup_add_title(
         *s_geometry->gantry_popup,
         *s_geometry->gantry_use_qgl
-            ? "RUN QUAD GANTRY LEVEL?"
-            : "RUN Z TILT?",
+            ? ui_text("RUN QUAD GANTRY LEVEL?")
+            : ui_text("RUN Z TILT?"),
         false,
         4);
     ui_popup_add_header_divider(

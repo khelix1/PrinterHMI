@@ -1,4 +1,5 @@
 #include "ui_global_estop.h"
+#include "ui_text.h"
 #include "ui_button.h"
 #include "ui_popup.h"
 
@@ -69,7 +70,7 @@ static void estop_event_cb(lv_event_t *event)
     if (s_estop->popup) lv_obj_delete(s_estop->popup);
     s_estop->popup = ui_popup_create(lv_layer_top(), 650, 360, UI_POPUP_DANGER);
     if (!s_estop->popup) return;
-    ui_popup_add_title(s_estop->popup, "EMERGENCY STOP SENT", true, 4);
+    ui_popup_add_title(s_estop->popup, ui_text("EMERGENCY STOP SENT"), true, 4);
     ui_popup_add_header_divider(s_estop->popup, 48);
     char message[160];
     char restart_label[96];
@@ -92,7 +93,7 @@ void ui_global_estop_show_restart_confirmation(void)
     const char *name = s_estop->printer_name[0] ? s_estop->printer_name : "ACTIVE PRINTER";
     snprintf(message, sizeof(message), "Restart Klipper on %s? This interrupts that printer.", name);
     snprintf(restart_label, sizeof(restart_label), LV_SYMBOL_REFRESH " RESTART %s", name);
-    ui_popup_add_title(s_estop->popup, "RESTART KLIPPER?", true, 4);
+    ui_popup_add_title(s_estop->popup, ui_text("RESTART KLIPPER?"), true, 4);
     ui_popup_add_header_divider(s_estop->popup, 48);
     ui_popup_add_body(s_estop->popup, message, 28, 76, 594);
     ui_popup_add_standard_footer_divider(s_estop->popup);

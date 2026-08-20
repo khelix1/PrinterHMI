@@ -1,4 +1,5 @@
 #include "ui_printer_toolhead.h"
+#include "ui_text.h"
 
 #include "moonraker.h"
 #include "ui_button.h"
@@ -9,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "ui_font_fallback.h"
 
 static lv_obj_t **s_xy_step1_btn = NULL;
 static lv_obj_t **s_xy_step10_btn = NULL;
@@ -177,7 +179,7 @@ static void refresh_live_labels(void)
         } else {
             lv_label_set_text(
                 s_position_label,
-                "X  --.--      Y  --.--      Z  --.--- mm");
+                ui_text("X  --.--      Y  --.--      Z  --.--- mm"));
         }
     }
 
@@ -319,51 +321,51 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
         ui_popup_create(lv_layer_top(), 760, 540, UI_POPUP_STANDARD);
     if (!popup) return;
 
-    ui_popup_add_title(popup, "TOOLHEAD CONTROL", false, 18);
+    ui_popup_add_title(popup, ui_text("TOOLHEAD CONTROL"), false, 18);
     ui_popup_add_header_divider(popup, 58);
 
     s_position_label = lv_label_create(popup);
     lv_obj_set_pos(s_position_label, 38, 72);
     lv_obj_set_width(s_position_label, 500);
-    lv_obj_set_style_text_font(s_position_label, UI_FONT_VALUE_SMALL, 0);
+    lv_obj_set_style_text_font(s_position_label, ui_font_with_fallback(UI_FONT_VALUE_SMALL), 0);
     lv_obj_set_style_text_color(s_position_label, UI_TEXT_BRIGHT, 0);
 
     s_homed_label = lv_label_create(popup);
     lv_obj_set_pos(s_homed_label, 590, 78);
     lv_obj_set_width(s_homed_label, 130);
     lv_obj_set_style_text_align(s_homed_label, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(s_homed_label, UI_FONT_BODY, 0);
+    lv_obj_set_style_text_font(s_homed_label, ui_font_with_fallback(UI_FONT_BODY), 0);
     lv_obj_set_style_text_color(s_homed_label, UI_ACCENT_CYAN, 0);
 
-    ui_popup_add_caption(popup, "XY JOG", 40, 118, 340);
+    ui_popup_add_caption(popup, ui_text("XY JOG"), 40, 118, 340);
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_UP "  Y+", 155, 140, 110, 52, jog_cb, "Y+");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_LEFT "  X-", 40, 198, 110, 52, jog_cb, "X-");
     make_button(popup, UI_BUTTON_SUCCESS, LV_SYMBOL_HOME "  HOME", 155, 198, 110, 52, jog_cb, "HOME");
     make_button(popup, UI_BUTTON_OUTLINED, "X+  " LV_SYMBOL_RIGHT, 270, 198, 110, 52, jog_cb, "X+");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_DOWN "  Y-", 155, 256, 110, 52, jog_cb, "Y-");
 
-    ui_popup_add_caption(popup, "XY STEP", 40, 318, 340);
+    ui_popup_add_caption(popup, ui_text("XY STEP"), 40, 318, 340);
     if (step1_btn) *step1_btn = make_button(popup, UI_BUTTON_OUTLINED, "1 mm", 40, 340, 100, 46, xy_step_cb, "1");
     if (step10_btn) *step10_btn = make_button(popup, UI_BUTTON_OUTLINED, "10 mm", 155, 340, 100, 46, xy_step_cb, "10");
     if (step50_btn) *step50_btn = make_button(popup, UI_BUTTON_OUTLINED, "50 mm", 270, 340, 100, 46, xy_step_cb, "50");
 
-    ui_popup_add_caption(popup, "Z JOG", 420, 118, 300);
+    ui_popup_add_caption(popup, ui_text("Z JOG"), 420, 118, 300);
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_UP "  Z+", 420, 140, 140, 52, jog_cb, "Z+");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_DOWN "  Z-", 580, 140, 140, 52, jog_cb, "Z-");
 
-    ui_popup_add_caption(popup, "Z STEP", 420, 208, 300);
+    ui_popup_add_caption(popup, ui_text("Z STEP"), 420, 208, 300);
     s_z_step001_btn = make_button(popup, UI_BUTTON_OUTLINED, "0.01", 420, 230, 68, 44, z_step_cb, "0.01");
     s_z_step005_btn = make_button(popup, UI_BUTTON_OUTLINED, "0.05", 496, 230, 68, 44, z_step_cb, "0.05");
     s_z_step010_btn = make_button(popup, UI_BUTTON_OUTLINED, "0.10", 572, 230, 68, 44, z_step_cb, "0.10");
     s_z_step100_btn = make_button(popup, UI_BUTTON_OUTLINED, "1.00", 648, 230, 68, 44, z_step_cb, "1.00");
 
-    ui_popup_add_caption(popup, "RUNTIME Z OFFSET", 420, 292, 300);
+    ui_popup_add_caption(popup, ui_text("RUNTIME Z OFFSET"), 420, 292, 300);
 
     s_offset_label = lv_label_create(popup);
     lv_obj_set_pos(s_offset_label, 575, 290);
     lv_obj_set_width(s_offset_label, 140);
     lv_obj_set_style_text_align(s_offset_label, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(s_offset_label, UI_FONT_VALUE_SMALL, 0);
+    lv_obj_set_style_text_font(s_offset_label, ui_font_with_fallback(UI_FONT_VALUE_SMALL), 0);
     lv_obj_set_style_text_color(s_offset_label, UI_TEXT_BRIGHT, 0);
 
     make_button(popup, UI_BUTTON_OUTLINED, "-0.05", 420, 324, 68, 44, z_offset_cb, "-0.05");

@@ -1,4 +1,5 @@
 #include "ui_settings_components.h"
+#include "ui_text.h"
 
 #include "ui_button.h"
 
@@ -15,7 +16,7 @@ static lv_obj_t *settings_component_make_label(
 {
     lv_obj_t *label = lv_label_create(parent);
 
-    lv_label_set_text(label, text ? text : "--");
+    lv_label_set_text(label, text ? text : ui_text("--"));
     ui_apply_custom_label_style(label, font, color);
 
     return label;

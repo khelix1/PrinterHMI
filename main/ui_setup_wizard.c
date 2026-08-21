@@ -1,4 +1,5 @@
 #include "ui_setup_wizard.h"
+/* STEP258_CAMERA_POLISH */
 /* STEP257_PRINTER_DISCOVERY */
 /* STEP256_DEDICATED_NAV */
 /* STEP254_SETUP_CARD_SAFE */
@@ -597,7 +598,8 @@ static void camera_discovery_poll(lv_timer_t *timer)
     delete_poll();
     const int profile = moonraker_config_active_profile_index();
     if (!found || !count) {
-        set_status("No enabled cameras found for this printer.");
+        set_status("No enabled cameras found for this printer. Scan again or continue without one.");
+        ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "SCAN AGAIN", 24, 330, 220, 44, center_camera_cb, NULL, NULL);
         return;
     }
     set_status("Select a camera to test it.");
@@ -611,9 +613,11 @@ static void camera_discovery_poll(lv_timer_t *timer)
 static void camera_open(void)
 {
     delete_poll();
+    s_selected_camera = -1;
     setup_clear_content();
     ui_popup_add_caption(s_setup_content, "ADD CAMERA", 24, 28, 680);
     s_status = ui_popup_add_status_label(s_setup_content, "Searching this printer for configured cameras...", 24, 74, 680);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "SCAN CAMERAS", 24, 104, 220, 44, center_camera_cb, NULL, NULL);
     const int profile = moonraker_config_active_profile_index();
     const moonraker_profile_t *printer = moonraker_config_profile(profile);
     if (!printer || !printer->configured) {

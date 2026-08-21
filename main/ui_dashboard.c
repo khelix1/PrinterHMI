@@ -1,4 +1,5 @@
 #include "ui_dashboard.h"
+#include "ui_text.h"
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include <stdio.h>
@@ -128,7 +129,7 @@ static void dashboard_camera_release_frame(void)
 static void dashboard_camera_set_status(const char *text)
 {
     if (dash32_camera_status) {
-        lv_label_set_text(dash32_camera_status, text ? text : "");
+        lv_label_set_text(dash32_camera_status, text ? text : ui_text(""));
     }
 }
 
@@ -199,7 +200,7 @@ static void dashboard_camera_mode_set(bool enabled)
     if (dash32_camera_toggle) {
         lv_obj_t *label = lv_obj_get_child(dash32_camera_toggle, 0);
         if (label) lv_label_set_text(label,
-            enabled ? LV_SYMBOL_IMAGE " THUMBNAIL" : LV_SYMBOL_IMAGE " CAMERA");
+            enabled ? ui_text(LV_SYMBOL_IMAGE " THUMBNAIL") : ui_text(LV_SYMBOL_IMAGE " CAMERA"));
     }
     if (!enabled) {
         if (dash32_camera_timer) {
@@ -529,7 +530,7 @@ void ui_dashboard_status_popup_show(const char *title_text, const char *body)
 
     ui_popup_add_title(
         s_dashboard_status_popup,
-        title_text ? title_text : "STATUS",
+        title_text ? title_text : ui_text("STATUS"),
         false,
         0);
 

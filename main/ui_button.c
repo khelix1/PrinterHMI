@@ -1,4 +1,5 @@
 #include "ui_button.h"
+#include "ui_text.h"
 
 #include "ui_theme.h"
 
@@ -63,7 +64,7 @@ lv_obj_t *ui_button_create_label(
 
     lv_label_set_text(
         label,
-        text ? text : "");
+        text ? text : ui_text(""));
 
     ui_apply_text_button(label);
     ui_apply_label_bright(label);
@@ -169,7 +170,7 @@ lv_obj_t *ui_button_create_icon(
 
     lv_label_set_text(
         icon,
-        symbol ? symbol : "");
+        symbol ? symbol : ui_text(""));
 
     lv_obj_set_style_text_color(
         icon,
@@ -186,7 +187,7 @@ lv_obj_t *ui_button_create_icon(
 
     lv_label_set_text(
         label,
-        text ? text : "");
+        text ? text : ui_text(""));
 
     ui_apply_text_button(label);
     ui_apply_label_bright(label);

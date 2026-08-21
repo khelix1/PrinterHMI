@@ -1,4 +1,5 @@
 #include "ui_ota_popup.h"
+#include "ui_text.h"
 
 #include "ota_release_catalog.h"
 #include "ui_theme.h"
@@ -70,7 +71,7 @@ static void progress_cancel_cb(lv_event_t *e)
     if (s_progress_label) {
         lv_label_set_text(
             s_progress_label,
-            "Cancelling OTA...");
+            ui_text("Cancelling OTA..."));
     }
 
     if (s_progress_cancel_cb) {
@@ -100,7 +101,7 @@ void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
 
     ui_popup_add_title(
         s_progress_popup,
-        "OTA UPDATE",
+        ui_text("OTA UPDATE"),
         false,
         0);
 
@@ -149,7 +150,7 @@ void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
     s_progress_bytes_label =
         ui_popup_add_progress_detail(
             s_progress_popup,
-            "0.00 MB / 0.00 MB",
+            ui_text("0.00 MB / 0.00 MB"),
             40,
             264,
             680);
@@ -206,8 +207,8 @@ void ui_ota_progress_pump(const char *status_text,
 
         lv_label_set_text(
             s_progress_label,
-            strstr(status, "Downloading firmware")
-                ? "Downloading Firmware"
+            strstr(status, ui_text("Downloading firmware"))
+                ? ui_text("Downloading Firmware")
                 : status);
     }
 
@@ -400,7 +401,7 @@ void ui_ota_popup_show(const char *current_url,
 
     ui_popup_add_title(
         s_ota_popup,
-        "OTA UPDATE SERVER",
+        ui_text("OTA UPDATE SERVER"),
         false,
         0);
 
@@ -411,7 +412,7 @@ void ui_ota_popup_show(const char *current_url,
     lv_obj_t *info =
         ui_popup_add_progress_detail(
             s_ota_popup,
-            firmware_info ? firmware_info : "",
+            firmware_info ? firmware_info : ui_text(""),
             30,
             48,
             900);
@@ -433,8 +434,8 @@ void ui_ota_popup_show(const char *current_url,
             true,
             false,
             max_url_len,
-            "https://server/firmware.bin",
-            current_url ? current_url : "",
+            ui_text("https://server/firmware.bin"),
+            current_url ? current_url : ui_text(""),
             NULL);
 
     if (!s_ota_url_ta) {

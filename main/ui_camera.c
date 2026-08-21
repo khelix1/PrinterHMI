@@ -1,4 +1,5 @@
 #include "ui_camera.h"
+#include "ui_text.h"
 
 #include "camera_stream_controller.h"
 #include "camera_catalog_controller.h"
@@ -46,7 +47,7 @@ static unsigned s_camera_frame_count = 0;
 static void camera_set_status(const char *text)
 {
     if (s_status) {
-        lv_label_set_text(s_status, text ? text : "");
+        lv_label_set_text(s_status, text ? text : ui_text(""));
     }
 }
 
@@ -159,19 +160,19 @@ static void camera_view_open_cb(lv_event_t *event)
     if (s_view_popup) { lv_obj_move_foreground(s_view_popup); return; }
     s_view_popup = ui_popup_create(lv_screen_active(), 680, 362, UI_POPUP_STANDARD);
     if (!s_view_popup) return;
-    ui_popup_add_title(s_view_popup, "CAMERA VIEW", false, 0);
+    ui_popup_add_title(s_view_popup, ui_text("CAMERA VIEW"), false, 0);
     ui_popup_add_header_divider(s_view_popup, 44);
-    ui_popup_add_caption(s_view_popup, "ROTATE", 28, 66, 240);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, "0 DEG", 28, 92, 145, 48, camera_view_set_cb, (void *)0, NULL);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, "90 DEG", 183, 92, 145, 48, camera_view_set_cb, (void *)1, NULL);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, "180 DEG", 338, 92, 145, 48, camera_view_set_cb, (void *)2, NULL);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, "270 DEG", 493, 92, 145, 48, camera_view_set_cb, (void *)3, NULL);
-    ui_popup_add_caption(s_view_popup, "MIRROR", 28, 162, 240);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, "HORIZONTAL", 28, 188, 300, 48, camera_view_set_cb, (void *)4, NULL);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, "VERTICAL", 338, 188, 300, 48, camera_view_set_cb, (void *)5, NULL);
+    ui_popup_add_caption(s_view_popup, ui_text("ROTATE"), 28, 66, 240);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text("0 DEG"), 28, 92, 145, 48, camera_view_set_cb, (void *)0, NULL);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text("90 DEG"), 183, 92, 145, 48, camera_view_set_cb, (void *)1, NULL);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text("180 DEG"), 338, 92, 145, 48, camera_view_set_cb, (void *)2, NULL);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text("270 DEG"), 493, 92, 145, 48, camera_view_set_cb, (void *)3, NULL);
+    ui_popup_add_caption(s_view_popup, ui_text("MIRROR"), 28, 162, 240);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text("HORIZONTAL"), 28, 188, 300, 48, camera_view_set_cb, (void *)4, NULL);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text("VERTICAL"), 338, 188, 300, 48, camera_view_set_cb, (void *)5, NULL);
     ui_popup_add_standard_footer_divider(s_view_popup);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CLOSE", 28, 294, 300, 44, camera_view_close_cb, NULL, NULL);
-    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " RESET", 338, 294, 300, 44, camera_view_set_cb, (void *)6, NULL);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_CANCEL, ui_text(LV_SYMBOL_CLOSE " CLOSE"), 28, 294, 300, 44, camera_view_close_cb, NULL, NULL);
+    ui_popup_add_action_at(s_view_popup, UI_POPUP_ACTION_SECONDARY, ui_text(LV_SYMBOL_REFRESH " RESET"), 338, 294, 300, 44, camera_view_set_cb, (void *)6, NULL);
 }
 
 static void camera_set_viewport(bool fullscreen)
@@ -195,7 +196,7 @@ static void camera_set_viewport(bool fullscreen)
         lv_obj_add_flag(s_status, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(s_fullscreen_button, 816, 548);
         lv_obj_set_size(s_fullscreen_button, 192, 40);
-        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), LV_SYMBOL_CLOSE " EXIT FULLSCREEN");
+        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_CLOSE " EXIT FULLSCREEN"));
         lv_obj_move_foreground(s_card);
     } else {
         lv_obj_set_parent(s_card, s_root);
@@ -218,7 +219,7 @@ static void camera_set_viewport(bool fullscreen)
         lv_obj_set_pos(s_fullscreen_button, 650, 476);
         lv_obj_set_pos(s_status, 470, 450);
         lv_obj_set_width(s_status, 170);
-        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), LV_SYMBOL_IMAGE " FULLSCREEN");
+        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
         lv_obj_move_background(s_card);
     }
 }
@@ -437,7 +438,7 @@ static void camera_picker_open_cb(lv_event_t *event)
     s_camera_picker_popup = ui_popup_create(
         lv_screen_active(), 680, 360, UI_POPUP_STANDARD);
     if (!s_camera_picker_popup) return;
-    ui_popup_add_title(s_camera_picker_popup, "SELECT CAMERA", false, 0);
+    ui_popup_add_title(s_camera_picker_popup, ui_text("SELECT CAMERA"), false, 0);
     ui_popup_add_header_divider(s_camera_picker_popup, 44);
 
     size_t default_index = camera_catalog_default(profile_index);
@@ -465,7 +466,7 @@ static void camera_picker_open_cb(lv_event_t *event)
 
     ui_popup_add_standard_footer_divider(s_camera_picker_popup);
     ui_popup_add_action_at(s_camera_picker_popup, UI_POPUP_ACTION_CANCEL,
-                           LV_SYMBOL_CLOSE " CLOSE", 188, 300, 304, 44,
+                           ui_text(LV_SYMBOL_CLOSE " CLOSE"), 188, 300, 304, 44,
                            camera_picker_close_cb, NULL, NULL);
     lv_obj_move_foreground(s_camera_picker_popup);
 }
@@ -561,7 +562,7 @@ void ui_camera_show(void)
     lv_obj_set_width(s_status, 170);
     lv_obj_set_pos(s_status, 470, 450);
     lv_label_set_long_mode(s_status, LV_LABEL_LONG_MODE_CLIP);
-    lv_label_set_text(s_status, "Connecting to configured camera...");
+    lv_label_set_text(s_status, ui_text("Connecting to configured camera..."));
 
     s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
     camera_start();

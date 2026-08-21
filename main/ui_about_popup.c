@@ -1,4 +1,5 @@
 #include "ui_about_popup.h"
+#include "ui_text.h"
 
 #include <stdio.h>
 
@@ -54,11 +55,11 @@ void ui_about_popup_show(void)
         return;
     }
 
-    ui_popup_add_title(s_popup, "ABOUT PRINTERHMI", false, 0);
+    ui_popup_add_title(s_popup, ui_text("ABOUT PRINTERHMI"), false, 0);
     ui_popup_add_header_divider(s_popup, 44);
     ui_popup_add_status_label(
         s_popup,
-        "OPEN-SOURCE PRINT-CELL OPERATOR INTERFACE",
+        ui_text("OPEN-SOURCE PRINT-CELL OPERATOR INTERFACE"),
         28,
         64,
         664);

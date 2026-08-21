@@ -1,4 +1,5 @@
 #include "ui_calibration_layout.h"
+#include "ui_text.h"
 
 #include <string.h>
 
@@ -11,7 +12,7 @@ lv_obj_t *ui_calibration_layout_label(lv_obj_t *parent, const char *text,
                                       int x, int y, int width)
 {
     lv_obj_t *label = lv_label_create(parent);
-    lv_label_set_text(label, text ? text : "--");
+    lv_label_set_text(label, text ? text : ui_text("--"));
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);
@@ -53,7 +54,7 @@ void ui_calibration_layout_set_card(ui_calibration_card_refs_t *refs,
 {
     if (!refs || !refs->summary || !refs->status) return;
     lv_label_set_text(refs->summary, summary && summary[0] ? summary :
-                      "No applicable tools reported by this printer.");
+                      ui_text("No applicable tools reported by this printer."));
     char status[48];
     if (macro_count > 0) {
         lv_snprintf(status, sizeof(status), "%u TOOL%s + %u MACRO%s",
@@ -74,5 +75,5 @@ void ui_calibration_layout_set_action_label(lv_obj_t *button,
                                             const char *text)
 {
     lv_obj_t *label = button ? lv_obj_get_child(button, 0) : NULL;
-    if (label) lv_label_set_text(label, text ? text : "");
+    if (label) lv_label_set_text(label, text ? text : ui_text(""));
 }

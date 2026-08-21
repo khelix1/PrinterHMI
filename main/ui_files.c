@@ -1,4 +1,5 @@
 #include "ui_files.h"
+#include "ui_text.h"
 #include "ui_page_layout_profile.h"
 
 #include "lvgl.h"
@@ -535,7 +536,7 @@ void ui_files_set_breadcrumb(const char *path)
 
 void ui_files_set_sort_text(const char *text)
 {
-    if (s_sort_label) lv_label_set_text(s_sort_label, text ? text : "SORT");
+    if (s_sort_label) lv_label_set_text(s_sort_label, text ? text : ui_text("SORT"));
 }
 
 void ui_files_set_search_text(const char *text)
@@ -544,7 +545,7 @@ void ui_files_set_search_text(const char *text)
 
     if (s_search_label) {
         lv_label_set_text(s_search_label,
-                          s_search_text[0] ? "SEARCH*" : "SEARCH");
+                          s_search_text[0] ? ui_text("SEARCH*") : ui_text("SEARCH"));
     }
 
     if (s_search_text[0] && s_breadcrumb_label) {
@@ -630,7 +631,7 @@ static void search_button_cb(lv_event_t *event)
                         LV_EVENT_DELETE,
                         NULL);
 
-    ui_popup_add_title(s_search_popup, "SEARCH FILES", false, 8);
+    ui_popup_add_title(s_search_popup, ui_text("SEARCH FILES"), false, 8);
     ui_popup_add_header_divider(s_search_popup, 44);
 
     s_search_textarea = ui_popup_add_textarea(
@@ -643,7 +644,7 @@ static void search_button_cb(lv_event_t *event)
         true,
         false,
         sizeof(s_search_text) - 1,
-        "Search filenames and folders",
+        ui_text("Search filenames and folders"),
         s_search_text,
         NULL);
 
@@ -1090,7 +1091,7 @@ void ui_files_show_detail_popup(const char *filename_text,
 
     lv_label_set_text(
         title,
-        "FILE READY TO PRINT");
+        ui_text("FILE READY TO PRINT"));
 
     ui_apply_text_title(title);
 
@@ -1107,7 +1108,7 @@ void ui_files_show_detail_popup(const char *filename_text,
 
     lv_label_set_text(
         subtitle,
-        "Review the selected file before starting the print.");
+        ui_text("Review the selected file before starting the print."));
 
     ui_apply_text_caption(subtitle);
 
@@ -1132,7 +1133,7 @@ void ui_files_show_detail_popup(const char *filename_text,
         filename,
         filename_text && filename_text[0]
             ? filename_text
-            : "Unnamed file");
+            : ui_text("Unnamed file"));
 
     lv_obj_set_size(
         filename,

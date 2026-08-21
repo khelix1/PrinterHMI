@@ -1,4 +1,5 @@
 #include "ui_printer_chooser.h"
+#include "ui_text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -85,7 +86,7 @@ static lv_obj_t *make_label(
     int width)
 {
     lv_obj_t *label = lv_label_create(parent);
-    lv_label_set_text(label, text ? text : "");
+    lv_label_set_text(label, text ? text : ui_text(""));
     lv_obj_set_width(label, width);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_set_pos(label, x, y);
@@ -238,8 +239,8 @@ static void refresh_cards(void)
             char empty_name[32];
             snprintf(empty_name, sizeof(empty_name), "ADD PRINTER %d", index + 1);
             lv_label_set_text(card->name, empty_name);
-            lv_label_set_text(card->endpoint, "EMPTY PROFILE SLOT");
-            lv_label_set_text(card->status, "NOT CONFIGURED");
+            lv_label_set_text(card->endpoint, ui_text("EMPTY PROFILE SLOT"));
+            lv_label_set_text(card->status, ui_text("NOT CONFIGURED"));
             if (!cached_image)
                 lv_label_set_text(card->preview, "ADD A\nPRINTER");
             lv_obj_add_flag(card->active, LV_OBJ_FLAG_HIDDEN);

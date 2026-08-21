@@ -1,4 +1,5 @@
 #include "ui_widgets.h"
+#include "ui_text.h"
 #include "ui_button.h"
 
 /*
@@ -44,7 +45,7 @@ lv_obj_set_style_pad_all(obj, UI_PAD_CARD, 0);
 lv_obj_t *ui_create_label(lv_obj_t *parent, const char *text, lv_color_t color)
 {
     lv_obj_t *lbl = lv_label_create(parent);
-    lv_label_set_text(lbl, text ? text : "");
+    lv_label_set_text(lbl, text ? text : ui_text(""));
     ui_apply_custom_label_style(lbl, NULL, color);
     return lbl;
 }
@@ -98,7 +99,7 @@ lv_obj_t *ui_create_button(
 
     lv_obj_t *lbl = lv_label_create(btn);
 
-    lv_label_set_text(lbl, text ? text : "");
+    lv_label_set_text(lbl, text ? text : ui_text(""));
 
     ui_apply_text_button(lbl);
     ui_apply_label_bright(lbl);
@@ -232,7 +233,7 @@ lv_obj_t *ui_create_operator_info_card(
 
     lv_label_set_text(
         title_label,
-        title ? title : "");
+        title ? title : ui_text(""));
 
     lv_obj_set_width(
         title_label,
@@ -265,7 +266,7 @@ lv_obj_t *ui_create_operator_info_card(
 
     lv_label_set_text(
         value_label,
-        value ? value : "");
+        value ? value : ui_text(""));
 
     lv_obj_set_width(
         value_label,
@@ -316,7 +317,7 @@ lv_obj_t *ui_create_operator_card_heading(
 
     lv_label_set_text(
         heading,
-        text ? text : "");
+        text ? text : ui_text(""));
 
     ui_apply_custom_label_style(heading,
                                 UI_FONT_BODY_LARGE,
@@ -525,7 +526,7 @@ lv_obj_t *ui_create_operator_nav_button(
 
     lv_label_set_text(
         icon_label,
-        icon ? icon : "");
+        icon ? icon : ui_text(""));
 
     lv_obj_set_style_text_color(
         icon_label,
@@ -555,7 +556,7 @@ lv_obj_t *ui_create_operator_nav_button(
 
     lv_label_set_text(
         text_label,
-        text ? text : "");
+        text ? text : ui_text(""));
 
     ui_apply_text_button(text_label);
 

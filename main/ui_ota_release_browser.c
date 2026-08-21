@@ -1,4 +1,5 @@
 #include "ui_ota_release_browser.h"
+#include "ui_text.h"
 
 #include "ota_release_catalog.h"
 #include "ui_popup.h"
@@ -268,7 +269,7 @@ static void render_catalog(
     if (snapshot->state == OTA_RELEASE_CATALOG_LOADING) {
         lv_label_set_text(
             s_status,
-            "Loading firmware releases from GitHub...");
+            ui_text("Loading firmware releases from GitHub..."));
         return;
     }
 
@@ -277,7 +278,7 @@ static void render_catalog(
             s_status,
             snapshot->error[0]
                 ? snapshot->error
-                : "Could not load GitHub releases.");
+                : ui_text("Could not load GitHub releases."));
         return;
     }
 
@@ -319,14 +320,14 @@ static void render_catalog(
         lv_label_set_text(
             s_status,
             s_channel == OTA_RELEASE_CHANNEL_STABLE
-                ? "No compatible stable releases were found."
-                : "No compatible nightly builds were found.");
+                ? ui_text("No compatible stable releases were found.")
+                : ui_text("No compatible nightly builds were found."));
     } else {
         lv_label_set_text(
             s_status,
             s_channel == OTA_RELEASE_CHANNEL_STABLE
-                ? "Tap a stable release for details or installation."
-                : "Development builds: select one for details and warning.");
+                ? ui_text("Tap a stable release for details or installation.")
+                : ui_text("Development builds: select one for details and warning."));
     }
 }
 
@@ -407,25 +408,25 @@ void ui_ota_release_browser_show(
     }
 
     ui_popup_add_title(
-        s_popup, "FIRMWARE RELEASES", false, 0);
+        s_popup, ui_text("FIRMWARE RELEASES"), false, 0);
     ui_popup_add_header_divider(s_popup, 44);
 
     s_stable_tab = ui_popup_add_selectable_row(
         s_popup,
-        "STABLE",
+        ui_text("STABLE"),
         230, 52, 210, 44,
         tab_cb,
         (void *)(uintptr_t)OTA_RELEASE_CHANNEL_STABLE);
     s_nightly_tab = ui_popup_add_selectable_row(
         s_popup,
-        "NIGHTLY",
+        ui_text("NIGHTLY"),
         460, 52, 210, 44,
         tab_cb,
         (void *)(uintptr_t)OTA_RELEASE_CHANNEL_NIGHTLY);
 
     s_status = ui_popup_add_status_label(
         s_popup,
-        "Loading firmware releases from GitHub...",
+        ui_text("Loading firmware releases from GitHub..."),
         24, 104, 852);
     s_list = ui_popup_add_list(
         s_popup,

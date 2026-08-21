@@ -1,4 +1,5 @@
 #include "ui_telemetry.h"
+#include "ui_text.h"
 #include "ui_page_layout_profile.h"
 #include "ui_telemetry_components.h"
 #include "ui_telemetry_charts.h"
@@ -174,7 +175,7 @@ void ui_telemetry_refresh(
     if (state->capabilities.discovered &&
         !state->capabilities.has_heated_bed) {
         if (s_bed_value) {
-            lv_label_set_text(s_bed_value, "N/A");
+            lv_label_set_text(s_bed_value, ui_text("N/A"));
         }
     } else {
         telemetry_set_temperature(
@@ -185,11 +186,11 @@ void ui_telemetry_refresh(
     if (state->capabilities.discovered &&
         !state->capabilities.has_drybox_environment_sensor) {
         if (s_air_value) {
-            lv_label_set_text(s_air_value, "N/A");
+            lv_label_set_text(s_air_value, ui_text("N/A"));
         }
 
         if (s_humidity_value) {
-            lv_label_set_text(s_humidity_value, "N/A");
+            lv_label_set_text(s_humidity_value, ui_text("N/A"));
         }
     } else {
         telemetry_set_temperature(

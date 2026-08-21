@@ -1,3 +1,8 @@
+## [6.5.0] - 2026-08-20
+
+- Added the guided first-run Setup Center with in-card Wi-Fi, printer, and camera discovery.
+- Improved offline setup behavior, camera/OTA lifecycle handling, and shared localization coverage.
+
 # Changelog
 
 This file records product-level changes. Detailed development history before

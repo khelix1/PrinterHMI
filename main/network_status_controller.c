@@ -1,4 +1,5 @@
 #include "network_status_controller.h"
+#include "ui_text.h"
 
 #include <stdio.h>
 
@@ -53,5 +54,5 @@ void network_status_controller_update_topbar(
 
     lv_label_set_text(
         wifi_label,
-        wifi_status ? wifi_status : "");
+        wifi_status ? wifi_status : ui_text(""));
 }

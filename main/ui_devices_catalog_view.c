@@ -1,4 +1,5 @@
 #include "ui_devices_catalog_view.h"
+#include "ui_text.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -77,7 +78,7 @@ static lv_obj_t *devices_label(
 {
     lv_obj_t *label = lv_label_create(parent);
 
-    lv_label_set_text(label, text ? text : "--");
+    lv_label_set_text(label, text ? text : ui_text("--"));
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);
@@ -317,7 +318,7 @@ static void update_pagination_controls(
     if (matching_count == 0) {
         lv_label_set_text(
             s_devices->pagination_label,
-            "NO MATCHING DEVICES");
+            ui_text("NO MATCHING DEVICES"));
         return;
     }
 

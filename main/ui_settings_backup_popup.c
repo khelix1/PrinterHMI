@@ -1,4 +1,5 @@
 #include "ui_settings_backup_popup.h"
+#include "ui_text.h"
 
 #include "lvgl.h"
 #include "settings_backup.h"
@@ -49,7 +50,7 @@ static void secure_clear(char *text, size_t text_size)
 static void set_status(const char *text)
 {
     if (s_status) {
-        lv_label_set_text(s_status, text ? text : "");
+        lv_label_set_text(s_status, text ? text : ui_text(""));
     }
 }
 
@@ -172,7 +173,7 @@ static void show_restore_confirmation(
 
     ui_popup_add_title(
         s_restore_confirmation,
-        encrypted ? "RESTORE ENCRYPTED BACKUP?" : "RESTORE CONFIGURATION?",
+        encrypted ? ui_text("RESTORE ENCRYPTED BACKUP?") : ui_text("RESTORE CONFIGURATION?"),
         true,
         0);
     ui_popup_add_header_divider(s_restore_confirmation, 44);
@@ -331,7 +332,7 @@ static void show_export_progress_popup(bool restore_verify)
     s_export_progress_is_restore_verify = restore_verify;
     ui_popup_add_title(
         s_export_progress_popup,
-        restore_verify ? "VERIFYING ENCRYPTED BACKUP" : "SAVING ENCRYPTED BACKUP",
+        restore_verify ? ui_text("VERIFYING ENCRYPTED BACKUP") : ui_text("SAVING ENCRYPTED BACKUP"),
         false,
         0);
     ui_popup_add_header_divider(s_export_progress_popup, 44);
@@ -348,8 +349,8 @@ static void show_export_progress_popup(bool restore_verify)
     ui_popup_add_progress_detail(
         s_export_progress_popup,
         restore_verify
-            ? "Do not power off while the encrypted backup is being verified."
-            : "Do not power off while the encrypted SD backup is being created.",
+            ? ui_text("Do not power off while the encrypted backup is being verified.")
+            : ui_text("Do not power off while the encrypted SD backup is being created."),
         24, 220, 632);
     s_export_progress_pulse = 0;
     s_export_progress_timer = lv_timer_create(export_progress_timer_cb, 150, NULL);
@@ -432,13 +433,13 @@ static void show_secret_popup(bool restore)
 
     ui_popup_add_title(
         s_secret_popup,
-        restore ? "OPEN ENCRYPTED BACKUP" : "CREATE ENCRYPTED BACKUP",
+        restore ? ui_text("OPEN ENCRYPTED BACKUP") : ui_text("CREATE ENCRYPTED BACKUP"),
         false,
         0);
     ui_popup_add_header_divider(s_secret_popup, 44);
     ui_popup_add_caption(
         s_secret_popup,
-        restore ? "BACKUP PASSPHRASE" : "NEW PASSPHRASE",
+        restore ? ui_text("BACKUP PASSPHRASE") : ui_text("NEW PASSPHRASE"),
         40,
         66,
         300);
@@ -452,7 +453,7 @@ static void show_secret_popup(bool restore)
         true,
         true,
         BACKUP_PASSPHRASE_MAX,
-        "At least 12 characters",
+        ui_text("At least 12 characters"),
         NULL,
         NULL);
     if (s_secret_input) {
@@ -472,7 +473,7 @@ static void show_secret_popup(bool restore)
     if (!restore) {
         ui_popup_add_caption(
             s_secret_popup,
-            "CONFIRM PASSPHRASE",
+            ui_text("CONFIRM PASSPHRASE"),
             40,
             142,
             300);
@@ -486,7 +487,7 @@ static void show_secret_popup(bool restore)
             true,
             true,
             BACKUP_PASSPHRASE_MAX,
-            "Enter the same passphrase again",
+            ui_text("Enter the same passphrase again"),
             NULL,
             NULL);
         if (s_secret_confirm) {
@@ -517,7 +518,7 @@ static void show_secret_popup(bool restore)
     ui_popup_add_action_at(
         s_secret_popup,
         UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_CLOSE " CANCEL",
+        ui_text(LV_SYMBOL_CLOSE " CANCEL"),
         24,
         494,
         260,
@@ -528,7 +529,7 @@ static void show_secret_popup(bool restore)
     ui_popup_add_action_at(
         s_secret_popup,
         UI_POPUP_ACTION_CONFIRM,
-        restore ? LV_SYMBOL_REFRESH " VERIFY" : LV_SYMBOL_SAVE " SAVE ENCRYPTED",
+        restore ? ui_text(LV_SYMBOL_REFRESH " VERIFY") : ui_text(LV_SYMBOL_SAVE " SAVE ENCRYPTED"),
         496,
         494,
         280,
@@ -587,7 +588,7 @@ static void remove_request_cb(lv_event_t *event)
     if (!s_remove_confirmation) {
         return;
     }
-    ui_popup_add_title(s_remove_confirmation, "REMOVE ALL BACKUPS?", true, 0);
+    ui_popup_add_title(s_remove_confirmation, ui_text("REMOVE ALL BACKUPS?"), true, 0);
     ui_popup_add_header_divider(s_remove_confirmation, 44);
     ui_popup_add_body(
         s_remove_confirmation,
@@ -636,15 +637,15 @@ void ui_settings_backup_popup_show(void)
         return;
     }
 
-    ui_popup_add_title(s_popup, "CONFIGURATION BACKUP", false, 0);
+    ui_popup_add_title(s_popup, ui_text("CONFIGURATION BACKUP"), false, 0);
     ui_popup_add_header_divider(s_popup, 44);
-    ui_popup_add_caption(s_popup, "PLAIN SD CARD FILE", 24, 68, 250);
+    ui_popup_add_caption(s_popup, ui_text("PLAIN SD CARD FILE"), 24, 68, 250);
     ui_popup_add_body(s_popup, SETTINGS_BACKUP_PATH, 24, 92, 752);
-    ui_popup_add_caption(s_popup, "ENCRYPTED SD CARD FILE", 24, 126, 280);
+    ui_popup_add_caption(s_popup, ui_text("ENCRYPTED SD CARD FILE"), 24, 126, 280);
     ui_popup_add_body(s_popup, SETTINGS_BACKUP_ENCRYPTED_PATH, 24, 150, 752);
     s_status = ui_popup_add_status_label(
         s_popup,
-        "Plain backups exclude Moonraker API keys. Encrypted backups include them.",
+        ui_text("Plain backups exclude Moonraker API keys. Encrypted backups include them."),
         24,
         198,
         752);
@@ -653,7 +654,7 @@ void ui_settings_backup_popup_show(void)
     ui_popup_add_action_at(
         s_popup,
         UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_SAVE " BACK UP",
+        ui_text(LV_SYMBOL_SAVE " BACK UP"),
         20,
         312,
         240,
@@ -664,7 +665,7 @@ void ui_settings_backup_popup_show(void)
     ui_popup_add_action_at(
         s_popup,
         UI_POPUP_ACTION_PRIMARY,
-        LV_SYMBOL_SAVE " ENCRYPT",
+        ui_text(LV_SYMBOL_SAVE " ENCRYPT"),
         280,
         312,
         240,
@@ -675,7 +676,7 @@ void ui_settings_backup_popup_show(void)
     ui_popup_add_action_at(
         s_popup,
         UI_POPUP_ACTION_PRIMARY,
-        LV_SYMBOL_REFRESH " RESTORE ENCRYPTED",
+        ui_text(LV_SYMBOL_REFRESH " RESTORE ENCRYPTED"),
         540,
         312,
         240,
@@ -686,7 +687,7 @@ void ui_settings_backup_popup_show(void)
     ui_popup_add_action_at(
         s_popup,
         UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
+        ui_text(LV_SYMBOL_CLOSE " CLOSE"),
         20,
         372,
         240,
@@ -697,7 +698,7 @@ void ui_settings_backup_popup_show(void)
     ui_popup_add_action_at(
         s_popup,
         UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_REFRESH " RESTORE PLAIN",
+        ui_text(LV_SYMBOL_REFRESH " RESTORE PLAIN"),
         280,
         372,
         240,
@@ -708,7 +709,7 @@ void ui_settings_backup_popup_show(void)
     ui_popup_add_action_at(
         s_popup,
         UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_TRASH " CLEAR ALL",
+        ui_text(LV_SYMBOL_TRASH " CLEAR ALL"),
         540,
         372,
         240,

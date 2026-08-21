@@ -1,4 +1,5 @@
 #include "ui_calibration_motion.h"
+#include "ui_text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -167,7 +168,7 @@ static void input_shaper_button_cb(
 
     ui_popup_add_title(
         s_motion.input_shaper_popup,
-        "RUN INPUT SHAPER CALIBRATION?",
+        ui_text("RUN INPUT SHAPER CALIBRATION?"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -318,7 +319,7 @@ static void resonance_test_button_cb(
 
     ui_popup_add_title(
         s_motion.resonance_test_popup,
-        "SELECT RESONANCE TEST AXIS",
+        ui_text("SELECT RESONANCE TEST AXIS"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -334,24 +335,24 @@ static void resonance_test_button_cb(
     ui_popup_add_action_at(
         s_motion.resonance_test_popup,
         UI_POPUP_ACTION_CONFIRM,
-        "TEST X AXIS",
+        ui_text("TEST X AXIS"),
         54,
         252,
         248,
         48,
         run_resonance_test_cb,
-        (void *)"X",
+        (void *)ui_text("X"),
         NULL);
     ui_popup_add_action_at(
         s_motion.resonance_test_popup,
         UI_POPUP_ACTION_CONFIRM,
-        "TEST Y AXIS",
+        ui_text("TEST Y AXIS"),
         348,
         252,
         248,
         48,
         run_resonance_test_cb,
-        (void *)"Y",
+        (void *)ui_text("Y"),
         NULL);
     ui_popup_add_standard_footer_divider(
         s_motion.resonance_test_popup);
@@ -456,7 +457,7 @@ static void accelerometer_check_button_cb(
 
     ui_popup_add_title(
         s_motion.accelerometer_check_popup,
-        "CHECK ACCELEROMETER?",
+        ui_text("CHECK ACCELEROMETER?"),
         false,
         4);
     ui_popup_add_header_divider(

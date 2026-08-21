@@ -1,4 +1,5 @@
 #include "ui_thumbnail.h"
+#include "ui_text.h"
 #include "ui_preview_lightbox.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
@@ -185,7 +186,7 @@ void ui_thumbnail_set_placeholder(ui_thumbnail_t *thumb, const char *text)
         thumb->label = ui_create_card_subtitle(thumb->box, text ? text : "THUMBNAIL");
     }
 
-    lv_label_set_text(thumb->label, text ? text : "THUMBNAIL");
+    lv_label_set_text(thumb->label, text ? text : ui_text("THUMBNAIL"));
     lv_obj_clear_flag(thumb->label, LV_OBJ_FLAG_HIDDEN);
     lv_obj_center(thumb->label);
 }

@@ -1,4 +1,5 @@
 #include "ui_devices_live_values.h"
+#include "ui_text.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -248,7 +249,7 @@ void ui_devices_live_values_update(void)
         if (!device_catalog_controller_get(
                 s_live.catalog_indices[visible],
                 &device)) {
-            lv_label_set_text(label, "--");
+            lv_label_set_text(label, ui_text("--"));
             continue;
         }
 
@@ -275,8 +276,8 @@ void ui_devices_live_values_update(void)
             lv_label_set_text(
                 label,
                 expects_live_value
-                    ? "WAITING FOR DATA"
-                    : "DISCOVERED");
+                    ? ui_text("WAITING FOR DATA")
+                    : ui_text("DISCOVERED"));
             ui_apply_label_dim(label);
         }
     }

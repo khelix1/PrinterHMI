@@ -1,4 +1,5 @@
 #include "ui_toast.h"
+#include "ui_text.h"
 
 #include "lvgl.h"
 
@@ -51,7 +52,7 @@ void ui_toast_show(ui_status_kind_t kind,
     lv_obj_set_style_bg_color(accent, ui_status_color(kind), 0);
 
     lv_obj_t *title_label = lv_label_create(s_toast);
-    lv_label_set_text(title_label, title ? title : "");
+    lv_label_set_text(title_label, title ? title : ui_text(""));
     lv_obj_set_width(title_label, 386);
     lv_label_set_long_mode(title_label, LV_LABEL_LONG_DOT);
     ui_apply_custom_label_style(title_label,
@@ -60,7 +61,7 @@ void ui_toast_show(ui_status_kind_t kind,
     lv_obj_set_pos(title_label, 24, 11);
 
     lv_obj_t *detail_label = lv_label_create(s_toast);
-    lv_label_set_text(detail_label, detail ? detail : "");
+    lv_label_set_text(detail_label, detail ? detail : ui_text(""));
     lv_obj_set_width(detail_label, 386);
     lv_label_set_long_mode(detail_label, LV_LABEL_LONG_DOT);
     ui_apply_text_caption(detail_label);

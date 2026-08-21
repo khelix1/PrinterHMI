@@ -1,4 +1,5 @@
 #include "ui_cards.h"
+#include "ui_text.h"
 #include "ui_theme.h"
 
 lv_obj_t *ui_info_card_create(lv_obj_t *parent,
@@ -25,13 +26,13 @@ lv_obj_t *ui_info_card_create(lv_obj_t *parent,
     lv_obj_set_style_pad_all(box, UI_PAD_PANEL, 0);
 
     lv_obj_t *title_label = lv_label_create(box);
-    lv_label_set_text(title_label, title ? title : "");
+    lv_label_set_text(title_label, title ? title : ui_text(""));
     ui_apply_text_body_large(title_label);
     ui_apply_label_dim(title_label);
     lv_obj_align(title_label, LV_ALIGN_TOP_LEFT, 0, 0);
 
     lv_obj_t *value_label = lv_label_create(box);
-    lv_label_set_text(value_label, value ? value : "");
+    lv_label_set_text(value_label, value ? value : ui_text(""));
     lv_obj_set_width(value_label,
                      width - (UI_PAD_PANEL * 2));
     lv_label_set_long_mode(value_label,

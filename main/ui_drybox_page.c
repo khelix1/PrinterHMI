@@ -1,4 +1,5 @@
 #include "ui_drybox_page.h"
+#include "ui_text.h"
 #include "ui_page_layout_profile.h"
 
 #include <stdio.h>
@@ -296,7 +297,7 @@ static lv_obj_t *make_text(
 {
     lv_obj_t *label = lv_label_create(parent);
 
-    lv_label_set_text(label, text ? text : "");
+    lv_label_set_text(label, text ? text : ui_text(""));
     ui_apply_custom_label_style(label, font, color);
 
     return label;
@@ -901,7 +902,7 @@ void ui_drybox_page_refresh(
         if (page->humidity_label) {
             lv_label_set_text(
                 page->humidity_label,
-                "--.-");
+                ui_text("--.-"));
 
             set_label_color(
                 page->humidity_label,
@@ -911,7 +912,7 @@ void ui_drybox_page_refresh(
         if (s_humidity_condition_label) {
             lv_label_set_text(
                 s_humidity_condition_label,
-                "NO DATA");
+                ui_text("NO DATA"));
 
             set_label_color(
                 s_humidity_condition_label,
@@ -926,20 +927,20 @@ void ui_drybox_page_refresh(
         }
 
         if (page->air_label) {
-            lv_label_set_text(page->air_label, "--.- C");
+            lv_label_set_text(page->air_label, ui_text("--.- C"));
         }
 
         if (page->center_label) {
-            lv_label_set_text(page->center_label, "--.- C");
+            lv_label_set_text(page->center_label, ui_text("--.- C"));
         }
 
         if (page->target_label) {
-            lv_label_set_text(page->target_label, "-- C");
+            lv_label_set_text(page->target_label, ui_text("-- C"));
             set_label_color(page->target_label, UI_TEXT_DIM);
         }
 
         if (page->heater_label) {
-            lv_label_set_text(page->heater_label, "OFFLINE");
+            lv_label_set_text(page->heater_label, ui_text("OFFLINE"));
             set_label_color(page->heater_label, UI_TEXT_DIM);
         }
 
@@ -1039,7 +1040,7 @@ void ui_drybox_page_refresh(
     if (page->heater_label) {
         lv_label_set_text(
             page->heater_label,
-            state->heater_on ? "HEATING" : "OFF");
+            state->heater_on ? ui_text("HEATING") : ui_text("OFF"));
 
         set_label_color(
             page->heater_label,

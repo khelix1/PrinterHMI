@@ -1,4 +1,5 @@
 #include "ui_devices.h"
+#include "ui_text.h"
 
 #include <stdbool.h>
 
@@ -67,7 +68,7 @@ static lv_obj_t *devices_label(
 {
     lv_obj_t *label = lv_label_create(parent);
 
-    lv_label_set_text(label, text ? text : "--");
+    lv_label_set_text(label, text ? text : ui_text("--"));
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);

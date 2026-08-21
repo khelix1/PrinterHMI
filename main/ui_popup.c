@@ -1,4 +1,5 @@
 #include "ui_popup.h"
+#include "ui_text.h"
 
 #include "ui_button.h"
 #include "ui_theme.h"
@@ -62,6 +63,9 @@ lv_obj_t *ui_popup_create(lv_obj_t *parent,
     lv_obj_set_pos(blocker, 0, 0);
     lv_obj_clear_flag(blocker, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(blocker, LV_OBJ_FLAG_CLICKABLE);
+    /* Every modal shares the same calm, readable operator backdrop. */
+    lv_obj_set_style_bg_color(blocker, UI_BG_DEEP, 0);
+    lv_obj_set_style_bg_opa(blocker, LV_OPA_60, 0);
 
     lv_obj_t *popup = lv_obj_create(modal_parent);
     if (!popup) {
@@ -113,7 +117,7 @@ lv_obj_t *ui_popup_add_title(lv_obj_t *popup,
     if (!popup) return NULL;
 
     lv_obj_t *title = lv_label_create(popup);
-    lv_label_set_text(title, text ? text : "");
+    lv_label_set_text(title, text ? text : ui_text(""));
     ui_apply_text_popup_title(title);
 
     if (danger) {
@@ -134,7 +138,7 @@ lv_obj_t *ui_popup_add_message(lv_obj_t *popup,
     if (!popup) return NULL;
 
     lv_obj_t *message = lv_label_create(popup);
-    lv_label_set_text(message, text ? text : "");
+    lv_label_set_text(message, text ? text : ui_text(""));
     ui_apply_text_body_large(message);
 
     if (muted) {
@@ -235,7 +239,7 @@ lv_obj_t *ui_popup_add_body(lv_obj_t *popup,
 
     lv_label_set_text(
         body,
-        text ? text : "");
+        text ? text : ui_text(""));
 
     lv_obj_set_width(
         body,
@@ -280,7 +284,7 @@ lv_obj_t *ui_popup_add_status_label(lv_obj_t *popup,
 
     lv_label_set_text(
         status,
-        text ? text : "");
+        text ? text : ui_text(""));
 
     lv_obj_set_width(
         status,
@@ -316,7 +320,7 @@ lv_obj_t *ui_popup_add_caption(lv_obj_t *popup,
     if (!popup) return NULL;
 
     lv_obj_t *caption = lv_label_create(popup);
-    lv_label_set_text(caption, text ? text : "");
+    lv_label_set_text(caption, text ? text : ui_text(""));
     lv_label_set_long_mode(caption, LV_LABEL_LONG_DOT);
     lv_obj_set_width(caption, width);
     lv_obj_set_pos(caption, x, y);
@@ -335,7 +339,7 @@ lv_obj_t *ui_popup_add_progress_status(lv_obj_t *popup,
     if (!popup) return NULL;
 
     lv_obj_t *label = lv_label_create(popup);
-    lv_label_set_text(label, text ? text : "");
+    lv_label_set_text(label, text ? text : ui_text(""));
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);
@@ -359,7 +363,7 @@ lv_obj_t *ui_popup_add_progress_value(lv_obj_t *popup,
     if (!popup) return NULL;
 
     lv_obj_t *label = lv_label_create(popup);
-    lv_label_set_text(label, text ? text : "");
+    lv_label_set_text(label, text ? text : ui_text(""));
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);
@@ -409,7 +413,7 @@ lv_obj_t *ui_popup_add_progress_detail(lv_obj_t *popup,
     if (!popup) return NULL;
 
     lv_obj_t *label = lv_label_create(popup);
-    lv_label_set_text(label, text ? text : "");
+    lv_label_set_text(label, text ? text : ui_text(""));
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);

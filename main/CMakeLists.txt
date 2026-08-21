@@ -6,6 +6,8 @@ idf_component_register(
 
         # Theme and shared UI components
         "ui_theme.c"
+        "ui_font_fallback.c"
+        "ui_text.c"
         "ui_theme_a.c"
         "ui_theme_b.c"
         "ui_theme_c.c"
@@ -16,6 +18,8 @@ idf_component_register(
         "ui_widgets.c"
         "ui_button.c"
         "ui_popup.c"
+        "onboarding_controller.c"
+        "ui_setup_wizard.c"
         "ui_cards.c"
         "ui_page_title.c"
         "ui_page_state.c"

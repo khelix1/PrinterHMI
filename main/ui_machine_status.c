@@ -1,4 +1,5 @@
 #include "ui_machine_status.h"
+#include "ui_text.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
@@ -91,7 +92,7 @@ static void machine_status_add_live_badge(
     ctx->live = lv_label_create(card);
     lv_label_set_text(
         ctx->live,
-        LV_SYMBOL_CLOSE " OFFLINE");
+        ui_text(LV_SYMBOL_CLOSE " OFFLINE"));
     ui_apply_text_caption(ctx->live);
     ui_apply_label_error(ctx->live);
     lv_obj_set_width(ctx->live, 110);
@@ -347,7 +348,7 @@ void ui_machine_status_set_filament(
         !moonraker_online) {
         lv_label_set_text(
             ctx->filament,
-            "OFFLINE");
+            ui_text("OFFLINE"));
         ui_apply_label_error(
             ctx->filament);
         return;
@@ -439,8 +440,8 @@ void ui_machine_status_set_connection(
     lv_label_set_text(
         ctx->live,
         online
-            ? LV_SYMBOL_OK " LIVE"
-            : LV_SYMBOL_CLOSE " OFFLINE");
+            ? ui_text(LV_SYMBOL_OK " LIVE")
+            : ui_text(LV_SYMBOL_CLOSE " OFFLINE"));
 
     if (online) {
         ui_apply_label_success(ctx->live);
@@ -465,13 +466,13 @@ void ui_machine_status_set_active_hotend(
     if (ctx->nozzle_name) {
         lv_label_set_text(
             ctx->nozzle_name,
-            name && name[0] ? name : "NOZZLE");
+            name && name[0] ? name : ui_text("NOZZLE"));
     }
 
     if (ctx->nozzle) {
         lv_label_set_text(
             ctx->nozzle,
-            value && value[0] ? value : "-- / -- C");
+            value && value[0] ? value : ui_text("-- / -- C"));
     }
 }
 
@@ -491,9 +492,9 @@ void ui_machine_status_set(
     machine_status_ctx_t *ctx = (machine_status_ctx_t *)lv_obj_get_user_data(panel);
     if (!ctx) return;
 
-    lv_label_set_text(ctx->nozzle, nozzle ? nozzle : "-- / -- C");
-    lv_label_set_text(ctx->bed, bed ? bed : "-- / -- C");
-    lv_label_set_text(ctx->air, chamber ? chamber : "-- C");
+    lv_label_set_text(ctx->nozzle, nozzle ? nozzle : ui_text("-- / -- C"));
+    lv_label_set_text(ctx->bed, bed ? bed : ui_text("-- / -- C"));
+    lv_label_set_text(ctx->air, chamber ? chamber : ui_text("-- C"));
     lv_label_set_text(ctx->humidity, humidity ? humidity : "-- %RH");
     lv_label_set_text(ctx->speed, speed ? speed : "100%");
     lv_label_set_text(ctx->flow, flow ? flow : "100%");

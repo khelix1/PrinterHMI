@@ -1,4 +1,5 @@
 #include "ui_event_history_popup.h"
+#include "ui_text.h"
 
 #include <stdio.h>
 #include <time.h>
@@ -112,7 +113,7 @@ static void rebuild_event_list(void)
 
         lv_label_set_text(
             empty,
-            "No operator events have been recorded.");
+            ui_text("No operator events have been recorded."));
 
         lv_obj_set_width(empty, 680);
         lv_obj_set_pos(empty, 16, 20);
@@ -274,7 +275,7 @@ void ui_event_history_popup_show(void)
 
     ui_popup_add_title(
         s_popup,
-        "OPERATOR EVENT HISTORY",
+        ui_text("OPERATOR EVENT HISTORY"),
         false,
         0);
 

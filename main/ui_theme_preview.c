@@ -1,6 +1,8 @@
 #include "ui_theme_preview.h"
+#include "ui_text.h"
 
 #include <stddef.h>
+#include "ui_font_fallback.h"
 
 typedef struct {
     uint32_t background;
@@ -141,9 +143,9 @@ static lv_obj_t *preview_label(lv_obj_t *parent,
 
     if (!label) return NULL;
 
-    lv_label_set_text(label, text ? text : "");
+    lv_label_set_text(label, text ? text : ui_text(""));
     lv_obj_set_pos(label, x, y);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label, ui_font_with_fallback(font), 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
 

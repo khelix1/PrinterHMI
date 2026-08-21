@@ -1,4 +1,5 @@
 #include "ui_settings_popups.h"
+#include "ui_text.h"
 
 #include "ui_popup.h"
 #include "ui_theme.h"
@@ -91,7 +92,7 @@ void reset_settings_cb(lv_event_t *e)
 
     ui_popup_add_title(
         s_reset_settings_popup,
-        "RESET SETTINGS?",
+        ui_text("RESET SETTINGS?"),
         true,
         0);
 
@@ -191,7 +192,7 @@ void ui_settings_popups_show_timezone(
 
     ui_popup_add_title(
         s_timezone_popup,
-        "TIME ZONE",
+        ui_text("TIME ZONE"),
         false,
         8);
 
@@ -199,7 +200,7 @@ void ui_settings_popups_show_timezone(
 
     ui_popup_add_status_label(
         s_timezone_popup,
-        "Select local time zone. Daylight-saving rules apply automatically.",
+        ui_text("Select local time zone. Daylight-saving rules apply automatically."),
         24,
         50,
         712);
@@ -438,7 +439,7 @@ static void custom_theme_remove_cb(lv_event_t *event)
 
     ui_popup_add_title(
         s_custom_remove_popup,
-        "REMOVE CUSTOM THEME?",
+        ui_text("REMOVE CUSTOM THEME?"),
         true,
         8);
     ui_popup_add_header_divider(
@@ -566,7 +567,7 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
 
     ui_popup_add_title(
         s_custom_theme_popup,
-        "CUSTOM THEMES",
+        ui_text("CUSTOM THEMES"),
         false,
         8);
     ui_popup_add_header_divider(
@@ -575,8 +576,8 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
     ui_popup_add_status_label(
         s_custom_theme_popup,
         count
-            ? "Tap a theme to apply it. Remove deletes only the SD-card file."
-            : "No valid themes found in /sdcard/PrinterHMI/themes.",
+            ? ui_text("Tap a theme to apply it. Remove deletes only the SD-card file.")
+            : ui_text("No valid themes found in /sdcard/PrinterHMI/themes."),
         24, 50, 772);
 
     lv_obj_t *list = ui_popup_add_list(
@@ -622,7 +623,7 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
         ui_popup_add_action_at(
             list,
             UI_POPUP_ACTION_DANGER,
-            LV_SYMBOL_TRASH " REMOVE",
+            ui_text(LV_SYMBOL_TRASH " REMOVE"),
             584, y + 7, 156, 48,
             custom_theme_remove_cb,
             (void *)(uintptr_t)index,
@@ -665,7 +666,7 @@ void ui_settings_popups_show_theme(
 
     ui_popup_add_title(
         s_theme_popup,
-        "INTERFACE THEME",
+        ui_text("INTERFACE THEME"),
         false,
         8);
 
@@ -673,7 +674,7 @@ void ui_settings_popups_show_theme(
 
     ui_popup_add_status_label(
         s_theme_popup,
-        "Tap a preview to apply it across the interface.",
+        ui_text("Tap a preview to apply it across the interface."),
         24,
         50,
         872);

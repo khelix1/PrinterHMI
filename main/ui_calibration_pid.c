@@ -1,4 +1,5 @@
 #include "ui_calibration_pid.h"
+#include "ui_text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -302,7 +303,7 @@ static void show_pid_target_popup(void)
 
     ui_popup_add_title(
         *s_context->popup,
-        "CONFIRM PID CALIBRATION",
+        ui_text("CONFIRM PID CALIBRATION"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -378,7 +379,7 @@ static void pid_start_warning_cb(lv_event_t *event)
     ui_calibration_pid_close();
     *s_context->popup = ui_popup_create(lv_layer_top(), 650, 420, UI_POPUP_DANGER);
     if (!*s_context->popup) return;
-    ui_popup_add_title(*s_context->popup, "START PID HEAT CYCLE?", false, 4);
+    ui_popup_add_title(*s_context->popup, ui_text("START PID HEAT CYCLE?"), false, 4);
     ui_popup_add_header_divider(*s_context->popup, 48);
     ui_popup_add_body(*s_context->popup,
         "The selected heater will cycle repeatedly at the chosen target. Keep the printer attended, clear the area, and do not start a print until calibration completes.",
@@ -497,7 +498,7 @@ void ui_calibration_pid_event(
 
     ui_popup_add_title(
         *s_context->popup,
-        "SELECT HEATER FOR PID",
+        ui_text("SELECT HEATER FOR PID"),
         false,
         4);
     ui_popup_add_header_divider(

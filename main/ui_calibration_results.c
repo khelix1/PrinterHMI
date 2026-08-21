@@ -1,4 +1,5 @@
 #include "ui_calibration_results.h"
+#include "ui_text.h"
 
 #include <string.h>
 
@@ -171,7 +172,7 @@ static void apply_restart_button_cb(
 
     ui_popup_add_title(
         *s_context->save_confirm_popup,
-        "APPLY CALIBRATION & RESTART?",
+        ui_text("APPLY CALIBRATION & RESTART?"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -230,7 +231,7 @@ void ui_calibration_results_show(
 
     ui_popup_add_title(
         *s_context->results_popup,
-        title ? title : "CALIBRATION RESULTS",
+        title ? title : ui_text("CALIBRATION RESULTS"),
         false,
         4);
     ui_popup_add_header_divider(

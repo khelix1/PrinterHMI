@@ -1,4 +1,5 @@
 #include "ui_page_state.h"
+#include "ui_text.h"
 
 #include "ui_theme.h"
 
@@ -110,8 +111,8 @@ void ui_page_state_show(ui_page_state_t *state,
 
     lv_label_set_text(state->icon, icon);
     ui_apply_custom_label_style(state->icon, UI_FONT_HEADING, color);
-    lv_label_set_text(state->title, title ? title : "");
-    lv_label_set_text(state->detail, detail ? detail : "");
+    lv_label_set_text(state->title, title ? title : ui_text(""));
+    lv_label_set_text(state->detail, detail ? detail : ui_text(""));
     lv_obj_clear_flag(state->root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(state->root);
 }

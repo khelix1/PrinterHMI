@@ -1,4 +1,5 @@
 #include "ui_calibration.h"
+#include "ui_text.h"
 
 #include <stdbool.h>
 #include <ctype.h>
@@ -213,7 +214,7 @@ static void layout_bed_geometry_actions(
         if (s_calibration->bed.summary) {
             lv_label_set_text(
                 s_calibration->bed.summary,
-                "BED GEOMETRY TOOLS READY");
+                ui_text("BED GEOMETRY TOOLS READY"));
         }
 
         lv_obj_align(
@@ -253,7 +254,7 @@ static void refresh_capabilities(void)
     if (!capabilities.discovered) {
         lv_label_set_text(
             s_calibration->banner_status,
-            "WAITING FOR PRINTER");
+            ui_text("WAITING FOR PRINTER"));
 
         ui_calibration_card_refs_t *cards[] = {
             &s_calibration->bed,
@@ -272,10 +273,10 @@ static void refresh_capabilities(void)
 
             lv_label_set_text(
                 cards[index]->summary,
-                "Waiting for active-printer discovery.");
+                ui_text("Waiting for active-printer discovery."));
             lv_label_set_text(
                 cards[index]->status,
-                "AWAITING DISCOVERY");
+                ui_text("AWAITING DISCOVERY"));
             ui_apply_label_dim(cards[index]->status);
         }
 
@@ -425,8 +426,8 @@ static void refresh_capabilities(void)
                 lv_label_set_text(
                     label,
                     capabilities.quad_gantry_level
-                        ? "QGL"
-                        : "Z TILT");
+                        ? ui_text("QGL")
+                        : ui_text("Z TILT"));
             }
         } else {
             lv_obj_add_flag(
@@ -890,7 +891,7 @@ static void probe_z_button_cb(
 
     ui_popup_add_title(
         s_calibration->probe_popup,
-        "START PROBE / Z CALIBRATION?",
+        ui_text("START PROBE / Z CALIBRATION?"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -1142,7 +1143,7 @@ static void axis_twist_button_cb(
 
     ui_popup_add_title(
         s_calibration->axis_twist_popup,
-        "START AXIS TWIST CALIBRATION?",
+        ui_text("START AXIS TWIST CALIBRATION?"),
         false,
         4);
     ui_popup_add_header_divider(

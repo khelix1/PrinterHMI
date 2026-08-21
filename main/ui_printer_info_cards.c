@@ -1,4 +1,5 @@
 #include "ui_printer_info_cards.h"
+#include "ui_text.h"
 #include "printer_controller.h"
 #include <string.h>
 #include "ui_theme.h"
@@ -7,6 +8,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "ui_font_fallback.h"
 
 typedef struct {
     lv_event_cb_t callback;
@@ -141,10 +143,7 @@ void ui_printer_info_cards_create(
          * Progress is the Printer page's primary at-a-glance value.
          * Give it stronger typography than the other compact cards.
          */
-        lv_obj_set_style_text_font(
-            cards->progress,
-            UI_FONT_HEADING,
-            0);
+        lv_obj_set_style_text_font(cards->progress, ui_font_with_fallback(UI_FONT_HEADING), 0);
         lv_obj_set_style_text_align(
             cards->progress,
             LV_TEXT_ALIGN_CENTER,
@@ -327,7 +326,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
             lv_label_set_text(cards->eta, printer_eta_text);
             lv_obj_set_style_text_color(cards->eta, UI_TEXT, 0);
         } else {
-            lv_label_set_text(cards->eta, moonraker_ok ? LV_SYMBOL_OK " ONLINE" : LV_SYMBOL_CLOSE " OFFLINE");
+            lv_label_set_text(cards->eta, moonraker_ok ? ui_text(LV_SYMBOL_OK " ONLINE") : ui_text(LV_SYMBOL_CLOSE " OFFLINE"));
             lv_obj_set_style_text_color(cards->eta, moonraker_ok ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
         }
     }
@@ -339,7 +338,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
     }
 
     if (cards->remaining) {
-        lv_label_set_text(cards->remaining, (printer_eta_text && printer_eta_text[0]) ? printer_eta_text : "--:--");
+        lv_label_set_text(cards->remaining, (printer_eta_text && printer_eta_text[0]) ? printer_eta_text : ui_text("--:--"));
     }
 }
 
@@ -395,7 +394,7 @@ void ui_printer_info_cards_add_vivid_icon(lv_obj_t *value_label, const char *tit
 
     lv_obj_t *ico = lv_label_create(box);
     lv_label_set_text(ico, card_icon_for_title(title));
-    lv_obj_set_style_text_font(ico, UI_FONT_TITLE, 0);
+    lv_obj_set_style_text_font(ico, ui_font_with_fallback(UI_FONT_TITLE), 0);
     lv_obj_set_style_text_color(ico, card_color_for_title(title), 0);
     lv_obj_align(ico, LV_ALIGN_TOP_RIGHT, -10, 8);
 }
@@ -463,7 +462,7 @@ static void apply_optional_card_capability(
 
     lv_label_set_text(
         value_label,
-        "N/A");
+        ui_text("N/A"));
 
     lv_obj_set_style_text_color(
         value_label,

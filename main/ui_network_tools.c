@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ui_network_tools.h"
+#include "ui_text.h"
 #include "ui_button.h"
 #include "ui_theme.h"
 #include "ui_popup.h"
@@ -95,7 +96,7 @@ void ui_network_tools_wifi_scan_set_status(
     if (s_wifi_scan_status_label) {
         lv_label_set_text(
             s_wifi_scan_status_label,
-            status_text ? status_text : "");
+            status_text ? status_text : ui_text(""));
     }
 }
 
@@ -179,7 +180,7 @@ void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,
     if (*popup) {
         lv_obj_move_foreground(*popup);
         if (*status_label) {
-            lv_label_set_text(*status_label, status_text ? status_text : "");
+            lv_label_set_text(*status_label, status_text ? status_text : ui_text(""));
         }
         return;
     }
@@ -195,7 +196,7 @@ void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,
     lv_obj_t *title =
         ui_popup_add_title(
             *popup,
-            "WIFI NETWORKS",
+            ui_text("WIFI NETWORKS"),
             false,
             4);
 
@@ -210,7 +211,7 @@ void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,
     *status_label =
         ui_popup_add_status_label(
             *popup,
-            status_text ? status_text : "",
+            status_text ? status_text : ui_text(""),
             20,
             52,
             700);
@@ -300,7 +301,7 @@ void ui_network_tools_show_wifi_password_popup_window(lv_obj_t **password_popup,
     lv_obj_t *title =
         ui_popup_add_title(
             *password_popup,
-            "WIFI PASSWORD",
+            ui_text("WIFI PASSWORD"),
             false,
             2);
 
@@ -340,7 +341,7 @@ void ui_network_tools_show_wifi_password_popup_window(lv_obj_t **password_popup,
             true,
             true,
             64,
-            "Enter WiFi password",
+            ui_text("Enter WiFi password"),
             NULL,
             NULL);
 
@@ -529,7 +530,7 @@ void ui_network_port_popup_show(int current_port,
     lv_obj_t *title =
         ui_popup_add_title(
             s_moon_port_popup,
-            "MOONRAKER PORT",
+            ui_text("MOONRAKER PORT"),
             false,
             2);
 
@@ -561,7 +562,7 @@ void ui_network_port_popup_show(int current_port,
             5,
             NULL,
             pbuf,
-            "0123456789");
+            ui_text("0123456789"));
 
     if (!s_moon_port_ta) {
         ui_network_port_popup_close();

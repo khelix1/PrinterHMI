@@ -1,4 +1,5 @@
 #include "ui_printer_popups.h"
+#include "ui_text.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_dashboard.h"
@@ -98,7 +99,7 @@ static void show_cancel_print_confirm(
 
     ui_popup_add_title(
         s_cancel_confirm_popup,
-        "CANCEL PRINT?",
+        ui_text("CANCEL PRINT?"),
         true,
         4);
 
@@ -236,7 +237,7 @@ static void show_object_confirm(const char *name)
     if (!s_object_confirm_popup) return;
 
     ui_popup_add_title(s_object_confirm_popup,
-                       "CANCEL OBJECT?",
+                       ui_text("CANCEL OBJECT?"),
                        true,
                        4);
     ui_popup_add_header_divider(s_object_confirm_popup, 44);
@@ -672,7 +673,7 @@ static void show_cancel_object_list(void)
     }
 
     ui_popup_add_title(s_object_list_popup,
-                       "CANCEL OBJECT",
+                       ui_text("CANCEL OBJECT"),
                        false,
                        8);
     ui_popup_add_header_divider(s_object_list_popup, 44);
@@ -1059,9 +1060,9 @@ static void open_custom_temp_cb(lv_event_t *event)
         true,
         false,
         3,
-        "Temperature",
+        ui_text("Temperature"),
         initial_text,
-        "0123456789");
+        ui_text("0123456789"));
 
     lv_obj_t *keyboard = ui_popup_add_keyboard(
         s_custom_temp_popup,
@@ -1294,7 +1295,7 @@ static void show_control_popup(
 
     ui_popup_add_status_label(
         popup,
-        "CHOOSE A PRESET",
+        ui_text("CHOOSE A PRESET"),
         24,
         146,
         612);
@@ -1550,8 +1551,8 @@ static void refresh_hotend_list(lv_timer_t *timer)
             lv_label_set_text(
                 s_hotend_activate_labels[i],
                 hotend->active
-                    ? LV_SYMBOL_OK " ACTIVE"
-                    : "MAKE ACTIVE");
+                    ? ui_text(LV_SYMBOL_OK " ACTIVE")
+                    : ui_text("MAKE ACTIVE"));
         }
 
         if (s_hotend_activate_buttons[i]) {
@@ -1725,7 +1726,7 @@ void ui_printer_popups_show_hotends(
 
     ui_popup_add_title(
         s_hotend_list_popup,
-        "HOTEND CONTROL",
+        ui_text("HOTEND CONTROL"),
         false,
         8);
 
@@ -1795,7 +1796,7 @@ void ui_printer_popups_show_hotends(
         ui_popup_add_action_at(
             s_hotend_list_popup,
             UI_POPUP_ACTION_CHOICE,
-            "SET TEMP",
+            ui_text("SET TEMP"),
             384,
             y + 7,
             138,
@@ -1809,8 +1810,8 @@ void ui_printer_popups_show_hotends(
                 s_hotend_list_popup,
                 UI_POPUP_ACTION_CONFIRM,
                 hotend->active
-                    ? LV_SYMBOL_OK " ACTIVE"
-                    : "MAKE ACTIVE",
+                    ? ui_text(LV_SYMBOL_OK " ACTIVE")
+                    : ui_text("MAKE ACTIVE"),
                 540,
                 y + 7,
                 150,
@@ -2123,15 +2124,15 @@ static void refresh_filament_list(lv_timer_t *timer)
         if (!button || !label) continue;
 
         if (s_filament_toggle_pending[i]) {
-            lv_label_set_text(label, "UPDATING");
+            lv_label_set_text(label, ui_text("UPDATING"));
             lv_obj_add_state(button, LV_STATE_DISABLED);
         } else {
             lv_obj_clear_state(button, LV_STATE_DISABLED);
             lv_label_set_text(
                 label,
                 sensor->enabled
-                    ? "DISABLE"
-                    : "ENABLE");
+                    ? ui_text("DISABLE")
+                    : ui_text("ENABLE"));
             ui_button_apply_kind(
                 button,
                 sensor->enabled
@@ -2199,7 +2200,7 @@ static void filament_toggle_event_cb(lv_event_t *event)
     if (s_filament_toggle_labels[index]) {
         lv_label_set_text(
             s_filament_toggle_labels[index],
-            "UPDATING");
+            ui_text("UPDATING"));
     }
     if (s_filament_toggle_buttons[index]) {
         lv_obj_add_state(
@@ -2248,7 +2249,7 @@ void ui_printer_popups_show_filament_sensors(
 
     ui_popup_add_title(
         s_filament_list_popup,
-        "FILAMENT SENSOR CONTROL",
+        ui_text("FILAMENT SENSOR CONTROL"),
         false,
         8);
     ui_popup_add_header_divider(
@@ -2301,7 +2302,7 @@ void ui_printer_popups_show_filament_sensors(
             lv_label_create(row);
         lv_label_set_text(
             s_filament_status_labels[i],
-            "CHECKING");
+            ui_text("CHECKING"));
         ui_apply_text_value_small(
             s_filament_status_labels[i]);
         lv_obj_set_pos(
@@ -2316,8 +2317,8 @@ void ui_printer_popups_show_filament_sensors(
                     ? UI_POPUP_ACTION_CHOICE
                     : UI_POPUP_ACTION_CONFIRM,
                 sensor->enabled
-                    ? "DISABLE"
-                    : "ENABLE",
+                    ? ui_text("DISABLE")
+                    : ui_text("ENABLE"),
                 516,
                 y + 7,
                 174,
@@ -2330,7 +2331,7 @@ void ui_printer_popups_show_filament_sensors(
     if (state->truncated) {
         ui_popup_add_caption(
             s_filament_list_popup,
-            "Additional sensors are not shown.",
+            ui_text("Additional sensors are not shown."),
             24,
             374,
             360);

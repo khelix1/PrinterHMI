@@ -1,4 +1,5 @@
 #include "ui_macros.h"
+#include "ui_text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -197,7 +198,7 @@ static void macro_button_cb(lv_event_t *event)
 
     ui_popup_add_title(
         s_confirm,
-        "RUN MACRO?",
+        ui_text("RUN MACRO?"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -289,8 +290,8 @@ static void rebuild_macro_list(void)
         lv_label_set_text(
             empty,
             status.discovered
-                ? "No public gcode_macro objects were detected."
-                : "Waiting for Moonraker object discovery...");
+                ? ui_text("No public gcode_macro objects were detected.")
+                : ui_text("Waiting for Moonraker object discovery..."));
         lv_obj_set_width(empty, 730);
         lv_obj_set_style_text_align(
             empty,
@@ -403,7 +404,7 @@ void ui_macros_show(
     ui_apply_root_style(s_root);
 
     lv_obj_t *title = lv_label_create(s_root);
-    lv_label_set_text(title, "MACROS");
+    lv_label_set_text(title, ui_text("MACROS"));
     lv_obj_set_pos(title, UI_PAGE_RAIL_X, 18);
     ui_apply_text_title(title);
     ui_apply_label_bright(title);
@@ -411,7 +412,7 @@ void ui_macros_show(
     lv_obj_t *subtitle = lv_label_create(s_root);
     lv_label_set_text(
         subtitle,
-        "DETECTED PUBLIC KLIPPER ACTIONS");
+        ui_text("DETECTED PUBLIC KLIPPER ACTIONS"));
     lv_obj_set_pos(subtitle, UI_PAGE_RAIL_X, 50);
     ui_apply_text_caption(subtitle);
     ui_apply_label_dim(subtitle);

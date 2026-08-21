@@ -1,4 +1,5 @@
 #include "ui_bed_mesh_profiles.h"
+#include "ui_text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -299,8 +300,8 @@ static void show_profile_confirmation(
     ui_popup_add_title(
         s.profile_confirm,
         removing
-            ? "REMOVE BED MESH?"
-            : "SAVE BED MESH?",
+            ? ui_text("REMOVE BED MESH?")
+            : ui_text("SAVE BED MESH?"),
         removing,
         4);
     ui_popup_add_header_divider(
@@ -383,7 +384,7 @@ static void save_as_profile_cb(lv_event_t *e)
 
     ui_popup_add_title(
         s.profile_editor,
-        "SAVE BED MESH PROFILE",
+        ui_text("SAVE BED MESH PROFILE"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -391,7 +392,7 @@ static void save_as_profile_cb(lv_event_t *e)
         44);
     ui_popup_add_caption(
         s.profile_editor,
-        "PROFILE NAME",
+        ui_text("PROFILE NAME"),
         54,
         68,
         220);
@@ -407,11 +408,9 @@ static void save_as_profile_cb(lv_event_t *e)
             true,
             false,
             BED_MESH_PROFILE_NAME_MAX - 1,
-            "example: textured_plate",
-            "",
-            "abcdefghijklmnopqrstuvwxyz"
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "0123456789_.-");
+            ui_text("example: textured_plate"),
+            ui_text(""),
+            "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789_.-");
 
     ui_popup_add_keyboard(
         s.profile_editor,
@@ -482,7 +481,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
 
     ui_popup_add_title(
         s.profile_popup,
-        "BED MESH PROFILES",
+        ui_text("BED MESH PROFILES"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -502,7 +501,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
             lv_obj_t *empty =
                 ui_popup_add_status_label(
                     s.profile_popup,
-                    "No saved bed-mesh profiles reported.",
+                    ui_text("No saved bed-mesh profiles reported."),
                     48,
                     104,
                     624);

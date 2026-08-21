@@ -1,4 +1,5 @@
 #include "ui_active_print.h"
+#include "ui_text.h"
 #include "ui_preview_lightbox.h"
 #include "ui_theme.h"
 #include "ui_thumbnail.h"
@@ -361,7 +362,7 @@ lv_obj_t *ui_active_print_create_profile(
 
     lv_label_set_text(
         ctx->footer,
-        "LAYER --/--    ELAPSED --:--    REM --:--");
+        ui_text("LAYER --/--    ELAPSED --:--    REM --:--"));
 
     lv_obj_set_width(
         ctx->footer,

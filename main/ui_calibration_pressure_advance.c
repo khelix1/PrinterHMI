@@ -1,4 +1,5 @@
 #include "ui_calibration_pressure_advance.h"
+#include "ui_text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -84,7 +85,7 @@ static void show_armed_popup(
 
     ui_popup_add_title(
         s_pa.popup,
-        "PRESSURE ADVANCE TOWER ARMED",
+        ui_text("PRESSURE ADVANCE TOWER ARMED"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -198,7 +199,7 @@ static void button_cb(
 
     ui_popup_add_title(
         s_pa.popup,
-        "SET UP PRESSURE ADVANCE TOWER",
+        ui_text("SET UP PRESSURE ADVANCE TOWER"),
         false,
         4);
     ui_popup_add_header_divider(
@@ -225,24 +226,24 @@ static void button_cb(
     ui_popup_add_action_at(
         s_pa.popup,
         UI_POPUP_ACTION_CONFIRM,
-        "DIRECT DRIVE",
+        ui_text("DIRECT DRIVE"),
         54,
         286,
         260,
         48,
         arm_tower_cb,
-        (void *)".005",
+        (void *)ui_text(".005"),
         NULL);
     ui_popup_add_action_at(
         s_pa.popup,
         UI_POPUP_ACTION_CONFIRM,
-        "LONG BOWDEN",
+        ui_text("LONG BOWDEN"),
         366,
         286,
         260,
         48,
         arm_tower_cb,
-        (void *)".020",
+        (void *)ui_text(".020"),
         NULL);
 
     ui_popup_add_standard_footer_divider(

@@ -4,6 +4,7 @@
 #include "ui_theme_a.h"
 #include "ui_theme_b.h"
 #include "ui_theme_c.h"
+#include "ui_theme_d.h"
 
 /*
  * Public theme dispatcher.
@@ -72,6 +73,7 @@ void ui_theme_set_active(ui_theme_id_t theme)
         case UI_THEME_OPERATOR:
         case UI_THEME_GLASS:
         case UI_THEME_OPERATOR_SHELL:
+        case UI_THEME_FUTURE:
             s_active_theme = theme;
             break;
 
@@ -102,6 +104,9 @@ const char *ui_theme_name(ui_theme_id_t theme)
 
         case UI_THEME_OPERATOR_SHELL:
             return "Operator Shell";
+
+        case UI_THEME_FUTURE:
+            return "Future";
 
         case UI_THEME_OPERATOR:
         default:

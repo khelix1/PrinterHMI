@@ -14,7 +14,8 @@ typedef enum {
     UI_THEME_OPERATOR,
     UI_THEME_GLASS,
     /* Operator Shell is a separate layout selection using the Operator palette. */
-    UI_THEME_OPERATOR_SHELL
+    UI_THEME_OPERATOR_SHELL,
+    UI_THEME_FUTURE
 } ui_theme_id_t;
 
 typedef enum {

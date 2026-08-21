@@ -11,6 +11,7 @@ idf_component_register(
         "ui_theme_a.c"
         "ui_theme_b.c"
         "ui_theme_c.c"
+        "ui_theme_d.c"
         "theme_manager.c"
         "custom_theme.c"
         "ui_theme_preview.c"

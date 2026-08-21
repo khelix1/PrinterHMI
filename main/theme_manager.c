@@ -68,7 +68,7 @@ static void load_custom_id(nvs_handle_t handle)
 static bool theme_valid(ui_theme_id_t theme)
 {
     return (unsigned)theme >= (unsigned)UI_THEME_CLASSIC &&
-           (unsigned)theme <= (unsigned)UI_THEME_OPERATOR_SHELL;
+           (unsigned)theme <= (unsigned)UI_THEME_FUTURE;
 }
 
 static const char *theme_label(ui_theme_id_t theme)
@@ -80,6 +80,8 @@ static const char *theme_label(ui_theme_id_t theme)
             return "DARK GLASS (THEME C)";
         case UI_THEME_OPERATOR_SHELL:
             return "OPERATOR SHELL (LAYOUT)";
+        case UI_THEME_FUTURE:
+            return "FUTURE HOLOGRAPHIC";
         case UI_THEME_OPERATOR:
         default:
             return "OPERATOR (THEME B)";

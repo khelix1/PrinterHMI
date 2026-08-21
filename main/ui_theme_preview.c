@@ -63,6 +63,25 @@ static ui_theme_preview_palette_t preview_palette(ui_theme_id_t theme)
                 .description = "Smoked layers",
             };
 
+        case UI_THEME_FUTURE:
+            return (ui_theme_preview_palette_t){
+                .background = 0x03040A,
+                .surface = 0x0A1020,
+                .card = 0x11152A,
+                .control = 0x17142E,
+                .border = 0x38E8FF,
+                .accent = 0xFF39C8,
+                .text = 0xF4F7FF,
+                .muted = 0x91A6D8,
+                .success = 0xA8FF00,
+                .danger = 0xFF3F76,
+                .radius = 32,
+                .surface_opa = (lv_opa_t)220,
+                .name = "FUTURE",
+                .code = "THEME D",
+                .description = "Holographic orbital",
+            };
+
         case UI_THEME_OPERATOR_SHELL:
             return (ui_theme_preview_palette_t){
                 .background = 0x09121E,

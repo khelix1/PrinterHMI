@@ -1,4 +1,7 @@
 #include "ui_setup_wizard.h"
+/* STEP257_PRINTER_DISCOVERY */
+/* STEP256_DEDICATED_NAV */
+/* STEP254_SETUP_CARD_SAFE */
 /* STEP252_SETUP_REPAIRED */
 /* STEP251_SETUP_CARD */
 /* STEP249_STABLE_SETUP_SCAN */
@@ -61,12 +64,19 @@ enum {
 static int s_setup_step = SETUP_STEP_WELCOME;
 static lv_obj_t *s_setup_content;
 
+static void delete_poll(void);
 static void setup_render_step(int step);
+static void setup_select_welcome_cb(lv_event_t *event);
+static void setup_select_wifi_cb(lv_event_t *event);
+static void setup_select_printer_cb(lv_event_t *event);
+static void setup_select_camera_cb(lv_event_t *event);
+static void setup_select_complete_cb(lv_event_t *event);
 static void wifi_scan_open(void);
 static void wifi_save_cb(lv_event_t *event);
 static void printer_test_poll(lv_timer_t *timer);
 static void wifi_scan_open_cb(lv_event_t *event);
 static void printer_test_start_cb(lv_event_t *event);
+static void printer_discover_cb(lv_event_t *event);
 
 static void center_wifi_cb(lv_event_t *event);
 static void center_printer_cb(lv_event_t *event);
@@ -98,11 +108,16 @@ static void setup_skip_cb(lv_event_t *event)
     }
 }
 
-static void setup_select_step_cb(lv_event_t *event)
-{
-    s_setup_step = (int)(uintptr_t)lv_event_get_user_data(event);
-    setup_render_step(s_setup_step);
-}
+static void setup_select_welcome_cb(lv_event_t *event)
+{ (void)event; s_setup_step = SETUP_STEP_WELCOME; setup_render_step(s_setup_step); }
+static void setup_select_wifi_cb(lv_event_t *event)
+{ (void)event; s_setup_step = SETUP_STEP_WIFI; setup_render_step(s_setup_step); }
+static void setup_select_printer_cb(lv_event_t *event)
+{ (void)event; s_setup_step = SETUP_STEP_PRINTER; setup_render_step(s_setup_step); }
+static void setup_select_camera_cb(lv_event_t *event)
+{ (void)event; s_setup_step = SETUP_STEP_CAMERA; setup_render_step(s_setup_step); }
+static void setup_select_complete_cb(lv_event_t *event)
+{ (void)event; s_setup_step = SETUP_STEP_COMPLETE; setup_render_step(s_setup_step); }
 
 static void setup_clear_content(void)
 {
@@ -127,10 +142,14 @@ static void setup_add_nav_button(const char *label, int step, int y)
         label,
         24,
         y,
-        196,
+        180,
         48,
-        setup_select_step_cb,
-        (void *)(uintptr_t)step,
+        step == SETUP_STEP_WELCOME ? setup_select_welcome_cb :
+        step == SETUP_STEP_WIFI ? setup_select_wifi_cb :
+        step == SETUP_STEP_PRINTER ? setup_select_printer_cb :
+        step == SETUP_STEP_CAMERA ? setup_select_camera_cb :
+        setup_select_complete_cb,
+        NULL,
         NULL);
 }
 
@@ -165,6 +184,7 @@ static void setup_add_next_buttons(bool allow_skip)
 
 static void setup_render_step(int step)
 {
+    delete_poll();
     if (!s_setup_content) return;
     setup_clear_content();
 
@@ -299,11 +319,11 @@ static void wifi_scan_task(void *ignored)
 static void wifi_password_open(void)
 {
     setup_clear_content();
-    ui_popup_add_caption(s_setup_content, "WI-FI PASSWORD", 24, 28, 572);
-    s_status = ui_popup_add_status_label(s_setup_content, s_selected_ssid, 24, 74, 572);
+    ui_popup_add_caption(s_setup_content, "WI-FI PASSWORD", 24, 28, 680);
+    s_status = ui_popup_add_status_label(s_setup_content, s_selected_ssid, 24, 74, 680);
     s_password = ui_popup_add_textarea(
         s_setup_content,
-        572,
+        680,
         44,
         LV_ALIGN_TOP_LEFT,
         24,
@@ -317,7 +337,7 @@ static void wifi_password_open(void)
     s_keyboard = ui_popup_add_keyboard(
         s_setup_content,
         s_password,
-        572,
+        680,
         150,
         LV_ALIGN_TOP_LEFT,
         24,
@@ -339,6 +359,10 @@ static void wifi_scan_ready(lv_timer_t *timer)
 {
     (void)timer;
     if (!s_wifi_scan_done) return;
+    if (s_setup_step != SETUP_STEP_WIFI) {
+        delete_poll();
+        return;
+    }
     delete_poll();
     if (!s_setup_content) return;
     if (!s_wifi_count) {
@@ -355,7 +379,7 @@ static void wifi_scan_ready(lv_timer_t *timer)
             row,
             24,
             126 + (int)i * 34,
-            572,
+            680,
             30,
             wifi_selected_cb,
             (void *)(uintptr_t)i,
@@ -371,6 +395,7 @@ static void wifi_scan_open_cb(lv_event_t *event)
 
 static void wifi_scan_open(void)
 {
+    delete_poll();
     if (s_keyboard) {
         lv_obj_delete(s_keyboard);
         s_keyboard = NULL;
@@ -380,8 +405,8 @@ static void wifi_scan_open(void)
     setup_clear_content();
     s_keyboard = NULL;
     s_password = NULL;
-    ui_popup_add_caption(s_setup_content, "CONNECT WI-FI", 24, 28, 572);
-    s_status = ui_popup_add_status_label(s_setup_content, "Scanning nearby networks...", 24, 74, 572);
+    ui_popup_add_caption(s_setup_content, "CONNECT WI-FI", 24, 28, 680);
+    s_status = ui_popup_add_status_label(s_setup_content, "Scanning nearby networks...", 24, 74, 680);
     ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "SCAN WI-FI", 24, 104, 220, 44, wifi_scan_open_cb, NULL, NULL);
     s_wifi_scan_done = false;
     if (xTaskCreate(wifi_scan_task, "setup_wifi_scan", 4096, NULL, 4, NULL) != pdPASS) {
@@ -464,21 +489,54 @@ static void printer_test_poll(lv_timer_t *timer)
         return;
     }
     set_status("Printer verified. Press SAVE PRINTER to keep it.");
-    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_CONFIRM, "SAVE PRINTER", 24, 330, 220, 44, printer_save_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_CONFIRM, "SAVE PRINTER", 24, 380, 220, 44, printer_save_cb, NULL, NULL);
+}
+
+static void printer_discovery_selected(const char *host, int port, const char *identity)
+{
+    if (host && host[0]) {
+        strlcpy(s_printer_host, host, sizeof(s_printer_host));
+        if (s_password) lv_textarea_set_text(s_password, host);
+    }
+    if (port > 0) s_printer_port = port;
+    if (s_name && identity && identity[0]) lv_textarea_set_text(s_name, identity);
+    set_status("Printer discovered. Review the endpoint, then press TEST PRINTER.");
+}
+
+static void printer_discovery_closed(void)
+{
+    set_status("Printer discovery closed. Review or edit the endpoint below.");
+}
+
+static void printer_discover_cb(lv_event_t *event)
+{
+    (void)event;
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip = {0};
+    if (!netif || esp_netif_get_ip_info(netif, &ip) != ESP_OK || ip.ip.addr == 0) {
+        set_status("Connect Wi-Fi before discovering Moonraker printers.");
+        return;
+    }
+    moonraker_discovery_show("SETUP: searching for Moonraker printers...",
+                             printer_discovery_closed,
+                             printer_discovery_selected);
+    (void)moonraker_discovery_start(&ip.ip);
 }
 
 static void printer_open(void)
 {
+    delete_poll();
     setup_clear_content();
-    ui_popup_add_caption(s_setup_content, "ADD PRINTER", 24, 28, 572);
-    s_status = ui_popup_add_status_label(s_setup_content, "Enter the Moonraker endpoint, then test and save it.", 24, 74, 572);
+    ui_popup_add_caption(s_setup_content, "ADD PRINTER", 24, 28, 680);
+    s_status = ui_popup_add_status_label(s_setup_content, "Enter the Moonraker endpoint, then test and save it.", 24, 74, 680);
     s_name = ui_popup_add_textarea(s_setup_content, 300, 42, LV_ALIGN_TOP_LEFT, 24, 116, true, false, 31, ui_text("Printer name"), ui_text("Printer 1"), NULL);
     s_password = ui_popup_add_textarea(s_setup_content, 300, 42, LV_ALIGN_TOP_LEFT, 332, 116, true, false, 63, ui_text("Host or IP address"), ui_text(""), NULL);
-    s_keyboard = ui_popup_add_keyboard(s_setup_content, s_password, 572, 150, LV_ALIGN_TOP_LEFT, 24, 168, LV_KEYBOARD_MODE_TEXT_LOWER);
+    s_keyboard = ui_popup_add_keyboard(s_setup_content, s_password, 680, 150, LV_ALIGN_TOP_LEFT, 24, 168, LV_KEYBOARD_MODE_TEXT_LOWER);
     if (s_name) lv_obj_add_event_cb(s_name, focus_cb, LV_EVENT_CLICKED, NULL);
     if (s_password) lv_obj_add_event_cb(s_password, focus_cb, LV_EVENT_CLICKED, NULL);
-    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_CONFIRM, "TEST PRINTER", 24, 330, 220, 44, printer_test_start_cb, NULL, NULL);
-    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "NEXT", 376, 330, 220, 44, setup_next_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "DISCOVER PRINTERS", 24, 330, 220, 44, printer_discover_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_CONFIRM, "TEST PRINTER", 260, 330, 220, 44, printer_test_start_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "NEXT", 496, 330, 200, 44, setup_next_cb, NULL, NULL);
 }
 
 static void camera_save_cb(lv_event_t *event)
@@ -546,15 +604,16 @@ static void camera_discovery_poll(lv_timer_t *timer)
     for (int slot = 0; slot < CAMERA_CATALOG_MAX_CAMERAS; ++slot) {
         camera_catalog_entry_t entry;
         if (!camera_catalog_get(profile, slot, &entry) || !entry.configured) continue;
-        ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, entry.name, 24, 126 + slot * 40, 572, 34, camera_selected_cb, (void *)(uintptr_t)slot, NULL);
+        ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, entry.name, 24, 126 + slot * 40, 680, 34, camera_selected_cb, (void *)(uintptr_t)slot, NULL);
     }
 }
 
 static void camera_open(void)
 {
+    delete_poll();
     setup_clear_content();
-    ui_popup_add_caption(s_setup_content, "ADD CAMERA", 24, 28, 572);
-    s_status = ui_popup_add_status_label(s_setup_content, "Searching this printer for configured cameras...", 24, 74, 572);
+    ui_popup_add_caption(s_setup_content, "ADD CAMERA", 24, 28, 680);
+    s_status = ui_popup_add_status_label(s_setup_content, "Searching this printer for configured cameras...", 24, 74, 680);
     const int profile = moonraker_config_active_profile_index();
     const moonraker_profile_t *printer = moonraker_config_profile(profile);
     if (!printer || !printer->configured) {

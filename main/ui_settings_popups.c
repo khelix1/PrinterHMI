@@ -716,6 +716,18 @@ void ui_settings_popups_show_theme(
             (void *)(uintptr_t)choices[index].id);
     }
 
+    ui_theme_preview_create(
+        preview_grid,
+        UI_THEME_FUTURE,
+        !theme_manager_custom_active() &&
+            UI_THEME_FUTURE == selected,
+        296,
+        268,
+        276,
+        250,
+        theme_select_cb,
+        (void *)(uintptr_t)UI_THEME_FUTURE);
+
     /* Swipe the preview area upward to reach the additional layout theme. */
     lv_obj_t *operator_shell_preview = ui_theme_preview_create(
         preview_grid,

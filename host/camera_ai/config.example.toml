@@ -1,0 +1,7 @@
+# Host-side only; PrinterHMI is a read-only consumer.
+camera_url = "http://127.0.0.1/webcam/?action=stream"
+moonraker_url = "http://127.0.0.1:7125"
+enabled = false
+analysis_fps = 2
+failure_confidence = 0.90
+check_confidence = 0.65

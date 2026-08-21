@@ -219,7 +219,23 @@ bool camera_stream_take_result(
 
 void camera_stream_stop(void)
 {
+    /*
+     * Request the MJPEG worker to close its HTTP connection, then wait for
+     * the task to release network_activity_controller before returning.
+     * OTA is network-exclusive; returning early leaves a small race where
+     * the camera still owns the shared transport and OTA fails intermittently.
+     */
     s_stop_requested = true;
+    for (int attempt = 0; attempt < 320 && s_task; ++attempt) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (s_task) {
+        /* The HTTP client timeout is finite, but never silently start an OTA
+         * while a camera worker is still active if the timeout is exceeded. */
+        return;
+    }
+
     if (!s_result_queue) return;
     camera_frame_result_t stale;
     while (xQueueReceive(s_result_queue, &stale, 0) == pdPASS) {

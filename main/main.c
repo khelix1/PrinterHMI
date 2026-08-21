@@ -779,10 +779,10 @@ static void wifi_init_sta(void)
         return;
     }
 
-    ESP_LOGI(TAG, "Waiting for WiFi/DHCP before display start...");
+    ESP_LOGI(TAG, "Waiting briefly for WiFi/DHCP; continuing offline if unavailable...");
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
+            pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "CONNECTED + GOT_IP: " IPSTR, IP2STR(&s_ip));

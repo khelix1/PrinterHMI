@@ -332,7 +332,10 @@ static void scan_task(void *arg)
     vTaskDelete(NULL);
 }
 
-void moonraker_discovery_show(
+static void moonraker_discovery_show_internal(
+    lv_obj_t *parent,
+    int popup_width,
+    int popup_height,
     const char *status_text,
     moonraker_discovery_close_cb_t close_cb,
     moonraker_discovery_select_cb_t select_cb)
@@ -346,54 +349,31 @@ void moonraker_discovery_show(
 
     if (s_popup) {
         lv_obj_move_foreground(s_popup);
-
-        if (s_status_label) {
-            lv_label_set_text(s_status_label, s_status);
-        }
-
+        if (s_status_label) lv_label_set_text(s_status_label, s_status);
         return;
     }
 
-    s_popup = ui_popup_create(
-        lv_layer_top(),
-        860,
-        540,
-        UI_POPUP_STANDARD);
-
+    s_popup = ui_popup_create(parent, popup_width, popup_height, UI_POPUP_STANDARD);
     if (!s_popup) return;
 
-    ui_popup_add_title(
-        s_popup,
-        ui_text(LV_SYMBOL_WIFI " DISCOVER MOONRAKER"),
-        false,
-        8);
-
+    const int content_width = popup_width - 48;
+    const int list_height = popup_height - 216;
+    ui_popup_add_title(s_popup, ui_text(LV_SYMBOL_WIFI " DISCOVER MOONRAKER"), false, 8);
     ui_popup_add_header_divider(s_popup, 48);
-
-    s_status_label = ui_popup_add_status_label(
-        s_popup,
-        s_status,
-        24,
-        58,
-        812);
-
-    if (s_status_label) {
-        lv_obj_set_height(s_status_label, 44);
-    }
-
+    s_status_label = ui_popup_add_status_label(s_popup, s_status, 24, 58, content_width);
+    if (s_status_label) lv_obj_set_height(s_status_label, 44);
     ui_popup_add_caption(
         s_popup,
         ui_text("SELECT A VERIFIED PRINTER. READY MEANS KLIPPER RESPONDED."),
         24,
         106,
-        812);
-
+        content_width);
     s_results_list = ui_popup_add_list(
         s_popup,
         24,
         132,
-        812,
-        324);
+        content_width,
+        list_height);
 
     if (!s_status_label || !s_results_list) {
         lv_obj_delete(s_popup);
@@ -404,9 +384,7 @@ void moonraker_discovery_show(
     }
 
     s_candidate_count = 0;
-
     ui_popup_add_standard_footer_divider(s_popup);
-
     ui_popup_add_footer_action(
         s_popup,
         UI_POPUP_ACTION_CLOSE,
@@ -416,6 +394,28 @@ void moonraker_discovery_show(
         close_event_cb,
         NULL,
         NULL);
+}
+
+void moonraker_discovery_show(
+    const char *status_text,
+    moonraker_discovery_close_cb_t close_cb,
+    moonraker_discovery_select_cb_t select_cb)
+{
+    moonraker_discovery_show_internal(
+        lv_layer_top(), 860, 540, status_text, close_cb, select_cb);
+}
+
+void moonraker_discovery_show_in_parent(
+    lv_obj_t *parent,
+    const char *status_text,
+    moonraker_discovery_close_cb_t close_cb,
+    moonraker_discovery_select_cb_t select_cb)
+{
+    if (!parent) return;
+    /* The setup card is 720x440; leave a small inset so every discovery
+     * result, status message, and CLOSE action remains inside that card. */
+    moonraker_discovery_show_internal(
+        parent, 704, 424, status_text, close_cb, select_cb);
 }
 
 void moonraker_discovery_set_status(const char *status_text)

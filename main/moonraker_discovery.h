@@ -4,6 +4,9 @@
 
 #include "esp_netif_ip_addr.h"
 
+/* Forward declaration keeps the discovery API lightweight for callers. */
+typedef struct _lv_obj_t lv_obj_t;
+
 typedef void (*moonraker_discovery_close_cb_t)(void);
 typedef void (*moonraker_discovery_select_cb_t)(
     const char *host,
@@ -24,6 +27,13 @@ typedef void (*moonraker_discovery_select_cb_t)(
  */
 
 void moonraker_discovery_show(
+    const char *status_text,
+    moonraker_discovery_close_cb_t close_cb,
+    moonraker_discovery_select_cb_t select_cb);
+
+/* Same workflow, rendered inside a caller-owned card instead of a modal layer. */
+void moonraker_discovery_show_in_parent(
+    lv_obj_t *parent,
     const char *status_text,
     moonraker_discovery_close_cb_t close_cb,
     moonraker_discovery_select_cb_t select_cb);

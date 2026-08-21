@@ -18,7 +18,7 @@ jobs:
     name: Source policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
       - name: Install audit dependencies
@@ -44,7 +44,7 @@ jobs:
     container:
       image: espressif/idf:v6.0.2
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build verified P4 firmware
         shell: bash
         env:

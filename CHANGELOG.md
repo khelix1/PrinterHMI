@@ -5,6 +5,16 @@
 
 # Changelog
 
+## [6.5.1] - 2026-08-22
+
+### Fixed
+
+- Hardened ESP32-P4 JD9165 LCD reset timing for reliable startup and wake recovery.
+- Explicitly enables the JD9165 panel after initialization before the backlight is restored.
+- Preserved the stable camera, dashboard, and operator-shell behavior from v6.5.0.
+
+
+
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.
 

@@ -249,13 +249,69 @@ static void camera_configure_cb(lv_event_t *event)
 }
 
 
+
+static uint16_t demo_camera_rgb565(uint8_t r, uint8_t g, uint8_t b)
+{
+    return (uint16_t)(((uint16_t)(r & 0xf8) << 8) |
+                      ((uint16_t)(g & 0xfc) << 3) |
+                      ((uint16_t)(b >> 3)));
+}
+
+static void camera_demo_render(void)
+{
+    enum { DEMO_W = 320, DEMO_H = 180 };
+    if (!s_image || s_frame) return;
+
+    const size_t bytes = (size_t)DEMO_W * DEMO_H * sizeof(uint16_t);
+    s_frame = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_frame) s_frame = heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
+    if (!s_frame) return;
+
+    uint16_t *px = (uint16_t *)s_frame;
+    for (int y = 0; y < DEMO_H; ++y) {
+        for (int x = 0; x < DEMO_W; ++x) {
+            uint8_t r = (uint8_t)(5 + (y * 10 / DEMO_H));
+            uint8_t g = (uint8_t)(13 + (y * 20 / DEMO_H));
+            uint8_t b = (uint8_t)(28 + (y * 46 / DEMO_H));
+            if (y > 128) { r += 8; g += 12; b += 10; }
+            if ((x % 40 == 0) || (y % 30 == 0)) { r += 5; g += 12; b += 16; }
+            if ((x > 28 && x < 292 && (y == 24 || y == 25 || y == 128 || y == 129)) ||
+                (y > 24 && y < 130 && (x == 28 || x == 29 || x == 291 || x == 292))) {
+                r = 18; g = 205; b = 232;
+            }
+            if (x >= 18 && x < 62 && y >= 15 && y < 31) {
+                r = 235; g = 45; b = 48;
+            }
+            if (x >= 24 && x < 42 && y >= 20 && y < 26) {
+                r = 255; g = 225; b = 220;
+            }
+            if (x >= 135 && x < 185 && y >= 106 && y < 120) {
+                r = 242; g = 151; b = 48;
+            }
+            if (x >= 143 && x < 177 && y >= 120 && y < 128) {
+                r = 232; g = 232; b = 235;
+            }
+            px[(size_t)y * DEMO_W + x] = demo_camera_rgb565(r, g, b);
+        }
+    }
+
+    memset(&s_frame_dsc, 0, sizeof(s_frame_dsc));
+    s_frame_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+    s_frame_dsc.header.w = DEMO_W;
+    s_frame_dsc.header.h = DEMO_H;
+    s_frame_dsc.header.stride = DEMO_W * sizeof(uint16_t);
+    s_frame_dsc.data_size = bytes;
+    s_frame_dsc.data = s_frame;
+    lv_image_set_src(s_image, &s_frame_dsc);
+    camera_apply_view_transform();
+}
+
 static void camera_poll_cb(lv_timer_t *timer)
 {
     (void)timer;
     if (s_setup_active) return;
     if (demo_mode_controller_enabled()) {
-        camera_release_frame();
-        if (s_image) lv_image_set_src(s_image, NULL);
+        camera_demo_render();
         camera_set_status("DEMO CAMERA | OFFLINE SAMPLE");
         return;
     }

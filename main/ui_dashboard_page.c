@@ -11,6 +11,17 @@
 #include "ui_command_bar.h"
 #include "ui_page_title.h"
 #include "ui_page_geometry.h"
+#include "ui_command_bar.h"
+#include "ui_shell.h"
+static void future_orbital_camera_cb(lv_event_t *event);
+static lv_obj_t *future_orbital_action(
+    lv_obj_t *parent,
+    int32_t x,
+    int32_t y,
+    const char *label,
+    const char *action,
+    lv_color_t edge);
+
 
 
 static lv_obj_t *future_orbital_node(
@@ -51,6 +62,57 @@ static lv_obj_t *future_orbital_node(
     lv_obj_align(reading, LV_ALIGN_CENTER, 0, 14);
     if (reading_out) *reading_out = reading;
     return node;
+}
+
+
+static void future_orbital_action_cb(lv_event_t *event)
+{
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    const char *action = (const char *)lv_event_get_user_data(event);
+    if (action) ui_command_bar_action(action);
+}
+
+
+static void future_orbital_camera_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_shell_page_action(UI_SHELL_PAGE_CAMERA);
+}
+
+
+static lv_obj_t *future_orbital_action(
+    lv_obj_t *parent,
+    int32_t x,
+    int32_t y,
+    const char *label,
+    const char *action,
+    lv_color_t edge)
+{
+    lv_obj_t *button = lv_obj_create(parent);
+    if (!button) return NULL;
+
+    lv_obj_set_size(button, 92, 92);
+    lv_obj_set_pos(button, x, y);
+    lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(button, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(button, UI_CONTROL, 0);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(button, edge, 0);
+    lv_obj_set_style_border_width(button, 2, 0);
+    lv_obj_set_style_shadow_color(button, edge, 0);
+    lv_obj_set_style_shadow_width(button, 18, 0);
+    lv_obj_set_style_shadow_opa(button, LV_OPA_50, 0);
+
+    lv_obj_t *text = lv_label_create(button);
+    lv_label_set_text(text, label ? label : "");
+    ui_apply_text_caption(text);
+    ui_apply_label_bright(text);
+    lv_obj_center(text);
+
+    lv_obj_add_event_cb(button, future_orbital_action_cb,
+                        LV_EVENT_CLICKED, (void *)action);
+    return button;
 }
 
 
@@ -110,20 +172,29 @@ static void future_orbital_dashboard(lv_obj_t *root, ui_dashboard_page_t *page)
     ui_apply_label_primary(core_detail);
     lv_obj_align(core_detail, LV_ALIGN_CENTER, 0, 38);
 
-    future_orbital_node(space, 34, 54, 142, "NOZZLE", "-- / -- C", UI_ACCENT_CYAN,
+    future_orbital_node(space, 54, 54, 142, "NOZZLE", "-- / -- C", UI_ACCENT_CYAN,
                             page ? &page->future_nozzle : NULL);
-    future_orbital_node(space, 676, 52, 142, "BED", "-- / -- C", UI_ACCENT_BRIGHT,
+    future_orbital_node(space, 658, 54, 142, "BED", "-- / -- C", UI_ACCENT_BRIGHT,
                             page ? &page->future_bed : NULL);
     future_orbital_node(space, 54, 344, 142, "PROGRESS", "0%", UI_ACCENT_PURPLE,
                             page ? &page->future_progress : NULL);
-    future_orbital_node(space, 652, 344, 142, "CAMERA", "LIVE", UI_ACCENT_CYAN,
+    lv_obj_t *camera_node =
+        future_orbital_node(space, 658, 344, 142, "CAMERA", "LIVE", UI_ACCENT_CYAN,
                             page ? &page->future_camera : NULL);
+    if (camera_node) {
+        lv_obj_add_flag(camera_node, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(camera_node, future_orbital_camera_cb, LV_EVENT_CLICKED, NULL);
+    }
+
+    future_orbital_action(space, 271, 392, "PAUSE", "PAUSE", UI_ACCENT_BRIGHT);
+    future_orbital_action(space, 381, 392, "RESUME", "RESUME", UI_ACCENT_CYAN);
+    future_orbital_action(space, 491, 392, "CANCEL", "CANCEL_PRINT", UI_TEXT_ERROR);
 
     lv_obj_t *footer = lv_label_create(space);
     lv_label_set_text(footer, "FUTURE OPERATING ENVIRONMENT  //  LIVE TELEMETRY");
     ui_apply_text_caption(footer);
     ui_apply_label_dim(footer);
-    lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -18);
+    lv_obj_add_flag(footer, LV_OBJ_FLAG_HIDDEN);
 }
 
 
@@ -252,3 +323,7 @@ void ui_dashboard_page_destroy(
         0,
         sizeof(*page));
 }
+
+/* Future orbital controls already fit. */
+
+/* Future orbital spacing normalized. */

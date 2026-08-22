@@ -9,6 +9,7 @@
 static int64_t s_started_us = 0;
 static bool s_paused = false;
 static char s_file[256] = "Modular_Desk_Organizer.3mf";
+static bool s_new_job = false;
 static bool s_cancelled = false;
 
 bool demo_mode_controller_enabled(void)
@@ -39,7 +40,9 @@ void demo_mode_controller_tick(void)
     const int64_t now_us = esp_timer_get_time();
     const double elapsed = (double)(now_us - s_started_us) / 1000000.0;
     const double wave = sin(elapsed / 5.0);
-    const double progress = 0.62 + fmod(elapsed, 900.0) / 900.0 * 0.25;
+    const double progress = s_new_job
+        ? fmin(elapsed / 300.0, 0.62)
+        : 0.62 + fmod(elapsed, 900.0) / 900.0 * 0.25;
     const char *state = s_cancelled ? "complete" :
                         (s_paused ? "paused" : "printing");
 
@@ -86,5 +89,6 @@ void demo_mode_controller_start_file(const char *file)
     s_paused = false;
     s_cancelled = false;
     s_started_us = esp_timer_get_time();
+    s_new_job = true;
     demo_mode_controller_tick();
 }

@@ -20,7 +20,8 @@ static lv_obj_t *future_orbital_node(
     int32_t size,
     const char *title,
     const char *value,
-    lv_color_t edge)
+    lv_color_t edge,
+    lv_obj_t **reading_out)
 {
     lv_obj_t *node = lv_obj_create(parent);
     if (!node) return NULL;
@@ -48,11 +49,12 @@ static lv_obj_t *future_orbital_node(
     ui_apply_text_title(reading);
     ui_apply_label_bright(reading);
     lv_obj_align(reading, LV_ALIGN_CENTER, 0, 14);
+    if (reading_out) *reading_out = reading;
     return node;
 }
 
 
-static void future_orbital_dashboard(lv_obj_t *root)
+static void future_orbital_dashboard(lv_obj_t *root, ui_dashboard_page_t *page)
 {
     lv_obj_t *space = lv_obj_create(root);
     if (!space) return;
@@ -100,6 +102,7 @@ static void future_orbital_dashboard(lv_obj_t *root)
     ui_apply_text_title(core_value);
     ui_apply_label_bright(core_value);
     lv_obj_align(core_value, LV_ALIGN_CENTER, 0, 8);
+    if (page) page->future_core = core_value;
 
     lv_obj_t *core_detail = lv_label_create(core);
     lv_label_set_text(core_detail, "ORBITAL LINK");
@@ -107,10 +110,14 @@ static void future_orbital_dashboard(lv_obj_t *root)
     ui_apply_label_primary(core_detail);
     lv_obj_align(core_detail, LV_ALIGN_CENTER, 0, 38);
 
-    future_orbital_node(space, 34, 54, 142, "NOZZLE", "-- / -- C", UI_ACCENT_CYAN);
-    future_orbital_node(space, 676, 52, 142, "BED", "-- / -- C", UI_ACCENT_BRIGHT);
-    future_orbital_node(space, 54, 344, 142, "PROGRESS", "0%", UI_ACCENT_PURPLE);
-    future_orbital_node(space, 652, 344, 142, "CAMERA", "LIVE", UI_ACCENT_CYAN);
+    future_orbital_node(space, 34, 54, 142, "NOZZLE", "-- / -- C", UI_ACCENT_CYAN,
+                            page ? &page->future_nozzle : NULL);
+    future_orbital_node(space, 676, 52, 142, "BED", "-- / -- C", UI_ACCENT_BRIGHT,
+                            page ? &page->future_bed : NULL);
+    future_orbital_node(space, 54, 344, 142, "PROGRESS", "0%", UI_ACCENT_PURPLE,
+                            page ? &page->future_progress : NULL);
+    future_orbital_node(space, 652, 344, 142, "CAMERA", "LIVE", UI_ACCENT_CYAN,
+                            page ? &page->future_camera : NULL);
 
     lv_obj_t *footer = lv_label_create(space);
     lv_label_set_text(footer, "FUTURE OPERATING ENVIRONMENT  //  LIVE TELEMETRY");
@@ -206,11 +213,28 @@ ui_dashboard_page_t ui_dashboard_page_create(
         lv_obj_add_flag(page.active_print_host, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(page.machine_status_host, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(page.command_host, LV_OBJ_FLAG_HIDDEN);
-        future_orbital_dashboard(page.root);
+        future_orbital_dashboard(page.root, &page);
     }
 
     return page;
 }
+
+void ui_dashboard_page_future_update(
+    ui_dashboard_page_t *page,
+    const char *nozzle,
+    const char *bed,
+    const char *progress,
+    const char *camera,
+    const char *state)
+{
+    if (!page) return;
+    if (page->future_nozzle && nozzle) lv_label_set_text(page->future_nozzle, nozzle);
+    if (page->future_bed && bed) lv_label_set_text(page->future_bed, bed);
+    if (page->future_progress && progress) lv_label_set_text(page->future_progress, progress);
+    if (page->future_camera && camera) lv_label_set_text(page->future_camera, camera);
+    if (page->future_core && state) lv_label_set_text(page->future_core, state);
+}
+
 
 void ui_dashboard_page_destroy(
     ui_dashboard_page_t *page)

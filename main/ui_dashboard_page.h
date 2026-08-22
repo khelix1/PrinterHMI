@@ -25,10 +25,25 @@ typedef struct {
     lv_obj_t *print_status_host;
     ui_dashboard_status_t print_status;
     lv_obj_t *command_host;
+
+    /* Future orbital Dashboard live bindings. */
+    lv_obj_t *future_nozzle;
+    lv_obj_t *future_bed;
+    lv_obj_t *future_progress;
+    lv_obj_t *future_camera;
+    lv_obj_t *future_core;
 } ui_dashboard_page_t;
 
 ui_dashboard_page_t ui_dashboard_page_create(
     lv_obj_t *parent);
+
+void ui_dashboard_page_future_update(
+    ui_dashboard_page_t *page,
+    const char *nozzle,
+    const char *bed,
+    const char *progress,
+    const char *camera,
+    const char *state);
 
 void ui_dashboard_page_destroy(
     ui_dashboard_page_t *page);

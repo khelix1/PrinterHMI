@@ -3284,15 +3284,18 @@ static void files_refresh_bridge(void)
 }
 
 /* DEMO FILE DETAIL V1 */
+static char s_demo_selected_file[256];
 static void demo_file_start_bridge(void)
 {
-    (void)demo_mode_controller_handle_command("RESUME");
+    demo_mode_controller_start_file(s_demo_selected_file);
     ui_files_close_detail_popup();
 }
 
 static void files_select_bridge(const char *path)
 {
     if (demo_mode_controller_enabled()) {
+        strlcpy(s_demo_selected_file, path ? path : "",
+                sizeof(s_demo_selected_file));
         char detail[320];
         snprintf(detail, sizeof(detail),
                  "DEMO FILE\\n\\n"

@@ -8,6 +8,7 @@
 
 static int64_t s_started_us = 0;
 static bool s_paused = false;
+static char s_file[256] = "Modular_Desk_Organizer.3mf";
 static bool s_cancelled = false;
 
 bool demo_mode_controller_enabled(void)
@@ -41,8 +42,6 @@ void demo_mode_controller_tick(void)
     const double progress = 0.62 + fmod(elapsed, 900.0) / 900.0 * 0.25;
     const char *state = s_cancelled ? "complete" :
                         (s_paused ? "paused" : "printing");
-    const char *file = s_cancelled ? "Bench_Bunny_Demo.3mf" :
-                                     "Modular_Desk_Organizer.3mf";
 
     moonraker_state_publish_http_fallback(
         &(moonraker_http_fallback_update_t) {
@@ -61,7 +60,7 @@ void demo_mode_controller_tick(void)
             .print_duration = 12840.0 + elapsed,
             .current_layer = s_cancelled ? 312 : 194 + (int)(elapsed / 30.0),
             .total_layer = 312, .live_data_ok = true, .moonraker_ok = true,
-            .printer_state = state, .printer_file = file,
+            .printer_state = state, .printer_file = s_file,
         });
 }
 
@@ -79,4 +78,13 @@ bool demo_mode_controller_handle_command(const char *command)
     }
     demo_mode_controller_tick();
     return true;
+}
+
+void demo_mode_controller_start_file(const char *file)
+{
+    if (file && file[0]) strlcpy(s_file, file, sizeof(s_file));
+    s_paused = false;
+    s_cancelled = false;
+    s_started_us = esp_timer_get_time();
+    demo_mode_controller_tick();
 }

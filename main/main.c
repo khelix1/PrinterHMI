@@ -3283,8 +3283,33 @@ static void files_refresh_bridge(void)
     app_files_reload();
 }
 
+/* DEMO FILE DETAIL V1 */
+static void demo_file_start_bridge(void)
+{
+    (void)demo_mode_controller_handle_command("RESUME");
+    ui_files_close_detail_popup();
+}
+
 static void files_select_bridge(const char *path)
 {
+    if (demo_mode_controller_enabled()) {
+        char detail[320];
+        snprintf(detail, sizeof(detail),
+                 "DEMO FILE\\n\\n"
+                 "This local showcase file is ready to print.\\n\\n"
+                 "No printer connection is required.\\n"
+                 "START PRINT changes the simulated job state.");
+        ui_files_show_detail_popup(
+            path,
+            detail,
+            &printer_thumb_box,
+            &printer_thumb_view,
+            ui_files_close_detail_popup,
+            demo_file_start_bridge);
+        ui_files_update_detail_metadata(detail, true);
+        return;
+    }
+
     printer_file_controller_select_file(
         path,
         show_printer_file_detail_popup);

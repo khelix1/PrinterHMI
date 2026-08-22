@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "dashboard_runtime_controller.c"
+        "demo_mode_controller.c"
         # Application entry point
         "main.c"
 

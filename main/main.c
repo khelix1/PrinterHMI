@@ -203,6 +203,7 @@ static void sntp_wait_task(void *arg);
 #include "files_page_controller.h"
 #include "dashboard_live_controller.h"
 #include "dashboard_runtime_controller.h"
+#include "demo_mode_controller.h"
 void ui_shell_raise(void)
 {
     ui_shell_raise_topbar();
@@ -1189,6 +1190,15 @@ static void thumbnail_preview_coordinator_set_live_target(void)
 
 static void moonraker_live_poll_tasklet(void)
 {
+    if (demo_mode_controller_enabled()) {
+        demo_mode_controller_tick();
+        s_moonraker_code = 200;
+        s_moonraker_ok = true;
+        s_live_data_ok = true;
+        safe_copy(moonraker_status, sizeof(moonraker_status),
+                  "Demo Mode: offline simulation");
+        return;
+    }
     /* WebSocket is authoritative only while subscribed status is fresh.
      * The proven HTTP poller automatically resumes after three seconds.
      */
@@ -1345,6 +1355,10 @@ static bool moonraker_send_gcode_http(const char *cmd)
 static bool moonraker_send_gcode_raw(
     const char *command)
 {
+    if (demo_mode_controller_enabled() &&
+        demo_mode_controller_handle_command(command)) {
+        return true;
+    }
     if (!command || !command[0]) {
         return false;
     }
@@ -3821,11 +3835,15 @@ static void app_startup_show_initial_ui(void)
      * the multi-printer chooser in front. Selecting a printer continues into
      * that profile's Dashboard through printer_chooser_select_bridge().
      */
-    ui_printer_chooser_show(
-        printer_chooser_select_bridge,
-        printer_chooser_manage_bridge);
-    if (onboarding_controller_should_show()) {
-        app_open_setup_wizard();
+    if (demo_mode_controller_enabled()) {
+        ui_shell_set_active_printer_name("DEMO CELL - OFFLINE");
+    } else {
+        ui_printer_chooser_show(
+            printer_chooser_select_bridge,
+            printer_chooser_manage_bridge);
+        if (onboarding_controller_should_show()) {
+            app_open_setup_wizard();
+        }
     }
     ui_splash_create();
     ui_splash_display_ready();
@@ -3871,6 +3889,7 @@ void app_main(void)
      * before any UI or transport path can take a state snapshot.
      */
     moonraker_module_init();
+    demo_mode_controller_init();
     if (!moonraker_transport_security_controller_init()) {
         ESP_LOGE(TAG, "Secure Moonraker transport unavailable");
     }
@@ -3976,7 +3995,9 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG, "Starting WiFi after display/touch/dashboard");
-    wifi_init_sta();
+    if (!demo_mode_controller_enabled()) {
+        wifi_init_sta();
+    }
 
     app_splash_wifi_waiting_locked(s_got_ip);
 

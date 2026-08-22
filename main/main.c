@@ -3298,6 +3298,19 @@ static void files_preview_bridge(const char *path)
 
 void app_files_reload(void)
 {
+    if (demo_mode_controller_enabled()) {
+        /* DEMO FILE LIBRARY V1: curated content, no Moonraker required. */
+        ui_files_clear_rows();
+        ui_files_set_breadcrumb("/");
+        ui_files_set_sort_text("DEMO");
+        ui_files_set_status("DEMO LIBRARY | OFFLINE");
+        ui_files_add_file_entry("Modular_Desk_Organizer.3mf", 8.4, 0.0, 0);
+        ui_files_add_file_entry("Bench_Bunny_Demo.3mf", 5.7, 0.0, 76);
+        ui_files_add_file_entry("Operator_Cable_Tray.gcode", 1.2, 0.0, 152);
+        ui_files_add_file_entry("Calibration_Tower.gcode", 0.9, 0.0, 228);
+        return;
+    }
+
     files_page_controller_reload(
         s_got_ip,
         s_moonraker_ok,

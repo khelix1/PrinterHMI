@@ -1,4 +1,5 @@
 #include "ui_camera.h"
+#include "demo_mode_controller.h"
 #include "ui_text.h"
 
 #include "camera_stream_controller.h"
@@ -252,6 +253,12 @@ static void camera_poll_cb(lv_timer_t *timer)
 {
     (void)timer;
     if (s_setup_active) return;
+    if (demo_mode_controller_enabled()) {
+        camera_release_frame();
+        if (s_image) lv_image_set_src(s_image, NULL);
+        camera_set_status("DEMO CAMERA | OFFLINE SAMPLE");
+        return;
+    }
     uint32_t now = lv_tick_get();
 
     uint8_t *pixels = NULL;

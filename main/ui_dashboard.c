@@ -396,12 +396,8 @@ void ui_dashboard_update(void)
         "--%"
     );
     ui_dashboard_page_future_update(
-        &dash32_page,
-        NULL,
-        NULL,
-        "0%",
-        NULL,
-        "READY");
+        &dash32_page, NULL, NULL, "0%", NULL,
+        NULL, NULL, NULL, NULL, NULL, "READY");
 }
 
 void ui_dashboard_destroy(void)
@@ -483,12 +479,8 @@ void ui_dashboard_set_machine(
         fan
     );
     ui_dashboard_page_future_update(
-        &dash32_page,
-        nozzle,
-        bed,
-        NULL,
-        NULL,
-        NULL);
+        &dash32_page, nozzle, bed, NULL, NULL,
+        speed, flow, fan, chamber, humidity, NULL);
 }
 
 
@@ -502,12 +494,8 @@ void ui_dashboard_set_banner(
     if (!dash32_banner) return;
     ui_status_banner_set(dash32_banner, state, file, eta, progress);
     ui_dashboard_page_future_update(
-        &dash32_page,
-        NULL,
-        NULL,
-        progress,
-        NULL,
-        state);
+        &dash32_page, NULL, NULL, progress, NULL,
+        NULL, NULL, NULL, NULL, NULL, state);
 }
 
 

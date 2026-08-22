@@ -32,6 +32,11 @@ typedef struct {
     lv_obj_t *future_progress;
     lv_obj_t *future_camera;
     lv_obj_t *future_core;
+    lv_obj_t *future_metrics;
+    lv_obj_t *future_environment;
+    lv_obj_t *future_pause;
+    lv_obj_t *future_resume;
+    lv_obj_t *future_cancel;
 } ui_dashboard_page_t;
 
 ui_dashboard_page_t ui_dashboard_page_create(
@@ -43,6 +48,11 @@ void ui_dashboard_page_future_update(
     const char *bed,
     const char *progress,
     const char *camera,
+    const char *speed,
+    const char *flow,
+    const char *fan,
+    const char *chamber,
+    const char *humidity,
     const char *state);
 
 void ui_dashboard_page_destroy(

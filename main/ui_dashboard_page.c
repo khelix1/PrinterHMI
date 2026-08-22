@@ -1,6 +1,7 @@
 #include "ui_dashboard_page.h"
 
 #include <string.h>
+#include <stdio.h>
 
 #include "ui_dashboard_layout_profile.h"
 
@@ -91,7 +92,7 @@ static lv_obj_t *future_orbital_action(
     lv_obj_t *button = lv_obj_create(parent);
     if (!button) return NULL;
 
-    lv_obj_set_size(button, 92, 92);
+    lv_obj_set_size(button, 78, 78);
     lv_obj_set_pos(button, x, y);
     lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
@@ -112,6 +113,7 @@ static lv_obj_t *future_orbital_action(
 
     lv_obj_add_event_cb(button, future_orbital_action_cb,
                         LV_EVENT_CLICKED, (void *)action);
+    lv_obj_add_flag(button, LV_OBJ_FLAG_HIDDEN);
     return button;
 }
 
@@ -129,8 +131,8 @@ static void future_orbital_dashboard(lv_obj_t *root, ui_dashboard_page_t *page)
     lv_obj_move_foreground(space);
 
     lv_obj_t *orbit = lv_arc_create(space);
-    lv_obj_set_size(orbit, 500, 500);
-    lv_obj_align(orbit, LV_ALIGN_CENTER, 40, 16);
+    lv_obj_set_size(orbit, 420, 420);
+    lv_obj_align(orbit, LV_ALIGN_CENTER, 0, 16);
     lv_arc_set_range(orbit, 0, 100);
     lv_arc_set_value(orbit, 68);
     lv_obj_remove_style(orbit, NULL, LV_PART_KNOB);
@@ -142,7 +144,7 @@ static void future_orbital_dashboard(lv_obj_t *root, ui_dashboard_page_t *page)
 
     lv_obj_t *core = lv_obj_create(space);
     lv_obj_set_size(core, 190, 190);
-    lv_obj_align(core, LV_ALIGN_CENTER, 40, 16);
+    lv_obj_align(core, LV_ALIGN_CENTER, 0, 16);
     lv_obj_clear_flag(core, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(core, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(core, UI_PANEL, 0);
@@ -172,23 +174,49 @@ static void future_orbital_dashboard(lv_obj_t *root, ui_dashboard_page_t *page)
     ui_apply_label_primary(core_detail);
     lv_obj_align(core_detail, LV_ALIGN_CENTER, 0, 38);
 
+    /* Keep telemetry in the annulus between the outer orbit and core ring. */
+    lv_obj_t *core_metrics = lv_label_create(space);
+    lv_label_set_text(core_metrics, "SPD --\nFLOW --");
+    ui_apply_text_caption(core_metrics);
+    ui_apply_label_dim(core_metrics);
+    lv_label_set_long_mode(core_metrics, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(core_metrics, 100);
+    lv_obj_set_style_text_align(core_metrics, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(core_metrics, 224, 246);
+    if (page) page->future_metrics = core_metrics;
+
+    lv_obj_t *core_environment = lv_label_create(space);
+    lv_label_set_text(core_environment, "FAN --\nCHM --\nHUM --");
+    ui_apply_text_caption(core_environment);
+    ui_apply_label_dim(core_environment);
+    lv_label_set_long_mode(core_environment, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(core_environment, 100);
+    lv_obj_set_style_text_align(core_environment, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(core_environment, 530, 234);
+    if (page) page->future_environment = core_environment;
+
     future_orbital_node(space, 54, 54, 142, "NOZZLE", "-- / -- C", UI_ACCENT_CYAN,
                             page ? &page->future_nozzle : NULL);
     future_orbital_node(space, 658, 54, 142, "BED", "-- / -- C", UI_ACCENT_BRIGHT,
                             page ? &page->future_bed : NULL);
-    future_orbital_node(space, 54, 344, 142, "PROGRESS", "0%", UI_ACCENT_PURPLE,
+    future_orbital_node(space, 38, 350, 116, "PROGRESS", "0%", UI_ACCENT_PURPLE,
                             page ? &page->future_progress : NULL);
     lv_obj_t *camera_node =
-        future_orbital_node(space, 658, 344, 142, "CAMERA", "LIVE", UI_ACCENT_CYAN,
+        future_orbital_node(space, 700, 350, 116, "CAMERA", "LIVE", UI_ACCENT_CYAN,
                             page ? &page->future_camera : NULL);
     if (camera_node) {
         lv_obj_add_flag(camera_node, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(camera_node, future_orbital_camera_cb, LV_EVENT_CLICKED, NULL);
     }
 
-    future_orbital_action(space, 271, 392, "PAUSE", "PAUSE", UI_ACCENT_BRIGHT);
-    future_orbital_action(space, 381, 392, "RESUME", "RESUME", UI_ACCENT_CYAN);
-    future_orbital_action(space, 491, 392, "CANCEL", "CANCEL_PRINT", UI_TEXT_ERROR);
+    if (page) {
+        page->future_pause = future_orbital_action(
+            space, 232, 369, "PAUSE", "PAUSE", UI_ACCENT_BRIGHT);
+        page->future_resume = future_orbital_action(
+            space, 388, 369, "RESUME", "RESUME", UI_ACCENT_CYAN);
+        page->future_cancel = future_orbital_action(
+            space, 544, 369, "CANCEL", "CANCEL_PRINT", UI_TEXT_ERROR);
+    }
 
     lv_obj_t *footer = lv_label_create(space);
     lv_label_set_text(footer, "FUTURE OPERATING ENVIRONMENT  //  LIVE TELEMETRY");
@@ -296,6 +324,11 @@ void ui_dashboard_page_future_update(
     const char *bed,
     const char *progress,
     const char *camera,
+    const char *speed,
+    const char *flow,
+    const char *fan,
+    const char *chamber,
+    const char *humidity,
     const char *state)
 {
     if (!page) return;
@@ -304,8 +337,33 @@ void ui_dashboard_page_future_update(
     if (page->future_progress && progress) lv_label_set_text(page->future_progress, progress);
     if (page->future_camera && camera) lv_label_set_text(page->future_camera, camera);
     if (page->future_core && state) lv_label_set_text(page->future_core, state);
-}
 
+    char metrics[64];
+    snprintf(metrics, sizeof(metrics), "SPD %s\nFLOW %s",
+             speed ? speed : "--", flow ? flow : "--");
+    if (page->future_metrics) lv_label_set_text(page->future_metrics, metrics);
+    char environment[96];
+    snprintf(environment, sizeof(environment), "FAN %s\nCHM %s\nHUM %s",
+             fan ? fan : "--", chamber ? chamber : "--", humidity ? humidity : "--");
+    if (page->future_environment) lv_label_set_text(page->future_environment, environment);
+
+    bool actions_visible = state && (strstr(state, "PRINTING") || strstr(state, "PAUSED"));
+    lv_obj_t *actions[] = { page->future_pause, page->future_resume, page->future_cancel };
+    for (size_t index = 0; index < sizeof(actions) / sizeof(actions[0]); ++index) {
+        if (!actions[index]) continue;
+        if (actions_visible) lv_obj_clear_flag(actions[index], LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(actions[index], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (page->future_progress && page->future_camera) {
+        if (actions_visible) {
+            lv_obj_set_pos(page->future_progress, 38, 350);
+            lv_obj_set_pos(page->future_camera, 700, 350);
+        } else {
+            lv_obj_set_pos(page->future_progress, 210, 350);
+            lv_obj_set_pos(page->future_camera, 528, 350);
+        }
+    }
+}
 
 void ui_dashboard_page_destroy(
     ui_dashboard_page_t *page)
@@ -327,3 +385,11 @@ void ui_dashboard_page_destroy(
 /* Future orbital controls already fit. */
 
 /* Future orbital spacing normalized. */
+
+/* Future lower band edge spacing normalized. */
+
+/* Future dashboard fit and idle gating complete. */
+
+/* Future Dashboard reconciled layout. */
+
+/* Future Dashboard annular telemetry placement. */

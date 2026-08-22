@@ -3288,6 +3288,12 @@ static char s_demo_selected_file[256];
 static void demo_file_start_bridge(void)
 {
     demo_mode_controller_start_file(s_demo_selected_file);
+    ui_dashboard_set_banner(
+        "PRINTING",
+        s_demo_selected_file,
+        "ETA 00:42",
+        "0%");
+    dashboard_live_controller_push_machine();
     ui_files_close_detail_popup();
 }
 

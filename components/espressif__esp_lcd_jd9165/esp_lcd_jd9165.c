@@ -264,12 +264,15 @@ static esp_err_t panel_jd9165_reset(esp_lcd_panel_t *panel)
 
     // Perform hardware reset
     if (jd9165->reset_gpio_num >= 0) {
+        /* Establish a quiet inactive level before asserting reset. */
         gpio_set_level(jd9165->reset_gpio_num, !jd9165->flags.reset_level);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(20));
+        /* Hold reset long enough for the panel and DSI PHY to settle. */
         gpio_set_level(jd9165->reset_gpio_num, jd9165->flags.reset_level);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(20));
+        /* Release reset, then allow the controller to complete boot. */
         gpio_set_level(jd9165->reset_gpio_num, !jd9165->flags.reset_level);
-        vTaskDelay(pdMS_TO_TICKS(120));
+        vTaskDelay(pdMS_TO_TICKS(150));
     } else if (io) { // Perform software reset
         ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(120));

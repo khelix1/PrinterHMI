@@ -327,7 +327,9 @@ void ui_dashboard_create(void)
         dash32_active_print, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " CAMERA");
     if (dash32_camera_toggle) {
         lv_obj_set_size(dash32_camera_toggle, 172, 32);
-        lv_obj_set_pos(dash32_camera_toggle, 308, 8);
+        /* Keep the Camera/Thumbnail toggle inside the active-print card
+         * for every theme, including Operator Shell and custom themes. */
+        lv_obj_align(dash32_camera_toggle, LV_ALIGN_TOP_RIGHT, -8, 8);
         const char *camera_url = dashboard_selected_camera_url();
         if (!camera_url || !camera_url[0]) {
             lv_obj_add_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN);

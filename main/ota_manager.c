@@ -1,4 +1,5 @@
 #include "ota_manager.h"
+#include "ota_release_catalog.h"
 
 #include "ui_ota_popup.h"
 #include "operator_event_log.h"
@@ -242,6 +243,24 @@ static void update_task(void *arg)
     bool network_owned = false;
 
     set_state("Preparing Network...", 5);
+
+
+    /* The release browser loads GitHub metadata asynchronously. Do not claim
+     * the OTA exclusive lane while that task is still using the shared lane;
+     * otherwise the catalog sees the exclusive bit and both operations race. */
+    for (int elapsed_ms = 0; elapsed_ms < 20000; elapsed_ms += 50) {
+        if (s_cancel_requested) {
+            goto cancelled;
+        }
+
+        ota_release_catalog_snapshot_t catalog_snapshot;
+        ota_release_catalog_snapshot(&catalog_snapshot);
+        if (catalog_snapshot.state != OTA_RELEASE_CATALOG_LOADING) {
+            break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
 
     /* Queue behind a catalog, thumbnail, scan, or switch instead of failing
      * OTA from the LVGL callback when another exclusive owner is finishing.

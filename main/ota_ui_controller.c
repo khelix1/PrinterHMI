@@ -59,6 +59,7 @@ static void ota_open_custom_url_bridge(void)
 static void ota_popup_remote_bridge(void)
 {
     ui_ota_popup_close();
+    ui_ota_popup_quiesce_camera();
     ui_ota_release_browser_show(ota_catalog_start_bridge,
                                 ota_open_custom_url_bridge);
 }
@@ -66,6 +67,7 @@ static void ota_popup_remote_bridge(void)
 void ota_ui_controller_open_event_cb(lv_event_t *event)
 {
     (void)event;
+    ui_ota_popup_quiesce_camera();
     ui_ota_release_browser_show(ota_catalog_start_bridge,
                                 ota_open_custom_url_bridge);
 }

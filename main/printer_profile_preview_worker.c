@@ -189,6 +189,19 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     if (generation_before != moonraker_config_generation()) return;
 
     if (!online) {
+        /* ESP_ERR_INVALID_STATE here means another short HTTP operation owns
+         * the serialized shared lane. It is not evidence that this printer is
+         * offline; preserve its current state and retry shortly. */
+        if (error == ESP_ERR_INVALID_STATE && http_code == 0) {
+            s_preview_retry_after_us[index] =
+                now + PROFILE_PREVIEW_CONFIRM_RETRY_US;
+            ESP_LOGD(
+                TAG,
+                "Profile %d probe deferred: shared network lane busy",
+                index + 1);
+            return;
+        }
+
         printer_profile_health_report_live_state(index, false, NULL);
 
         /* Keep a previously-online profile in VERIFYING until a second

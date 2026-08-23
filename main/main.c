@@ -455,9 +455,11 @@ static bool s_got_ip = false;
 static bool s_wifi_credentials_configured = false;
 static bool s_wifi_transport_ready = false;
 
-#define WIFI_RSSI_SAMPLE_INTERVAL_US 5000000LL
+#define WIFI_RSSI_SAMPLE_INTERVAL_US 2000000LL
+#define WIFI_RSSI_STALE_TIMEOUT_US 15000000LL
 
 static int64_t s_wifi_rssi_next_sample_us = 0;
+static int64_t s_wifi_rssi_last_sample_us = 0;
 static int s_wifi_rssi_filtered = -127;
 static bool s_wifi_rssi_valid = false;
 static bool s_wifi_signal_dirty = true;
@@ -3608,6 +3610,7 @@ static void wifi_signal_sample_tasklet(bool allow_remote_query)
         }
 
         s_wifi_rssi_next_sample_us = 0;
+        s_wifi_rssi_last_sample_us = 0;
         return;
     }
 
@@ -3632,15 +3635,24 @@ static void wifi_signal_sample_tasklet(bool allow_remote_query)
      * reading; loss of IP clears it separately.
      */
     if (err != ESP_OK || rssi >= 0 || rssi < -127) {
+        if (s_wifi_rssi_valid &&
+            now - s_wifi_rssi_last_sample_us >=
+                WIFI_RSSI_STALE_TIMEOUT_US) {
+            s_wifi_rssi_valid = false;
+            s_wifi_rssi_filtered = -127;
+            s_wifi_signal_dirty = true;
+        }
         return;
     }
+
+    s_wifi_rssi_last_sample_us = now;
 
     if (!s_wifi_rssi_valid) {
         s_wifi_rssi_filtered = rssi;
     } else {
-        /* Low-cost exponential smoothing: 2/3 previous, 1/3 new. */
-        s_wifi_rssi_filtered =
-            ((2 * s_wifi_rssi_filtered) + rssi) / 3;
+        /* Use the current valid RSSI directly so the top bar agrees with
+         * the measured value shown by the WiFi scan screen. */
+        s_wifi_rssi_filtered = rssi;
     }
 
     s_wifi_rssi_valid = true;

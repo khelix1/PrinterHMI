@@ -4,6 +4,10 @@
 #include "ota_release_catalog.h"
 #include "ui_theme.h"
 #include "ui_camera.h"
+#include "camera_stream_controller.h"
+#include "ui_dashboard.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "esp_heap_caps.h"
 #include "ui_popup.h"
@@ -31,7 +35,13 @@ static void ota_quiesce_camera(void)
     }
 
     /* The persistent MJPEG request shares the network transport with OTA. */
+    ui_dashboard_set_camera_quiesced(true);
     ui_camera_set_setup_active(true);
+    /* Wait for the MJPEG worker to finish releasing the shared transport
+     * before the GitHub release-catalog request starts. */
+    for (int wait_ms = 0; wait_ms < 2000 && camera_stream_busy(); wait_ms += 50) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     s_camera_quiesced = true;
 }
 
@@ -43,7 +53,19 @@ static void ota_resume_camera(void)
 
     s_camera_quiesced = false;
     ui_camera_set_setup_active(false);
+    ui_dashboard_set_camera_quiesced(false);
 }
+
+void ui_ota_popup_quiesce_camera(void)
+{
+    ota_quiesce_camera();
+}
+
+void ui_ota_popup_resume_camera(void)
+{
+    ota_resume_camera();
+}
+
 static lv_obj_t *s_ota_url_ta = NULL;
 static lv_obj_t *s_ota_kb = NULL;
 static ui_ota_start_cb_t s_start_cb = NULL;
@@ -263,6 +285,7 @@ void ui_ota_progress_close(void)
 
 void ui_ota_popup_close(void)
 {
+    bool had_editor_popup = s_ota_popup != NULL;
     if (s_ota_popup) {
         lv_obj_delete(s_ota_popup);
         s_ota_popup = NULL;
@@ -271,7 +294,9 @@ void ui_ota_popup_close(void)
         s_start_cb = NULL;
         s_remote_cb = NULL;
     }
-    ota_resume_camera();
+    if (had_editor_popup) {
+        ota_resume_camera();
+    }
 }
 
 static void close_cb(lv_event_t *e)

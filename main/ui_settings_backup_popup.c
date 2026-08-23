@@ -31,6 +31,8 @@ static bool s_export_progress_is_restore_verify = false;
 static int s_export_progress_pulse = 0;
 static bool s_secret_is_restore = false;
 static bool s_pending_encrypted_restore = false;
+
+static void close_export_progress_popup(void);
 static char s_restore_passphrase[BACKUP_PASSPHRASE_MAX + 1];
 
 
@@ -98,6 +100,7 @@ void ui_settings_backup_popup_close(void)
     close_restore_confirmation();
     close_remove_confirmation();
     close_secret_popup(false);
+    close_export_progress_popup();
 
     if (s_popup) {
         lv_obj_delete(s_popup);

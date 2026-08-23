@@ -14,6 +14,8 @@ void ui_ota_popup_show(const char *current_url,
                        ui_ota_remote_cb_t remote_cb);
 
 void ui_ota_popup_close(void);
+void ui_ota_popup_quiesce_camera(void);
+void ui_ota_popup_resume_camera(void);
 
 void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb);
 void ui_ota_progress_close(void);

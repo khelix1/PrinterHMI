@@ -267,10 +267,21 @@ void ui_shell_update_status_icons(void)
     if (s_shell->wifi_signal_connected) {
         int rssi = s_shell->wifi_signal_rssi;
 
-        if (rssi >= -55) bars = 4;
-        else if (rssi >= -67) bars = 3;
-        else if (rssi >= -75) bars = 2;
-        else if (rssi >= -85) bars = 1;
+        if (rssi >= -60) bars = 4;
+        else if (rssi >= -70) bars = 3;
+        else if (rssi >= -80) bars = 2;
+        else if (rssi >= -90) bars = 1;
+
+        /* Require a further 3 dB drop before reducing the displayed level.
+         * This prevents normal RSSI jitter around a boundary from flickering
+         * the icon while upward changes remain immediate. */
+        int previous = s_shell->wifi_signal_bars;
+        if (previous > bars) {
+            if (previous == 4 && rssi >= -63) bars = 4;
+            else if (previous == 3 && rssi >= -73) bars = 3;
+            else if (previous == 2 && rssi >= -83) bars = 2;
+            else if (previous == 1 && rssi >= -93) bars = 1;
+        }
     }
 
     for (int i = 0; i < 4; i++) {

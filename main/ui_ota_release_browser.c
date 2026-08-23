@@ -29,6 +29,7 @@ static size_t s_rendered_count = SIZE_MAX;
 static ota_release_channel_t s_rendered_channel =
     OTA_RELEASE_CHANNEL_STABLE;
 static ota_release_entry_t *s_selected = NULL;
+static bool s_installing = false;
 
 
 static const char *relation_text(
@@ -88,6 +89,10 @@ static void browser_close(void)
     s_rendered_channel = OTA_RELEASE_CHANNEL_STABLE;
     free(s_selected);
     s_selected = NULL;
+    if (!s_installing) {
+        ui_ota_popup_resume_camera();
+    }
+    s_installing = false;
 }
 
 
@@ -118,6 +123,7 @@ static void install_cb(lv_event_t *event)
     char url[sizeof(s_selected->asset_url)];
     snprintf(url, sizeof(url), "%s", s_selected->asset_url);
 
+    s_installing = true;
     browser_close();
     ui_ota_popup_close();
 
@@ -393,6 +399,7 @@ void ui_ota_release_browser_show(
 {
     s_start_fn = start_cb;
     s_custom_fn = custom_cb_fn;
+    ui_ota_popup_quiesce_camera();
 
     if (s_popup) {
         lv_obj_move_foreground(s_popup);

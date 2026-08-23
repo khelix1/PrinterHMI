@@ -30,6 +30,18 @@ static lv_obj_t *s_camera_selector = NULL;
 static lv_obj_t *s_view_button = NULL;
 static lv_obj_t *s_view_popup = NULL;
 static lv_obj_t *s_camera_picker_popup = NULL;
+
+static void camera_close_popups(void)
+{
+    if (s_view_popup) {
+        lv_obj_delete(s_view_popup);
+        s_view_popup = NULL;
+    }
+    if (s_camera_picker_popup) {
+        lv_obj_delete(s_camera_picker_popup);
+        s_camera_picker_popup = NULL;
+    }
+}
 static size_t s_camera_index = 0;
 static bool s_fullscreen = false;
 static bool s_setup_active = false;
@@ -362,7 +374,6 @@ static void camera_update_selector(void)
         lv_label_set_text(selector_label, text);
     }
     lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_state(s_camera_selector, LV_STATE_DISABLED);
 }
 
@@ -581,6 +592,7 @@ void ui_camera_show_fullscreen(void)
 void ui_camera_destroy(void)
 {
     if (s_fullscreen) camera_set_viewport(false);
+    camera_close_popups();
     /* Theme changes rebuild persistent surfaces so local LVGL styles are
      * resolved from the newly selected runtime palette. */
     if (s_refresh_timer) {
@@ -600,8 +612,6 @@ void ui_camera_destroy(void)
     s_configure_button = NULL;
     s_camera_selector = NULL;
     s_view_button = NULL;
-    s_view_popup = NULL;
-    s_camera_picker_popup = NULL;
     s_fullscreen = false;
     s_camera_last_frame_tick = 0;
     s_camera_stream_started_tick = 0;
@@ -613,6 +623,7 @@ void ui_camera_destroy(void)
 void ui_camera_hide(void)
 {
     if (s_fullscreen) camera_set_viewport(false);
+    camera_close_popups();
     if (s_root) {
         lv_obj_add_flag(s_root, LV_OBJ_FLAG_HIDDEN);
     }

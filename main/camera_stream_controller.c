@@ -231,9 +231,11 @@ void camera_stream_stop(void)
     }
 
     if (s_task) {
-        /* The HTTP client timeout is finite, but never silently start an OTA
-         * while a camera worker is still active if the timeout is exceeded. */
-        return;
+        /* The HTTP client timeout is finite. Wait for the worker to release
+         * the shared transport before any caller starts another request. */
+        for (int wait_ms = 0; wait_ms < 2000 && s_task; wait_ms += 20) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
     }
 
     if (!s_result_queue) return;

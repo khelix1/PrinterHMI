@@ -1424,6 +1424,8 @@ static void printer_profiles_active_changed_bridge(void)
     printer_profile_preview_worker_reset();
     printer_preview_store_reset_restore();
     ui_printer_chooser_refresh();
+    /* Re-evaluate the Dashboard Camera/Thumbnail toggle for the new printer. */
+    ui_dashboard_refresh_camera();
 
     char status[128];
 

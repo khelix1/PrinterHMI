@@ -5,6 +5,16 @@
 
 # Changelog
 
+## [6.5.2] - 2026-08-22
+
+### Fixed
+
+- Refresh Dashboard camera visibility immediately when switching printers.
+- Keep the Camera/Thumbnail toggle interactive when it becomes visible after a printer change.
+- Preserve the all-theme in-card camera/thumbnail placement correction.
+
+
+
 ## [6.5.1] - 2026-08-22
 
 ### Fixed

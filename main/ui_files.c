@@ -60,9 +60,8 @@ static void file_preview_clicked_cb(lv_event_t *event)
         return;
     }
 
-    lv_event_stop_bubbling(event);
-
     if (row->preview_image) {
+        lv_event_stop_bubbling(event);
         ui_preview_lightbox_show_object(
             row->preview_image);
     }
@@ -959,6 +958,7 @@ void ui_files_hide(void)
     }
     s_files_refresh_pending = false;
     close_search_popup();
+    ui_files_close_detail_popup();
     if (s_printer_file_popup) {
         lv_obj_delete(s_printer_file_popup);
         s_printer_file_popup = NULL;
@@ -1024,6 +1024,8 @@ void ui_files_close_detail_popup(void)
         s_detail_info_label = NULL;
         s_detail_start_button = NULL;
     }
+    s_detail_cancel_cb = NULL;
+    s_detail_start_cb = NULL;
 }
 
 static void detail_cancel_event_cb(lv_event_t *e)

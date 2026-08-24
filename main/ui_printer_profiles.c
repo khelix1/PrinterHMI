@@ -76,6 +76,7 @@ static void editor_camera_set_status(const char *text);
 static void editor_auth_open_cb(lv_event_t *event);
 static void editor_camera_open_cb(lv_event_t *event);
 static void editor_camera_discover_cb(lv_event_t *event);
+static void editor_camera_close(void);
 
 static void editor_close(void)
 {
@@ -99,6 +100,7 @@ static void editor_close(void)
     s_editor_status = NULL;
     s_editor_profile = -1;
     s_editor_secure = false;
+    editor_camera_close();
     editor_security_close();
 }
 

@@ -72,6 +72,8 @@ static lv_timer_t *dash32_camera_timer = NULL;
 static uint8_t *dash32_camera_frame = NULL;
 static lv_image_dsc_t dash32_camera_dsc;
 static bool dash32_camera_mode = false;
+static bool dash32_camera_quiesced = false;
+static bool dash32_camera_restore_after_ota = false;
 
 ui_dashboard_status_t ui_dashboard_create_status(
     lv_obj_t *parent)
@@ -136,7 +138,7 @@ static void dashboard_camera_set_status(const char *text)
 static void dashboard_camera_poll_cb(lv_timer_t *timer)
 {
     (void)timer;
-    if (!dash32_camera_mode) return;
+    if (!dash32_camera_mode || dash32_camera_quiesced) return;
 
     uint8_t *pixels = NULL;
     size_t pixel_size = 0;
@@ -188,6 +190,7 @@ static void dashboard_camera_poll_cb(lv_timer_t *timer)
 
 static void dashboard_camera_mode_set(bool enabled)
 {
+    if (enabled && dash32_camera_quiesced) return;
     dash32_camera_mode = enabled;
     if (dash32_camera_image) {
         if (enabled) lv_obj_clear_flag(dash32_camera_image, LV_OBJ_FLAG_HIDDEN);
@@ -216,6 +219,28 @@ static void dashboard_camera_mode_set(bool enabled)
     }
     dashboard_camera_set_status("Connecting camera...");
     dashboard_camera_poll_cb(NULL);
+}
+
+void ui_dashboard_set_camera_quiesced(bool quiesced)
+{
+    if (quiesced) {
+        if (dash32_camera_quiesced) return;
+        dash32_camera_quiesced = true;
+        dash32_camera_restore_after_ota = dash32_camera_mode;
+        if (dash32_camera_restore_after_ota) {
+            dashboard_camera_mode_set(false);
+        }
+        return;
+    }
+
+    if (!dash32_camera_quiesced) return;
+    dash32_camera_quiesced = false;
+    bool restore = dash32_camera_restore_after_ota;
+    dash32_camera_restore_after_ota = false;
+    if (restore && dash32_camera_toggle &&
+        !lv_obj_has_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN)) {
+        dashboard_camera_mode_set(true);
+    }
 }
 
 void ui_dashboard_refresh_camera(void)

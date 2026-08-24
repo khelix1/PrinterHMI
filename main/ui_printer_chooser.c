@@ -260,12 +260,21 @@ static void refresh_cards(void)
         bool status_online = active_live;
         const char *status_text = NULL;
 
+        bool active_state_fallback = false;
+        char active_health_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
         if (index == active) {
-            /* The active card reports only synchronized live state. */
+            /* Keep the last confirmed state visible while the active transport
+             * reconnects; replace it only when fresh synchronized data arrives. */
             if (active_live &&
                 state->printer_state[0] &&
                 strcmp(state->printer_state, "--") != 0) {
                 status_text = state->printer_state;
+            } else if (printer_profile_health_get_live_state(
+                           index,
+                           active_health_state,
+                           sizeof(active_health_state))) {
+                status_text = active_health_state;
+                active_state_fallback = true;
             } else {
                 status_text = "OFFLINE / RETRYING";
             }
@@ -284,22 +293,25 @@ static void refresh_cards(void)
             bool verifying = known && online && !inactive_online_fresh;
 
             status_online = inactive_online_fresh;
+            /* Preserve a previously confirmed state during the normal freshness
+             * window and while the next background probe is in flight. */
             status_text = !known
                 ? "VERIFYING..."
                 : (!online
                     ? "OFFLINE"
-                    : (verifying
-                        ? "VERIFYING..."
-                        : (has_live_state
-                            ? inactive_state
+                    : (has_live_state
+                        ? inactive_state
+                        : (verifying
+                            ? "VERIFYING..."
                             : "ONLINE")));
         }
 
         lv_label_set_text(card->status, status_text);
-        if (index != active &&
-            known &&
-            online &&
-            !status_online) {
+        if ((index != active &&
+             known &&
+             online &&
+             !status_online) ||
+            (index == active && active_state_fallback)) {
             ui_apply_label_dim(card->status);
         } else {
             apply_status_style(card->status, true, status_online);

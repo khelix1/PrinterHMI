@@ -528,7 +528,11 @@ static void release_catalog_task(void *argument)
     esp_err_t result = ESP_ERR_INVALID_STATE;
     int status = 0;
 
-    if (network_activity_controller_try_begin_shared()) {
+    /* Release metadata is a short shared transaction. Never wait behind an
+     * OTA exclusive request: the OTA owner may be waiting for this task to
+     * finish, which would otherwise deadlock the update flow. */
+    if (!network_activity_controller_exclusive_requested() &&
+        network_activity_controller_acquire_shared(5000)) {
         result = esp_http_client_perform(client);
         status = esp_http_client_get_status_code(client);
         network_activity_controller_end_shared();

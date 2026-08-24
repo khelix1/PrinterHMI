@@ -5,6 +5,12 @@
 
 # Changelog
 
+## [6.5.3]
+
+- Harden UI popup teardown and first-click file metadata/preview loading.
+- Improve camera, OTA, printer-state, and Wi-Fi responsiveness.
+
+
 ## [6.5.2] - 2026-08-22
 
 ### Fixed

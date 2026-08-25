@@ -53,17 +53,26 @@ void dashboard_live_controller_push_banner(bool moonraker_ok)
             "--%%");
     }
 
-    printer_controller_format_eta_clock(
-        eta_clock,
-        sizeof(eta_clock),
-        state_snapshot.progress,
-        state_snapshot.print_duration);
+    if (printer_controller_is_live_state(state_snapshot.printer_state) &&
+        state_snapshot.progress > 0.01 &&
+        state_snapshot.progress < 0.999) {
+        printer_controller_format_eta_clock(
+            eta_clock,
+            sizeof(eta_clock),
+            state_snapshot.progress,
+            state_snapshot.print_duration);
 
-    snprintf(
-        eta,
-        sizeof(eta),
-        "ETA %s",
-        eta_clock);
+        snprintf(
+            eta,
+            sizeof(eta),
+            "ETA %s",
+            eta_clock);
+    } else {
+        snprintf(
+            eta,
+            sizeof(eta),
+            "ETA --:--");
+    }
 
     ui_dashboard_set_banner(
         state,

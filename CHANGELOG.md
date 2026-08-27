@@ -5,6 +5,14 @@
 
 # Changelog
 
+## [6.5.4] - 2026-08-26
+
+### Fixed
+
+- Corrected Dashboard print ETA so it remains a completion time instead of tracking the current clock after a print completes.
+
+## [6.5.3]
+
 ## [6.5.3]
 
 - Harden UI popup teardown and first-click file metadata/preview loading.

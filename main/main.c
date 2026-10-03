@@ -969,35 +969,8 @@ static bool moonraker_get_live_objects(void)
     if (strlen(printer_file) == 0) {
         safe_copy(printer_file, sizeof(s_app_buffers->printer_file), "No file");
     }
-    /*
-     * Use virtual_sdcard.progress as the authoritative completion value.
-     * This is the file-position progress normally presented by Moonraker
-     * frontends. display_status.progress may instead reflect slicer M73
-     * commands and can disagree substantially.
-     */
-    printer_progress = 0.0;
-
-    if (!json_find_number_after(
-            s_moonraker_objects,
-            "\"virtual_sdcard\"",
-            "progress",
-            &printer_progress)) {
-        /*
-         * Fallback for printers without virtual_sdcard or while no file
-         * is active.
-         */
-        json_find_number_after(
-            s_moonraker_objects,
-            "\"display_status\"",
-            "progress",
-            &printer_progress);
-    }
-
-    if (printer_progress < 0.0) {
-        printer_progress = 0.0;
-    } else if (printer_progress > 1.0) {
-        printer_progress = 1.0;
-    }
+    bool progress_from_virtual_sdcard = false;
+    printer_progress = -1.0;
 
     json_find_number_after(
         s_moonraker_objects,
@@ -1041,6 +1014,17 @@ static bool moonraker_get_live_objects(void)
     cJSON *layer_root = cJSON_Parse(s_moonraker_objects);
     cJSON *layer_result = cJSON_GetObjectItemCaseSensitive(layer_root, "result");
     cJSON *layer_status = cJSON_GetObjectItemCaseSensitive(layer_result, "status");
+    cJSON *progress_sd = cJSON_GetObjectItemCaseSensitive(layer_status, "virtual_sdcard");
+    cJSON *progress_value = cJSON_GetObjectItemCaseSensitive(progress_sd, "progress");
+    progress_from_virtual_sdcard = cJSON_IsNumber(progress_value) &&
+        isfinite(progress_value->valuedouble);
+    if (!progress_from_virtual_sdcard) {
+        cJSON *progress_display = cJSON_GetObjectItemCaseSensitive(layer_status, "display_status");
+        progress_value = cJSON_GetObjectItemCaseSensitive(progress_display, "progress");
+    }
+    if (cJSON_IsNumber(progress_value) && isfinite(progress_value->valuedouble)) {
+        printer_progress = fmin(1.0, fmax(0.0, progress_value->valuedouble));
+    }
     cJSON *layer_stats = cJSON_GetObjectItemCaseSensitive(layer_status, "print_stats");
     cJSON *layer_info = cJSON_GetObjectItemCaseSensitive(layer_stats, "info");
     cJSON *layer_current = cJSON_GetObjectItemCaseSensitive(layer_info, "current_layer");
@@ -1090,6 +1074,8 @@ static bool moonraker_get_live_objects(void)
             .bed_temp = printer_bed_temp,
             .bed_target = printer_bed_target,
             .progress = printer_progress,
+            .current_gcode_z = printer_current_z,
+            .progress_from_virtual_sdcard = progress_from_virtual_sdcard,
             .print_duration = printer_print_duration,
             .current_layer = printer_current_layer,
             .total_layer = printer_total_layer,
@@ -1800,7 +1786,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         printer_layer_resolver_resolve(
             telemetry_state.current_layer,
             telemetry_state.total_layer,
-            printer_current_z,
+            telemetry_state.current_gcode_z,
             printer_meta_object_height,
             printer_meta_layer_height,
             telemetry_state.progress);

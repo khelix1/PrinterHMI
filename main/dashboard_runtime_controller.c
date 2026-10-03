@@ -105,13 +105,12 @@ static void update_status_cards(
         printer_layer_resolver_resolve(
             state->current_layer,
             state->total_layer,
-            context->current_z,
+            state->current_gcode_z,
             context->meta_object_height,
             context->meta_layer_height,
             state->progress);
 
-    if (display_layers.current > 0 &&
-        display_layers.total > 0) {
+    if (display_layers.valid) {
         snprintf(
             layer,
             sizeof(layer),

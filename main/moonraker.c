@@ -17,6 +17,8 @@
 
 #include <limits.h>
 static moonraker_state_t g_moonraker_state;
+/* Preserve source priority across partial WebSocket frames. */
+static bool s_virtual_sd_progress_known = false;
 static moonraker_exclude_state_t *g_moonraker_exclude_state = NULL;
 static moonraker_filament_state_t
     *g_moonraker_filament_state = NULL;
@@ -191,6 +193,8 @@ void moonraker_state_reset(void)
     g_moonraker_state.bed_temp = -999.0;
     g_moonraker_state.bed_target = -999.0;
     g_moonraker_state.progress = -1.0;
+    g_moonraker_state.current_gcode_z = -1.0;
+    s_virtual_sd_progress_known = false;
     g_moonraker_state.current_layer = -1;
     g_moonraker_state.total_layer = -1;
 
@@ -442,6 +446,8 @@ void moonraker_state_publish_http_fallback(
     g_moonraker_state.bed_temp = update->bed_temp;
     g_moonraker_state.bed_target = update->bed_target;
     g_moonraker_state.progress = update->progress;
+    g_moonraker_state.current_gcode_z = update->current_gcode_z;
+    s_virtual_sd_progress_known = update->progress_from_virtual_sdcard;
     g_moonraker_state.print_duration = update->print_duration;
     g_moonraker_state.current_layer = update->current_layer;
     g_moonraker_state.total_layer = update->total_layer;
@@ -506,6 +512,7 @@ static bool print_state_is_active(const char *state)
 static void reset_print_job_locked(void)
 {
     g_moonraker_state.progress = 0.0;
+    g_moonraker_state.current_gcode_z = -1.0;
     g_moonraker_state.print_duration = 0.0;
     g_moonraker_state.current_layer = -1;
     g_moonraker_state.total_layer = -1;
@@ -909,6 +916,14 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         "gcode_move");
 
     if (cJSON_IsObject(gcode_move)) {
+        cJSON *position = cJSON_GetObjectItemCaseSensitive(gcode_move, "gcode_position");
+        if (position) {
+            cJSON *z = cJSON_GetArrayItem(position, 2);
+            g_moonraker_state.current_gcode_z =
+                cJSON_IsNumber(z) && isfinite(z->valuedouble)
+                    ? z->valuedouble : -1.0;
+            ++updates;
+        }
         cJSON *homing_origin = cJSON_GetObjectItemCaseSensitive(
             gcode_move,
             "homing_origin");
@@ -972,11 +987,16 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
      * can retain the previous job's percentage at a new print start. */
     cJSON *virtual_sdcard = cJSON_GetObjectItemCaseSensitive(
         status, "virtual_sdcard");
-    if (json_number(virtual_sdcard, "progress", &value)) {
-        g_moonraker_state.progress = value;
+    if (json_number(virtual_sdcard, "progress", &value) && isfinite(value)) {
+        g_moonraker_state.progress = fmin(1.0, fmax(0.0, value));
+        s_virtual_sd_progress_known = true;
         ++updates;
-    } else {
-        MERGE_NUMBER("display_status", "progress", progress, 1.0);
+    } else if (!s_virtual_sd_progress_known) {
+        cJSON *display_status = cJSON_GetObjectItemCaseSensitive(status, "display_status");
+        if (json_number(display_status, "progress", &value) && isfinite(value)) {
+            g_moonraker_state.progress = fmin(1.0, fmax(0.0, value));
+            ++updates;
+        }
     }
 
     MERGE_NUMBER("print_stats", "print_duration", print_duration, 1.0);

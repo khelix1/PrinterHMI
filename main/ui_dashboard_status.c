@@ -144,8 +144,8 @@ void ui_dashboard_status_refresh(double progress,
     if (progress >= 0.0) {
         snprintf(progress_buf,
                  sizeof(progress_buf),
-                 "%.0f %%",
-                 progress * 100.0);
+                 "%d %%",
+                 (int)(progress * 100.0));
     } else {
         snprintf(progress_buf, sizeof(progress_buf), "-- %%");
     }

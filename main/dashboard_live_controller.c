@@ -44,8 +44,8 @@ void dashboard_live_controller_push_banner(bool moonraker_ok)
         snprintf(
             progress,
             sizeof(progress),
-            "%.0f%%",
-            state_snapshot.progress * 100.0);
+            "%d%%",
+            (int)(state_snapshot.progress * 100.0));
     } else {
         snprintf(
             progress,

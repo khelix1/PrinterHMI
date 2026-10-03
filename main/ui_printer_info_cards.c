@@ -291,7 +291,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 
     if (cards->progress) {
         char pbuf[32];
-        if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%.0f%%", printer_progress * 100.0);
+        if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%d%%", (int)(printer_progress * 100.0));
         else snprintf(pbuf, sizeof(pbuf), "--%%");
         lv_label_set_text(cards->progress, pbuf);
         lv_obj_set_style_text_color(cards->progress, progress_value_color(printer_progress), 0);

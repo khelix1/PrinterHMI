@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdbool.h>
+#include "cJSON.h"
 #include "ui_button.h"
 
 #include "freertos/FreeRTOS.h"
@@ -1032,114 +1033,37 @@ static bool moonraker_get_live_objects(void)
         }
     }
 
-    /*
-     * current_layer and total_layer belong to print_stats.info.
-     * Anchor the lookup inside print_stats so another generic "info"
-     * object in the Moonraker response cannot capture the search.
-     */
-    /*
-     * Do not clear the cached layer values here. The thumbnail/file
-     * metadata fallback may have already calculated them. Replace each
-     * value only when print_stats.info publishes a valid value.
-     */
-    const char *print_stats_json =
-        strstr(s_moonraker_objects, "\"print_stats\"");
-
-    const char *print_info_json =
-        print_stats_json
-            ? strstr(print_stats_json, "\"info\"")
-            : NULL;
-
-    double layer_val = 0.0;
-
-    if (print_info_json &&
-        json_find_number_after(
-            print_info_json,
-            "\"info\"",
-            "current_layer",
-            &layer_val)) {
-        printer_current_layer = (int)(layer_val + 0.5);
+    /* Keep reported layers separate from estimates. Each HTTP response is a
+     * full snapshot: null/missing values must clear the previous report. */
+    printer_current_layer = -1;
+    printer_total_layer = -1;
+    printer_current_z = -1.0;
+    cJSON *layer_root = cJSON_Parse(s_moonraker_objects);
+    cJSON *layer_result = cJSON_GetObjectItemCaseSensitive(layer_root, "result");
+    cJSON *layer_status = cJSON_GetObjectItemCaseSensitive(layer_result, "status");
+    cJSON *layer_stats = cJSON_GetObjectItemCaseSensitive(layer_status, "print_stats");
+    cJSON *layer_info = cJSON_GetObjectItemCaseSensitive(layer_stats, "info");
+    cJSON *layer_current = cJSON_GetObjectItemCaseSensitive(layer_info, "current_layer");
+    cJSON *layer_total = cJSON_GetObjectItemCaseSensitive(layer_info, "total_layer");
+    if (cJSON_IsNumber(layer_current) && layer_current->valuedouble >= 0.0 &&
+        layer_current->valuedouble <= 2147483646.0) {
+        printer_current_layer = (int)(layer_current->valuedouble + 0.5);
     }
-
-    if (print_info_json &&
-        json_find_number_after(
-            print_info_json,
-            "\"info\"",
-            "total_layer",
-            &layer_val)) {
-        printer_total_layer = (int)(layer_val + 0.5);
+    if (cJSON_IsNumber(layer_total) && layer_total->valuedouble > 0.0 &&
+        layer_total->valuedouble <= 2147483646.0) {
+        printer_total_layer = (int)(layer_total->valuedouble + 0.5);
     }
-
-    /*
-     * Klipper commonly leaves print_stats.info layer values null.
-     * Match Moonraker's displayed layer using current G-code Z and
-     * the active file's layer metadata.
-     */
-    const char *gcode_move_json =
-        strstr(s_moonraker_objects, "\"gcode_move\"");
-
-    const char *gcode_position_json =
-        gcode_move_json
-            ? strstr(gcode_move_json, "\"position\"")
-            : NULL;
-
-    const char *gcode_position_array =
-        gcode_position_json
-            ? strchr(gcode_position_json, '[')
-            : NULL;
-
-    if (gcode_position_array) {
-        double x = 0.0;
-        double y = 0.0;
-        double z = 0.0;
-
-        if (sscanf(gcode_position_array,
-                   "[ %lf , %lf , %lf",
-                   &x,
-                   &y,
-                   &z) == 3) {
-            printer_current_z = z;
-        }
+    cJSON *layer_move = cJSON_GetObjectItemCaseSensitive(layer_status, "gcode_move");
+    cJSON *layer_position = cJSON_GetObjectItemCaseSensitive(layer_move, "gcode_position");
+    cJSON *layer_z = cJSON_GetArrayItem(layer_position, 2);
+    if (cJSON_IsNumber(layer_z)) {
+        printer_current_z = layer_z->valuedouble;
     }
+    cJSON_Delete(layer_root);
 
-    if (printer_current_layer <= 0 ||
-        printer_total_layer <= 0) {
-        double object_height = 0.0;
-        double layer_height = 0.0;
-
-        if (thumbnail_session_get_layer_metadata(
-                &object_height,
-                &layer_height) &&
-            object_height > 0.0 &&
-            layer_height > 0.0) {
-
-            printer_meta_object_height = object_height;
-            printer_meta_layer_height = layer_height;
-
-            printer_total_layer =
-                (int)floor(
-                    (object_height / layer_height) +
-                    0.001);
-
-            if (printer_current_z >= 0.0) {
-                printer_current_layer =
-                    (int)floor(
-                        (printer_current_z / layer_height) +
-                        0.001);
-
-                if (printer_current_layer < 1 &&
-                    printer_current_z > 0.0) {
-                    printer_current_layer = 1;
-                }
-
-                if (printer_current_layer >
-                    printer_total_layer) {
-                    printer_current_layer =
-                        printer_total_layer;
-                }
-            }
-        }
-    }
+    /* Estimates are resolved at display time, never cached as Klipper reports. */
+    thumbnail_session_get_layer_metadata(
+        &printer_meta_object_height, &printer_meta_layer_height);
 
     json_find_number_after(s_moonraker_objects, "\"extruder\"", "temperature", &printer_nozzle_temp);
     json_find_number_after(s_moonraker_objects, "\"extruder\"", "target", &printer_nozzle_target);

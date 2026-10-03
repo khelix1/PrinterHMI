@@ -1106,21 +1106,24 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         ? cJSON_GetObjectItemCaseSensitive(print_stats, "info")
         : NULL;
 
-    /* A freshly started job at file position zero must not display the
-     * prior job's layer fields if Moonraker has not refreshed info yet. */
-    if (job_context_changed &&
-        g_moonraker_state.progress <= 0.001) {
-        g_moonraker_state.current_layer = -1;
-        g_moonraker_state.total_layer = -1;
-    } else {
-        if (json_number(info, "current_layer", &value)) {
-            g_moonraker_state.current_layer = (int)(value + 0.5);
-            ++updates;
-        }
-        if (json_number(info, "total_layer", &value)) {
-            g_moonraker_state.total_layer = (int)(value + 0.5);
-            ++updates;
-        }
+    /* Omitted fields in a partial update retain their values; explicit null
+     * clears them. reset_print_job_locked() already clears a previous job
+     * before this frame is merged, so accept valid first-frame reports. */
+    cJSON *current_layer = cJSON_GetObjectItemCaseSensitive(info, "current_layer");
+    cJSON *total_layer = cJSON_GetObjectItemCaseSensitive(info, "total_layer");
+    if (current_layer) {
+        g_moonraker_state.current_layer =
+            cJSON_IsNumber(current_layer) && current_layer->valuedouble >= 0.0 &&
+            current_layer->valuedouble <= 2147483646.0
+                ? (int)(current_layer->valuedouble + 0.5) : -1;
+        ++updates;
+    }
+    if (total_layer) {
+        g_moonraker_state.total_layer =
+            cJSON_IsNumber(total_layer) && total_layer->valuedouble > 0.0 &&
+            total_layer->valuedouble <= 2147483646.0
+                ? (int)(total_layer->valuedouble + 0.5) : -1;
+        ++updates;
     }
 
     if (updates > 0) {

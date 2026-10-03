@@ -23,7 +23,7 @@ printer_layer_result_t printer_layer_resolver_resolve(
             (object_height / layer_height) + 0.001);
     }
 
-    if (result.current <= 0 &&
+    if (result.current < 0 &&
         result.total > 0 &&
         layer_height > 0.0 &&
         current_z > 0.0) {
@@ -31,14 +31,14 @@ printer_layer_result_t printer_layer_resolver_resolve(
             (current_z / layer_height) + 0.001);
     }
 
-    if (result.current <= 0 &&
+    if (result.current < 0 &&
         result.total > 0 &&
         progress >= 0.0) {
         result.current =
             (int)floor(progress * result.total) + 1;
     }
 
-    if (result.current < 1 && result.total > 0) {
+    if (result.current < 0 && result.total > 0) {
         result.current = 1;
     }
 
@@ -48,7 +48,7 @@ printer_layer_result_t printer_layer_resolver_resolve(
     }
 
     result.valid =
-        result.current > 0 &&
+        result.current >= 0 &&
         result.total > 0;
 
     return result;

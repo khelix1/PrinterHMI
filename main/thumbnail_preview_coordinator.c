@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "printer_controller.h"
 #include "thumbnail_manager.h"
@@ -12,6 +13,11 @@
 static const char *TAG = "dashboard_preview";
 
 static char s_live_preview_key[240] = "";
+static int64_t s_live_preview_retry_after_us;
+static unsigned s_live_preview_attempts;
+
+#define LIVE_PREVIEW_RETRY_DELAY_US (5LL * 1000000LL)
+#define LIVE_PREVIEW_MAX_ATTEMPTS 4U
 
 static void copy_text(char *destination,
                       size_t destination_size,
@@ -42,6 +48,8 @@ static void delete_object(lv_obj_t **object)
 void thumbnail_preview_coordinator_reset(void)
 {
     s_live_preview_key[0] = '\0';
+    s_live_preview_retry_after_us = 0;
+    s_live_preview_attempts = 0;
 }
 
 void thumbnail_preview_coordinator_update(
@@ -86,9 +94,24 @@ void thumbnail_preview_coordinator_update(
              context->moonraker_port,
              context->printer_file);
 
+    int64_t now = esp_timer_get_time();
     if (strcmp(s_live_preview_key, live_key) == 0) {
-        return;
+        /* An attempted load is not a successful load. Browser-started jobs
+         * can arrive before metadata is available, or a download can fail.
+         * Retry without requiring Printer-page navigation, but do not keep
+         * fetching metadata forever for files that have no thumbnail.
+         */
+        if (thumbnail_manager_result() == THUMBNAIL_MANAGER_RESULT_READY ||
+            s_live_preview_attempts >= LIVE_PREVIEW_MAX_ATTEMPTS ||
+            now < s_live_preview_retry_after_us) {
+            return;
+        }
+    } else {
+        s_live_preview_attempts = 0;
     }
+
+    ++s_live_preview_attempts;
+    s_live_preview_retry_after_us = now + LIVE_PREVIEW_RETRY_DELAY_US;
 
     copy_text(s_live_preview_key,
               sizeof(s_live_preview_key),

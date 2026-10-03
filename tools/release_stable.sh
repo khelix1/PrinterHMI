@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V2
 expected_origin_repo="khelix1/PrinterHMI"
-version="6.5.4"
+version="6.5.5"
 tag="v${version}"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -101,6 +101,9 @@ fi
 
 echo "Building complete PrinterHMI ${tag} stack from ${short_commit}..."
 "$repo_dir/tools/build_v6_stack.sh"
+"$repo_dir/tools/audit/dependencies_lock_audit.sh"
+"$repo_dir/tools/audit/firmware_size_audit.sh"
+"$repo_dir/tools/audit/compiler_warning_audit.sh"
 
 stack_base="PrinterHMI-v${version}-full-stack-${stack_commit}"
 stack_dir="$repo_dir/dist/$stack_base"

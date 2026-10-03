@@ -1,17 +1,19 @@
-## [6.5.0] - 2026-08-20
-
-- Added the guided first-run Setup Center with in-card Wi-Fi, printer, and camera discovery.
-- Improved offline setup behavior, camera/OTA lifecycle handling, and shared localization coverage.
-
 # Changelog
+
+## [6.5.5] - 2026-10-03
+
+### Fixed
+
+- Refresh Dashboard thumbnails for browser-started prints without requiring page navigation; retry transient metadata/download failures with bounded, spaced attempts.
+- Wait for Moonraker readiness before fetching the live print preview.
+- Keep Dashboard and Printer layer estimates synchronized using live G-code Z.
+- Preserve virtual-SD progress priority across partial WebSocket updates and use consistent integer progress displays.
 
 ## [6.5.4] - 2026-08-26
 
 ### Fixed
 
 - Corrected Dashboard print ETA so it remains a completion time instead of tracking the current clock after a print completes.
-
-## [6.5.3]
 
 ## [6.5.3]
 
@@ -38,6 +40,11 @@
 - Preserved the stable camera, dashboard, and operator-shell behavior from v6.5.0.
 
 
+
+## [6.5.0] - 2026-08-20
+
+- Added the guided first-run Setup Center with in-card Wi-Fi, printer, and camera discovery.
+- Improved offline setup behavior, camera/OTA lifecycle handling, and shared localization coverage.
 
 This file records product-level changes. Detailed development history before
 v4.0.0 is preserved under `docs/history/`.

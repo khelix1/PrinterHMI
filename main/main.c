@@ -3670,7 +3670,7 @@ static void hmi_runtime_task(void *arg)
                 sizeof(last_dashboard_print_state),
 
             .preview_network_ready =
-                s_got_ip && !exclusive_network,
+                s_got_ip && s_moonraker_ok && !exclusive_network,
 
             .set_live_target =
                 thumbnail_preview_coordinator_set_live_target,

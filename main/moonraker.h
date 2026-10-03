@@ -116,6 +116,7 @@ typedef struct {
 
     double progress;
     double print_duration;
+    double current_gcode_z;
 
     int current_layer;
     int total_layer;
@@ -151,6 +152,8 @@ typedef struct {
     double bed_target;
     double progress;
     double print_duration;
+    double current_gcode_z;
+    bool progress_from_virtual_sdcard;
     int current_layer;
     int total_layer;
     bool live_data_ok;

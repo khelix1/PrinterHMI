@@ -27,8 +27,9 @@ static void active_print_preview_clicked_cb(lv_event_t *event)
         return;
     }
 
-    ui_preview_lightbox_show_object(
-        s_active_print_thumb_canvas);
+    ui_preview_lightbox_show_file_object(
+        s_active_print_thumb_canvas,
+        s_active_print_thumb_canvas_file);
 }
 
 static void active_print_delete_cb(lv_event_t *event)

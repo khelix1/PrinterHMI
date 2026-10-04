@@ -1,4 +1,9 @@
 #include "ui_thumbnail.h"
+#include "esp_heap_caps.h"
+#include "thumbnail_render.h"
+#include "misc/cache/instance/lv_image_cache.h"
+#include <string.h>
+#include "thumbnail_session.h"
 #include "ui_text.h"
 #include "ui_preview_lightbox.h"
 #include "ui_theme.h"
@@ -9,6 +14,7 @@ struct ui_thumbnail {
     lv_obj_t *label;
     lv_obj_t *canvas;
     void *canvas_buf;
+    lv_image_dsc_t canvas_image;
     char loaded_file[160];
 };
 
@@ -23,7 +29,20 @@ static void thumbnail_clicked_cb(lv_event_t *event)
         return;
     }
 
-    ui_preview_lightbox_show_object(thumb->canvas);
+    lv_event_stop_bubbling(event);
+    ui_preview_lightbox_show_file_object(
+        thumb->canvas, thumbnail_session_selected_file());
+}
+
+static void thumbnail_deleted_cb(lv_event_t *event)
+{
+    /* Ignore bubbled child deletions before touching the component's data. */
+    if (lv_event_get_target(event) != lv_event_get_current_target(event)) return;
+    ui_thumbnail_t *thumb = lv_event_get_user_data(event);
+    if (!thumb) return;
+    lv_image_cache_drop(&thumb->canvas_image);
+    heap_caps_free(thumb->canvas_buf);
+    lv_free(thumb);
 }
 
 static void thumbnail_enable_lightbox(ui_thumbnail_t *thumb)
@@ -32,6 +51,7 @@ static void thumbnail_enable_lightbox(ui_thumbnail_t *thumb)
         return;
     }
 
+    lv_obj_add_event_cb(thumb->box, thumbnail_deleted_cb, LV_EVENT_DELETE, thumb);
     lv_obj_add_flag(thumb->box, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(
         thumb->box,
@@ -47,6 +67,7 @@ ui_thumbnail_t *ui_thumbnail_create(lv_obj_t *parent, int x, int y, int w, int h
 
     thumb->canvas = NULL;
     thumb->canvas_buf = NULL;
+    memset(&thumb->canvas_image, 0, sizeof(thumb->canvas_image));
     thumb->loaded_file[0] = 0;
 
     thumb->box = ui_create_card(parent);
@@ -73,6 +94,7 @@ ui_thumbnail_t *ui_thumbnail_wrap(lv_obj_t *box)
     thumb->label = NULL;
     thumb->canvas = NULL;
     thumb->canvas_buf = NULL;
+    memset(&thumb->canvas_image, 0, sizeof(thumb->canvas_image));
     thumb->loaded_file[0] = 0;
 
     lv_obj_clear_flag(thumb->box, LV_OBJ_FLAG_SCROLLABLE);
@@ -132,6 +154,15 @@ void ui_thumbnail_fit_object(
 {
     if (!object || !box) return;
 
+    /* Compressed PNG descriptors have zero dimensions. lv_image_set_src()
+     * resolves the decoder header; fit the decoded source, not that stub.
+     */
+    if (source_width <= 0 || source_height <= 0) {
+        source_width = lv_image_get_src_width(object);
+        source_height = lv_image_get_src_height(object);
+    }
+    if (source_width <= 0 || source_height <= 0) return;
+
     lv_image_set_scale(
         object,
         ui_thumbnail_fit_scale(
@@ -146,6 +177,32 @@ void ui_thumbnail_fit_object(
 void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, int scale)
 {
     if (!thumb || !thumb->box || !dsc) return;
+
+    /* Match Dashboard and Printer: render the original PNG once into the
+     * shared RGB565 canvas. Both the card and lightbox use this stable source.
+     */
+    if (!thumb->canvas_buf) {
+        thumb->canvas_buf = heap_caps_malloc(
+            THUMBNAIL_PREVIEW_WIDTH * THUMBNAIL_PREVIEW_HEIGHT * sizeof(uint16_t),
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    if (!thumb->canvas_buf || !thumbnail_render_to_rgb565(
+            dsc, thumb->canvas_buf, THUMBNAIL_PREVIEW_WIDTH, THUMBNAIL_PREVIEW_HEIGHT)) {
+        ui_thumbnail_set_placeholder(thumb, "PREVIEW UNAVAILABLE");
+        return;
+    }
+    lv_image_cache_drop(&thumb->canvas_image);
+    memset(&thumb->canvas_image, 0, sizeof(thumb->canvas_image));
+#if defined(LV_IMAGE_HEADER_MAGIC)
+    thumb->canvas_image.header.magic = LV_IMAGE_HEADER_MAGIC;
+#endif
+    thumb->canvas_image.header.cf = LV_COLOR_FORMAT_RGB565;
+    thumb->canvas_image.header.w = THUMBNAIL_PREVIEW_WIDTH;
+    thumb->canvas_image.header.h = THUMBNAIL_PREVIEW_HEIGHT;
+    thumb->canvas_image.header.stride = THUMBNAIL_PREVIEW_WIDTH * sizeof(uint16_t);
+    thumb->canvas_image.data_size = THUMBNAIL_PREVIEW_WIDTH * THUMBNAIL_PREVIEW_HEIGHT * sizeof(uint16_t);
+    thumb->canvas_image.data = thumb->canvas_buf;
+    dsc = &thumb->canvas_image;
 
     if (thumb->label) {
         lv_obj_delete(thumb->label);

@@ -78,28 +78,27 @@ static void detail_task(void *argument)
         int http_code = 0;
         esp_err_t error = ESP_FAIL;
 
-        if (moonraker_fetch_file_metadata(
-                job->host,
-                job->port,
-                job->api_key,
-                encoded,
-                body,
-                DETAIL_METADATA_BODY_SIZE,
-                &http_code,
-                &error)) {
-            ok = printer_files_build_metadata_text(
-                job->file,
-                body,
-                thumbnail,
-                sizeof(thumbnail),
-                metadata,
-                sizeof(metadata));
-        } else {
-            snprintf(metadata,
-                     sizeof(metadata),
-                     "Metadata request failed.\nHTTP %d\n%s",
-                     http_code,
-                     esp_err_to_name(error));
+        /* Visible-row downloads and reconnects can briefly deny a shared
+         * request. Recover in this worker while the same popup is open.
+         */
+        for (unsigned attempt = 0; attempt < 3 && generation_current(job->generation); ++attempt) {
+            memset(body, 0, DETAIL_METADATA_BODY_SIZE);
+            thumbnail[0] = '\0';
+            if (moonraker_fetch_file_metadata(
+                    job->host, job->port, job->api_key, encoded,
+                    body, DETAIL_METADATA_BODY_SIZE, &http_code, &error)) {
+                ok = printer_files_build_metadata_text(
+                    job->file, body, thumbnail, sizeof(thumbnail),
+                    metadata, sizeof(metadata));
+                if (ok) break;
+            } else {
+                snprintf(metadata, sizeof(metadata),
+                         "Metadata request failed.\nHTTP %d\n%s",
+                         http_code, esp_err_to_name(error));
+            }
+            if (attempt + 1 < 3 && generation_current(job->generation)) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
         }
     }
 

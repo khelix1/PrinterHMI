@@ -17,8 +17,11 @@
 #include "thumbnail_render.h"
 
 #define TAG "files_row_preview"
-#define ROW_PREVIEW_WIDTH 64
-#define ROW_PREVIEW_HEIGHT 64
+/* Keep the full shared canvas even though the list displays a small icon.
+ * The lightbox uses this descriptor directly, without another download.
+ */
+#define ROW_PREVIEW_WIDTH THUMBNAIL_PREVIEW_WIDTH
+#define ROW_PREVIEW_HEIGHT THUMBNAIL_PREVIEW_HEIGHT
 #define ROW_PREVIEW_SLOT_COUNT 24
 #define ROW_PREVIEW_QUEUE_LENGTH 12
 #define ROW_PREVIEW_METADATA_SIZE 8192

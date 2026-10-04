@@ -117,7 +117,7 @@ bool printer_preview_store_store_png(
             expected_host,
             expected_port) ||
         !file || !file[0] ||
-        !png || png_size < 8 || png_size > 64 * 1024) {
+        !png || png_size < 8 || png_size > 512 * 1024) {
         return false;
     }
 

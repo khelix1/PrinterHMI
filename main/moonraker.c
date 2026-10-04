@@ -1239,35 +1239,31 @@ bool json_find_best_thumbnail_path(const char *json, char *out, size_t out_sz)
     if (!json || !out || out_sz == 0) return false;
     out[0] = 0;
 
-    const char *best = strstr(json, "400x300");
-    if (!best) best = strstr(json, "relative_path");
-    if (!best) return false;
-
-    const char *rp = best;
-    while (rp > json && strncmp(rp, "relative_path", 13) != 0) {
-        rp--;
+    cJSON *root = cJSON_Parse(json);
+    cJSON *result = cJSON_GetObjectItemCaseSensitive(root, "result");
+    cJSON *thumbnails = cJSON_GetObjectItemCaseSensitive(result, "thumbnails");
+    const char *best_path = NULL;
+    double best_area = -1.0;
+    cJSON *thumbnail = NULL;
+    cJSON_ArrayForEach(thumbnail, thumbnails) {
+        cJSON *path = cJSON_GetObjectItemCaseSensitive(thumbnail, "relative_path");
+        if (!cJSON_IsString(path) || !path->valuestring || !path->valuestring[0] ||
+            strlen(path->valuestring) >= out_sz) continue;
+        cJSON *width = cJSON_GetObjectItemCaseSensitive(thumbnail, "width");
+        cJSON *height = cJSON_GetObjectItemCaseSensitive(thumbnail, "height");
+        double area = 0.0;
+        if (cJSON_IsNumber(width) && cJSON_IsNumber(height) &&
+            isfinite(width->valuedouble) && isfinite(height->valuedouble) &&
+            width->valuedouble > 0 && height->valuedouble > 0) {
+            area = width->valuedouble * height->valuedouble;
+        }
+        if (area > best_area) {
+            best_area = area;
+            best_path = path->valuestring;
+        }
     }
-
-    if (strncmp(rp, "relative_path", 13) != 0) {
-        rp = strstr(best, "relative_path");
-        if (!rp) return false;
-    }
-
-    const char *colon = strchr(rp, ':');
-    if (!colon) return false;
-
-    const char *q1 = strchr(colon, '"');
-    if (!q1) return false;
-    q1++;
-
-    const char *q2 = strchr(q1, '"');
-    if (!q2) return false;
-
-    size_t n = q2 - q1;
-    if (n >= out_sz) n = out_sz - 1;
-
-    memcpy(out, q1, n);
-    out[n] = 0;
+    if (best_path) snprintf(out, out_sz, "%s", best_path);
+    cJSON_Delete(root);
     return out[0] != 0;
 }
 
@@ -1532,17 +1528,11 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
         return false;
     }
 
-    const size_t max_len = 64 * 1024;
+    const size_t max_len = 512 * 1024;
 
     uint8_t *buf = heap_caps_malloc(
         max_len,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-    if (!buf) {
-        buf = heap_caps_malloc(
-            max_len,
-            MALLOC_CAP_8BIT);
-    }
 
     if (!buf) {
         return false;
@@ -1571,7 +1561,7 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
         port,
         NULL,
         path,
-        1500,
+        5000,
         buf,
         max_len,
         &captured_size,

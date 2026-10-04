@@ -81,9 +81,13 @@ bool thumbnail_render_to_rgb565(
         return false;
     }
 
+    /* Callers often supply a temporary PNG descriptor. Decode without
+     * retaining that stack address or a second full-size image in LVGL cache.
+     */
+    lv_image_decoder_args_t args = { .no_cache = true };
     lv_image_decoder_dsc_t decoder;
     lv_result_t result =
-        lv_image_decoder_open(&decoder, image, NULL);
+        lv_image_decoder_open(&decoder, image, &args);
 
     if (result != LV_RESULT_OK ||
         !decoder.decoded ||

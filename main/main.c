@@ -347,6 +347,7 @@ static ui_thumbnail_t *printer_thumb_view = NULL;
 static volatile int printer_thumb_target = THUMB_TARGET_LIVE;
 
 static lv_timer_t *thumb_poll_timer = NULL;
+static bool s_popup_thumb_start_pending;
 
 static lv_obj_t *network_selected_ssid_label = NULL;
 static lv_obj_t *network_password_ta = NULL;
@@ -415,8 +416,8 @@ static lv_timer_t *dash_thumb_render_timer = NULL;
 static int dash_thumb_render_profile_index = -1;
 static uint32_t dash_thumb_render_generation = 0;
 
-#define DASH_THUMB_CANVAS_W 286
-#define DASH_THUMB_CANVAS_H 215
+#define DASH_THUMB_CANVAS_W THUMBNAIL_PREVIEW_WIDTH
+#define DASH_THUMB_CANVAS_H THUMBNAIL_PREVIEW_HEIGHT
 
 
 static int s_moonraker_code = 0;
@@ -1745,7 +1746,11 @@ static void printer_thumb_cleanup_for_popup_close(void)
      */
     thumbnail_manager_mark_pending();
 
-    thumb_poll_timer = NULL;
+    s_popup_thumb_start_pending = false;
+    if (thumb_poll_timer) {
+        lv_timer_delete(thumb_poll_timer);
+        thumb_poll_timer = NULL;
+    }
 
     dash_thumb_img = NULL;
     printer_thumb_box = NULL;
@@ -2977,6 +2982,22 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
     bool is_live_thumb =
         (printer_thumb_target == THUMB_TARGET_LIVE);
 
+    /* A busy worker may belong to a previous selection. Wait for it, then
+     * start this popup's request instead of displaying that worker's image.
+     * Also resume automatically when Wi-Fi/Moonraker readiness returns.
+     */
+    if (!is_live_thumb && s_popup_thumb_start_pending) {
+        if (!ui_files_detail_is_open()) {
+            s_popup_thumb_start_pending = false;
+            lv_timer_delete(t);
+            thumb_poll_timer = NULL;
+            return;
+        }
+        if (thumbnail_manager_task_running() || !s_got_ip || !s_moonraker_ok) return;
+        printer_thumb_start_delayed();
+        return;
+    }
+
     thumbnail_manager_result_t result =
         thumbnail_manager_result();
 
@@ -3058,9 +3079,16 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
 
 static void printer_thumb_start_delayed(void)
 {
-    thumbnail_manager_mark_pending();
+    if (printer_thumb_target == THUMB_TARGET_POPUP) {
+        s_popup_thumb_start_pending = true;
+        if (!thumb_poll_timer) {
+            thumb_poll_timer = lv_timer_create(printer_thumb_ui_poll_cb, 200, NULL);
+        }
+    }
 
     if (!thumbnail_session_selected_thumbnail_path()[0]) {
+        s_popup_thumb_start_pending = false;
+        thumbnail_manager_mark_failed();
         printer_thumb_set_label("NO THUMBNAIL");
         return;
     }
@@ -3085,6 +3113,8 @@ static void printer_thumb_start_delayed(void)
     }
 
     printer_thumb_set_label("LOADING...");
+    thumbnail_manager_mark_pending();
+    s_popup_thumb_start_pending = false;
     bool started =
         thumbnail_manager_start_download_task(
             moonraker_config_host(),

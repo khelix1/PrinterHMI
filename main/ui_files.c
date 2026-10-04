@@ -62,8 +62,9 @@ static void file_preview_clicked_cb(lv_event_t *event)
 
     if (row->preview_image) {
         lv_event_stop_bubbling(event);
-        ui_preview_lightbox_show_object(
-            row->preview_image);
+        ui_preview_lightbox_show_file_object(
+            row->preview_image,
+            row->path);
     }
 }
 

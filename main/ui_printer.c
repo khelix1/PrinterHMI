@@ -50,13 +50,13 @@ static void preview_clicked_cb(lv_event_t *event)
 
     if (s_preview_image &&
         !lv_obj_has_flag(s_preview_image, LV_OBJ_FLAG_HIDDEN)) {
-        ui_preview_lightbox_show_object(s_preview_image);
+        ui_preview_lightbox_show_file_object(s_preview_image, s_preview_canvas_file);
         return;
     }
 
     if (s_preview_canvas &&
         !lv_obj_has_flag(s_preview_canvas, LV_OBJ_FLAG_HIDDEN)) {
-        ui_preview_lightbox_show_object(s_preview_canvas);
+        ui_preview_lightbox_show_file_object(s_preview_canvas, s_preview_canvas_file);
     }
 }
 

@@ -5,6 +5,12 @@
 
 #include "lvgl.h"
 
+/* Shared source resolution for Files, Dashboard and Printer previews.
+ * All three open this same aspect-fitted RGB565 canvas in the lightbox.
+ */
+#define THUMBNAIL_PREVIEW_WIDTH 286
+#define THUMBNAIL_PREVIEW_HEIGHT 215
+
 /*
  * Decode an LVGL image descriptor and aspect-fit it into an RGB565 buffer.
  *

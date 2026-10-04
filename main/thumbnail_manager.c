@@ -305,7 +305,7 @@ bool thumbnail_manager_load_cache_file(const char *path,
     }
 
     long len = ftell(f);
-    if (len <= 0 || len > 64 * 1024) {
+    if (len <= 0 || len > 512 * 1024) {
         fclose(f);
         return false;
     }
@@ -567,13 +567,13 @@ static void thumbnail_manager_download_task(void *arg)
     bool ok = false;
 
     if (job) {
-        ok = thumbnail_manager_run_download_task(
-            job->thumb_path,
-            job->host,
-            job->port,
-            job->selected_file,
-            job->force_refresh,
-            job->sd_ok);
+        for (unsigned attempt = 0; attempt < 3; ++attempt) {
+            ok = thumbnail_manager_run_download_task(
+                job->thumb_path, job->host, job->port, job->selected_file,
+                job->force_refresh, job->sd_ok);
+            if (ok) break;
+            if (attempt + 1 < 3) vTaskDelay(pdMS_TO_TICKS(500));
+        }
     }
 
     thumbnail_manager_set_force_refresh(false);

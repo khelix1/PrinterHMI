@@ -43,6 +43,9 @@ bool moonraker_live_websocket_fresh(int64_t maximum_age_us);
 bool moonraker_live_websocket_send_gcode(
     const char *script);
 
+/* Read-only diagnostic query; request IDs are owned by the endstop controller. */
+bool moonraker_live_websocket_request_endstops(uint32_t request_id);
+
 /* A file-list notification is coalesced until the LVGL owner consumes it. */
 bool moonraker_live_websocket_file_change_pending(void);
 bool moonraker_live_websocket_take_file_change(void);

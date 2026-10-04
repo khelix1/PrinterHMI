@@ -23,6 +23,7 @@ typedef struct {
     bool generic_heater_pid;
     bool pressure_advance;
 
+    bool probe_accuracy;
     bool probe;
     bool bltouch;
     bool load_cell_probe;

@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v6.5.5 behavior unless they are
+Documents in this directory describe current v6.5.6 behavior unless they are
 under `history/`.
 
 | Document | Purpose |
@@ -11,6 +11,7 @@ under `history/`.
 | [Configuration](CONFIGURATION.md) | Operator settings and persistent state |
 | [Custom themes](CUSTOM_THEMES.md) | SD package format, validation and recovery |
 | [Flashing and OTA](FLASHING_AND_OTA.md) | USB installation, OTA and recovery |
+| [Tools](TOOLS.md) | Calibration, live endstops, motion diagnostics and macro parameters |
 | [Testing](TESTING.md) | Required host and target validation |
 | [Continuous integration](CI.md) | Automated source policy and clean IDF6 build gate |
 | [Troubleshooting](TROUBLESHOOTING.md) | Diagnostic and recovery procedures |

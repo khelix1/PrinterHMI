@@ -5,6 +5,15 @@ acceptance environment.
 
 ## Build gate
 
+Host checks for Tools actions (requires a C compiler; pass `--cjson-dir` to
+`tools_features_test.py` for JSON controller tests when cJSON sources are not
+available under ESP-IDF or managed components):
+
+```bash
+python3 tools/audit/tools_action_safety_test.py
+python3 tools/audit/tools_features_test.py
+```
+
 ```bash
 ./tools/build_idf6_hosted3.sh
 
@@ -79,6 +88,38 @@ operator present.
   pans without reversing direction or fighting another gesture.
 - Calibration and profile Save/Remove paths use confirmation and recover after
   Klipper restart.
+- Bed Mesh Calibrate/Load/Save/Remove reject offline, printing, paused, error
+  and shutdown states, including state changes while confirmation is open.
+- Profile Save/Remove sends one script containing the profile operation followed
+  by SAVE_CONFIG. An invalid profile operation must not restart Klipper.
+- Switch printer profiles after calibration results appear: old results cannot
+  enable SAVE_CONFIG on the new printer, even before the next UI refresh.
+- Unfinished accelerometer checks time out after 2 minutes, screws adjustment
+  after 10 minutes, and other tracked sessions after 30 minutes. The timeout
+  reports missing results and does not cancel the printer operation.
+- Accelerometer noise results complete the check without enabling SAVE_CONFIG.
+- Completed calibration results remain available on the same printer.
+- Devices tile describes inspection and live readings.
+- Probe Accuracy appears only when Klipper reports PROBE_ACCURACY support.
+  Home XYZ and position the probe over the bed in Printer first. Confirm tests
+  with 5/10/20 samples; all six final statistics appear, with no Apply & Restart.
+  Unhomed, printing, paused, offline and switched-profile starts are blocked.
+- Devices Endstops opens a live view with OPEN/TRIGGERED states. Press a physical
+  switch and verify changes arrive on the next 2-second sample. Queries stop on
+  close, pause during printing, and clear old readings when offline or switched.
+  A failed/timed-out query displays a message and retries; a late reply cannot
+  revive a closed viewer. Check a printer with virtual/sensorless endstops too.
+- Macro search is case-insensitive and preserves Favorites ordering. Clearing
+  restores the full catalog; no-match and discovery-wait states remain usable.
+- Macro parameter fields recognize params.NAME, params['NAME'] and
+  params.get('NAME', ...). Empty values are omitted; two additional named fields
+  cover parameters that cannot be inferred. Dynamic/rawparams macros may need
+  Console. Test required fields, macro defaults, parameter-free macros and
+  filenames with spaces (quoted automatically). Invalid names, duplicate names, command
+  overflow, quotes, backslashes, semicolons and line breaks are rejected.
+- Editing parameters never sends a command. Review shows the exact command;
+  Run sends it once. Cancel, navigation, disconnect and profile changes leave
+  no keyboard or modal behind and cannot send to another printer.
 - Public macros appear alphabetically; underscore-prefixed helpers do not.
 - Running a safe macro requires confirmation and is recorded in Console
   history.
@@ -94,6 +135,27 @@ operator present.
 - A profile without a camera shows no stale image from another profile.
 - Camera selection, manual URL configuration and active-camera identity persist
   per printer profile.
+
+## Motion diagnostics
+
+- Calibration → Motion shows LIMITS, DISTANCE and DRIVERS above the existing
+  SHAPER, RESONANCE and SENSOR actions. All six buttons fit without overlapping
+  touch areas with normal and larger text.
+- LIMITS follows current runtime velocity, acceleration, square corner velocity
+  and minimum cruise ratio, including changes from M204/SET_VELOCITY_LIMIT.
+  Missing fields show unavailable. Opening the view sends no motion commands.
+- DRIVERS lists discovered TMC drivers, currents and reported temperature/status.
+  Unsupported temperatures and null/unsampled driver status remain unavailable;
+  they must not appear healthy. Warning/fault flags update and driver selection
+  survives refresh. Standalone drivers show an explanatory empty state.
+- Disconnect and printer-profile changes clear live readouts. Closing the popup
+  or leaving Calibration stops refresh and closes any numeric editor.
+- DISTANCE calculates belt pitch × pulley teeth (2 × 20 = 40 mm) or screw thread
+  pitch × starts (2 × 4 = 8 mm), and shows configured X/Y/Z reference values.
+  Reject zero, negative, nonfinite, malformed and fractional tooth/start counts.
+  Preserve configured gear ratios when applying a result manually. This tool
+  sends no G-code, edits no configuration and does not calibrate XYZ from measured
+  travel or printed-part dimensions.
 
 ## Files and previews
 

@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "macro_parameter_utils.h"
+
 #define MACRO_CONTROLLER_MAX_MACROS 64
 #define MACRO_CONTROLLER_NAME_MAX 64
 
@@ -38,3 +40,7 @@ bool macro_controller_get(
 /* Favorites are panel-local shortcuts; the macro itself remains in Klipper. */
 bool macro_controller_is_favorite(const char *name);
 bool macro_controller_toggle_favorite(const char *name);
+
+/* Config is the configfile.config map returned by Moonraker. */
+void macro_controller_update_parameters(const struct cJSON *config);
+bool macro_controller_parameters(const char *name, macro_parameter_catalog_t *out);

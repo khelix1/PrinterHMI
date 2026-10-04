@@ -21,6 +21,8 @@
 
 ## Build
 
+- [ ] Tools action-safety and feature host tests pass, including JSON controller tests.
+- [ ] Document links and feature architecture audits pass.
 - [ ] Canonical ESP-IDF 6.0.2 P4+C6 stack build succeeds.
 - [ ] `dependencies.lock`, `sdkconfig.idf6` and `partitions.csv` diffs are intentional.
 - [ ] Application and bootloader size reports are saved.
@@ -47,6 +49,9 @@
 - [ ] Stable and Nightly catalog installs preserve the saved Custom OTA URL.
 - [ ] Bed Mesh rotation, pinch, two-finger pan, grid, origins, calibration and
       profile management pass.
+- [ ] Probe Accuracy sample counts/statistics and session/profile timeout behavior pass.
+- [ ] Motion limits, geometry calculator and TMC unavailable/warning/fault states pass.
+- [ ] Idle-only endstop refresh and macro search/parameter review pass.
 - [ ] Devices filters, pagination, live values and Telemetry navigation pass.
 - [ ] `tools/audit/v5_feature_architecture_audit.sh` passes.
 - [ ] Public macros are detected, helper macros are hidden and execution

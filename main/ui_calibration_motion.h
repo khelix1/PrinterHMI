@@ -17,7 +17,8 @@ typedef void (*ui_calibration_motion_show_results_cb_t)(
 typedef void (*ui_calibration_motion_refresh_results_cb_t)(void);
 
 /*
- * Owns the Input Shaper, Resonance, and accelerometer-check actions and
+ * Owns Motion limits, distance calculator, driver diagnostics, Input Shaper,
+ * Resonance, and accelerometer-check actions and
  * popups. The parent Calibration page retains card layout and capability
  * summaries.
  */

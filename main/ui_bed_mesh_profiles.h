@@ -3,7 +3,7 @@
 #include "bed_mesh_controller.h"
 #include "lvgl.h"
 
-typedef void (*ui_bed_mesh_profiles_command_cb_t)(
+typedef bool (*ui_bed_mesh_profiles_command_cb_t)(
     const char *command);
 
 void ui_bed_mesh_profiles_init(

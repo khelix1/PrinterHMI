@@ -85,7 +85,7 @@ void ui_tools_show(void)
     add_tile(LV_SYMBOL_IMAGE, UI_ACCENT_BRIGHT,
              "BED MESH", "Probe and visualize the bed surface.", 420, 88, 1);
     add_tile(LV_SYMBOL_CHARGE, UI_WARN,
-             "DEVICES", "Manage connected devices and diagnostics.", 20, 276, 2);
+             "DEVICES", "Inspect devices and live readings.", 20, 276, 2);
     add_tile(LV_SYMBOL_PLAY, UI_OK_BRIGHT,
              "MACROS", "Run available printer macros.", 420, 276, 3);
 }

@@ -10,6 +10,7 @@
 #include "cJSON.h"
 #include "bed_mesh_controller.h"
 #include "calibration_capability_controller.h"
+#include "motion_diagnostics_controller.h"
 #include "device_catalog_controller.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -155,6 +156,7 @@ bool moonraker_exclude_objects_available(void)
 
 void moonraker_state_reset(void)
 {
+    motion_diagnostics_controller_reset();
     state_lock();
     memset(&g_moonraker_state, 0, sizeof(g_moonraker_state));
     if (g_moonraker_exclude_state) {
@@ -779,6 +781,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
             ? 1
             : 0;
 
+    if (motion_diagnostics_controller_merge_status(status)) ++updates;
     if (calibration_capability_controller_merge_status(status)) {
         ++updates;
     }

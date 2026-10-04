@@ -23,6 +23,7 @@ static macro_favorites_t s_favorites;
 static bool s_favorites_loaded = false;
 
 typedef struct {
+    macro_parameter_catalog_t parameters[MACRO_CONTROLLER_MAX_MACROS];
     macro_controller_status_t status;
     char names[MACRO_CONTROLLER_MAX_MACROS]
               [MACRO_CONTROLLER_NAME_MAX];
@@ -136,6 +137,7 @@ void macro_controller_update_from_objects(
 
     portENTER_CRITICAL(&s_lock);
 
+    memset(s_store->parameters, 0, sizeof(s_store->parameters));
     memset(
         s_store->names,
         0,
@@ -245,6 +247,51 @@ bool macro_controller_get(
         found = true;
     }
 
+    portEXIT_CRITICAL(&s_lock);
+    return found;
+}
+
+void macro_controller_update_parameters(const struct cJSON *config)
+{
+    if (!s_store) return;
+    /* Parse outside the lock; copy one bounded entry after checking catalog revision. */
+    macro_controller_status_t status;
+    macro_controller_status(&status);
+    for (size_t i = 0; i < status.count; ++i) {
+        char name[MACRO_CONTROLLER_NAME_MAX], section[MACRO_CONTROLLER_NAME_MAX + 16];
+        if (!macro_controller_get(i, name, sizeof(name))) continue;
+        snprintf(section, sizeof(section), "gcode_macro %s", name);
+        const cJSON *definition = cJSON_GetObjectItem(config, section);
+        const cJSON *gcode = cJSON_GetObjectItemCaseSensitive(definition, "gcode");
+        macro_parameter_catalog_t parameters;
+        macro_parameter_detect(cJSON_IsString(gcode) ? gcode->valuestring : NULL, &parameters);
+        portENTER_CRITICAL(&s_lock);
+        if (s_store->status.generation != status.generation) {
+            portEXIT_CRITICAL(&s_lock);
+            return;
+        }
+        s_store->parameters[i] = parameters;
+        portEXIT_CRITICAL(&s_lock);
+    }
+    portENTER_CRITICAL(&s_lock);
+    if (s_store->status.generation == status.generation) ++s_store->status.generation;
+    portEXIT_CRITICAL(&s_lock);
+}
+
+bool macro_controller_parameters(const char *name, macro_parameter_catalog_t *out)
+{
+    if (!out) return false;
+    memset(out, 0, sizeof(*out));
+    if (!s_store || !name) return false;
+    bool found = false;
+    portENTER_CRITICAL(&s_lock);
+    for (size_t i = 0; i < s_store->status.count; ++i) {
+        if (!strcmp(name, s_store->names[i])) {
+            *out = s_store->parameters[i];
+            found = true;
+            break;
+        }
+    }
     portEXIT_CRITICAL(&s_lock);
     return found;
 }

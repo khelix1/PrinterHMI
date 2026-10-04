@@ -7,10 +7,15 @@
 #include "console_controller.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "moonraker_config_controller.h"
 #include "freertos/FreeRTOS.h"
 
 typedef struct {
     calibration_session_snapshot_t snapshot;
+    int owner_profile;
+    uint32_t owner_generation;
+    int64_t started_us;
 } calibration_session_store_t;
 
 static const char TAG[] = "calibration_session";
@@ -127,6 +132,46 @@ static void next_generation_locked(void)
 }
 
 
+static int64_t session_timeout_us(calibration_session_kind_t kind)
+{
+    int minutes = 30; /* Heating and guided manual calibration can take time. */
+    if (kind == CALIBRATION_SESSION_ACCELEROMETER_CHECK) minutes = 2;
+    if (kind == CALIBRATION_SESSION_PROBE_ACCURACY) minutes = 5;
+    if (kind == CALIBRATION_SESSION_SCREWS_TILT) minutes = 10;
+    return (int64_t)minutes * 60 * 1000000;
+}
+
+static void validate_session(void)
+{
+    if (!s_store) return;
+    int profile = moonraker_config_active_profile_index();
+    uint32_t owner_generation = moonraker_config_generation();
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_lock);
+    calibration_session_snapshot_t *snapshot = &s_store->snapshot;
+    const char *error = NULL;
+    if (snapshot->status != CALIBRATION_SESSION_IDLE &&
+        snapshot->status != CALIBRATION_SESSION_ERROR) {
+        if (profile != s_store->owner_profile ||
+            owner_generation != s_store->owner_generation) {
+            error = "Printer changed. Start calibration again on the active printer.";
+        } else if (!snapshot->completed &&
+                   now - s_store->started_us >= session_timeout_us(snapshot->kind)) {
+            error = "Timed out waiting for calibration results. Check Console; "
+                    "the printer operation has not been cancelled.";
+        }
+    }
+    if (error) {
+        snapshot->status = CALIBRATION_SESSION_ERROR;
+        snapshot->completed = false;
+        snapshot->save_available = false;
+        snprintf(snapshot->results, sizeof(snapshot->results), "%s", error);
+        next_generation_locked();
+    }
+    portEXIT_CRITICAL(&s_lock);
+}
+
+
 static void append_result(
     const char *line,
     bool completed,
@@ -205,8 +250,14 @@ void calibration_session_controller_begin(
         return;
     }
 
+    int profile = moonraker_config_active_profile_index();
+    uint32_t owner_generation = moonraker_config_generation();
+    int64_t started_us = esp_timer_get_time();
     portENTER_CRITICAL(&s_lock);
 
+    s_store->owner_profile = profile;
+    s_store->owner_generation = owner_generation;
+    s_store->started_us = started_us;
     uint32_t generation = s_store->snapshot.generation;
     memset(&s_store->snapshot, 0, sizeof(s_store->snapshot));
     s_store->snapshot.kind = kind;
@@ -262,6 +313,10 @@ static bool generic_result_relevant(
         return false;
     }
 
+    /* An accuracy check only completes on its own final statistics. */
+    if (kind == CALIBRATION_SESSION_PROBE_ACCURACY)
+        return contains_case_insensitive(message, "probe accuracy results:");
+
     if (contains_case_insensitive(message, "SAVE_CONFIG")) {
         return true;
     }
@@ -316,6 +371,7 @@ static bool generic_result_relevant(
          */
         return false;
 
+    case CALIBRATION_SESSION_PROBE_ACCURACY:
     case CALIBRATION_SESSION_SCREWS_TILT:
     case CALIBRATION_SESSION_KIND_NONE:
     default:
@@ -330,6 +386,7 @@ void calibration_session_controller_poll(void)
         return;
     }
 
+    validate_session();
     calibration_session_kind_t kind;
     calibration_session_status_t status;
     uint32_t last_sequence;
@@ -387,14 +444,15 @@ void calibration_session_controller_poll(void)
             continue;
         }
 
-        bool save_available =
+        bool save_available = kind != CALIBRATION_SESSION_PROBE_ACCURACY &&
             contains_case_insensitive(
                 entry.message,
                 "SAVE_CONFIG");
-        append_result(
-            entry.message,
-            save_available,
-            save_available);
+        bool completed = kind == CALIBRATION_SESSION_PROBE_ACCURACY || save_available ||
+            (kind == CALIBRATION_SESSION_ACCELEROMETER_CHECK &&
+             (contains_case_insensitive(entry.message, "axes noise") ||
+              contains_case_insensitive(entry.message, "noise for")));
+        append_result(entry.message, completed, save_available);
     }
 }
 
@@ -411,6 +469,8 @@ void calibration_session_controller_snapshot(
         return;
     }
 
+    /* Recheck ownership even when Save is tapped between UI refreshes. */
+    validate_session();
     portENTER_CRITICAL(&s_lock);
     *output = s_store->snapshot;
     portEXIT_CRITICAL(&s_lock);

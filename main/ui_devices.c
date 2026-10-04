@@ -12,6 +12,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "ui_devices_catalog_view.h"
+#include "ui_endstop_status.h"
 
 typedef struct {
     lv_obj_t *root;
@@ -89,6 +90,12 @@ static void devices_open_telemetry_event_cb(
 }
 
 
+static void endstops_cb(lv_event_t *event)
+{
+    (void)event;
+    ui_endstop_status_show();
+}
+
 void ui_devices_show(
     ui_devices_open_telemetry_cb_t open_telemetry_cb)
 {
@@ -142,12 +149,12 @@ void ui_devices_show(
 
     devices_label(
         banner,
-        "Active-printer objects, grouped by capability",
+        "Active-printer devices and live readings",
         UI_FONT_CAPTION,
         UI_TEXT_DIM,
         20,
         50,
-        480);
+        440);
 
     s_devices->banner_status = devices_label(
         banner,
@@ -182,6 +189,13 @@ void ui_devices_show(
             NULL);
     }
 
+    lv_obj_t *endstops = ui_button_create(banner, UI_BUTTON_OUTLINED, "ENDSTOPS");
+    if (endstops) {
+        lv_obj_set_size(endstops, 150, 32);
+        lv_obj_align(endstops, LV_ALIGN_BOTTOM_RIGHT, -164, -8);
+        lv_obj_add_event_cb(endstops, endstops_cb, LV_EVENT_CLICKED, NULL);
+    }
+
     ui_devices_catalog_view_create(
         s_devices->root,
         s_devices->banner_status);
@@ -195,6 +209,7 @@ void ui_devices_hide(void)
         return;
     }
 
+    ui_endstop_status_close();
     ui_devices_catalog_view_close();
 
     if (s_devices->root) {

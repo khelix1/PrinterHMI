@@ -8,6 +8,7 @@
 #include "macro_controller.h"
 
 static bool s_axis_twist_command_available;
+static bool s_probe_accuracy_command_available;
 static uint32_t s_command_generation;
 
 
@@ -40,6 +41,8 @@ bool calibration_capability_controller_merge_status(
     bool available = cJSON_HasObjectItem(
         commands,
         "AXIS_TWIST_COMPENSATION_CALIBRATE");
+    __atomic_store_n(&s_probe_accuracy_command_available,
+        cJSON_HasObjectItem(commands, "PROBE_ACCURACY"), __ATOMIC_RELEASE);
     __atomic_store_n(
         &s_axis_twist_command_available,
         available,
@@ -54,6 +57,7 @@ bool calibration_capability_controller_merge_status(
 
 void calibration_capability_controller_reset(void)
 {
+    __atomic_store_n(&s_probe_accuracy_command_available, false, __ATOMIC_RELEASE);
     __atomic_store_n(
         &s_axis_twist_command_available,
         false,
@@ -155,7 +159,8 @@ void calibration_capability_controller_snapshot(
         output->z_tilt =
             output->z_tilt ||
             strcmp(name, "z_tilt") == 0;
-        output->axis_twist =
+        output->probe_accuracy = __atomic_load_n(&s_probe_accuracy_command_available, __ATOMIC_ACQUIRE);
+    output->axis_twist =
             output->axis_twist ||
             strcmp(name, "axis_twist_compensation") == 0;
 

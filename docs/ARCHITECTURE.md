@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v6.5.5 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v6.5.6 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -96,6 +96,8 @@ status banners, cards, previews, charts, action panels and popup controllers.
   `moonraker` and consumed through controllers.
 - `macro_controller` derives a bounded, alphabetized public-macro catalog from
   Moonraker object discovery while excluding underscore-prefixed helpers.
+  Configuration queries supply macro parameter hints; `macro_parameter_utils`
+  validates names/values and constructs a bounded command for review.
 - `console_controller` retains bounded command and response history and
   receives live `notify_gcode_response` WebSocket messages.
 
@@ -130,6 +132,17 @@ status banners, cards, previews, charts, action panels and popup controllers.
   both Probe/Z and Axis Twist, while `calibration_capability_controller`
   and `calibration_session_controller`
   retain capability and session policy.
+- `ui_probe_accuracy` runs 5/10/20-sample checks through the shared session
+  owner and shows final statistics without SAVE_CONFIG. Dispatch rechecks the
+  active printer, readiness and idle/homed requirements.
+- `motion_diagnostics_controller` merges partial toolhead/TMC status updates
+  and configuration reference values into a bounded, profile-fenced snapshot.
+  `ui_motion_diagnostics` owns read-only limits/driver views and the local
+  hardware-geometry calculator, including popup and timer teardown.
+- `endstop_status_controller` matches request IDs to the active profile,
+  handles timeouts and rejects stale responses. `ui_endstop_status` requests
+  structured WebSocket readings every two seconds while the printer is idle;
+  printing/paused states suspend queries.
 - `ui_bed_mesh` composes the 3D mesh page. Gesture recognition, rendering
   and profile dialogs belong to `ui_bed_mesh_gestures`,
   `ui_bed_mesh_renderer` and `ui_bed_mesh_profiles`; `bed_mesh_controller`
@@ -139,9 +152,8 @@ status banners, cards, previews, charts, action panels and popup controllers.
   `ui_devices_live_values` translates synchronized Moonraker state for visible
   labels; `device_catalog_controller` owns discovery and classification.
 - `ui_macros` and `macro_controller` own public-macro presentation and
-  policy. `ui_console` and `console_controller` own command entry and
-  bounded response history. These already had clean page/controller
-  boundaries and were intentionally left intact.
+  policy, search, detected parameter entry and final command confirmation.
+  `ui_console` and `console_controller` own command entry and bounded response history.
 - Long-lived feature contexts and bounded catalogs prefer PSRAM with an
   internal-RAM fallback.
 

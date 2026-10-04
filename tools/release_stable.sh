@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V2
 expected_origin_repo="khelix1/PrinterHMI"
-version="6.5.5"
+version="6.5.6"
 tag="v${version}"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -56,6 +56,11 @@ gh auth status >/dev/null 2>&1 || {
 
 "$repo_dir/tools/audit/public_tree_audit.sh"
 "$repo_dir/tools/audit/version_audit.sh"
+"$repo_dir/tools/audit/dependencies_lock_audit.sh"
+"$repo_dir/tools/audit/v5_feature_architecture_audit.sh"
+python3 "$repo_dir/tools/audit/document_links_audit.py"
+python3 "$repo_dir/tools/audit/tools_action_safety_test.py"
+python3 "$repo_dir/tools/audit/tools_features_test.py" --require-cjson
 git diff-tree --check --root --no-commit-id HEAD
 
 local_commit="$(git rev-parse HEAD)"

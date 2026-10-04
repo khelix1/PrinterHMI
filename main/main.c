@@ -149,6 +149,7 @@ static void sntp_wait_task(void *arg);
 #include "console_controller.h"
 #include "ui_macros.h"
 #include "macro_controller.h"
+#include "motion_diagnostics_controller.h"
 #include "printer_action_resolver.h"
 #include "device_catalog_controller.h"
 #include "calibration_session_controller.h"
@@ -1475,6 +1476,39 @@ static void printer_popup_send_gcode_bridge(const char *cmd)
 }
 
 
+static uint32_t s_bed_mesh_owner_generation;
+
+static bool bed_mesh_send_gcode_bridge(const char *cmd)
+{
+    if (s_bed_mesh_owner_generation != moonraker_config_generation()) {
+        ui_toast_show(UI_STATUS_DANGER, "BED MESH UNAVAILABLE",
+                      "Printer changed. Reopen Bed Mesh before continuing.");
+        return false;
+    }
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    if (!s_got_ip || !state.moonraker_ok || !state.live_data_ok) {
+        ui_toast_show(UI_STATUS_DANGER, "BED MESH UNAVAILABLE",
+                      "The active printer is offline or not ready.");
+        return false;
+    }
+    if (strcmp(state.printer_state, "printing") == 0 ||
+        strcmp(state.printer_state, "paused") == 0) {
+        ui_toast_show(UI_STATUS_DANGER, "BED MESH BLOCKED",
+                      "Mesh actions cannot run during a print.");
+        return false;
+    }
+    if (strcmp(state.printer_state, "error") == 0 ||
+        strcmp(state.printer_state, "shutdown") == 0) {
+        ui_toast_show(UI_STATUS_DANGER, "BED MESH BLOCKED",
+                      "Clear the printer error before changing the mesh.");
+        return false;
+    }
+    console_controller_add_command(cmd);
+    return moonraker_send_gcode(cmd);
+}
+
+
 void ui_command_bar_action(const char *action)
 {
     if (!action) return;
@@ -1692,7 +1726,8 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_BED_MESH:
-        ui_bed_mesh_show(printer_popup_send_gcode_bridge);
+        s_bed_mesh_owner_generation = moonraker_config_generation();
+        ui_bed_mesh_show(bed_mesh_send_gcode_bridge);
         return;
 
     case UI_SHELL_PAGE_CALIBRATION:
@@ -3807,6 +3842,7 @@ void app_main(void)
     operator_event_log_init();
     console_controller_init();
     macro_controller_init();
+    motion_diagnostics_controller_init();
     device_catalog_controller_init();
     calibration_session_controller_init();
     ui_macros_init();

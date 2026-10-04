@@ -125,6 +125,11 @@ bool device_catalog_controller_subscription_fields(
         return false;
     }
 
+    if (starts_with(object_name, "tmc") && strchr(object_name, ' ')) {
+        *fields_out = "[\"run_current\",\"hold_current\",\"drv_status\",\"temperature\"]";
+        return true;
+    }
+
     if (starts_with(object_name, "heater_generic ")) {
         *fields_out = "[\"temperature\",\"target\",\"power\"]";
         return true;
@@ -396,6 +401,13 @@ static bool format_generic_status_value(
     bool has_value =
         status_number(object, "value", &value);
 
+    double run_current, hold_current;
+    if (status_number(object, "run_current", &run_current)) {
+        if (status_number(object, "hold_current", &hold_current))
+            snprintf(output, output_size, "RUN %.2f A / HOLD %.2f A", run_current, hold_current);
+        else snprintf(output, output_size, "RUN %.2f A", run_current);
+        return true;
+    }
     if (has_temperature && has_target) {
         snprintf(
             output,

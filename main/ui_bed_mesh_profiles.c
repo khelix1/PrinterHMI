@@ -223,7 +223,7 @@ static void confirmed_profile_command(
     int written = snprintf(
         command,
         sizeof(command),
-        "BED_MESH_PROFILE %s=%s",
+        "BED_MESH_PROFILE %s=%s\nSAVE_CONFIG",
         operation,
         s.pending_profile_name);
 
@@ -239,8 +239,8 @@ static void confirmed_profile_command(
      * Klipper, while keeping the dedicated Bed Mesh page in place.
      */
     close_profile_popup_cb(NULL);
+    /* One script: Klipper stops before SAVE_CONFIG if the profile command fails. */
     send_command(command);
-    send_command("SAVE_CONFIG");
 }
 
 static void confirm_save_profile_cb(lv_event_t *e)

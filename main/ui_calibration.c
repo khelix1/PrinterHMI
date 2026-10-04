@@ -9,6 +9,7 @@
 #include "calibration_capability_controller.h"
 #include "calibration_session_controller.h"
 #include "ui_calibration_motion.h"
+#include "ui_probe_accuracy.h"
 #include "ui_calibration_layout.h"
 #include "ui_calibration_geometry.h"
 #include "ui_calibration_custom.h"
@@ -319,6 +320,8 @@ static void refresh_capabilities(void)
             false,
             false);
 
+        ui_probe_accuracy_refresh(false);
+
         if (s_calibration->probe_z_button) {
             lv_obj_add_flag(
                 s_calibration->probe_z_button,
@@ -466,29 +469,9 @@ static void refresh_capabilities(void)
         }
     }
 
-    char motion[176] = "";
-    size_t motion_count = 0;
-
-    if (capabilities.input_shaper) {
-        ui_calibration_layout_append_tool(
-            motion,
-            sizeof(motion),
-            "INPUT SHAPER");
-        ++motion_count;
-    }
-    if (capabilities.accelerometer) {
-        ui_calibration_layout_append_tool(
-            motion,
-            sizeof(motion),
-            "ACCELEROMETER");
-        ++motion_count;
-    }
-
-    ui_calibration_layout_set_card(
-        &s_calibration->motion,
-        motion,
-        motion_count,
-        0);
+    ui_calibration_layout_set_card(&s_calibration->motion,
+        "Limits / axis distance / TMC status", 3 + (capabilities.input_shaper ? 1 : 0) +
+        (capabilities.accelerometer ? 1 : 0), 0);
 
     ui_calibration_motion_refresh(
         true,
@@ -581,6 +564,10 @@ static void refresh_capabilities(void)
         ++probe_count;
     }
 
+    if (capabilities.probe_accuracy) {
+        ui_calibration_layout_append_tool(probe, sizeof(probe), "ACCURACY CHECK");
+        ++probe_count;
+    }
     if (capabilities.calibration_macro_count > 0) {
         char macros[48];
         lv_snprintf(
@@ -596,6 +583,8 @@ static void refresh_capabilities(void)
         probe,
         probe_count,
         capabilities.calibration_macro_count);
+
+    ui_probe_accuracy_refresh(capabilities.probe_accuracy);
 
     if (s_calibration->probe_z_button) {
         if (capabilities.probe) {
@@ -622,7 +611,7 @@ static void refresh_capabilities(void)
     }
 
     if (s_calibration->probe.status) {
-        if (capabilities.probe ||
+        if (capabilities.probe || capabilities.probe_accuracy ||
             capabilities.calibration_macro_count > 0) {
             lv_obj_add_flag(
                 s_calibration->probe.status,
@@ -1518,6 +1507,9 @@ void ui_calibration_show(
         &s_calibration->motion);
 
     if (motion) {
+        lv_obj_add_flag(s_calibration->motion.status, LV_OBJ_FLAG_HIDDEN);
+        ui_apply_text_caption(s_calibration->motion.summary);
+        lv_label_set_long_mode(s_calibration->motion.summary, LV_LABEL_LONG_DOT);
         ui_calibration_motion_create(
             motion,
             s_calibration->send_gcode,
@@ -1574,6 +1566,7 @@ void ui_calibration_show(
         &s_calibration->probe);
 
     if (probe) {
+        ui_probe_accuracy_create(probe, s_calibration->send_gcode, calibration_action_ready);
         s_calibration->probe_z_button =
             ui_button_create(
                 probe,
@@ -1583,7 +1576,7 @@ void ui_calibration_show(
         if (s_calibration->probe_z_button) {
             lv_obj_set_size(
                 s_calibration->probe_z_button,
-                166,
+                110,
                 38);
             lv_obj_align(
                 s_calibration->probe_z_button,
@@ -1609,7 +1602,7 @@ void ui_calibration_show(
         if (s_calibration->custom_calibration_button) {
             lv_obj_set_size(
                 s_calibration->custom_calibration_button,
-                166,
+                110,
                 38);
             lv_obj_align(
                 s_calibration->custom_calibration_button,
@@ -1656,6 +1649,7 @@ void ui_calibration_hide(void)
     close_probe_popup();
     ui_calibration_custom_close();
     ui_calibration_motion_hide();
+    ui_probe_accuracy_hide();
     close_axis_twist_popup();
     ui_calibration_manual_probe_hide();
     ui_calibration_results_close();

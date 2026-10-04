@@ -1,7 +1,7 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v6.5.5 firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v6.5.6 firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
@@ -13,7 +13,7 @@ timezone settings, runtime themes, and OTA firmware updates.
 
 ## Status
 
-- Firmware version: `6.5.5`
+- Firmware version: `6.5.6`
 - Target: `esp32p4`
 - Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`
@@ -27,6 +27,8 @@ publishing repository history.
 
 ## Operator features
 
+See the [Tools guide](docs/TOOLS.md) for calibration and diagnostics controls.
+
 - Dashboard with active-printer identity, print status and cached preview
 - Capability-aware printer controls for motion, independently controlled hotends, active-tool selection, bed, fan, speed, flow and print state
 - Live switch and motion filament-sensor status with multi-sensor detail
@@ -35,9 +37,10 @@ publishing repository history.
 - Dedicated Bed Mesh page with color height surface, rear reference planes,
   origin markers, statistics, calibration, profile management and multitouch
 - Capability-aware guided Calibration workflows with safe persistence
-  confirmations
-- Capability-aware Devices catalog with filtering, pagination and live values
-- Detected public Klipper macros with confirmation before execution
+  confirmations, repeated-sample probe accuracy checks, runtime motion limits,
+  axis-distance calculator and TMC driver diagnostics
+- Capability-aware Devices catalog with filtering, pagination, live values and endstop queries
+- Public Klipper macro search, detected parameter fields and command review before execution
 - Live command console with bounded history and response severity colors
 - Multi-printer profile selection for as many as four Moonraker instances
 - Drybox status and PLA/PETG/hold program controls

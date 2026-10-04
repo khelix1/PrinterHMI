@@ -17,6 +17,8 @@
 #include "operator_event_log.h"
 #include "console_controller.h"
 #include "macro_controller.h"
+#include "motion_diagnostics_controller.h"
+#include "endstop_status_controller.h"
 #include "device_catalog_controller.h"
 #include "calibration_capability_controller.h"
 
@@ -40,6 +42,7 @@ static bool s_started = false;
 static volatile bool s_connected = false;
 static volatile bool s_discovery_pending = false;
 static volatile bool s_subscribe_pending = false;
+static volatile bool s_macro_config_pending;
 static volatile bool s_subscription_ready = false;
 static volatile bool s_subscribed = false;
 static volatile int64_t s_last_status_update_us = 0;
@@ -639,6 +642,41 @@ bool moonraker_live_websocket_send_gcode(
 }
 
 
+bool moonraker_live_websocket_request_endstops(uint32_t request_id)
+{
+    if (!s_client || !s_connected || request_id < ENDSTOP_REQUEST_FIRST ||
+        s_generation != __atomic_load_n(&s_accepted_generation, __ATOMIC_ACQUIRE)) return false;
+    char request[128];
+    int length = snprintf(request, sizeof(request),
+        "{\"jsonrpc\":\"2.0\",\"method\":\"printer.query_endstops.status\",\"id\":%u}",
+        (unsigned)request_id);
+    return length > 0 && (size_t)length < sizeof(request) &&
+        esp_websocket_client_send_text(s_client, request, length, 0) == length;
+}
+
+static bool handle_tools_response(const char *json, size_t length)
+{
+    /* Notifications dominate live traffic and never carry response IDs. */
+    if (!strstr(json, "\"id\"")) return false;
+    cJSON *root = cJSON_ParseWithLength(json, length);
+    if (!root) return false;
+    cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "id");
+    bool consumed = cJSON_IsNumber(id) && id->valueint == 1003;
+    if (consumed) {
+        cJSON *result = cJSON_GetObjectItemCaseSensitive(root, "result");
+        cJSON *status = cJSON_GetObjectItemCaseSensitive(result, "status");
+        cJSON *configfile = cJSON_GetObjectItemCaseSensitive(status, "configfile");
+        cJSON *config = cJSON_GetObjectItemCaseSensitive(configfile, "config");
+        macro_controller_update_parameters(config);
+        motion_diagnostics_controller_update_config(config);
+    } else {
+        consumed = endstop_status_controller_merge(root, s_generation);
+    }
+    cJSON_Delete(root);
+    return consumed;
+}
+
+
 static bool handle_command_response(
     const char *json,
     size_t length)
@@ -704,6 +742,8 @@ static bool handle_object_list_response(
         : NULL;
 
     macro_controller_update_from_objects(objects);
+    motion_diagnostics_controller_update_objects(objects);
+    s_macro_config_pending = cJSON_IsArray(objects);
     device_catalog_controller_update_from_objects(objects);
 
     static const char *candidates[MOONRAKER_MAX_HOTENDS] = {
@@ -906,6 +946,8 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         return;
     }
 
+    if (handle_tools_response(s_message_buffer, (size_t)payload_length)) return;
+
     if (handle_object_list_response(
             s_message_buffer,
             (size_t)payload_length)) {
@@ -944,6 +986,9 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_READY:
         /* A Klippy restart invalidates the old object subscription. */
         device_catalog_controller_reset();
+        motion_diagnostics_controller_reset();
+        macro_controller_update_from_objects(NULL);
+        s_macro_config_pending = false;
         calibration_capability_controller_reset();
         s_last_status_update_us = 0;
         s_subscribed = false;
@@ -968,6 +1013,9 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED:
         device_catalog_controller_reset();
+        motion_diagnostics_controller_reset();
+        macro_controller_update_from_objects(NULL);
+        s_macro_config_pending = false;
         calibration_capability_controller_reset();
         s_last_status_update_us = 0;
         s_subscribed = false;
@@ -1025,6 +1073,9 @@ static void websocket_event_handler(
 
     case WEBSOCKET_EVENT_DISCONNECTED:
         device_catalog_controller_reset();
+        motion_diagnostics_controller_reset();
+        macro_controller_update_from_objects(NULL);
+        s_macro_config_pending = false;
         calibration_capability_controller_reset();
         s_connected = false;
         s_subscribed = false;
@@ -1059,6 +1110,9 @@ static void websocket_event_handler(
 
     case WEBSOCKET_EVENT_CLOSED:
         device_catalog_controller_reset();
+        motion_diagnostics_controller_reset();
+        macro_controller_update_from_objects(NULL);
+        s_macro_config_pending = false;
         calibration_capability_controller_reset();
         s_connected = false;
         s_subscribed = false;
@@ -1086,6 +1140,7 @@ static void destroy_client(void)
     s_message_generation = 0;
     __atomic_store_n(&s_file_change_pending, false, __ATOMIC_RELEASE);
     device_catalog_controller_reset();
+    motion_diagnostics_controller_reset();
     calibration_capability_controller_reset();
 
     if (!client) return;
@@ -1351,6 +1406,14 @@ void moonraker_live_websocket_tasklet(
             s_discovery_pending = true;
             ESP_LOGW(TAG, "WS discovery transaction failed");
         }
+    }
+
+    if (s_connected && s_macro_config_pending) {
+        static const char request[] =
+            "{\"jsonrpc\":\"2.0\",\"method\":\"printer.objects.query\","
+            "\"params\":{\"objects\":{\"configfile\":[\"config\"]}},\"id\":1003}";
+        if (esp_websocket_client_send_text(s_client, request, (int)sizeof(request) - 1, 0) == (int)sizeof(request) - 1)
+            s_macro_config_pending = false;
     }
 
     if (s_connected &&

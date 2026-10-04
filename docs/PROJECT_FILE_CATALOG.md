@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v6.5.5 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v6.5.6 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -26,7 +26,7 @@ when ownership or build membership changes.
 | --- | --- |
 | `ui_shell` | Persistent top bar, ten-destination navigation, clock and active printer; pointer state is permanently PSRAM-backed |
 | `ui_console` | Console page, command entry and bounded history presentation |
-| `ui_macros` | Detected public-macro page and run confirmation |
+| `ui_macros` | Public-macro search, parameter entry and command review |
 | `ui_splash` | Startup splash state and progress |
 | `ui_logo_assets` | Compiled PrinterHMI logo assets |
 
@@ -55,7 +55,11 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_calibration` | Calibration page composition and workflow routing |
-| `ui_calibration_motion` | Input Shaper, Axis Twist and Z Tilt workflows |
+| `ui_calibration_motion` | Input Shaper, resonance/sensor actions and Motion utilities routing |
+| `ui_probe_accuracy` | Repeated-sample probe checks and final statistics |
+| `ui_motion_diagnostics`, `motion_diagnostics_controller` | Runtime motion limits, geometry calculator and TMC status snapshots |
+| `ui_endstop_status`, `endstop_status_controller` | Idle-only live endstop requests, response ownership and timeout handling |
+| `macro_parameter_utils` | Bounded parameter detection, search matching and validated command construction |
 | `ui_calibration_pressure_advance` | Pressure Advance workflow |
 | `ui_calibration_manual_probe` | Shared guided Probe/Z and Axis Twist TESTZ controls, including 0.005 mm fine steps |
 | `calibration_capability_controller`, `calibration_session_controller` | Calibration availability, progress and command policy |
@@ -68,7 +72,7 @@ when ownership or build membership changes.
 | `ui_devices_catalog_view` | Filters, cards, pagination and refresh timer |
 | `ui_devices_live_values` | Visible Moonraker device-value translation |
 | `device_catalog_controller` | Object discovery, classification and bounded catalog state |
-| `macro_controller` | Bounded public Klipper macro discovery and sorting |
+| `macro_controller` | Bounded public Klipper macro discovery, sorting and detected parameters |
 | `console_controller` | Bounded command/response history and response classification |
 
 ## Camera
@@ -141,6 +145,8 @@ when ownership or build membership changes.
 | `partitions.csv` | NVS, dual-OTA and storage layout |
 | `components/espressif__esp32_p4_function_ev_board/` | Local board/display/touch support |
 | `common_components/bsp_extra/` | Project-specific BSP extensions |
+| `tools/audit/tools_action_safety_test.py`, `tools/audit/tools_features_test.py` | Host checks for dispatch policy, session handling, macro parameters, endstops and motion diagnostics |
+| `tools/release_stable.sh` | Versioned P4+C6 build, checksums, atomic main/tag push and stable release publication |
 | `tools/audit/public_tree_audit.sh` | Public-tree safety validation |
 | `tools/audit/v5_feature_architecture_audit.sh` | v5 module ownership and build-membership validation |
 | `tools/end_of_night_checkpoint.sh` | Build, push and nightly publication |

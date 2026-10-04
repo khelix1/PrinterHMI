@@ -1,4 +1,5 @@
 #include "ui_calibration_motion.h"
+#include "ui_motion_diagnostics.h"
 #include "ui_text.h"
 
 #include <stdint.h>
@@ -509,8 +510,8 @@ static lv_obj_t *make_action_button(
         return NULL;
     }
 
-    lv_obj_set_size(button, 110, 38);
-    lv_obj_align(button, align, x, -12);
+    lv_obj_set_size(button, 110, 34);
+    lv_obj_align(button, align, x, -10);
     lv_obj_add_event_cb(
         button,
         callback,
@@ -534,6 +535,7 @@ void ui_calibration_motion_create(
         return;
     }
 
+    ui_motion_diagnostics_create(card);
     s_motion.send_gcode = send_gcode_cb;
     s_motion.ready = ready_cb;
     s_motion.show_results = show_results_cb;
@@ -542,7 +544,7 @@ void ui_calibration_motion_create(
     s_motion.input_shaper_button =
         make_action_button(
             card,
-            "INPUT SHAPER",
+            "SHAPER",
             LV_ALIGN_BOTTOM_LEFT,
             16,
             input_shaper_button_cb);
@@ -558,7 +560,7 @@ void ui_calibration_motion_create(
     s_motion.accelerometer_check_button =
         make_action_button(
             card,
-            "SENSOR CHECK",
+            "SENSOR",
             LV_ALIGN_BOTTOM_RIGHT,
             -16,
             accelerometer_check_button_cb);
@@ -593,6 +595,7 @@ void ui_calibration_motion_refresh(
 
 void ui_calibration_motion_hide(void)
 {
+    ui_motion_diagnostics_hide();
     close_input_shaper_popup();
     close_resonance_test_popup();
     close_accelerometer_check_popup();

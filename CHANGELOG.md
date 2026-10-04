@@ -1,5 +1,25 @@
 # Changelog
 
+## [6.5.6] - 2026-10-04
+
+### Added
+
+- Repeated-sample Probe Accuracy checks with final statistics.
+- Live endstop queries under Devices, refreshed every two seconds while idle.
+- Public-macro search, detected parameter fields and final command review.
+- Motion runtime limits, a hardware-geometry axis-distance calculator and TMC driver diagnostics.
+
+### Fixed
+
+- Recheck printer readiness and workflow requirements when Tools actions run.
+- Fence calibration sessions and diagnostics to the active printer and handle timeouts.
+- Save Bed Mesh profiles and SAVE_CONFIG as one confirmed, ordered script.
+- Use an overlap-safe Motion driver-name copy for optimized firmware builds.
+
+### Documentation
+
+- Align current product/version references, architecture, source catalog, Tools guide and release checks with 6.5.6.
+
 ## [6.5.5] - 2026-10-03
 
 ### Fixed

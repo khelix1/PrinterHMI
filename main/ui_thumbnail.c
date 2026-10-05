@@ -174,12 +174,39 @@ void ui_thumbnail_fit_object(
 }
 
 
+void ui_thumbnail_fill_object(lv_obj_t *object, lv_obj_t *box,
+    int source_width, int source_height)
+{
+    if (!object || !box) return;
+    if (source_width <= 0 || source_height <= 0) {
+        source_width = lv_image_get_src_width(object);
+        source_height = lv_image_get_src_height(object);
+    }
+    if (source_width <= 0 || source_height <= 0) return;
+    lv_obj_update_layout(box);
+    int width = lv_obj_get_content_width(box);
+    int height = lv_obj_get_content_height(box);
+    if (width <= 0 || height <= 0) return;
+    /* Round upward: integer LVGL scales must cover even the final edge. */
+    int64_t scale_x = ((int64_t)width * 256 + source_width - 1) / source_width;
+    int64_t scale_y = ((int64_t)height * 256 + source_height - 1) / source_height;
+    int64_t scale = scale_x > scale_y ? scale_x : scale_y;
+    if (scale < 1) scale = 1;
+    if (scale > 8192) scale = 8192;
+    lv_obj_remove_flag(box, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    lv_obj_set_style_clip_corner(box, true, 0);
+    lv_image_set_scale(object, (uint32_t)scale);
+    lv_obj_center(object);
+}
+
+
 void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, int scale)
 {
     if (!thumb || !thumb->box || !dsc) return;
 
     /* Match Dashboard and Printer: render the original PNG once into the
-     * shared RGB565 canvas. Both the card and lightbox use this stable source.
+     * shared RGB565 canvas. The lightbox uses this stable initial source, then
+     * replaces it with the complete high-resolution thumbnail.
      */
     if (!thumb->canvas_buf) {
         thumb->canvas_buf = heap_caps_malloc(
@@ -218,12 +245,11 @@ void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, i
         lv_image_set_scale(thumb->canvas, scale);
         lv_obj_center(thumb->canvas);
     } else {
-        ui_thumbnail_fit_object(
+        ui_thumbnail_fill_object(
             thumb->canvas,
             thumb->box,
             (int)dsc->header.w,
-            (int)dsc->header.h,
-            8);
+            (int)dsc->header.h);
     }
 }
 

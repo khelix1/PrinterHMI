@@ -2766,12 +2766,11 @@ static void dashboard_show_loaded_thumbnail(void)
         DASH_THUMB_CANVAS_H,
         LV_COLOR_FORMAT_RGB565);
 
-    ui_thumbnail_fit_object(
+    ui_thumbnail_fill_object(
         dash_thumb_canvas,
         ui_dashboard_thumb_box(),
         DASH_THUMB_CANVAS_W,
-        DASH_THUMB_CANVAS_H,
-        6);
+        DASH_THUMB_CANVAS_H);
     lv_obj_move_foreground(dash_thumb_canvas);
 
     ui_dashboard_thumb_clear_placeholder();
@@ -2806,12 +2805,11 @@ static void dashboard_apply_rendered_thumbnail(void)
         lv_obj_invalidate(dash_thumb_canvas);
     }
 
-    ui_thumbnail_fit_object(
+    ui_thumbnail_fill_object(
         dash_thumb_canvas,
         ui_dashboard_thumb_box(),
         DASH_THUMB_CANVAS_W,
-        DASH_THUMB_CANVAS_H,
-        6);
+        DASH_THUMB_CANVAS_H);
 
     ui_dashboard_thumb_clear_placeholder();
 

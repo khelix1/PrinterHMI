@@ -154,6 +154,9 @@ status banners, cards, previews, charts, action panels and popup controllers.
 - `ui_macros` and `macro_controller` own public-macro presentation and
   policy, search, detected parameter entry and final command confirmation.
   `ui_console` and `console_controller` own command entry and bounded response history.
+  `console_filter` applies presentation-only type/text filters and recognizes complete
+  numeric temperature reports; it does not remove entries or change calibration ingestion.
+  Console filter preferences survive page navigation for the current HMI session.
 - Long-lived feature contexts and bounded catalogs prefer PSRAM with an
   internal-RAM fallback.
 

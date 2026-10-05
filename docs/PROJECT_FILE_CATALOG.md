@@ -25,7 +25,7 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_shell` | Persistent top bar, ten-destination navigation, clock and active printer; pointer state is permanently PSRAM-backed |
-| `ui_console` | Console page, command entry and bounded history presentation |
+| `ui_console` | Console page, command entry, type/text filters and bounded history presentation |
 | `ui_macros` | Public-macro search, parameter entry and command review |
 | `ui_splash` | Startup splash state and progress |
 | `ui_logo_assets` | Compiled PrinterHMI logo assets |
@@ -73,6 +73,7 @@ when ownership or build membership changes.
 | `ui_devices_live_values` | Visible Moonraker device-value translation |
 | `device_catalog_controller` | Object discovery, classification and bounded catalog state |
 | `macro_controller` | Bounded public Klipper macro discovery, sorting and detected parameters |
+| `console_filter` | Presentation-only type/text matching and routine temperature-report detection |
 | `console_controller` | Bounded command/response history and response classification |
 
 ## Camera

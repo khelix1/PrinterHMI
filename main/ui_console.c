@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "console_controller.h"
+#include "console_filter.h"
 #include "lvgl.h"
 #include "moonraker.h"
 #include "ui_button.h"
@@ -28,6 +29,13 @@ static uint32_t s_rendered_sequence = 0;
 static size_t s_rendered_count = 0;
 static size_t s_history_cursor = SIZE_MAX;
 static bool s_follow = true;
+static console_filter_kind_t s_filter = CONSOLE_FILTER_ALL;
+static bool s_hide_temperatures;
+static char s_query[64];
+static lv_obj_t *s_filter_dropdown, *s_temperature_button, *s_temperature_label;
+static lv_obj_t *s_search_label, *s_filter_count;
+static lv_obj_t *s_search_popup, *s_search_input;
+
 
 
 static lv_color_t entry_color(console_entry_type_t type)
@@ -113,6 +121,7 @@ static void rebuild_output(void)
         return;
     }
 
+    int32_t scroll_y = lv_obj_get_scroll_y(s_output);
     lv_obj_clean(s_output);
 
     size_t count = console_controller_count();
@@ -121,6 +130,7 @@ static void rebuild_output(void)
         console_controller_latest_sequence();
 
     if (count == 0) {
+        lv_label_set_text(s_filter_count, "0 / 0");
         lv_obj_t *empty = lv_label_create(s_output);
         lv_label_set_text(
             empty,
@@ -134,6 +144,7 @@ static void rebuild_output(void)
     }
 
     lv_obj_t *last = NULL;
+    size_t visible = 0;
 
     for (size_t row = 0; row < count; ++row) {
         size_t newest_index = count - 1 - row;
@@ -144,6 +155,8 @@ static void rebuild_output(void)
                 &entry)) {
             continue;
         }
+
+        if (!console_filter_matches(&entry, s_filter, s_query, s_hide_temperatures)) continue;
 
         char time_text[24] = "";
         char line[256];
@@ -169,18 +182,30 @@ static void rebuild_output(void)
         lv_obj_set_pos(
             label,
             16,
-            10 + (int32_t)row * 38);
+            10 + (int32_t)visible * 38);
 
         ui_apply_custom_label_style(
             label,
             UI_FONT_CAPTION,
             entry_color(entry.type));
         last = label;
+        ++visible;
     }
 
+    char count_text[32];
+    snprintf(count_text, sizeof(count_text), "%u / %u", (unsigned)visible, (unsigned)count);
+    lv_label_set_text(s_filter_count, count_text);
+    if (!visible) {
+        lv_obj_t *empty = lv_label_create(s_output);
+        lv_label_set_text(empty, ui_text("No entries match these filters."));
+        lv_obj_set_pos(empty, 18, 18);
+        ui_apply_custom_label_style(empty, UI_FONT_BODY, UI_TEXT_DIM);
+    }
     lv_obj_update_layout(s_output);
     if (s_follow && last) {
         lv_obj_scroll_to_view(last, LV_ANIM_OFF);
+    } else if (!s_follow) {
+        lv_obj_scroll_to_y(s_output, scroll_y, LV_ANIM_OFF);
     }
 }
 
@@ -271,6 +296,116 @@ static void clear_cb(lv_event_t *event)
     rebuild_output();
 }
 
+
+static void close_search_popup(void)
+{
+    if (s_search_popup) lv_obj_delete(s_search_popup);
+    s_search_popup = s_search_input = NULL;
+}
+
+static void search_cancel_cb(lv_event_t *event) { (void)event; close_search_popup(); }
+static void search_done_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!s_search_input) return;
+    snprintf(s_query, sizeof(s_query), "%s", lv_textarea_get_text(s_search_input));
+    close_search_popup();
+    lv_label_set_text(s_search_label, s_query[0] ? "SEARCH*" : "SEARCH");
+    rebuild_output();
+}
+
+static void search_keyboard_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_READY) search_done_cb(event);
+    else if (lv_event_get_code(event) == LV_EVENT_CANCEL) search_cancel_cb(event);
+}
+
+static void search_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_search_popup) { lv_obj_move_foreground(s_search_popup); return; }
+    s_search_popup = ui_popup_create(lv_layer_top(), 760, 440, UI_POPUP_STANDARD);
+    if (!s_search_popup) return;
+    ui_popup_add_title(s_search_popup, ui_text("FILTER CONSOLE TEXT"), false, 4);
+    ui_popup_add_header_divider(s_search_popup, 48);
+    s_search_input = ui_popup_add_textarea(s_search_popup, 704, 48,
+        LV_ALIGN_TOP_MID, 0, 62, true, false, sizeof(s_query) - 1,
+        ui_text("Match message text (case-insensitive)"), s_query, NULL);
+    lv_obj_t *keyboard = ui_popup_add_keyboard(s_search_popup, s_search_input, 704, 224,
+        LV_ALIGN_TOP_MID, 0, 124, LV_KEYBOARD_MODE_TEXT_LOWER);
+    if (keyboard) lv_obj_add_event_cb(keyboard, search_keyboard_cb, LV_EVENT_ALL, NULL);
+    ui_popup_add_standard_footer_divider(s_search_popup);
+    ui_popup_add_footer_action(s_search_popup, UI_POPUP_ACTION_CANCEL, ui_text("CANCEL"), 160,
+        UI_POPUP_FOOTER_LEFT, search_cancel_cb, NULL, NULL);
+    ui_popup_add_footer_action(s_search_popup, UI_POPUP_ACTION_CONFIRM, ui_text("APPLY"), 160,
+        UI_POPUP_FOOTER_RIGHT, search_done_cb, NULL, NULL);
+}
+
+static void filter_cb(lv_event_t *event)
+{
+    (void)event;
+    s_filter = (console_filter_kind_t)lv_dropdown_get_selected(s_filter_dropdown);
+    rebuild_output();
+}
+
+static void update_temperature_button(void)
+{
+    lv_label_set_text(s_temperature_label, s_hide_temperatures ? "TEMPS OFF" : "TEMPS ON");
+    ui_button_apply_kind(s_temperature_button, s_hide_temperatures ? UI_BUTTON_SECONDARY : UI_BUTTON_OUTLINED);
+}
+static void temperature_cb(lv_event_t *event)
+{
+    (void)event;
+    s_hide_temperatures = !s_hide_temperatures;
+    update_temperature_button();
+    rebuild_output();
+}
+static void reset_filters_cb(lv_event_t *event)
+{
+    (void)event;
+    s_filter = CONSOLE_FILTER_ALL;
+    s_hide_temperatures = false;
+    s_query[0] = 0;
+    lv_dropdown_set_selected(s_filter_dropdown, 0);
+    update_temperature_button();
+    lv_label_set_text(s_search_label, "SEARCH");
+    rebuild_output();
+}
+
+static void create_filters(void)
+{
+    s_filter_dropdown = lv_dropdown_create(s_root);
+    lv_obj_set_pos(s_filter_dropdown, 20, 82);
+    lv_obj_set_size(s_filter_dropdown, 244, 40);
+    ui_apply_card_style(s_filter_dropdown);
+    lv_obj_set_style_pad_top(s_filter_dropdown, 8, 0);
+    lv_obj_set_style_pad_bottom(s_filter_dropdown, 8, 0);
+    lv_obj_set_style_text_font(s_filter_dropdown, UI_FONT_CAPTION, 0);
+    lv_dropdown_set_options(s_filter_dropdown,
+        "All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
+    lv_dropdown_set_selected(s_filter_dropdown, (uint32_t)s_filter);
+    lv_obj_add_event_cb(s_filter_dropdown, filter_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    s_temperature_button = ui_button_create(s_root, UI_BUTTON_OUTLINED, "TEMPS ON");
+    lv_obj_set_pos(s_temperature_button, 276, 82);
+    lv_obj_set_size(s_temperature_button, 130, 40);
+    s_temperature_label = lv_obj_get_child(s_temperature_button, 0);
+    lv_obj_add_event_cb(s_temperature_button, temperature_cb, LV_EVENT_CLICKED, NULL);
+    update_temperature_button();
+    lv_obj_t *search = ui_button_create(s_root, UI_BUTTON_OUTLINED, s_query[0] ? "SEARCH*" : "SEARCH");
+    lv_obj_set_pos(search, 418, 82);
+    lv_obj_set_size(search, 124, 40);
+    s_search_label = lv_obj_get_child(search, 0);
+    lv_obj_add_event_cb(search, search_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *reset = ui_button_create(s_root, UI_BUTTON_SECONDARY, "RESET");
+    lv_obj_set_pos(reset, 554, 82);
+    lv_obj_set_size(reset, 100, 40);
+    lv_obj_add_event_cb(reset, reset_filters_cb, LV_EVENT_CLICKED, NULL);
+    s_filter_count = lv_label_create(s_root);
+    lv_obj_set_pos(s_filter_count, 670, 93);
+    lv_obj_set_width(s_filter_count, 164);
+    lv_obj_set_style_text_align(s_filter_count, LV_TEXT_ALIGN_RIGHT, 0);
+    ui_apply_custom_label_style(s_filter_count, UI_FONT_CAPTION, UI_TEXT_DIM);
+}
 
 static void close_command_popup(void)
 {
@@ -659,9 +794,11 @@ void ui_console_show(
         clear_cb,
         NULL);
 
+    create_filters();
+
     s_output = lv_obj_create(s_root);
-    lv_obj_set_size(s_output, 814, 426);
-    lv_obj_set_pos(s_output, 20, 82);
+    lv_obj_set_size(s_output, 814, 374);
+    lv_obj_set_pos(s_output, 20, 134);
     ui_apply_card_style(s_output);
     lv_obj_set_style_pad_all(s_output, 0, 0);
     lv_obj_set_scroll_dir(s_output, LV_DIR_VER);
@@ -684,6 +821,7 @@ void ui_console_show(
 void ui_console_hide(void)
 {
     close_command_popup();
+    close_search_popup();
 
     if (s_refresh_timer) {
         lv_timer_delete(s_refresh_timer);
@@ -699,6 +837,8 @@ void ui_console_hide(void)
     s_connection = NULL;
     s_follow_button = NULL;
     s_follow_label = NULL;
+    s_filter_dropdown = s_temperature_button = s_temperature_label = NULL;
+    s_search_label = s_filter_count = NULL;
     s_command_callback = NULL;
     s_rendered_sequence = 0;
     s_rendered_count = 0;

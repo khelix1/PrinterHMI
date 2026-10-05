@@ -11,6 +11,7 @@ under `history/`.
 | [Configuration](CONFIGURATION.md) | Operator settings and persistent state |
 | [Custom themes](CUSTOM_THEMES.md) | SD package format, validation and recovery |
 | [Flashing and OTA](FLASHING_AND_OTA.md) | USB installation, OTA and recovery |
+| [Preview rendering](PREVIEW_RENDERING.md) | Preview fill/cropping and fullscreen behavior |
 | [Tools](TOOLS.md) | Calibration, live endstops, motion diagnostics and macro parameters |
 | [Testing](TESTING.md) | Required host and target validation |
 | [Continuous integration](CI.md) | Automated source policy and clean IDF6 build gate |

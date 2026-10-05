@@ -24,3 +24,7 @@ void ui_thumbnail_fit_object(
 void ui_thumbnail_set_placeholder(ui_thumbnail_t *thumb, const char *text);
 void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, int scale);
 void ui_thumbnail_clear(ui_thumbnail_t *thumb);
+
+/* Fill and clip to the preview well while retaining the source proportions. */
+void ui_thumbnail_fill_object(lv_obj_t *object, lv_obj_t *box,
+    int source_width, int source_height);

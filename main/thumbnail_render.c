@@ -68,11 +68,12 @@ static bool thumbnail_render_read_pixel(
     return false;
 }
 
-bool thumbnail_render_to_rgb565(
+static bool render_rgb565(
     const lv_image_dsc_t *image,
     uint16_t *destination,
     int destination_width,
-    int destination_height)
+    int destination_height,
+    bool fill)
 {
     if (!image ||
         !destination ||
@@ -118,6 +119,36 @@ bool thumbnail_render_to_rgb565(
 
     const uint8_t *source =
         (const uint8_t *)decoded->data;
+
+    if (fill) {
+        /* Center-crop the source, then sample every destination pixel. No
+         * letterbox pixels are baked into the shared cached preview. */
+        int crop_width = source_width, crop_height = source_height;
+        if ((int64_t)source_width * destination_height >
+            (int64_t)source_height * destination_width) {
+            crop_width = (int)((int64_t)source_height * destination_width / destination_height);
+        } else {
+            crop_height = (int)((int64_t)source_width * destination_height / destination_width);
+        }
+        if (crop_width < 1) crop_width = 1;
+        if (crop_height < 1) crop_height = 1;
+        int left = (source_width - crop_width) / 2;
+        int top = (source_height - crop_height) / 2;
+        bool valid = true;
+        for (int y = 0; y < destination_height && valid; ++y) {
+            int source_y = top + (int)((int64_t)y * crop_height / destination_height);
+            for (int x = 0; x < destination_width; ++x) {
+                int source_x = left + (int)((int64_t)x * crop_width / destination_width);
+                if (!thumbnail_render_read_pixel(source, stride, source_x, source_y,
+                        color_format, &destination[(size_t)y * destination_width + x])) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        lv_image_decoder_close(&decoder);
+        return valid;
+    }
 
     size_t destination_pixels =
         (size_t)destination_width *
@@ -181,4 +212,16 @@ bool thumbnail_render_to_rgb565(
 
     lv_image_decoder_close(&decoder);
     return true;
+}
+
+bool thumbnail_render_to_rgb565(const lv_image_dsc_t *image, uint16_t *destination,
+    int width, int height)
+{
+    return render_rgb565(image, destination, width, height, true);
+}
+
+bool thumbnail_render_to_rgb565_fit(const lv_image_dsc_t *image, uint16_t *destination,
+    int width, int height)
+{
+    return render_rgb565(image, destination, width, height, false);
 }

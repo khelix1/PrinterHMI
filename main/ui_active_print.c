@@ -173,12 +173,11 @@ void ui_active_print_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, int h,
                          h,
                          LV_COLOR_FORMAT_RGB565);
 
-    ui_thumbnail_fit_object(
+    ui_thumbnail_fill_object(
         s_active_print_thumb_canvas,
         box,
         w,
-        h,
-        6);
+        h);
     lv_obj_move_foreground(s_active_print_thumb_canvas);
 
     ui_active_print_thumb_copy_file(file);
@@ -202,12 +201,11 @@ void ui_active_print_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, int h
         lv_obj_move_foreground(s_active_print_thumb_canvas);
     }
 
-    ui_thumbnail_fit_object(
+    ui_thumbnail_fill_object(
         s_active_print_thumb_canvas,
         box,
         w,
-        h,
-        6);
+        h);
 
     ui_active_print_thumb_clear_placeholder(card);
     ui_active_print_thumb_copy_file(file);

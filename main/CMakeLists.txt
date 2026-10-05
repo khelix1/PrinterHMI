@@ -28,6 +28,7 @@ idf_component_register(
         "ui_event_history_popup.c"
         "ui_about_popup.c"
         "console_controller.c"
+    "console_filter.c"
         "macro_controller.c"
         "macro_parameter_utils.c"
         "endstop_status_controller.c"

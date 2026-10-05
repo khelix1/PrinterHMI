@@ -238,7 +238,7 @@ static void fullscreen_preview_worker(void *arg)
                     raw_png.header.cf = LV_COLOR_FORMAT_RAW;
                     raw_png.data = png;
                     raw_png.data_size = png_size;
-                    rendered = thumbnail_render_to_rgb565(
+                    rendered = thumbnail_render_to_rgb565_fit(
                         &raw_png, pixels, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
                 }
                 if (rendered) {

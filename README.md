@@ -41,7 +41,7 @@ See the [Tools guide](docs/TOOLS.md) for calibration and diagnostics controls.
   axis-distance calculator and TMC driver diagnostics
 - Capability-aware Devices catalog with filtering, pagination, live values and endstop queries
 - Public Klipper macro search, detected parameter fields and command review before execution
-- Live command console with bounded history and response severity colors
+- Live command console with bounded history, response severity colors, type/text filters and a temperature-report toggle
 - Multi-printer profile selection for as many as four Moonraker instances
 - Drybox status and PLA/PETG/hold program controls
 - Auto-scaling combined temperature and humidity telemetry

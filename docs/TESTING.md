@@ -136,6 +136,22 @@ operator present.
 - Camera selection, manual URL configuration and active-camera identity persist
   per printer profile.
 
+## Console filters
+
+- Run `python3 tools/audit/console_filters_test.py` for host matching checks.
+- Select All, Errors + warnings, Errors, Warnings, Commands, Responses and System;
+  only matching entries appear, in chronological order with no empty row gaps.
+- Search matches message text case-insensitively and combines with type/temperature
+  filters. Cancel retains the previous search; Apply/keyboard Done applies it.
+- TEMPS OFF hides complete numeric temperature responses but retains warnings,
+  errors and descriptive heater/probe messages. TEMPS ON restores those responses.
+- The visible/total count and empty-state messages track incoming and cleared logs.
+- RESET restores All, empty search and TEMPS ON without deleting history.
+- Filter settings survive page navigation in this session; search popups/timers
+  close with the page. Command history and calibration response handling remain intact.
+- FOLLOW ON follows the last matching entry. FOLLOW OFF retains scroll position as
+  messages arrive. Normal and larger text controls fit and do not overlap.
+
 ## Motion diagnostics
 
 - Calibration → Motion shows LIMITS, DISTANCE and DRIVERS above the existing

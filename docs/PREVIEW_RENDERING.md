@@ -2,14 +2,14 @@
 
 Dashboard and Printer previews fill their complete inner frame without
 stretching. The shared RGB565 renderer center-crops the source to the cached
-canvas proportions instead of adding black letterbox bands. The UI then scales
-that canvas proportionally to cover its well, clips overflow at the rounded
+canvas proportions instead of adding black letterbox bands. The UI uses native LVGL `COVER` sizing for
+that canvas to cover its well, clips overflow at the rounded
 frame and removes the previous image inset. Small Files preview canvases use
 the same shared fill renderer.
 
 Different frame proportions can crop edges of the small preview. The fullscreen
 high-resolution path uses the complete original thumbnail and aspect-fit
-rendering, so the operator can inspect the full image. Its initial cached
+rendering and native `CONTAIN` viewport sizing, so the operator can inspect the full image. Its initial cached
 fallback may show the cropped small preview until the original finishes loading.
 Black pixels already present in a slicer-generated thumbnail remain part of
 that image; fill removes padding added by PrinterHMI.

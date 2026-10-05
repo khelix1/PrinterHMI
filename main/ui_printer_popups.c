@@ -891,7 +891,8 @@ static void close_popup_event_cb(lv_event_t *e)
         lv_obj_t *popup = (lv_obj_t *)lv_event_get_user_data(e);
 
         if (!popup) {
-            popup = lv_obj_get_parent(obj);
+            popup = ui_popup_find_owner(obj);
+            if (!popup) popup = lv_obj_get_parent(obj);
         }
 
         if (popup) {

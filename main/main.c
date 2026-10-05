@@ -3926,8 +3926,8 @@ void app_main(void)
      */
     app_startup_show_initial_ui();
     if (bsp_display_lock(0)) {
-        lv_refr_now(NULL);
-        ESP_LOGI(TAG, "STARTUP_TRACE splash-frame-presented");
+        ui_splash_present_and_freeze();
+        ESP_LOGI(TAG, "STARTUP_TRACE splash-frame-presented and refresh held");
         bsp_display_unlock();
     }
     vTaskDelay(pdMS_TO_TICKS(120));
@@ -3952,9 +3952,10 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(250));
 
-    /* Keep the already-presented splash frame stable while Wi-Fi and the
-     * ESP-Hosted transport start. Moonraker-ready advances it later. */
-    ESP_LOGI(TAG, "STARTUP_TRACE wifi-start splash frozen");
+    /* Hold background redraws while permitting narrow splash progress
+     * updates during SD and Wi-Fi startup. */
+    app_splash_locked(ui_splash_wifi_starting);
+    ESP_LOGI(TAG, "STARTUP_TRACE wifi-start splash progress only");
 
     /* Start WiFi after dashboard is visible. Touch scaling fix remains in BSP. */
     if (!sd_mount_attempted) {

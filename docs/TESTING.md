@@ -215,3 +215,50 @@ watchdogs.
 
 Record commit, tag, binary checksum, hardware revision, flash method, tests
 performed, pass/fail result and any accepted exception.
+
+## LVGL modernization branch
+
+```bash
+python3 tools/audit/lvgl95_modernization_test.py
+python3 tools/audit/preview_fill_test.py
+```
+
+Both accept `--lvgl-dir /path/to/lvgl`; an optional `--lvgl-lib` reuses a host
+archive built with the same font/stdlib flags. The UI tests use real LVGL objects,
+themes and layouts with fixture printer/controller data. They check row identity,
+bounded object counts, callback rebinding, stale macro generations, Device page
+indices, scroll preservation, teardown, ten parameter fields, all three themes,
+normal/large text and popup resize/cleanup. Preview tests check native Cover/Contain
+sizing and resized frame coverage in addition to the renderer.
+
+Target acceptance after the IDF6 build:
+
+- Add Console messages with Follow On/Off; change filters, clear history and reopen.
+- Search/favorite macros, open the correct rebound row, edit all parameter fields
+  and confirm that Cancel/Review and the onscreen keyboard remain usable.
+- Change Device categories/pages, reconnect and switch printers; confirm each
+  live value stays attached to the correct object.
+- Open Network and Printer popups; all footer actions must work and close the
+  entire modal/backdrop. Check normal/large text and all three themes.
+- Compare Dashboard, Printer and Files preview fill and fullscreen proportions;
+  check load/retry, tap-to-close, reconnect and profile switch during loading.
+- Check target heap/PSRAM and frame pacing before claiming a performance gain.
+
+## Boot splash refresh hold
+
+```bash
+python3 tools/audit/boot_splash_freeze_test.py
+```
+
+The real LVGL host check renders the splash, then verifies that underlying label
+updates produce no further display flushes while application timers continue.
+Progress updates must flush only the bar/percentage/status region, reach 100%
+and skip duplicate stages. It checks all three themes with normal/large text,
+then verifies that close restores invalidation, repaints the whole current screen
+and allows normal refreshes, including repeated/no-freeze teardown.
+The test accepts the same LVGL source/archive options as the UI checks above.
+
+On the panel, test cold power-on and warm reset with Wi-Fi connected and unavailable.
+The logo/background should stay stable while the bar, percentage and status
+advance through startup, then hand off to the chooser once. Confirm normal touch, popup, Console and preview updates afterward. Host
+checks cannot validate MIPI timing or backlight behavior.

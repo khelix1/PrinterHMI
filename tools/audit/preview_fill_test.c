@@ -49,8 +49,22 @@ static void ui_case(int width,int height)
     int scale=lv_image_get_scale(image);
     assert((int64_t)286*scale>=lv_obj_get_content_width(box)*256);
     assert((int64_t)215*scale>=lv_obj_get_content_height(box)*256);
+    assert(lv_image_get_inner_align(image)==LV_IMAGE_ALIGN_COVER);
     assert(lv_obj_get_style_clip_corner(box,0));
     assert(!lv_obj_has_flag(box,LV_OBJ_FLAG_OVERFLOW_VISIBLE));
+    ui_thumbnail_fit_object(image,box,286,215,6);
+    lv_obj_update_layout(box);
+    assert(lv_image_get_inner_align(image)==LV_IMAGE_ALIGN_CONTAIN);
+    assert(lv_obj_get_width(image)==lv_obj_get_content_width(box)-12);
+    assert(lv_obj_get_height(image)==lv_obj_get_content_height(box)-12);
+    scale=lv_image_get_scale(image);
+    assert((int64_t)286*scale<=lv_obj_get_width(image)*256);
+    assert((int64_t)215*scale<=lv_obj_get_height(image)*256);
+    lv_obj_set_size(box,width+73,height+51);
+    ui_thumbnail_fill_object(image,box,0,0);lv_obj_update_layout(box);
+    scale=lv_image_get_scale(image);
+    assert((int64_t)286*scale>=lv_obj_get_content_width(box)*256);
+    assert((int64_t)215*scale>=lv_obj_get_content_height(box)*256);
     lv_obj_delete(box);
 }
 int main(void)

@@ -8,6 +8,7 @@
 
 #include "console_controller.h"
 #include "console_filter.h"
+#include "esp_heap_caps.h"
 #include "lvgl.h"
 #include "moonraker.h"
 #include "ui_button.h"
@@ -28,6 +29,18 @@ static ui_console_command_cb_t s_command_callback = NULL;
 static uint32_t s_rendered_sequence = 0;
 static size_t s_rendered_count = 0;
 static size_t s_history_cursor = SIZE_MAX;
+typedef struct {
+    lv_obj_t *rows[CONSOLE_LOG_CAPACITY];
+    lv_obj_t *empty;
+} console_row_store_t;
+static console_row_store_t *s_rows;
+static bool console_rows_init(void)
+{
+    if (s_rows) return true;
+    s_rows = heap_caps_calloc(1, sizeof(*s_rows), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_rows) s_rows = heap_caps_calloc(1, sizeof(*s_rows), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    return s_rows != NULL;
+}
 static bool s_follow = true;
 static console_filter_kind_t s_filter = CONSOLE_FILTER_ALL;
 static bool s_hide_temperatures;
@@ -122,26 +135,12 @@ static void rebuild_output(void)
     }
 
     int32_t scroll_y = lv_obj_get_scroll_y(s_output);
-    lv_obj_clean(s_output);
+    /* Rows retain their LVGL identity across new messages and filter changes. */
 
     size_t count = console_controller_count();
     s_rendered_count = count;
     s_rendered_sequence =
         console_controller_latest_sequence();
-
-    if (count == 0) {
-        lv_label_set_text(s_filter_count, "0 / 0");
-        lv_obj_t *empty = lv_label_create(s_output);
-        lv_label_set_text(
-            empty,
-            ui_text("Console history is empty."));
-        lv_obj_set_pos(empty, 18, 18);
-        ui_apply_custom_label_style(
-            empty,
-            UI_FONT_BODY,
-            UI_TEXT_DIM);
-        return;
-    }
 
     lv_obj_t *last = NULL;
     size_t visible = 0;
@@ -173,8 +172,13 @@ static void rebuild_output(void)
             entry_prefix(entry.type),
             entry.message);
 
-        lv_obj_t *label = lv_label_create(s_output);
-        lv_label_set_text(label, line);
+        lv_obj_t *label = s_rows->rows[visible];
+        if (!label) {
+            label = lv_label_create(s_output);
+            s_rows->rows[visible] = label;
+        }
+        if (strcmp(lv_label_get_text(label), line)) lv_label_set_text(label, line);
+        lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_long_mode(
             label,
             LV_LABEL_LONG_DOT);
@@ -195,11 +199,18 @@ static void rebuild_output(void)
     char count_text[32];
     snprintf(count_text, sizeof(count_text), "%u / %u", (unsigned)visible, (unsigned)count);
     lv_label_set_text(s_filter_count, count_text);
+    for (size_t i = visible; i < CONSOLE_LOG_CAPACITY; ++i)
+        if (s_rows->rows[i]) lv_obj_add_flag(s_rows->rows[i], LV_OBJ_FLAG_HIDDEN);
     if (!visible) {
-        lv_obj_t *empty = lv_label_create(s_output);
-        lv_label_set_text(empty, ui_text("No entries match these filters."));
+        if (!s_rows->empty) s_rows->empty = lv_label_create(s_output);
+        lv_obj_t *empty = s_rows->empty;
+        lv_obj_remove_flag(empty, LV_OBJ_FLAG_HIDDEN);
+        const char *message = count ? ui_text("No entries match these filters.") : ui_text("Console history is empty.");
+        if (strcmp(lv_label_get_text(empty), message)) lv_label_set_text(empty, message);
         lv_obj_set_pos(empty, 18, 18);
         ui_apply_custom_label_style(empty, UI_FONT_BODY, UI_TEXT_DIM);
+    } else if (s_rows->empty) {
+        lv_obj_add_flag(s_rows->empty, LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_update_layout(s_output);
     if (s_follow && last) {
@@ -724,6 +735,7 @@ static lv_obj_t *page_button(
 void ui_console_show(
     ui_console_command_cb_t command_callback)
 {
+    if (!console_rows_init()) return;
     s_command_callback = command_callback;
 
     if (s_root) {
@@ -832,6 +844,7 @@ void ui_console_hide(void)
         lv_obj_delete(s_root);
     }
 
+    if (s_rows) memset(s_rows, 0, sizeof(*s_rows));
     s_root = NULL;
     s_output = NULL;
     s_connection = NULL;

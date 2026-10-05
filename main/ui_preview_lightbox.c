@@ -133,19 +133,8 @@ void ui_preview_lightbox_show(const lv_image_dsc_t *image)
     s_preview_image = preview;
     lv_image_set_src(preview, image);
 
-    int scale_x = (FULLSCREEN_WIDTH * 256) / (int)header.w;
-    int scale_y = (FULLSCREEN_HEIGHT * 256) / (int)header.h;
-    int scale = scale_x < scale_y ? scale_x : scale_y;
-
-    /*
-     * Files-list previews can be intentionally small to conserve RAM.
-     * Do not apply the 3x in-card thumbnail cap here: this surface exists
-     * specifically to enlarge the source to the available screen area.
-     */
-    if (scale < 1) scale = 1;
-    if (scale > 8192) scale = 8192;
-
-    lv_image_set_scale(preview, scale);
+    lv_obj_set_size(preview, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
+    lv_image_set_inner_align(preview, LV_IMAGE_ALIGN_CONTAIN);
     lv_obj_center(preview);
     lv_obj_add_flag(preview, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(preview, preview_lightbox_close_cb, LV_EVENT_CLICKED, NULL);
@@ -255,7 +244,8 @@ static void fullscreen_preview_worker(void *arg)
                     s_fullscreen_pixels = pixels;
                     pixels = NULL;
                     lv_image_set_src(s_preview_image, &s_fullscreen_image);
-                    lv_image_set_scale(s_preview_image, 256);
+                    lv_obj_set_size(s_preview_image, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
+                    lv_image_set_inner_align(s_preview_image, LV_IMAGE_ALIGN_CONTAIN);
                     lv_obj_center(s_preview_image);
                 }
                 if (current && s_preview_hint) {

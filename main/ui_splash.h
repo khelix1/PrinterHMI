@@ -8,4 +8,6 @@ void ui_splash_wifi_starting(void);
 void ui_splash_wifi_waiting(bool connected);
 void ui_splash_moonraker_ready(void);
 void ui_splash_dashboard_ready(void);
+/* Call under the display lock after startup pages are constructed. */
+void ui_splash_present_and_freeze(void);
 void ui_splash_destroy(void);

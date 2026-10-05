@@ -60,6 +60,23 @@ status banners, cards, previews, charts, action panels and popup controllers.
   interface beneath it. `ui_about_popup` is a focused Settings-owned
   consumer of those shared popup primitives.
 
+### LVGL page refresh and layout
+
+Console retains up to 64 labels, Macros up to 64 buttons, and Devices up to
+12 cards while each page is open. Refreshes rebind and hide slots rather than
+cleaning and rebuilding the list. The pointer tables use permanent PSRAM-first
+contexts; page teardown clears references before a later reopen.
+
+Macro callbacks read the current catalog index from object user data and reject
+stale discovery generations. Device live-value bindings are cleared and registered
+against the current catalog after each page or filter change.
+
+Shared modal footer actions use Grid tracks; macro parameter fields use a
+scrolling two-column Grid with Flex cells. Callbacks can use
+`ui_popup_find_owner()` to resolve the modal through nested layout containers.
+Preview wells use native image `COVER`; fitted images and fullscreen previews
+use `CONTAIN`. See [the modernization scope](LVGL_MODERNIZATION.md).
+
 ### Ownership boundaries and next seams
 
 - `main.c` coordinates startup, lifecycle transitions and narrow adapters only. New

@@ -39,6 +39,10 @@ typedef struct {
     device_filter_t filter;
     size_t page_index;
     size_t page_count;
+    struct {
+        lv_obj_t *card, *name, *kind, *object, *value;
+    } rows[DEVICE_UI_MAX_VISIBLE];
+    lv_obj_t *empty;
     uint32_t rendered_generation;
 } ui_devices_catalog_state_t;
 
@@ -193,68 +197,25 @@ static void add_device_card(
     int x = column == 0 ? 0 : 410;
     int y = row * 102;
 
-    lv_obj_t *card = ui_create_operator_card(
-        s_devices->list,
-        x,
-        y,
-        390,
-        90);
-
+    lv_obj_t *card = s_devices->rows[visible_index].card;
     if (!card) {
-        return;
+        card = ui_create_operator_card(s_devices->list, x, y, 390, 90);
+        if (!card) return;
+        s_devices->rows[visible_index].card = card;
+        s_devices->rows[visible_index].name = devices_label(card, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT, 14, 10, 250);
+        s_devices->rows[visible_index].kind = devices_label(card, "", UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 270, 13, 104);
+        lv_obj_set_style_text_align(s_devices->rows[visible_index].kind, LV_TEXT_ALIGN_RIGHT, 0);
+        ui_create_operator_card_divider(card, 14, 40, 362);
+        s_devices->rows[visible_index].object = devices_label(card, "", UI_FONT_CAPTION, UI_TEXT_DIM, 14, 55, 205);
+        s_devices->rows[visible_index].value = devices_label(card, "--", UI_FONT_CAPTION, UI_TEXT_BRIGHT, 220, 55, 156);
+        lv_obj_set_style_text_align(s_devices->rows[visible_index].value, LV_TEXT_ALIGN_RIGHT, 0);
     }
-
-    devices_label(
-        card,
-        device->display_name,
-        UI_FONT_BODY_LARGE,
-        UI_TEXT_BRIGHT,
-        14,
-        10,
-        250);
-
-    lv_obj_t *kind = devices_label(
-        card,
-        device_catalog_kind_label(device->kind),
-        UI_FONT_CAPTION,
-        UI_ACCENT_BRIGHT,
-        270,
-        13,
-        104);
-
-    lv_obj_set_style_text_align(
-        kind,
-        LV_TEXT_ALIGN_RIGHT,
-        0);
-
-    ui_create_operator_card_divider(
-        card,
-        14,
-        40,
-        362);
-
-    devices_label(
-        card,
-        device->object_name,
-        UI_FONT_CAPTION,
-        UI_TEXT_DIM,
-        14,
-        55,
-        205);
-
-    lv_obj_t *value = devices_label(
-        card,
-        "--",
-        UI_FONT_CAPTION,
-        UI_TEXT_BRIGHT,
-        220,
-        55,
-        156);
-
-    lv_obj_set_style_text_align(
-        value,
-        LV_TEXT_ALIGN_RIGHT,
-        0);
+    lv_obj_remove_flag(card, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(s_devices->rows[visible_index].name, device->display_name);
+    lv_label_set_text(s_devices->rows[visible_index].kind, device_catalog_kind_label(device->kind));
+    lv_label_set_text(s_devices->rows[visible_index].object, device->object_name);
+    lv_obj_t *value = s_devices->rows[visible_index].value;
+    lv_label_set_text(value, "--");
 
     ui_devices_live_values_register(
         visible_index,
@@ -359,7 +320,9 @@ static void render_catalog(void)
     device_catalog_controller_status(&status);
 
     update_filter_buttons(&status);
-    lv_obj_clean(s_devices->list);
+    for (size_t i = 0; i < DEVICE_UI_MAX_VISIBLE; ++i)
+        if (s_devices->rows[i].card) lv_obj_add_flag(s_devices->rows[i].card, LV_OBJ_FLAG_HIDDEN);
+    if (s_devices->empty) lv_obj_add_flag(s_devices->empty, LV_OBJ_FLAG_HIDDEN);
 
     ui_devices_live_values_clear();
 
@@ -390,7 +353,7 @@ static void render_catalog(void)
         banner);
 
     if (!status.discovered) {
-        lv_obj_t *waiting = devices_label(
+        if (!s_devices->empty) s_devices->empty = devices_label(
             s_devices->list,
             "Waiting for the active printer's WebSocket capability discovery.",
             UI_FONT_BODY_LARGE,
@@ -399,6 +362,9 @@ static void render_catalog(void)
             80,
             760);
 
+        lv_obj_t *waiting = s_devices->empty;
+        lv_obj_remove_flag(waiting, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(waiting, "Waiting for the active printer's WebSocket capability discovery.");
         lv_obj_set_style_text_align(
             waiting,
             LV_TEXT_ALIGN_CENTER,
@@ -433,7 +399,7 @@ static void render_catalog(void)
     update_pagination_controls(matching);
 
     if (matching == 0) {
-        lv_obj_t *empty = devices_label(
+        if (!s_devices->empty) s_devices->empty = devices_label(
             s_devices->list,
             "No devices in this category were reported by the active printer.",
             UI_FONT_BODY_LARGE,
@@ -442,6 +408,9 @@ static void render_catalog(void)
             80,
             760);
 
+        lv_obj_t *empty = s_devices->empty;
+        lv_obj_remove_flag(empty, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(empty, "No devices in this category were reported by the active printer.");
         lv_obj_set_style_text_align(
             empty,
             LV_TEXT_ALIGN_CENTER,

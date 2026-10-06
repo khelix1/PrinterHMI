@@ -1,3 +1,4 @@
+#include "ui_value_update.h"
 #include "ui_telemetry.h"
 #include "ui_text.h"
 #include "ui_page_layout_profile.h"
@@ -135,7 +136,7 @@ static void telemetry_set_temperature(
         snprintf(buf, sizeof(buf), "-- C");
     }
 
-    lv_label_set_text(label, buf);
+    ui_value_set_text(label, buf);
 }
 
 static void telemetry_set_humidity(
@@ -154,7 +155,7 @@ static void telemetry_set_humidity(
         snprintf(buf, sizeof(buf), "-- %%RH");
     }
 
-    lv_label_set_text(label, buf);
+    ui_value_set_text(label, buf);
 }
 
 void ui_telemetry_refresh(
@@ -175,7 +176,7 @@ void ui_telemetry_refresh(
     if (state->capabilities.discovered &&
         !state->capabilities.has_heated_bed) {
         if (s_bed_value) {
-            lv_label_set_text(s_bed_value, ui_text("N/A"));
+            ui_value_set_text(s_bed_value, ui_text("N/A"));
         }
     } else {
         telemetry_set_temperature(
@@ -186,11 +187,11 @@ void ui_telemetry_refresh(
     if (state->capabilities.discovered &&
         !state->capabilities.has_drybox_environment_sensor) {
         if (s_air_value) {
-            lv_label_set_text(s_air_value, ui_text("N/A"));
+            ui_value_set_text(s_air_value, ui_text("N/A"));
         }
 
         if (s_humidity_value) {
-            lv_label_set_text(s_humidity_value, ui_text("N/A"));
+            ui_value_set_text(s_humidity_value, ui_text("N/A"));
         }
     } else {
         telemetry_set_temperature(

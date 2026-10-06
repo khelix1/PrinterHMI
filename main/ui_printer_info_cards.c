@@ -1,3 +1,4 @@
+#include "ui_value_update.h"
 #include "ui_printer_info_cards.h"
 #include "ui_text.h"
 #include "printer_controller.h"
@@ -293,52 +294,52 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
         char pbuf[32];
         if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%d%%", (int)(printer_progress * 100.0));
         else snprintf(pbuf, sizeof(pbuf), "--%%");
-        lv_label_set_text(cards->progress, pbuf);
-        lv_obj_set_style_text_color(cards->progress, progress_value_color(printer_progress), 0);
+        ui_value_set_text(cards->progress, pbuf);
+        ui_value_set_color(cards->progress, progress_value_color(printer_progress), 0);
     }
 
     if (cards->nozzle) {
         char nbuf[32];
         if (printer_nozzle_temp > -100.0) snprintf(nbuf, sizeof(nbuf), "%.1f / %.1f C", printer_nozzle_temp, printer_nozzle_target);
         else snprintf(nbuf, sizeof(nbuf), "-- / -- C");
-        lv_label_set_text(cards->nozzle, nbuf);
-        lv_obj_set_style_text_color(cards->nozzle, temp_value_color(printer_nozzle_temp, printer_nozzle_target), 0);
+        ui_value_set_text(cards->nozzle, nbuf);
+        ui_value_set_color(cards->nozzle, temp_value_color(printer_nozzle_temp, printer_nozzle_target), 0);
     }
 
     if (cards->bed) {
         char bbuf[32];
         if (printer_bed_temp > -100.0) snprintf(bbuf, sizeof(bbuf), "%.1f / %.1f C", printer_bed_temp, printer_bed_target);
         else snprintf(bbuf, sizeof(bbuf), "-- / -- C");
-        lv_label_set_text(cards->bed, bbuf);
-        lv_obj_set_style_text_color(cards->bed, temp_value_color(printer_bed_temp, printer_bed_target), 0);
+        ui_value_set_text(cards->bed, bbuf);
+        ui_value_set_color(cards->bed, temp_value_color(printer_bed_temp, printer_bed_target), 0);
     }
 
     if (cards->part_fan) {
         char pfbuf[24];
         if (printer_part_fan_speed >= 0.0) snprintf(pfbuf, sizeof(pfbuf), "%.0f %%", printer_part_fan_speed);
         else snprintf(pfbuf, sizeof(pfbuf), "-- %%");
-        lv_label_set_text(cards->part_fan, pfbuf);
-        lv_obj_set_style_text_color(cards->part_fan, fan_value_color(printer_part_fan_speed), 0);
+        ui_value_set_text(cards->part_fan, pfbuf);
+        ui_value_set_color(cards->part_fan, fan_value_color(printer_part_fan_speed), 0);
     }
 
     if (cards->eta) {
         if (printer_eta_text && printer_eta_text[0]) {
-            lv_label_set_text(cards->eta, printer_eta_text);
-            lv_obj_set_style_text_color(cards->eta, UI_TEXT, 0);
+            ui_value_set_text(cards->eta, printer_eta_text);
+            ui_value_set_color(cards->eta, UI_TEXT, 0);
         } else {
-            lv_label_set_text(cards->eta, moonraker_ok ? ui_text(LV_SYMBOL_OK " ONLINE") : ui_text(LV_SYMBOL_CLOSE " OFFLINE"));
-            lv_obj_set_style_text_color(cards->eta, moonraker_ok ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
+            ui_value_set_text(cards->eta, moonraker_ok ? ui_text(LV_SYMBOL_OK " ONLINE") : ui_text(LV_SYMBOL_CLOSE " OFFLINE"));
+            ui_value_set_color(cards->eta, moonraker_ok ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
         }
     }
 
     if (cards->elapsed) {
         char elapsed[32];
         format_hhmm(elapsed, sizeof(elapsed), printer_print_duration);
-        lv_label_set_text(cards->elapsed, elapsed);
+        ui_value_set_text(cards->elapsed, elapsed);
     }
 
     if (cards->remaining) {
-        lv_label_set_text(cards->remaining, (printer_eta_text && printer_eta_text[0]) ? printer_eta_text : ui_text("--:--"));
+        ui_value_set_text(cards->remaining, (printer_eta_text && printer_eta_text[0]) ? printer_eta_text : ui_text("--:--"));
     }
 }
 
@@ -460,11 +461,11 @@ static void apply_optional_card_capability(
         return;
     }
 
-    lv_label_set_text(
+    ui_value_set_text(
         value_label,
         ui_text("N/A"));
 
-    lv_obj_set_style_text_color(
+    ui_value_set_color(
         value_label,
         UI_TEXT_DIM,
         0);

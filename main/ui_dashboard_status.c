@@ -1,3 +1,4 @@
+#include "ui_value_update.h"
 #include <stdio.h>
 
 #include "ui_dashboard_status.h"
@@ -121,7 +122,7 @@ ui_dashboard_status_t ui_dashboard_status_create(lv_obj_t *parent)
 void ui_dashboard_status_set_print_state(const char *state)
 {
     if (s_dash_status.state) {
-        lv_label_set_text(s_dash_status.state, state ? state : ui_text("--"));
+        ui_value_set_text(s_dash_status.state, state ? state : ui_text("--"));
     }
 }
 
@@ -184,14 +185,16 @@ void ui_dashboard_status_set_progress(const char *progress_text,
                                           lv_color_t progress_color)
 {
     if (s_dash_status.progress) {
-        lv_label_set_text(s_dash_status.progress, progress_text ? progress_text : "-- %");
-        lv_obj_set_style_text_color(s_dash_status.progress, progress_color, 0);
+        ui_value_set_text(s_dash_status.progress, progress_text ? progress_text : "-- %");
+        ui_value_set_color(s_dash_status.progress, progress_color, 0);
     }
 
     if (s_dash_status.progress_bar) {
         if (progress_pct < 0) progress_pct = 0;
         if (progress_pct > 100) progress_pct = 100;
-        lv_bar_set_value(s_dash_status.progress_bar, progress_pct, LV_ANIM_OFF);
+        if (lv_bar_get_value(s_dash_status.progress_bar) != progress_pct) {
+            lv_bar_set_value(s_dash_status.progress_bar, progress_pct, LV_ANIM_OFF);
+        }
     }
 }
 
@@ -200,14 +203,14 @@ void ui_dashboard_status_set_times(const char *elapsed,
                                        const char *eta)
 {
     if (s_dash_status.elapsed) {
-        lv_label_set_text(s_dash_status.elapsed, elapsed ? elapsed : ui_text("--:--"));
+        ui_value_set_text(s_dash_status.elapsed, elapsed ? elapsed : ui_text("--:--"));
     }
 
     if (s_dash_status.remaining) {
-        lv_label_set_text(s_dash_status.remaining, remaining ? remaining : ui_text("--:--"));
+        ui_value_set_text(s_dash_status.remaining, remaining ? remaining : ui_text("--:--"));
     }
 
     if (s_dash_status.eta) {
-        lv_label_set_text(s_dash_status.eta, eta ? eta : ui_text("--:--"));
+        ui_value_set_text(s_dash_status.eta, eta ? eta : ui_text("--:--"));
     }
 }

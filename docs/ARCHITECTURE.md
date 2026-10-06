@@ -60,6 +60,31 @@ status banners, cards, previews, charts, action panels and popup controllers.
   interface beneath it. `ui_about_popup` is a focused Settings-owned
   consumer of those shared popup primitives.
 
+### LVGL page refresh and layout
+
+Console retains up to 64 labels, Macros up to 64 buttons, and Devices up to
+12 cards while each page is open. Refreshes rebind and hide slots rather than
+cleaning and rebuilding the list. The pointer tables use permanent PSRAM-first
+contexts; page teardown clears references before a later reopen.
+
+Macro callbacks read the current catalog index from object user data and reject
+stale discovery generations. Device live-value bindings are cleared and registered
+against the current catalog after each page or filter change.
+
+Shared modal footer actions use Grid tracks; macro parameter fields use a
+scrolling two-column Grid with Flex cells. Callbacks can use
+`ui_popup_find_owner()` to resolve the modal through nested layout containers.
+Preview wells use native image `COVER`; fitted images and fullscreen previews
+use `CONTAIN`. See [the modernization scope](LVGL_MODERNIZATION.md).
+
+### Live value updates
+
+`ui_value_update.h` provides display-lock-only comparisons against live widget
+text/local colors and deferred shift-mode chart appends using LVGL public APIs.
+Dashboard, Printer and Telemetry keep their existing formatting and cadence.
+Chart owners refresh shared plots after batches; time history continues recording
+flat values. These helpers do not own timers, transport or detached value caches.
+
 ### Ownership boundaries and next seams
 
 - `main.c` coordinates startup, lifecycle transitions and narrow adapters only. New
@@ -120,7 +145,11 @@ status banners, cards, previews, charts, action panels and popup controllers.
   `printer_file_controller`.
 - Thumbnail sessions, download, decode, RGB565 rendering and preview caching
   are separate modules.
-- Large image/message buffers prefer PSRAM. Rendered profile previews can be
+- Profile and Files rendered-pixel pools use PSRAM only, with four and 24
+  shared-size slots respectively. Files publication uses display-lock-then-slot-
+  mutex ordering and transfers the completed worker buffer into its slot.
+  Fullscreen owns its fallback snapshot and releases it after installing hires.
+- Other large image/message buffers prefer PSRAM. Rendered profile previews can be
   persisted on SD storage.
 
 ### Calibration, Bed Mesh, Devices, Macros and Console

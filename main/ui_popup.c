@@ -9,6 +9,10 @@
 typedef struct {
     lv_obj_t *blocker;
     lv_obj_t *popup;
+    lv_obj_t *footer;
+    lv_obj_t *footer_buttons[3];
+    int32_t footer_widths[3];
+    int32_t footer_columns[4];
 } ui_popup_modal_ctx_t;
 
 static void modal_blocker_deleted_cb(lv_event_t *event)
@@ -629,6 +633,57 @@ static ui_button_kind_t ui_popup_action_button_kind(
     }
 }
 
+static ui_popup_modal_ctx_t *modal_context(lv_obj_t *popup)
+{
+    for (uint32_t i = 0; popup && i < lv_obj_get_event_count(popup); ++i) {
+        lv_event_dsc_t *dsc = lv_obj_get_event_dsc(popup, i);
+        if (lv_event_dsc_get_cb(dsc) == modal_popup_deleted_cb)
+            return lv_event_dsc_get_user_data(dsc);
+    }
+    return NULL;
+}
+
+lv_obj_t *ui_popup_find_owner(lv_obj_t *object)
+{
+    for (lv_obj_t *p = object; p; p = lv_obj_get_parent(p))
+        if (modal_context(p)) return p;
+    return NULL;
+}
+
+static void footer_layout(ui_popup_modal_ctx_t *ctx)
+{
+    if (!ctx || !ctx->footer) return;
+    static const int32_t rows[] = {48, LV_GRID_TEMPLATE_LAST};
+    lv_obj_update_layout(ctx->popup);
+    int32_t width = lv_obj_get_content_width(ctx->popup) - 48;
+    if (width < 1) width = 1;
+    lv_obj_set_size(ctx->footer, width, 48);
+    lv_obj_align(ctx->footer, LV_ALIGN_BOTTOM_MID, 0, -12);
+    unsigned count = 0;
+    for (unsigned slot = 0; slot < 3; ++slot)
+        if (ctx->footer_buttons[slot]) ++count;
+    int32_t cell_width = count ? (width - 12 * ((int32_t)count - 1)) / (int32_t)count : width;
+    if (cell_width < 1) cell_width = 1;
+    unsigned column = 0;
+    for (unsigned slot = 0; slot < 3; ++slot) {
+        lv_obj_t *button = ctx->footer_buttons[slot];
+        if (!button) continue;
+        /* Percent widths resolve against the whole footer, not its Grid cell. */
+        int32_t requested = ctx->footer_widths[slot];
+        lv_obj_set_width(button, requested < cell_width ? requested : cell_width);
+        ctx->footer_columns[column] = LV_GRID_FR(1);
+        lv_grid_align_t align = slot == UI_POPUP_FOOTER_LEFT ? LV_GRID_ALIGN_START :
+            slot == UI_POPUP_FOOTER_RIGHT ? LV_GRID_ALIGN_END : LV_GRID_ALIGN_CENTER;
+        lv_obj_set_grid_cell(button, align, (int32_t)column++, 1, LV_GRID_ALIGN_CENTER, 0, 1);
+    }
+    ctx->footer_columns[column] = LV_GRID_TEMPLATE_LAST;
+    lv_obj_set_grid_dsc_array(ctx->footer, ctx->footer_columns, rows);
+}
+static void popup_size_cb(lv_event_t *event)
+{
+    footer_layout(lv_event_get_user_data(event));
+}
+
 lv_obj_t *ui_popup_add_footer_action(lv_obj_t *popup,
                                      ui_popup_action_t action,
                                      const char *text,
@@ -638,37 +693,65 @@ lv_obj_t *ui_popup_add_footer_action(lv_obj_t *popup,
                                      void *user_data,
                                      lv_obj_t **label_out)
 {
-    lv_align_t align = LV_ALIGN_BOTTOM_MID;
-    int32_t x_offset = 0;
-
-    switch (slot) {
-        case UI_POPUP_FOOTER_LEFT:
-            align = LV_ALIGN_BOTTOM_LEFT;
-            x_offset = 24;
-            break;
-
-        case UI_POPUP_FOOTER_RIGHT:
-            align = LV_ALIGN_BOTTOM_RIGHT;
-            x_offset = -24;
-            break;
-
-        case UI_POPUP_FOOTER_CENTER:
-        default:
-            break;
+    ui_popup_modal_ctx_t *ctx = modal_context(popup);
+    if (!ctx || slot < UI_POPUP_FOOTER_LEFT || slot > UI_POPUP_FOOTER_RIGHT || ctx->footer_buttons[slot]) {
+        lv_align_t align = slot == UI_POPUP_FOOTER_LEFT ? LV_ALIGN_BOTTOM_LEFT :
+            slot == UI_POPUP_FOOTER_RIGHT ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_MID;
+        int32_t x = slot == UI_POPUP_FOOTER_LEFT ? 24 : slot == UI_POPUP_FOOTER_RIGHT ? -24 : 0;
+        return ui_popup_add_action_aligned(popup, action, text, width, 48, align, x, -12,
+            event_cb, user_data, label_out);
     }
+    if (!ctx->footer) {
+        ctx->footer = lv_obj_create(popup);
+        lv_obj_remove_style_all(ctx->footer);
+        lv_obj_remove_flag(ctx->footer, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_pad_column(ctx->footer, 12, 0);
+        lv_obj_add_event_cb(popup, popup_size_cb, LV_EVENT_SIZE_CHANGED, ctx);
+    }
+    lv_obj_t *button = ui_button_create(ctx->footer, ui_popup_action_button_kind(action), text);
+    if (!button) return NULL;
+    ctx->footer_buttons[slot] = button;
+    ctx->footer_widths[slot] = width > 0 ? width : 1;
+    lv_obj_set_height(button, 48);
+    lv_obj_t *label = lv_obj_get_child(button, 0);
+    lv_obj_set_width(label, LV_PCT(100));
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    if (label_out) *label_out = label;
+    if (event_cb) lv_obj_add_event_cb(button, event_cb, LV_EVENT_CLICKED, user_data);
+    footer_layout(ctx);
+    return button;
+}
 
-    return ui_popup_add_action_aligned(
-        popup,
-        action,
-        text,
-        width,
-        48,
-        align,
-        x_offset,
-        -12,
-        event_cb,
-        user_data,
-        label_out);
+lv_obj_t *ui_popup_add_form_grid(lv_obj_t *popup, int32_t x, int32_t y,
+    int32_t width, int32_t height)
+{
+    lv_obj_t *form = ui_popup_add_list(popup, x, y, width, height);
+    if (!form) return NULL;
+    static const int32_t columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    static const int32_t rows[] = {
+        LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT,
+        LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT,
+        LV_GRID_TEMPLATE_LAST
+    };
+    lv_obj_set_style_pad_all(form, 12, 0);
+    lv_obj_set_style_pad_column(form, 16, 0);
+    lv_obj_set_style_pad_row(form, 16, 0);
+    lv_obj_set_grid_dsc_array(form, columns, rows);
+    return form;
+}
+lv_obj_t *ui_popup_add_form_cell(lv_obj_t *form, unsigned index)
+{
+    if (!form || index >= 16) return NULL;
+    lv_obj_t *cell = lv_obj_create(form);
+    lv_obj_remove_style_all(cell);
+    lv_obj_remove_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_height(cell, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(cell, 8, 0);
+    lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, (int32_t)(index % 2), 1,
+        LV_GRID_ALIGN_START, (int32_t)(index / 2), 1);
+    return cell;
 }
 
 

@@ -1,5 +1,6 @@
 #include "ui_printer_chooser.h"
 #include "ui_text.h"
+#include "ui_value_update.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -40,15 +41,9 @@ static ui_printer_chooser_manage_cb_t s_manage_cb = NULL;
 
 static void apply_status_style(lv_obj_t *label, bool configured, bool online)
 {
-    if (!label) return;
-
-    if (!configured) {
-        ui_apply_label_dim(label);
-    } else if (online) {
-        ui_apply_label_success(label);
-    } else {
-        ui_apply_label_error(label);
-    }
+    ui_value_set_color(label, !configured ? UI_TEXT_DIM :
+        online ? UI_OK_BRIGHT :
+        ui_theme_get_active() == UI_THEME_CLASSIC ? UI_TEXT_ERROR : UI_DANGER_BRIGHT, 0);
 }
 
 
@@ -218,7 +213,7 @@ static void refresh_cards(void)
                 lv_obj_clear_flag(
                     card->preview_image,
                     LV_OBJ_FLAG_HIDDEN);
-                lv_obj_move_foreground(card->preview_image);
+                /* Created last in this preview box; no repeated z-order write. */
             }
 
             lv_obj_add_flag(card->preview, LV_OBJ_FLAG_HIDDEN);
@@ -238,11 +233,11 @@ static void refresh_cards(void)
         if (!configured) {
             char empty_name[32];
             snprintf(empty_name, sizeof(empty_name), "ADD PRINTER %d", index + 1);
-            lv_label_set_text(card->name, empty_name);
-            lv_label_set_text(card->endpoint, ui_text("EMPTY PROFILE SLOT"));
-            lv_label_set_text(card->status, ui_text("NOT CONFIGURED"));
+            ui_value_set_text(card->name, empty_name);
+            ui_value_set_text(card->endpoint, ui_text("EMPTY PROFILE SLOT"));
+            ui_value_set_text(card->status, ui_text("NOT CONFIGURED"));
             if (!cached_image)
-                lv_label_set_text(card->preview, "ADD A\nPRINTER");
+                ui_value_set_text(card->preview, "ADD A\nPRINTER");
             lv_obj_add_flag(card->active, LV_OBJ_FLAG_HIDDEN);
             apply_status_style(card->status, false, false);
             continue;
@@ -251,8 +246,8 @@ static void refresh_cards(void)
         char endpoint[96];
         snprintf(endpoint, sizeof(endpoint), "%s:%d", profile->host, profile->port);
 
-        lv_label_set_text(card->name, profile->name);
-        lv_label_set_text(card->endpoint, endpoint);
+        ui_value_set_text(card->name, profile->name);
+        ui_value_set_text(card->endpoint, endpoint);
         bool active_live =
             index == active &&
             state &&
@@ -260,6 +255,8 @@ static void refresh_cards(void)
         bool status_online = active_live;
         const char *status_text = NULL;
 
+        /* Both fallback buffers live through the final label write. */
+        char inactive_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
         bool active_state_fallback = false;
         char active_health_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
         if (index == active) {
@@ -279,7 +276,6 @@ static void refresh_cards(void)
                 status_text = "OFFLINE / RETRYING";
             }
         } else {
-            char inactive_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
             bool has_live_state =
                 known &&
                 online &&
@@ -306,13 +302,13 @@ static void refresh_cards(void)
                             : "ONLINE")));
         }
 
-        lv_label_set_text(card->status, status_text);
+        ui_value_set_text(card->status, status_text);
         if ((index != active &&
              known &&
              online &&
              !status_online) ||
             (index == active && active_state_fallback)) {
-            ui_apply_label_dim(card->status);
+            ui_value_set_color(card->status, UI_TEXT_DIM, 0);
         } else {
             apply_status_style(card->status, true, status_online);
         }
@@ -322,18 +318,18 @@ static void refresh_cards(void)
 
             if (!cached_image) {
                 if (state && state->live_data_ok && state->printer_file[0]) {
-                    lv_label_set_text(card->preview, state->printer_file);
-                    ui_apply_label_bright(card->preview);
+                    ui_value_set_text(card->preview, state->printer_file);
+                    ui_value_set_color(card->preview, UI_TEXT_BRIGHT, 0);
                 } else {
-                    lv_label_set_text(card->preview, online ? "READY FOR\nLIVE DATA" : "NO LIVE\nPREVIEW");
-                    ui_apply_label_dim(card->preview);
+                    ui_value_set_text(card->preview, online ? "READY FOR\nLIVE DATA" : "NO LIVE\nPREVIEW");
+                    ui_value_set_color(card->preview, UI_TEXT_DIM, 0);
                 }
             }
         } else {
             lv_obj_add_flag(card->active, LV_OBJ_FLAG_HIDDEN);
             if (!cached_image) {
-                lv_label_set_text(card->preview, online ? "AVAILABLE\nTO OPEN" : "NO LIVE\nPREVIEW");
-                ui_apply_label_dim(card->preview);
+                ui_value_set_text(card->preview, online ? "AVAILABLE\nTO OPEN" : "NO LIVE\nPREVIEW");
+                ui_value_set_color(card->preview, UI_TEXT_DIM, 0);
             }
         }
     }
@@ -420,7 +416,6 @@ void ui_printer_chooser_show(
     refresh_cards();
 
     s_timer = lv_timer_create(chooser_timer_cb, 500, NULL);
-    chooser_timer_cb(s_timer);
 
     ESP_LOGI("printer_chooser", "Chooser visible");
 

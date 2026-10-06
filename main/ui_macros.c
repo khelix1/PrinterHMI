@@ -31,6 +31,8 @@ typedef struct {
     macro_parameter_catalog_t parameters;
     uint32_t pending_owner;
     bool editing_search;
+    lv_obj_t *rows[MACRO_CONTROLLER_MAX_MACROS];
+    lv_obj_t *empty;
     char query[48];
     char pending_command[MACRO_COMMAND_MAX];
     lv_timer_t *refresh_timer;
@@ -174,8 +176,10 @@ static void rebuild_macro_list(void);
 
 static void macro_favorite_cb(lv_event_t *event)
 {
-    uintptr_t encoded = (uintptr_t)lv_event_get_user_data(event);
-    if (!encoded) return;
+    uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
+    macro_controller_status_t status;
+    macro_controller_status(&status);
+    if (!encoded || status.generation != s_rendered_generation) { rebuild_macro_list(); return; }
     char name[MACRO_CONTROLLER_NAME_MAX];
     if (!macro_controller_get((size_t)(encoded - 1), name, sizeof(name))) return;
     bool favorite = macro_controller_toggle_favorite(name);
@@ -278,7 +282,7 @@ static void review_macro_cb(lv_event_t *event)
 static void macro_button_cb(lv_event_t *event)
 {
     if (s_confirm) { lv_obj_move_foreground(s_confirm); return; }
-    uintptr_t encoded = (uintptr_t)lv_event_get_user_data(event);
+    uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
     macro_controller_status(&status);
     if (!encoded || status.generation != s_rendered_generation) { rebuild_macro_list(); return; }
@@ -297,22 +301,22 @@ static void macro_button_cb(lv_event_t *event)
             ? "Some fields omitted. Add other names below or use Console. Blank values are not sent."
             : "Tap a value to edit. Blank values are not sent. Additional named parameters can be added below.",
         24, 64, 752);
-    lv_obj_t *list = ui_popup_add_list(s_confirm, 24, 114, 752, 294);
+    lv_obj_t *list = ui_popup_add_form_grid(s_confirm, 24, 114, 752, 294);
     size_t count = s_macros->parameters.count;
     for (size_t i = 0; i < count + MACRO_PARAMETER_EXTRA; ++i) {
-        int x = 12 + (int)(i % 2) * 362;
-        int y = 12 + (int)(i / 2) * 90;
+        lv_obj_t *cell = ui_popup_add_form_cell(list, (unsigned)i);
+        if (!cell) { close_confirm(); return; }
         if (i < count) {
-            lv_obj_t *label = ui_popup_add_body(list, s_macros->parameters.names[i], x, y, 338);
+            lv_obj_t *label = ui_popup_add_body(cell, s_macros->parameters.names[i], 0, 0, LV_PCT(100));
             lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
         } else {
-            lv_obj_t *name = ui_popup_add_textarea(list, 338, 36, LV_ALIGN_TOP_LEFT,
-                x, y, true, false, MACRO_PARAMETER_NAME_MAX - 1, "Additional NAME", "", NULL);
+            lv_obj_t *name = ui_popup_add_textarea(cell, LV_PCT(100), 48, LV_ALIGN_TOP_LEFT,
+                0, 0, true, false, MACRO_PARAMETER_NAME_MAX - 1, "Additional NAME", "", NULL);
             s_macros->parameter_names[i - count] = name;
             lv_obj_add_event_cb(name, field_cb, LV_EVENT_CLICKED, NULL);
         }
-        lv_obj_t *value = ui_popup_add_textarea(list, 338, 40, LV_ALIGN_TOP_LEFT,
-            x, y + 38, true, false, MACRO_PARAMETER_VALUE_MAX - 1, "Value (optional)", "", NULL);
+        lv_obj_t *value = ui_popup_add_textarea(cell, LV_PCT(100), 56, LV_ALIGN_TOP_LEFT,
+            0, 0, true, false, MACRO_PARAMETER_VALUE_MAX - 1, "Value (optional)", "", NULL);
         s_macros->parameter_fields[i] = value;
         lv_obj_add_event_cb(value, field_cb, LV_EVENT_CLICKED, NULL);
     }
@@ -330,7 +334,9 @@ static void rebuild_macro_list(void)
         return;
     }
 
-    lv_obj_clean(s_list);
+    for (size_t i = 0; i < MACRO_CONTROLLER_MAX_MACROS; ++i)
+        if (s_macros->rows[i]) lv_obj_add_flag(s_macros->rows[i], LV_OBJ_FLAG_HIDDEN);
+    if (s_macros->empty) lv_obj_add_flag(s_macros->empty, LV_OBJ_FLAG_HIDDEN);
 
     macro_controller_status_t status;
     macro_controller_status(&status);
@@ -366,7 +372,9 @@ static void rebuild_macro_list(void)
     }
 
     if (!status.discovered || status.count == 0) {
-        lv_obj_t *empty = lv_label_create(s_list);
+        if (!s_macros->empty) s_macros->empty = lv_label_create(s_list);
+        lv_obj_t *empty = s_macros->empty;
+        lv_obj_remove_flag(empty, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(
             empty,
             status.discovered
@@ -405,32 +413,24 @@ static void rebuild_macro_list(void)
         int32_t column = (int32_t)(displayed % 2);
         int32_t row = (int32_t)(displayed / 2);
 
-        lv_obj_t *button =
-            ui_button_create_icon(
-                s_list,
-                UI_BUTTON_OUTLINED,
-                favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY,
-                name,
-                UI_OK_BRIGHT,
-                UI_BUTTON_ICON_HORIZONTAL);
-
+        lv_obj_t *button = s_macros->rows[displayed];
         if (!button) {
-            continue;
+            button = ui_button_create_icon(s_list, UI_BUTTON_OUTLINED,
+                favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY, name, UI_OK_BRIGHT, UI_BUTTON_ICON_HORIZONTAL);
+            if (!button) continue;
+            s_macros->rows[displayed] = button;
+            lv_obj_add_event_cb(button, macro_button_cb, LV_EVENT_CLICKED, NULL);
+            lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
-
+        lv_obj_remove_flag(button, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_user_data(button, (void *)(uintptr_t)(index + 1));
+        lv_obj_t *icon = lv_obj_get_child(button, 0);
+        lv_obj_t *label = lv_obj_get_child(button, 1);
+        const char *symbol = favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY;
+        if (strcmp(lv_label_get_text(icon), symbol)) lv_label_set_text(icon, symbol);
+        if (strcmp(lv_label_get_text(label), name)) lv_label_set_text(label, name);
         lv_obj_set_size(button, 382, 54);
-        lv_obj_set_pos(
-            button,
-            12 + column * 394,
-            12 + row * 62);
-
-        lv_obj_add_event_cb(
-            button,
-            macro_button_cb,
-            LV_EVENT_CLICKED,
-            (void *)(uintptr_t)(index + 1));
-        lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED,
-                            (void *)(uintptr_t)(index + 1));
+        lv_obj_set_pos(button, 12 + column * 394, 12 + row * 62);
         ++displayed;
     }
     }
@@ -439,7 +439,11 @@ static void rebuild_macro_list(void)
         snprintf(text, sizeof(text), "%u MATCHES: %.47s", (unsigned)displayed, s_macros->query);
         lv_label_set_text(s_status, text);
     }
-    if (!displayed) ui_popup_add_body(s_list, "No matching macros. Clear or change the search.", 24, 30, 730);
+    if (!displayed) {
+        if (!s_macros->empty) s_macros->empty = ui_popup_add_body(s_list, "", 24, 30, 730);
+        lv_obj_remove_flag(s_macros->empty, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(s_macros->empty, "No matching macros. Clear or change the search.");
+    }
 }
 
 
@@ -576,6 +580,8 @@ void ui_macros_hide(void)
     s_root = NULL;
     s_list = NULL;
     s_status = NULL;
+    memset(s_macros->rows, 0, sizeof(s_macros->rows));
+    s_macros->empty = NULL;
     s_macros->search_label = NULL;
     s_command_callback = NULL;
     s_rendered_generation = 0;

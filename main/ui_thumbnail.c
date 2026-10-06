@@ -163,16 +163,15 @@ void ui_thumbnail_fit_object(
     }
     if (source_width <= 0 || source_height <= 0) return;
 
-    lv_image_set_scale(
-        object,
-        ui_thumbnail_fit_scale(
-            box,
-            source_width,
-            source_height,
-            inset));
+    lv_obj_update_layout(box);
+    int width = lv_obj_get_content_width(box) - inset * 2;
+    int height = lv_obj_get_content_height(box) - inset * 2;
+    if (width < 1) width = 1;
+    if (height < 1) height = 1;
+    lv_obj_set_size(object, width, height);
+    lv_image_set_inner_align(object, LV_IMAGE_ALIGN_CONTAIN);
     lv_obj_center(object);
 }
-
 
 void ui_thumbnail_fill_object(lv_obj_t *object, lv_obj_t *box,
     int source_width, int source_height)
@@ -187,15 +186,13 @@ void ui_thumbnail_fill_object(lv_obj_t *object, lv_obj_t *box,
     int width = lv_obj_get_content_width(box);
     int height = lv_obj_get_content_height(box);
     if (width <= 0 || height <= 0) return;
-    /* Round upward: integer LVGL scales must cover even the final edge. */
-    int64_t scale_x = ((int64_t)width * 256 + source_width - 1) / source_width;
-    int64_t scale_y = ((int64_t)height * 256 + source_height - 1) / source_height;
-    int64_t scale = scale_x > scale_y ? scale_x : scale_y;
-    if (scale < 1) scale = 1;
-    if (scale > 8192) scale = 8192;
+    /* 9.5 COVER quantizes scale downward to 1/256 steps. A source-sized
+     * rounding guard keeps that quantization from exposing a one-pixel band. */
+    lv_obj_set_size(object, width + (source_width + 255) / 256,
+        height + (source_height + 255) / 256);
     lv_obj_remove_flag(box, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
     lv_obj_set_style_clip_corner(box, true, 0);
-    lv_image_set_scale(object, (uint32_t)scale);
+    lv_image_set_inner_align(object, LV_IMAGE_ALIGN_COVER);
     lv_obj_center(object);
 }
 

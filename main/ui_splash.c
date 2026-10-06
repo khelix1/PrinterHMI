@@ -6,11 +6,14 @@
 #include "ui_logo_assets.h"
 #include "ui_theme.h"
 #include <stdio.h>
+#include <string.h>
 
 static lv_obj_t *splash_root = NULL;
 static lv_obj_t *splash_bar = NULL;
 static lv_obj_t *splash_status = NULL;
 static lv_obj_t *splash_percent = NULL;
+static lv_display_t *splash_frozen_display;
+static bool splash_invalidation_was_enabled;
 
 static void ui_splash_set_progress(int pct, const char *status)
 {
@@ -19,25 +22,37 @@ static void ui_splash_set_progress(int pct, const char *status)
     if (pct < 0) pct = 0;
     if (pct > 100) pct = 100;
 
-    /*
-     * The splash is top-layered, but this panel still visibly reacts to
-     * frequent full-scene invalidations. Retain useful progress movement
-     * while limiting it to four stable stages.
-     */
-    if (pct != 5 && pct != 45 && pct != 88 && pct != 100) {
-        return;
+    bool changed = false;
+    if (splash_bar && lv_bar_get_value(splash_bar) != pct) {
+        lv_bar_set_value(splash_bar, pct, LV_ANIM_OFF);
+        changed = true;
     }
-
-    if (splash_bar) lv_bar_set_value(splash_bar, pct, LV_ANIM_OFF);
-
     if (splash_percent) {
         char buf[24];
         snprintf(buf, sizeof(buf), "%d%%", pct);
-        lv_label_set_text(splash_percent, buf);
+        if (strcmp(lv_label_get_text(splash_percent), buf)) {
+            lv_label_set_text(splash_percent, buf);
+            changed = true;
+        }
+    }
+    if (splash_status && status && strcmp(lv_label_get_text(splash_status), status)) {
+        lv_label_set_text(splash_status, status);
+        changed = true;
     }
 
-    if (splash_status && status) {
-        lv_label_set_text(splash_status, status);
+    if (changed && splash_frozen_display && splash_invalidation_was_enabled) {
+        /* Background invalidations stay suppressed. Resolve any pending
+         * layout first, then queue only these fixed-size progress regions.
+         * Disable invalidation again before rendering so layout/animation
+         * work cannot expand the refresh to the whole scene.
+         */
+        lv_obj_update_layout(splash_root);
+        lv_display_enable_invalidation(splash_frozen_display, true);
+        if (splash_bar) lv_obj_invalidate(splash_bar);
+        if (splash_percent) lv_obj_invalidate(splash_percent);
+        if (splash_status) lv_obj_invalidate(splash_status);
+        lv_display_enable_invalidation(splash_frozen_display, false);
+        lv_refr_now(splash_frozen_display);
     }
 
 }
@@ -130,6 +145,9 @@ void ui_splash_create(void)
 
     splash_status = lv_label_create(panel);
     lv_label_set_text(splash_status, ui_text("Starting..."));
+    lv_obj_set_width(splash_status, 640);
+    lv_label_set_long_mode(splash_status, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(splash_status, LV_TEXT_ALIGN_CENTER, 0);
     ui_apply_text_title(splash_status);
     lv_obj_set_style_text_color(splash_status, UI_BORDER_BRIGHT, 0);
     lv_obj_align(splash_status, LV_ALIGN_TOP_MID, 0, 164);
@@ -149,6 +167,8 @@ void ui_splash_create(void)
 
     splash_percent = lv_label_create(panel);
     lv_label_set_text(splash_percent, "0%");
+    lv_obj_set_width(splash_percent, 100);
+    lv_obj_set_style_text_align(splash_percent, LV_TEXT_ALIGN_CENTER, 0);
     ui_apply_text_body_large(splash_percent);
     ui_apply_label_primary(splash_percent);
     lv_obj_align(splash_percent, LV_ALIGN_TOP_MID, 0, 254);
@@ -164,6 +184,39 @@ void ui_splash_create(void)
     lv_obj_move_foreground(splash_root);
 }
 
+static void splash_refresh_requested_cb(lv_event_t *event)
+{
+    (void)event;
+    /* Layout changes also request refreshes even with invalidation disabled.
+     * Registered after LVGL's own display callback, this holds that timer.
+     */
+    if (splash_frozen_display) {
+        lv_timer_t *refresh = lv_display_get_refr_timer(splash_frozen_display);
+        if (refresh) lv_timer_pause(refresh);
+    }
+}
+
+void ui_splash_present_and_freeze(void)
+{
+    if (!splash_root || splash_frozen_display) return;
+    lv_display_t *display = lv_obj_get_display(splash_root);
+    lv_timer_t *refresh = lv_display_get_refr_timer(display);
+    if (!display || !refresh) return;
+
+    /* Submit the complete opaque frame before holding the scanout stable.
+     * Pausing the timer alone is insufficient: every later invalidation can
+     * resume it through LV_EVENT_REFR_REQUEST. Suppress those requests too.
+     * Application timers and background startup work continue normally.
+     */
+    lv_refr_now(display);
+    lv_display_add_event_cb(display, splash_refresh_requested_cb,
+        LV_EVENT_REFR_REQUEST, NULL);
+    splash_invalidation_was_enabled = lv_display_is_invalidation_enabled(display);
+    lv_display_enable_invalidation(display, false);
+    lv_timer_pause(refresh);
+    splash_frozen_display = display;
+}
+
 void ui_splash_destroy(void)
 {
     if (!splash_root) return;
@@ -173,4 +226,48 @@ void ui_splash_destroy(void)
     splash_bar = NULL;
     splash_status = NULL;
     splash_percent = NULL;
+
+    if (splash_frozen_display) {
+        lv_display_t *display = splash_frozen_display;
+        /* Settle the revealed page while layout/animation invalidations are
+         * still held. Queue only the final scene, then render with the hold
+         * active so incidental invalidations cannot queue another full frame.
+         */
+        lv_obj_update_layout(lv_display_get_screen_active(display));
+        lv_obj_update_layout(lv_display_get_layer_top(display));
+        lv_display_enable_invalidation(display, true);
+        if (splash_invalidation_was_enabled) {
+            lv_obj_invalidate(lv_display_get_screen_active(display));
+            lv_display_enable_invalidation(display, false);
+            lv_refr_now(display);
+            lv_display_enable_invalidation(display, true);
+        }
+        splash_frozen_display = NULL;
+        lv_display_remove_event_cb_with_user_data(display, splash_refresh_requested_cb, NULL);
+        if (splash_invalidation_was_enabled) {
+            lv_timer_t *refresh = lv_display_get_refr_timer(display);
+            if (refresh) lv_timer_resume(refresh);
+        }
+    }
+}
+
+void ui_splash_restore_brightness(int saved_percent,
+    void (*set_percent)(int), void (*wait_ms)(unsigned))
+{
+    /* Boot holds 100% to avoid low-duty splash flicker. Do not rewrite that
+     * duty when it is already the saved value. Lower settings ramp gently
+     * after the final chooser frame, with a frame interval before each step.
+     * This runs outside the display lock; the normal UI task keeps running.
+     */
+    if (!set_percent || !wait_ms) return;
+    if (saved_percent < 10) saved_percent = 10;
+    if (saved_percent >= 100) return;
+    int previous = 100;
+    for (int step = 1; step <= 8; ++step) {
+        int next = 100 + (saved_percent - 100) * step / 8;
+        if (next == previous) continue;
+        wait_ms(20);
+        set_percent(next);
+        previous = next;
+    }
 }

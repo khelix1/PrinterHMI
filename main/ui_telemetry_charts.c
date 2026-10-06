@@ -1,3 +1,4 @@
+#include "ui_value_update.h"
 #include "ui_telemetry_charts.h"
 #include "ui_page_layout_profile.h"
 
@@ -300,7 +301,7 @@ static void telemetry_update_chart_stats(
                 unit);
         }
 
-        lv_label_set_text(chart->stats_label, buf);
+        ui_value_set_text(chart->stats_label, buf);
     }
 
     if (chart->target_label) {
@@ -317,7 +318,7 @@ static void telemetry_update_chart_stats(
             buf[0] = '\0';
         }
 
-        lv_label_set_text(chart->target_label, buf);
+        ui_value_set_text(chart->target_label, buf);
     }
 }
 
@@ -529,7 +530,7 @@ static void telemetry_chart_push_sample(
         return;
     }
 
-    lv_chart_set_next_value(
+    ui_value_chart_append(
         chart->chart,
         chart->actual_series,
         telemetry_chart_value(value));

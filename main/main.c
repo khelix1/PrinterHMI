@@ -3822,6 +3822,37 @@ static void app_startup_show_initial_ui(void)
 }
 
 
+static void app_startup_set_brightness(int percent)
+{
+    (void)bsp_display_brightness_set(percent);
+}
+
+static void app_startup_wait_ms(unsigned milliseconds)
+{
+    vTaskDelay(pdMS_TO_TICKS(milliseconds));
+}
+
+static void app_start_runtime_services(void)
+{
+    BaseType_t rc = xTaskCreatePinnedToCore(
+        hmi_runtime_task,
+        "hmi_runtime",
+        12288,
+        NULL,
+        4,
+        NULL,
+        0
+    );
+
+    if (rc != pdPASS) {
+        ESP_LOGE(TAG, "Failed to start hmi_runtime task");
+    } else {
+        /* Inactive-profile HTTP checks may wait for unreachable hosts. */
+        printer_profile_preview_worker_start(
+            moonraker_config_api_key());
+    }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "BOOT_RESET_REASON=%d", esp_reset_reason());
@@ -3926,8 +3957,8 @@ void app_main(void)
      */
     app_startup_show_initial_ui();
     if (bsp_display_lock(0)) {
-        lv_refr_now(NULL);
-        ESP_LOGI(TAG, "STARTUP_TRACE splash-frame-presented");
+        ui_splash_present_and_freeze();
+        ESP_LOGI(TAG, "STARTUP_TRACE splash-frame-presented and refresh held");
         bsp_display_unlock();
     }
     vTaskDelay(pdMS_TO_TICKS(120));
@@ -3952,9 +3983,10 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(250));
 
-    /* Keep the already-presented splash frame stable while Wi-Fi and the
-     * ESP-Hosted transport start. Moonraker-ready advances it later. */
-    ESP_LOGI(TAG, "STARTUP_TRACE wifi-start splash frozen");
+    /* Hold background redraws while permitting narrow splash progress
+     * updates during SD and Wi-Fi startup. */
+    app_splash_locked(ui_splash_wifi_starting);
+    ESP_LOGI(TAG, "STARTUP_TRACE wifi-start splash progress only");
 
     /* Start WiFi after dashboard is visible. Touch scaling fix remains in BSP. */
     if (!sd_mount_attempted) {
@@ -3968,6 +4000,13 @@ void app_main(void)
 
     app_splash_wifi_waiting_locked(s_got_ip);
 
+    /* Start initial state/preview publication while the opaque splash still
+     * holds background redraws. The readiness stages now follow actual
+     * service startup instead of revealing the chooser before that burst.
+     */
+    ESP_LOGI(TAG, "STARTUP_TRACE runtime-start under splash hold");
+    app_start_runtime_services();
+
     vTaskDelay(pdMS_TO_TICKS(350));
 
     app_splash_locked(ui_splash_moonraker_ready);
@@ -3980,9 +4019,10 @@ void app_main(void)
 
     app_splash_locked(ui_splash_destroy);
 
-    /* Return to the operator's saved display brightness only after
-     * the splash has handed off to the stable startup page. */
-    (void)bsp_display_brightness_set(ui_settings_brightness_percent());
+    /* Preserve a steady 100% handoff, then gently restore a lower saved
+     * setting while normal display servicing continues outside this lock. */
+    ui_splash_restore_brightness(ui_settings_brightness_percent(),
+        app_startup_set_brightness, app_startup_wait_ms);
 
     const esp_app_desc_t *running_app =
         esp_app_get_description();
@@ -3996,23 +4036,6 @@ void app_main(void)
 
     ota_boot_validation_confirm_running_image();
 
-    BaseType_t rc = xTaskCreatePinnedToCore(
-        hmi_runtime_task,
-        "hmi_runtime",
-        12288,
-        NULL,
-        4,
-        NULL,
-        0
-    );
-
-    if (rc != pdPASS) {
-        ESP_LOGE(TAG, "Failed to start hmi_runtime task");
-    } else {
-        /* Inactive-profile HTTP checks may wait for unreachable hosts. */
-        printer_profile_preview_worker_start(
-            moonraker_config_api_key());
-    }
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10000));

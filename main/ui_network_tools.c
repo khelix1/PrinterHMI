@@ -611,7 +611,8 @@ void ui_network_port_popup_show(int current_port,
 static void close_test_popup_cb(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_target(e);
-    lv_obj_t *popup = lv_obj_get_parent(obj);
+    lv_obj_t *popup = ui_popup_find_owner(obj);
+    if (!popup) popup = lv_obj_get_parent(obj);
     if (popup) lv_obj_delete(popup);
 }
 

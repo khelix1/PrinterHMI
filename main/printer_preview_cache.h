@@ -13,7 +13,10 @@
  * downloaded PNG data through the same renderer. UI consumers only see a
  * completed, profile-validated image descriptor.
  *
- * Publish functions must be called while the LVGL/display lock is held.
+ * All functions must be called while the LVGL/display lock is held.
+ * Pixels use PSRAM only, with each profile capped at the shared small preview
+ * dimensions. Descriptor addresses remain stable; consumers rebind on revision.
+ * Invalidation retains storage while old widgets may still reference it.
  */
 bool printer_preview_cache_publish_active(
     const char *file,
@@ -41,4 +44,5 @@ const lv_image_dsc_t *printer_preview_cache_image(
     uint32_t *revision_out);
 
 void printer_preview_cache_invalidate(int profile_index);
+/* Detach all consumer widgets before resetting/freeing their backing buffers. */
 void printer_preview_cache_reset(void);

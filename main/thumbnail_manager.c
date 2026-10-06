@@ -1,4 +1,5 @@
 #include "thumbnail_manager.h"
+#include "thumbnail_cache_io.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -11,12 +12,38 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #define THUMB_CACHE_DIR "/sdcard/cache"
 #define THUMB_MAX_FILE 160
 #define THUMB_MAX_PATH 240
 
 static const char *TAG = "thumbnail_manager";
+
+static SemaphoreHandle_t s_cache_mutex;
+static portMUX_TYPE s_cache_mutex_guard = portMUX_INITIALIZER_UNLOCKED;
+
+static bool cache_lock(void)
+{
+    portENTER_CRITICAL(&s_cache_mutex_guard);
+    SemaphoreHandle_t mutex = s_cache_mutex;
+    portEXIT_CRITICAL(&s_cache_mutex_guard);
+    if (!mutex) {
+        SemaphoreHandle_t candidate = xSemaphoreCreateMutex();
+        if (!candidate) return false;
+        portENTER_CRITICAL(&s_cache_mutex_guard);
+        if (!s_cache_mutex) s_cache_mutex = candidate;
+        mutex = s_cache_mutex;
+        portEXIT_CRITICAL(&s_cache_mutex_guard);
+        if (candidate != mutex) vSemaphoreDelete(candidate);
+    }
+    return xSemaphoreTake(mutex, pdMS_TO_TICKS(5000)) == pdTRUE;
+}
+
+static void cache_unlock(void)
+{
+    xSemaphoreGive(s_cache_mutex);
+}
 
 
 static volatile bool s_thumb_task_running = false;
@@ -287,7 +314,7 @@ bool thumbnail_manager_cache_path_for_file(const char *gcode_file,
 }
 
 
-bool thumbnail_manager_load_cache_file(const char *path,
+static bool load_cache_file_locked(const char *path,
                                            uint8_t **out_buf,
                                            size_t *out_len)
 {
@@ -305,7 +332,7 @@ bool thumbnail_manager_load_cache_file(const char *path,
     }
 
     long len = ftell(f);
-    if (len <= 0 || len > 512 * 1024) {
+    if (len <= 0 || len > (long)THUMBNAIL_CACHE_MAX_PNG_BYTES) {
         fclose(f);
         return false;
     }
@@ -333,35 +360,29 @@ bool thumbnail_manager_load_cache_file(const char *path,
 }
 
 
-bool thumbnail_manager_store_cache_file(const char *path,
-                                            const uint8_t *buf,
-                                            size_t len)
+bool thumbnail_manager_load_cache_file(const char *path,
+                                       uint8_t **out_buf, size_t *out_len)
 {
-    if (!path || !path[0] || !buf || len == 0) return false;
+    if (!out_buf || !out_len) return false;
+    *out_buf = NULL;
+    *out_len = 0;
+    if (!cache_lock()) return false;
+    bool ok = load_cache_file_locked(path, out_buf, out_len);
+    cache_unlock();
+    return ok;
+}
 
+bool thumbnail_manager_store_cache_file(const char *path,
+                                        const uint8_t *buf, size_t len)
+{
+    if (!cache_lock()) return false;
     mkdir("/sdcard/hmi", 0775);
     mkdir("/sdcard/hmi/thumbs", 0775);
     mkdir("/sdcard/hmi/thumbs32", 0775);
-
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        return false;
-    }
-
-    size_t wr = fwrite(buf, 1, len, f);
-    int cr = fclose(f);
-
-    return wr == len && cr == 0;
+    bool ok = thumbnail_cache_write(path, buf, len);
+    cache_unlock();
+    return ok;
 }
-
-
-
-
-
-
-
-
-
 
 bool thumbnail_manager_run_download_task(void *arg,
                                              const char *host,

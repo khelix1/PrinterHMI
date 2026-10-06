@@ -225,3 +225,11 @@ lv_obj_t *ui_popup_add_button_aligned(lv_obj_t *popup,
                                       lv_event_cb_t event_cb,
                                       void *user_data,
                                       lv_obj_t **label_out);
+
+/* Two-column responsive form, up to 16 fields; each cell uses a Flex column. */
+lv_obj_t *ui_popup_add_form_grid(lv_obj_t *popup, int32_t x, int32_t y,
+    int32_t width, int32_t height);
+lv_obj_t *ui_popup_add_form_cell(lv_obj_t *form, unsigned index);
+
+/* Find the modal owner through layout containers. */
+lv_obj_t *ui_popup_find_owner(lv_obj_t *object);

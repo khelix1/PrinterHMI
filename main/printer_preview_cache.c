@@ -8,6 +8,7 @@
 
 #include "moonraker_config_controller.h"
 #include "thumbnail_render.h"
+#include "misc/cache/instance/lv_image_cache.h"
 
 typedef struct {
     uint16_t *pixels;
@@ -80,6 +81,17 @@ static bool slot_matches_profile(
 }
 
 
+static bool valid_dimensions(int width, int height)
+{
+    return width > 0 && height > 0 && width <= THUMBNAIL_PREVIEW_WIDTH &&
+        height <= THUMBNAIL_PREVIEW_HEIGHT;
+}
+static uint32_t next_revision(uint32_t revision)
+{
+    ++revision;
+    return revision ? revision : 1;
+}
+
 static uint16_t *allocate_pixels(size_t count)
 {
     if (count == 0) return NULL;
@@ -88,11 +100,6 @@ static uint16_t *allocate_pixels(size_t count)
         count * sizeof(uint16_t),
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
-    if (!pixels) {
-        pixels = heap_caps_malloc(
-            count * sizeof(uint16_t),
-            MALLOC_CAP_8BIT);
-    }
 
     return pixels;
 }
@@ -130,9 +137,10 @@ static bool install_pixels(
 
     preview_slot_t *slot = &s_slots[profile_index];
 
-    if (slot->pixels) {
-        heap_caps_free(slot->pixels);
-    }
+    /* The descriptor address is reused. Drop decoded/header/GPU entries before
+     * changing its data, including same-sized in-place active updates. */
+    lv_image_cache_drop(&slot->image);
+    if (slot->pixels && slot->pixels != replacement) heap_caps_free(slot->pixels);
 
     slot->pixels = replacement;
     slot->pixel_capacity = count;
@@ -142,9 +150,7 @@ static bool install_pixels(
     snprintf(slot->host, sizeof(slot->host), "%s", host);
     slot->port = port;
     slot->ready = true;
-    slot->revision++;
-
-    if (slot->revision == 0) slot->revision = 1;
+    slot->revision = next_revision(slot->revision);
 
     memset(&slot->image, 0, sizeof(slot->image));
 #if defined(LV_IMAGE_HEADER_MAGIC)
@@ -176,7 +182,8 @@ bool printer_preview_cache_publish_active(
     int width,
     int height)
 {
-    if (!file || !file[0] || !pixels || width <= 0 || height <= 0) {
+    if (!file || !file[0] || strlen(file) >= sizeof(((preview_slot_t *)0)->file) ||
+        !pixels || !valid_dimensions(width, height)) {
         return false;
     }
 
@@ -188,14 +195,18 @@ bool printer_preview_cache_publish_active(
     }
 
     size_t count = (size_t)width * (size_t)height;
-    uint16_t *replacement = allocate_pixels(count);
+    if (!ensure_slots()) return false;
+    preview_slot_t *slot = &s_slots[index];
+    bool reused = slot->pixels && slot->pixel_capacity == count;
+    uint16_t *replacement = reused ? slot->pixels : allocate_pixels(count);
 
     if (!replacement) {
         ESP_LOGW(TAG, "Profile %d RGB565 allocation failed", index + 1);
         return false;
     }
 
-    memcpy(replacement, pixels, count * sizeof(uint16_t));
+    if (reused) lv_image_cache_drop(&slot->image);
+    memmove(replacement, pixels, count * sizeof(uint16_t));
 
     if (!install_pixels(
             index,
@@ -206,7 +217,7 @@ bool printer_preview_cache_publish_active(
             count,
             width,
             height)) {
-        heap_caps_free(replacement);
+        if (!reused) heap_caps_free(replacement);
         return false;
     }
 
@@ -228,7 +239,8 @@ bool printer_preview_cache_publish_png(
         !expected_host || !expected_host[0] ||
         !file || !file[0] ||
         !png || png_size == 0 ||
-        width <= 0 || height <= 0) {
+        strlen(file) >= sizeof(((preview_slot_t *)0)->file) ||
+        !valid_dimensions(width, height)) {
         return false;
     }
 
@@ -329,11 +341,13 @@ void printer_preview_cache_invalidate(int profile_index)
     preview_slot_t *slot = &s_slots[profile_index];
     if (!slot->ready) return;
 
+    lv_image_cache_drop(&slot->image);
+    /* Keep the bounded buffer alive until old widget bindings are replaced. */
     slot->ready = false;
     slot->file[0] = '\0';
     slot->host[0] = '\0';
     slot->port = 0;
-    slot->revision++;
+    slot->revision = next_revision(slot->revision);
 }
 
 
@@ -344,10 +358,10 @@ void printer_preview_cache_reset(void)
     for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index) {
         preview_slot_t *slot = &s_slots[index];
 
-        if (slot->pixels) {
-            heap_caps_free(slot->pixels);
-        }
-
+        lv_image_cache_drop(&slot->image);
+        if (slot->pixels) heap_caps_free(slot->pixels);
+        uint32_t revision = next_revision(slot->revision);
         memset(slot, 0, sizeof(*slot));
+        slot->revision = revision;
     }
 }

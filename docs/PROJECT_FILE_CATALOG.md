@@ -89,10 +89,10 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_files`, `files_page_controller` | Files page and behavior routing |
-| `files_row_preview`, `file_detail_loader` | Row thumbnail and long-press detail work |
-| `thumbnail_manager`, `thumbnail_render` | Thumbnail download/cache state and RGB565 rendering |
+| `files_row_preview`, `file_detail_loader` | Bounded PSRAM row previews with display-locked buffer transfer, and long-press detail work |
+| `thumbnail_manager`, `thumbnail_cache_io`, `thumbnail_render` | Thumbnail download/cache state, serialized SD I/O with scoped retention, and RGB565 rendering |
 | `thumbnail_session`, `thumbnail_preview_coordinator` | Selected-file metadata, layer fallback and preview coordination |
-| `ui_thumbnail` | Shared thumbnail UI component |
+| `ui_thumbnail`, `ui_preview_lightbox` | Shared thumbnail UI and fullscreen-owned fallback/hires image lifetime |
 
 ## Network and Moonraker
 
@@ -120,6 +120,7 @@ when ownership or build membership changes.
 
 | Modules | Ownership |
 | --- | --- |
+| `ui_value_update.h` | Change-aware live text/local-color writes and deferred shift-chart appends |
 | `telemetry_history` | Time-series sample storage |
 | `ui_telemetry_components`, `ui_telemetry_charts`, `ui_telemetry` | Telemetry controls, charts and page orchestration |
 

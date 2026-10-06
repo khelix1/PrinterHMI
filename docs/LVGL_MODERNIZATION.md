@@ -1,10 +1,11 @@
 # LVGL modernization
 
-Branch: `feature/lvgl95-modernization`. The project already pins LVGL 9.5.0;
-this work uses its APIs more consistently. Version 6.5.6 remains the stable
-release reference until a separate release is requested.
+Integration scope from `feature/lvgl95-modernization`. The project pins LVGL
+9.5.0; this work uses its APIs more consistently. Version 6.5.6 remains the stable
+release reference. The closeout workflow merges tested work into `main` and
+publishes a commit-specific nightly through `tools/end_of_night_checkpoint.sh`.
 
-## Current scope
+## Completed scope
 
 | Area | Implementation |
 | --- | --- |
@@ -26,9 +27,9 @@ continue running. Progress stages explicitly repaint only the fixed-size bar,
 percentage and status regions. The Wi-Fi starting stage is called before SD/Wi-Fi
 startup. Splash teardown restores invalidation and repaints the whole screen.
 
-This suppresses repeated background redraws during boot while retaining progress. Hardware confirmation is still
-required to establish that it resolves the reported flashing; the host test cannot
-prove the panel-level cause. The three modernization features remain enabled.
+The operator confirmed stable splash progress on the panel. Later runtime
+startup changes resolved the delayed white flash, as recorded below. Host tests
+cannot prove the panel-level cause. The three modernization features remain enabled.
 
 ## Preview cache cleanup
 
@@ -70,8 +71,8 @@ in up to eight yielding steps afterward instead of changing abruptly.
 
 Host checks cover both partial and double-buffered direct rendering, all three
 themes/text sizes, one completed handoff frame, progress redraw bounds and
-brightness values 10–100%. Panel confirmation is still required for the reported
-flash; software checks cannot reproduce the MIPI/backlight effect.
+brightness values 10–100%. The final runtime-startup correction below was
+confirmed on the panel; software checks cannot reproduce the MIPI/backlight effect.
 
 ## Chooser refresh follow-up
 
@@ -81,7 +82,8 @@ z-order writes or the initial refresh. Live status, preview revision and active
 profile updates remain enabled. Both health-state fallback buffers remain alive
 until their label write; inactive state no longer escapes a block-local buffer.
 Host tests verify an unchanged chooser stays redraw-free across timer ticks in
-all three themes/text sizes. Hardware confirmation remains required for the flash.
+all three themes/text sizes. The final runtime-startup correction below was
+confirmed on the panel.
 
 ## First runtime update burst
 
@@ -100,14 +102,30 @@ eight-second isolation delay is removed.
 These are follow-up candidates, outside this branch:
 
 1. Observer/data bindings for selected live labels and connection/status fields.
-2. Follow-up SD cache retention and download-buffer lifetime review; rendered
-   preview ownership, invalidation and pixel-pool budgets are now implemented.
-3. Broader live-widget update deduplication and rolling-statistics optimization,
+2. Broader live-widget update deduplication and rolling-statistics optimization,
    if panel measurements justify them; core telemetry refresh is now optimized.
-4. Targeted profiling of cache activity and page-load measurements when needed;
+3. Targeted profiling of cache activity and page-load measurements when needed;
    the temporary runtime monitor is removed after panel validation.
-5. ESP32-P4 PPA/DMA2D acceleration, evaluated after profiling and with an explicit
+4. ESP32-P4 PPA/DMA2D acceleration, evaluated after profiling and with an explicit
    software fallback; verify driver/config support and image-format limitations.
 
 See [Testing](TESTING.md) for host checks and panel acceptance, and
 [Preview rendering](PREVIEW_RENDERING.md) for crop/fullscreen behavior.
+
+## SD retention and download-buffer follow-up
+
+File-preview SD caches now use bounded write-age retention, serialized I/O and
+staged replacement. Completed HTTP PNG buffers are trimmed to their received
+size when PSRAM realloc succeeds. Profile startup previews and the verified
+worker startup under the splash are unchanged. See [Preview rendering](PREVIEW_RENDERING.md)
+for limits and error behavior, and [Testing](TESTING.md) for host/panel checks.
+
+## Closeout validation
+
+The operator confirmed the modernization, preview ownership, telemetry refresh,
+monitor removal, runtime-startup flash correction and SD/download cleanup on the
+panel. Host checks cover layouts/row reuse, preview fill/ownership, telemetry,
+splash hold/handoff, chooser refresh and storage/download failure paths. No
+quantified performance gain or completed release soak test is inferred from this
+acceptance. The canonical IDF6 build runs again on integrated `main` as part of
+nightly publication. Stable version and stable release assets remain unchanged.

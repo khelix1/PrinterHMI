@@ -11,7 +11,7 @@ under `history/`.
 | [Configuration](CONFIGURATION.md) | Operator settings and persistent state |
 | [Custom themes](CUSTOM_THEMES.md) | SD package format, validation and recovery |
 | [Flashing and OTA](FLASHING_AND_OTA.md) | USB installation, OTA and recovery |
-| [LVGL modernization](LVGL_MODERNIZATION.md) | Current branch scope and saved follow-up queue |
+| [LVGL modernization](LVGL_MODERNIZATION.md) | Completed modernization scope and remaining follow-up queue |
 | [Preview rendering](PREVIEW_RENDERING.md) | Preview fill/cropping and fullscreen behavior |
 | [Tools](TOOLS.md) | Calibration, live endstops, motion diagnostics and macro parameters |
 | [Testing](TESTING.md) | Required host and target validation |

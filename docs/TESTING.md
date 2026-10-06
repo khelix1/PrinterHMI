@@ -344,3 +344,27 @@ The host splash checks cover refresh hold/progress, not MIPI-level flash behavio
 Panel result: the operator confirmed the runtime-startup correction resolved the
 reported white flash. Preserve service startup under the splash hold when
 changing boot lifecycle order; the eight-second isolation delay is removed.
+
+## Thumbnail storage and download buffers
+
+Run `python3 tools/audit/thumbnail_storage_test.py` with a host C compiler. It
+compiles the production SD storage policy and extracts the production HTTP
+downloader into an allocator/transport harness. Checks cover 64-file and 16 MiB
+eviction, newly written file preservation, separate directory budgets, exclusion
+of profile/nested/user files, replacement (including EEXIST/FAT-style rejection and rollback) and
+write/close/rename failures,
+512 KiB rejection, exact-size download ownership, realloc failure fallback and
+failed/short/oversized-path transfer cleanup. This does not emulate FAT or ESP-IDF.
+
+Build with `./tools/build_idf6_hosted3.sh`. On the panel, check file-list previews,
+ready-to-print popups and fullscreen previews on first/repeated opening. Switch
+printers and cold/warm boot to confirm restored chooser previews and no white
+flash. Test without SD and with network unavailable; neither should block the
+chooser. Browse more than 64 distinct cached files and inspect cache size on SD;
+evicted previews should redownload when revisited. Firmware build and panel
+validation are required; host checks cannot establish power-loss durability.
+
+Panel acceptance: the operator reported the SD cache/download cleanup looks
+good. This records functional acceptance, not a filesystem power-loss test or
+quantified memory/performance measurement. Final integration reruns repository
+audits and the canonical IDF6 firmware build through the end-of-night script.

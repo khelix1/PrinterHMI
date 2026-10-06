@@ -112,6 +112,7 @@ idf_component_register(
 
         # Thumbnails
         "thumbnail_manager.c"
+        "thumbnail_cache_io.c"
         "thumbnail_render.c"
         "thumbnail_session.c"
         "thumbnail_preview_coordinator.c"

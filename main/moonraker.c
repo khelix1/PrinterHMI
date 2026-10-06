@@ -1577,6 +1577,15 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
         return false;
     }
 
+    /* Keep transfer capacity only while receiving. Realloc failure preserves
+     * the original allocation, so a valid preview still reaches its owner.
+     */
+    if (captured_size < max_len) {
+        uint8_t *compact = heap_caps_realloc(
+            buf, captured_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (compact) buf = compact;
+    }
+
     *out_buf = buf;
     *out_len = captured_size;
 

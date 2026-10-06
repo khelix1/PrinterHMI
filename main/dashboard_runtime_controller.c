@@ -1,3 +1,4 @@
+#include "ui_value_update.h"
 #include "dashboard_runtime_controller.h"
 #include "ui_text.h"
 
@@ -67,8 +68,8 @@ static void update_status_cards(
             snprintf(buffer, sizeof(buffer), "-- / -- C");
         }
 
-        lv_label_set_text(context->nozzle_label, buffer);
-        lv_obj_set_style_text_color(
+        ui_value_set_text(context->nozzle_label, buffer);
+        ui_value_set_color(
             context->nozzle_label,
             temp_value_color(
                 state->nozzle_temp,
@@ -88,8 +89,8 @@ static void update_status_cards(
             snprintf(buffer, sizeof(buffer), "-- / -- C");
         }
 
-        lv_label_set_text(context->bed_label, buffer);
-        lv_obj_set_style_text_color(
+        ui_value_set_text(context->bed_label, buffer);
+        ui_value_set_color(
             context->bed_label,
             temp_value_color(
                 state->bed_temp,
@@ -255,7 +256,7 @@ static void update_environment_cards(
             sizeof(buffer),
             "%.1f C",
             state->air_temp);
-        lv_label_set_text(context->chamber_label, buffer);
+        ui_value_set_text(context->chamber_label, buffer);
     }
 
     if (context->humidity_label) {
@@ -264,7 +265,7 @@ static void update_environment_cards(
             sizeof(buffer),
             "%.1f %%RH",
             state->humidity);
-        lv_label_set_text(context->humidity_label, buffer);
+        ui_value_set_text(context->humidity_label, buffer);
     }
 
     if (context->target_rh_label) {
@@ -273,11 +274,11 @@ static void update_environment_cards(
             sizeof(buffer),
             "Heat %.0f C",
             state->heater_target);
-        lv_label_set_text(context->target_rh_label, buffer);
+        ui_value_set_text(context->target_rh_label, buffer);
     }
 
     if (context->heater_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             context->heater_label,
             state->heater_on ? ui_text("ON") : ui_text("OFF"));
     }
@@ -288,11 +289,11 @@ static void update_environment_cards(
             sizeof(buffer),
             "%.0f %%",
             state->drybox_fan_speed);
-        lv_label_set_text(context->fan_label, buffer);
+        ui_value_set_text(context->fan_label, buffer);
     }
 
     if (context->moonraker_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             context->moonraker_label,
             state->live_data_ok
                 ? ui_text("linked")

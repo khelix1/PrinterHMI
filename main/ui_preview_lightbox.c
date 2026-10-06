@@ -24,6 +24,8 @@ static lv_obj_t *s_preview_lightbox = NULL;
 static lv_obj_t *s_preview_image;
 static lv_obj_t *s_preview_hint;
 static uint16_t *s_fullscreen_pixels;
+static uint16_t *s_fallback_pixels;
+static lv_image_dsc_t s_fallback_image;
 static lv_image_dsc_t s_fullscreen_image;
 static uint32_t s_request_id;
 static QueueHandle_t s_preview_queue;
@@ -46,8 +48,13 @@ static void preview_lightbox_delete_cb(lv_event_t *event)
     s_preview_lightbox = NULL;
     /* Children are being deleted; no descriptor may retain this buffer. */
     ++s_request_id;
+    if (s_preview_image) lv_image_set_src(s_preview_image, NULL);
     s_preview_image = NULL;
     s_preview_hint = NULL;
+    lv_image_cache_drop(&s_fallback_image);
+    heap_caps_free(s_fallback_pixels);
+    s_fallback_pixels = NULL;
+    memset(&s_fallback_image, 0, sizeof(s_fallback_image));
     lv_image_cache_drop(&s_fullscreen_image);
     heap_caps_free(s_fullscreen_pixels);
     s_fullscreen_pixels = NULL;
@@ -131,7 +138,35 @@ void ui_preview_lightbox_show(const lv_image_dsc_t *image)
     }
 
     s_preview_image = preview;
-    lv_image_set_src(preview, image);
+    /* The owner page/profile cache can change while this overlay is open.
+     * Snapshot a small aspect-preserving fallback instead of borrowing it. */
+    int width = (int)header.w, height = (int)header.h;
+    if ((size_t)width * height > THUMBNAIL_PREVIEW_WIDTH * THUMBNAIL_PREVIEW_HEIGHT) {
+        width = THUMBNAIL_PREVIEW_WIDTH;
+        height = (int)((int64_t)header.h * width / header.w);
+        if (height > THUMBNAIL_PREVIEW_HEIGHT) {
+            height = THUMBNAIL_PREVIEW_HEIGHT;
+            width = (int)((int64_t)header.w * height / header.h);
+        }
+    }
+    if (width < 1) width = 1;
+    if (height < 1) height = 1;
+    s_fallback_pixels = heap_caps_malloc((size_t)width * height * sizeof(uint16_t),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_fallback_pixels && thumbnail_render_to_rgb565_fit(image, s_fallback_pixels, width, height)) {
+        memset(&s_fallback_image, 0, sizeof(s_fallback_image));
+        s_fallback_image.header.magic = LV_IMAGE_HEADER_MAGIC;
+        s_fallback_image.header.cf = LV_COLOR_FORMAT_RGB565;
+        s_fallback_image.header.w = width;
+        s_fallback_image.header.h = height;
+        s_fallback_image.header.stride = width * sizeof(uint16_t);
+        s_fallback_image.data_size = (size_t)width * height * sizeof(uint16_t);
+        s_fallback_image.data = (const uint8_t *)s_fallback_pixels;
+        lv_image_set_src(preview, &s_fallback_image);
+    } else {
+        heap_caps_free(s_fallback_pixels);
+        s_fallback_pixels = NULL;
+    }
 
     lv_obj_set_size(preview, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
     lv_image_set_inner_align(preview, LV_IMAGE_ALIGN_CONTAIN);
@@ -142,7 +177,7 @@ void ui_preview_lightbox_show(const lv_image_dsc_t *image)
     lv_obj_t *hint =
         ui_create_card_subtitle(
             s_preview_lightbox,
-            "TAP ANYWHERE TO CLOSE");
+            s_fallback_pixels ? "TAP ANYWHERE TO CLOSE" : "PREVIEW UNAVAILABLE - TAP TO CLOSE");
 
     s_preview_hint = hint;
     if (hint) {
@@ -231,6 +266,9 @@ static void fullscreen_preview_worker(void *arg)
                         &raw_png, pixels, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
                 }
                 if (rendered) {
+                    lv_image_set_src(s_preview_image, NULL);
+                    lv_image_cache_drop(&s_fullscreen_image);
+                    heap_caps_free(s_fullscreen_pixels);
                     memset(&s_fullscreen_image, 0, sizeof(s_fullscreen_image));
     #if defined(LV_IMAGE_HEADER_MAGIC)
                     s_fullscreen_image.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -247,11 +285,16 @@ static void fullscreen_preview_worker(void *arg)
                     lv_obj_set_size(s_preview_image, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
                     lv_image_set_inner_align(s_preview_image, LV_IMAGE_ALIGN_CONTAIN);
                     lv_obj_center(s_preview_image);
+                    lv_image_cache_drop(&s_fallback_image);
+                    heap_caps_free(s_fallback_pixels);
+                    s_fallback_pixels = NULL;
+                    memset(&s_fallback_image, 0, sizeof(s_fallback_image));
                 }
                 if (current && s_preview_hint) {
                     lv_label_set_text(s_preview_hint, rendered ? "TAP ANYWHERE TO CLOSE" :
                         attempt + 1 < 3 ? "RETRYING HIGH-RES PREVIEW - TAP TO CLOSE" :
-                                          "SHOWING ORIGINAL PREVIEW - TAP TO CLOSE");
+                        s_fallback_pixels ? "SHOWING ORIGINAL PREVIEW - TAP TO CLOSE" :
+                                            "PREVIEW UNAVAILABLE - TAP TO CLOSE");
                 }
                 bsp_display_unlock();
             }

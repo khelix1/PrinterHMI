@@ -10,7 +10,9 @@ typedef void (*files_row_preview_ready_cb_t)(
 
 /*
  * Begin a new Files-page preview generation. Existing RGB565 allocations are
- * retained and reused, while stale jobs are discarded by generation number.
+ * retained until replaced by a completed PSRAM buffer; stale jobs are discarded
+ * by generation number. Begin/request are called under the display lock.
+ * Worker publication takes the display lock before the slot mutex.
  */
 void files_row_preview_begin(
     const char *host,

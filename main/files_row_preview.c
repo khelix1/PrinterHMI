@@ -15,6 +15,7 @@
 #include "moonraker.h"
 #include "thumbnail_manager.h"
 #include "thumbnail_render.h"
+#include "misc/cache/instance/lv_image_cache.h"
 
 #define TAG "files_row_preview"
 /* Keep the full shared canvas even though the list displays a small icon.
@@ -184,6 +185,48 @@ static bool fetch_preview_png(
     return true;
 }
 
+/* Publication follows the UI lock order: display, then slot mutex. The worker
+ * transfers its completed staging buffer rather than allocating/copying again.
+ */
+static void publish_preview_result(const row_preview_job_t *job, const char *file,
+    uint16_t **rendered, bool rendered_ok)
+{
+    if (!bsp_display_lock(0)) return;
+    const lv_image_dsc_t *ready_image = NULL;
+    files_row_preview_ready_cb_t ready_cb = NULL;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool current = job->slot >= 0 && job->slot < ROW_PREVIEW_SLOT_COUNT &&
+        job->generation == s_generation &&
+        s_slots[job->slot].generation == job->generation &&
+        strcmp(s_slots[job->slot].file, file) == 0;
+    if (current && rendered_ok && *rendered) {
+        row_preview_slot_t *slot = &s_slots[job->slot];
+        lv_image_cache_drop(&slot->image);
+        heap_caps_free(slot->pixels);
+        slot->pixels = *rendered;
+        *rendered = NULL; /* Ownership transferred to this bounded slot. */
+        lv_image_dsc_t *image = &slot->image;
+        memset(image, 0, sizeof(*image));
+#if defined(LV_IMAGE_HEADER_MAGIC)
+        image->header.magic = LV_IMAGE_HEADER_MAGIC;
+#endif
+        image->header.cf = LV_COLOR_FORMAT_RGB565;
+        image->header.w = ROW_PREVIEW_WIDTH;
+        image->header.h = ROW_PREVIEW_HEIGHT;
+        image->header.stride = ROW_PREVIEW_WIDTH * sizeof(uint16_t);
+        image->data_size = ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t);
+        image->data = (const uint8_t *)slot->pixels;
+        slot->state = ROW_PREVIEW_READY;
+        ready_image = image;
+        ready_cb = s_ready_cb;
+    } else if (current) {
+        s_slots[job->slot].state = ROW_PREVIEW_FAILED;
+    }
+    xSemaphoreGive(s_lock);
+    if (ready_image && ready_cb) ready_cb(file, ready_image);
+    bsp_display_unlock();
+}
+
 static void preview_worker(void *arg)
 {
     (void)arg;
@@ -241,12 +284,6 @@ static void preview_worker(void *arg)
                 ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t),
                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
-            if (!rendered) {
-                rendered = heap_caps_malloc(
-                    ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t),
-                    MALLOC_CAP_8BIT);
-            }
-
             lv_image_dsc_t raw_png;
             memset(&raw_png, 0, sizeof(raw_png));
 #if defined(LV_IMAGE_HEADER_MAGIC)
@@ -268,75 +305,9 @@ static void preview_worker(void *arg)
 
         if (png) heap_caps_free(png);
 
-        const lv_image_dsc_t *ready_image = NULL;
-        files_row_preview_ready_cb_t ready_cb = NULL;
+        publish_preview_result(&job, file, &rendered, rendered_ok);
+        heap_caps_free(rendered);
 
-        xSemaphoreTake(s_lock, portMAX_DELAY);
-
-        current =
-            job.generation == s_generation &&
-            s_slots[job.slot].generation == job.generation &&
-            strcmp(s_slots[job.slot].file, file) == 0;
-
-        if (current && rendered_ok) {
-            if (!s_slots[job.slot].pixels) {
-                s_slots[job.slot].pixels = heap_caps_malloc(
-                    ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t),
-                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-                if (!s_slots[job.slot].pixels) {
-                    s_slots[job.slot].pixels = heap_caps_malloc(
-                        ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t),
-                        MALLOC_CAP_8BIT);
-                }
-            }
-
-            if (s_slots[job.slot].pixels) {
-                memcpy(
-                    s_slots[job.slot].pixels,
-                    rendered,
-                    ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t));
-
-                lv_image_dsc_t *image = &s_slots[job.slot].image;
-                memset(image, 0, sizeof(*image));
-#if defined(LV_IMAGE_HEADER_MAGIC)
-                image->header.magic = LV_IMAGE_HEADER_MAGIC;
-#endif
-                image->header.cf = LV_COLOR_FORMAT_RGB565;
-                image->header.w = ROW_PREVIEW_WIDTH;
-                image->header.h = ROW_PREVIEW_HEIGHT;
-                image->header.stride =
-                    ROW_PREVIEW_WIDTH * sizeof(uint16_t);
-                image->data_size =
-                    ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t);
-                image->data = (const uint8_t *)s_slots[job.slot].pixels;
-                s_slots[job.slot].state = ROW_PREVIEW_READY;
-                ready_image = image;
-                ready_cb = s_ready_cb;
-            } else {
-                s_slots[job.slot].state = ROW_PREVIEW_FAILED;
-            }
-        } else if (current) {
-            s_slots[job.slot].state = ROW_PREVIEW_FAILED;
-        }
-
-        xSemaphoreGive(s_lock);
-
-        if (rendered) heap_caps_free(rendered);
-
-        if (ready_image && ready_cb && bsp_display_lock(1000)) {
-            xSemaphoreTake(s_lock, portMAX_DELAY);
-            bool still_current =
-                job.generation == s_generation &&
-                s_slots[job.slot].state == ROW_PREVIEW_READY &&
-                strcmp(s_slots[job.slot].file, file) == 0;
-            xSemaphoreGive(s_lock);
-
-            if (still_current) {
-                ready_cb(file, ready_image);
-            }
-            bsp_display_unlock();
-        }
     }
 }
 

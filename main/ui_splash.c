@@ -229,18 +229,45 @@ void ui_splash_destroy(void)
 
     if (splash_frozen_display) {
         lv_display_t *display = splash_frozen_display;
-        splash_frozen_display = NULL;
-        lv_display_remove_event_cb_with_user_data(display, splash_refresh_requested_cb, NULL);
-        /* The invalidation API uses a counter: balance the earlier disable. */
+        /* Settle the revealed page while layout/animation invalidations are
+         * still held. Queue only the final scene, then render with the hold
+         * active so incidental invalidations cannot queue another full frame.
+         */
+        lv_obj_update_layout(lv_display_get_screen_active(display));
+        lv_obj_update_layout(lv_display_get_layer_top(display));
         lv_display_enable_invalidation(display, true);
         if (splash_invalidation_was_enabled) {
-            /* Invalidations made during the hold were discarded. Repaint the
-             * whole current screen, including its top layer, for the handoff.
-             */
             lv_obj_invalidate(lv_display_get_screen_active(display));
+            lv_display_enable_invalidation(display, false);
+            lv_refr_now(display);
+            lv_display_enable_invalidation(display, true);
+        }
+        splash_frozen_display = NULL;
+        lv_display_remove_event_cb_with_user_data(display, splash_refresh_requested_cb, NULL);
+        if (splash_invalidation_was_enabled) {
             lv_timer_t *refresh = lv_display_get_refr_timer(display);
             if (refresh) lv_timer_resume(refresh);
-            lv_refr_now(display);
         }
+    }
+}
+
+void ui_splash_restore_brightness(int saved_percent,
+    void (*set_percent)(int), void (*wait_ms)(unsigned))
+{
+    /* Boot holds 100% to avoid low-duty splash flicker. Do not rewrite that
+     * duty when it is already the saved value. Lower settings ramp gently
+     * after the final chooser frame, with a frame interval before each step.
+     * This runs outside the display lock; the normal UI task keeps running.
+     */
+    if (!set_percent || !wait_ms) return;
+    if (saved_percent < 10) saved_percent = 10;
+    if (saved_percent >= 100) return;
+    int previous = 100;
+    for (int step = 1; step <= 8; ++step) {
+        int next = 100 + (saved_percent - 100) * step / 8;
+        if (next == previous) continue;
+        wait_ms(20);
+        set_percent(next);
+        previous = next;
     }
 }

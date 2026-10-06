@@ -77,6 +77,14 @@ scrolling two-column Grid with Flex cells. Callbacks can use
 Preview wells use native image `COVER`; fitted images and fullscreen previews
 use `CONTAIN`. See [the modernization scope](LVGL_MODERNIZATION.md).
 
+### Live value updates
+
+`ui_value_update.h` provides display-lock-only comparisons against live widget
+text/local colors and deferred shift-mode chart appends using LVGL public APIs.
+Dashboard, Printer and Telemetry keep their existing formatting and cadence.
+Chart owners refresh shared plots after batches; time history continues recording
+flat values. These helpers do not own timers, transport or detached value caches.
+
 ### Ownership boundaries and next seams
 
 - `main.c` coordinates startup, lifecycle transitions and narrow adapters only. New
@@ -137,7 +145,11 @@ use `CONTAIN`. See [the modernization scope](LVGL_MODERNIZATION.md).
   `printer_file_controller`.
 - Thumbnail sessions, download, decode, RGB565 rendering and preview caching
   are separate modules.
-- Large image/message buffers prefer PSRAM. Rendered profile previews can be
+- Profile and Files rendered-pixel pools use PSRAM only, with four and 24
+  shared-size slots respectively. Files publication uses display-lock-then-slot-
+  mutex ordering and transfers the completed worker buffer into its slot.
+  Fullscreen owns its fallback snapshot and releases it after installing hires.
+- Other large image/message buffers prefer PSRAM. Rendered profile previews can be
   persisted on SD storage.
 
 ### Calibration, Bed Mesh, Devices, Macros and Console

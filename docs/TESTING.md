@@ -262,3 +262,85 @@ On the panel, test cold power-on and warm reset with Wi-Fi connected and unavail
 The logo/background should stay stable while the bar, percentage and status
 advance through startup, then hand off to the chooser once. Confirm normal touch, popup, Console and preview updates afterward. Host
 checks cannot validate MIPI timing or backlight behavior.
+
+## Preview cache ownership
+
+```bash
+python3 tools/audit/preview_cache_ownership_test.py
+python3 tools/audit/preview_fill_test.py
+```
+
+Both support `--lvgl-dir` and `--lvgl-lib`. The ownership test uses real LVGL
+image descriptors/cache APIs with ESP allocator/lock fixtures. It checks profile
+reuse, dimension/revision changes, failed/stale publications, bounded PSRAM-only
+allocations, Files display-first publication and single-buffer transfer, and
+fullscreen snapshots/repeated teardown. These are host lifetime checks, not a
+FreeRTOS race stress test.
+
+On the panel, repeat Files refresh/folder changes, opening detail and fullscreen,
+closing while hires is loading, profile switching and reconnects. Confirm every
+preview still looks the same and tap-to-close works. Bounded cache pools can
+retain their high-water allocation. Cold/warm splash progress must remain stable.
+
+## Telemetry refresh optimization
+
+```bash
+python3 tools/audit/telemetry_refresh_test.py
+```
+
+Supply `--lvgl-dir`/`--lvgl-lib` for unmanaged host LVGL. The real LVGL test
+checks zero invalidation for repeated text/color, local-versus-inherited color
+behavior, deferred chart equivalence over wraparound/flat values/gaps, two-second
+sampling, capability transitions, expired extrema, bounded full-history reload
+and teardown. Changed consumers also compile with warning-as-error flags.
+
+On the panel, compare Dashboard/Printer values during heating, printing, pause
+and idle; status, progress, fan and times must advance as before. Open Telemetry,
+leave it open through steady temperatures and confirm the graph still advances
+once per two seconds. Close/reopen, change printer, test missing sensors and
+check all three themes/text sizes. Cold/warm boot and fullscreen previews should
+retain their verified behavior. Host checks do not establish hardware performance
+gains. The operator confirmed this panel validation; the temporary Performance
+monitor is removed. Check Settings System Information ends at Uptime without an
+empty extra row, and Storage starts at its normal position in all themes/text sizes.
+
+## Splash-to-chooser handoff
+
+Run `python3 tools/audit/boot_splash_freeze_test.py` with the LVGL arguments above.
+It checks partial/direct double-buffered rendering, one completed handoff frame,
+held background repaint, bounded progress regions and gradual saved-brightness
+restoration without a redundant 100% write. Test cold power-on and warm reset
+on the panel at saved 100% and a lower brightness (for example 50%). The chooser
+must replace the splash without a flash; lower brightness should settle smoothly.
+Confirm the moving progress bar, chooser selection and normal page updates.
+These host tests do not establish panel-level flash elimination.
+
+## Chooser periodic refresh
+
+```bash
+python3 tools/audit/chooser_refresh_test.py
+```
+
+Use `--lvgl-dir`/`--lvgl-lib` as above. The production chooser runs on real LVGL
+with double-buffered direct rendering. Repeated 500ms timer callbacks must cause
+no invalidations or flushes with unchanged inputs. Tests cover all themes/text
+sizes, inactive health text, live status transitions, preview arrival/replacement
+revision/removal, active-profile switching and timer cleanup. On hardware, leave
+the chooser visible for at least ten seconds after cold and warm startup, then
+confirm printer selection, health changes and restored previews still work.
+These checks isolate chooser writes; they do not prove panel-level flash removal.
+
+## Runtime startup behind splash
+
+The eight-second isolation test tied the reported white flash to runtime/preview
+startup and machine-state arrival. Confirm cold and warm boot now starts those
+workers during the splash hold (`STARTUP_TRACE runtime-start under splash hold`).
+Readiness/progress must continue advancing. Leave the revealed chooser visible
+for at least ten seconds; confirm states/previews update without a white flash,
+then select each printer and check normal live data. Network unavailable startup
+must still reach the chooser and reconnect normally. There is no diagnostic wait.
+The host splash checks cover refresh hold/progress, not MIPI-level flash behavior.
+
+Panel result: the operator confirmed the runtime-startup correction resolved the
+reported white flash. Preserve service startup under the splash hold when
+changing boot lifecycle order; the eight-second isolation delay is removed.

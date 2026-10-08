@@ -249,3 +249,24 @@ the device reboots. When rollback marks the new image as pending verification,
 
 The v3.x architecture documents are historical and live under
 `docs/history/architecture/`.
+
+## Banner status subjects
+
+`ui_status_banner` owns two per-instance string subjects for its state and
+operator message/active filename. The public banner setter publishes to these
+subjects under existing UI/display-lock ownership; native object observers
+update labels. Previous-value storage suppresses unchanged notifications, while
+long values and unavailable bindings preserve direct-update behavior. Subject
+cleanup precedes backing-storage release in the parent's DELETE callback. There
+is no background-task subject access or new transport/model ownership.
+
+Chooser cards each own a status string subject, current/previous storage and an
+object-bound label observer. Refresh retains existing health-state selection and
+local color comparisons; the subject handles text changes. The card DELETE
+callback deinitializes its subject before child destruction and card-slot reuse.
+No network task publishes to subjects, and no additional timers are introduced.
+
+Chooser name and endpoint labels now also use card-owned string subjects. The
+existing refresh path publishes current configuration text, and click routing
+continues resolving the card's profile index. All three card subjects are
+deinitialized on card deletion before static storage is cleared or reused.

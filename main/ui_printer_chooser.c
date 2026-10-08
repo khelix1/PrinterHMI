@@ -23,6 +23,18 @@ typedef struct {
     lv_obj_t *name;
     lv_obj_t *endpoint;
     lv_obj_t *status;
+    lv_subject_t name_subject;
+    lv_subject_t endpoint_subject;
+    char name_value[MOONRAKER_CONFIG_NAME_LENGTH];
+    char name_previous[MOONRAKER_CONFIG_NAME_LENGTH];
+    char endpoint_value[MOONRAKER_CONFIG_HOST_LENGTH + 16];
+    char endpoint_previous[MOONRAKER_CONFIG_HOST_LENGTH + 16];
+    bool name_bound;
+    bool endpoint_bound;
+    lv_subject_t status_subject;
+    char status_value[64];
+    char status_previous[64];
+    bool status_bound;
     lv_obj_t *preview_box;
     lv_obj_t *preview;
     lv_obj_t *preview_icon;
@@ -38,6 +50,60 @@ static chooser_card_t s_cards[MOONRAKER_CONFIG_MAX_PROFILES];
 static ui_printer_chooser_select_cb_t s_select_cb = NULL;
 static ui_printer_chooser_manage_cb_t s_manage_cb = NULL;
 
+
+static void card_subjects_delete_cb(lv_event_t *event)
+{
+    chooser_card_t *card = lv_event_get_user_data(event);
+    if (!card) return;
+    /* Card DELETE precedes label deletion. Remove all widget observers before
+     * the static card storage is cleared or reused on the next chooser open.
+     */
+    lv_subject_deinit(&card->name_subject);
+    lv_subject_deinit(&card->endpoint_subject);
+    lv_subject_deinit(&card->status_subject);
+    card->name_bound = false;
+    card->endpoint_bound = false;
+    card->name = NULL;
+    card->endpoint = NULL;
+    card->status_bound = false;
+    card->status = NULL;
+    card->root = NULL;
+}
+
+static void set_card_text(lv_obj_t *label, lv_subject_t *subject,
+                          size_t capacity, bool bound, const char *text)
+{
+    if (!label) return;
+    if (!text) text = "";
+    if (!bound || strlen(text) >= capacity) {
+        ui_value_set_text(label, text);
+        return;
+    }
+    bool unchanged = strcmp(lv_subject_get_string(subject), text) == 0;
+    lv_subject_copy_string(subject, text);
+    if (unchanged) ui_value_set_text(label, text);
+}
+
+static void set_status_text(chooser_card_t *card, const char *text)
+{
+    if (!card) return;
+    set_card_text(card->status, &card->status_subject,
+        sizeof(card->status_value), card->status_bound, text);
+}
+
+static void set_name_text(chooser_card_t *card, const char *text)
+{
+    if (!card) return;
+    set_card_text(card->name, &card->name_subject,
+        sizeof(card->name_value), card->name_bound, text);
+}
+
+static void set_endpoint_text(chooser_card_t *card, const char *text)
+{
+    if (!card) return;
+    set_card_text(card->endpoint, &card->endpoint_subject,
+        sizeof(card->endpoint_value), card->endpoint_bound, text);
+}
 
 static void apply_status_style(lv_obj_t *label, bool configured, bool online)
 {
@@ -138,6 +204,16 @@ static void create_card(int index, int x, int y)
     card->status = make_label(card->root, "CHECKING...", 146, 88, 220);
     ui_apply_text_body_large(card->status);
     ui_apply_label_dim(card->status);
+    lv_subject_init_string(&card->name_subject, card->name_value,
+        card->name_previous, sizeof(card->name_value), "PRINTER");
+    lv_subject_init_string(&card->endpoint_subject, card->endpoint_value,
+        card->endpoint_previous, sizeof(card->endpoint_value), "--");
+    card->name_bound = lv_label_bind_text(card->name, &card->name_subject, NULL) != NULL;
+    card->endpoint_bound = lv_label_bind_text(card->endpoint, &card->endpoint_subject, NULL) != NULL;
+    lv_subject_init_string(&card->status_subject, card->status_value,
+        card->status_previous, sizeof(card->status_value), "CHECKING...");
+    card->status_bound = lv_label_bind_text(card->status, &card->status_subject, NULL) != NULL;
+    lv_obj_add_event_cb(card->root, card_subjects_delete_cb, LV_EVENT_DELETE, card);
 
     lv_obj_t *hint = make_label(card->root, "TAP TO OPEN", 146, 128, 210);
     ui_apply_text_caption(hint);
@@ -233,9 +309,9 @@ static void refresh_cards(void)
         if (!configured) {
             char empty_name[32];
             snprintf(empty_name, sizeof(empty_name), "ADD PRINTER %d", index + 1);
-            ui_value_set_text(card->name, empty_name);
-            ui_value_set_text(card->endpoint, ui_text("EMPTY PROFILE SLOT"));
-            ui_value_set_text(card->status, ui_text("NOT CONFIGURED"));
+            set_name_text(card, empty_name);
+            set_endpoint_text(card, ui_text("EMPTY PROFILE SLOT"));
+            set_status_text(card, ui_text("NOT CONFIGURED"));
             if (!cached_image)
                 ui_value_set_text(card->preview, "ADD A\nPRINTER");
             lv_obj_add_flag(card->active, LV_OBJ_FLAG_HIDDEN);
@@ -243,11 +319,11 @@ static void refresh_cards(void)
             continue;
         }
 
-        char endpoint[96];
+        char endpoint[MOONRAKER_CONFIG_HOST_LENGTH + 16];
         snprintf(endpoint, sizeof(endpoint), "%s:%d", profile->host, profile->port);
 
-        ui_value_set_text(card->name, profile->name);
-        ui_value_set_text(card->endpoint, endpoint);
+        set_name_text(card, profile->name);
+        set_endpoint_text(card, endpoint);
         bool active_live =
             index == active &&
             state &&
@@ -302,7 +378,7 @@ static void refresh_cards(void)
                             : "ONLINE")));
         }
 
-        ui_value_set_text(card->status, status_text);
+        set_status_text(card, status_text);
         if ((index != active &&
              known &&
              online &&

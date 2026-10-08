@@ -1,5 +1,6 @@
 #include "ui_devices_live_values.h"
 #include "ui_text.h"
+#include "ui_value_update.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -249,7 +250,7 @@ void ui_devices_live_values_update(void)
         if (!device_catalog_controller_get(
                 s_live.catalog_indices[visible],
                 &device)) {
-            lv_label_set_text(label, ui_text("--"));
+            ui_value_set_text(label, ui_text("--"));
             continue;
         }
 
@@ -261,24 +262,24 @@ void ui_devices_live_values_update(void)
                 &filament,
                 value,
                 sizeof(value))) {
-            lv_label_set_text(label, value);
-            ui_apply_label_bright(label);
+            ui_value_set_text(label, value);
+            ui_value_set_color(label, UI_TEXT_BRIGHT, 0);
         } else if (device.live_value_valid) {
-            lv_label_set_text(
+            ui_value_set_text(
                 label,
                 device.live_value);
-            ui_apply_label_bright(label);
+            ui_value_set_color(label, UI_TEXT_BRIGHT, 0);
         } else {
             bool expects_live_value =
                 device_catalog_controller_has_live_value_source(
                     device.object_name);
 
-            lv_label_set_text(
+            ui_value_set_text(
                 label,
                 expects_live_value
                     ? ui_text("WAITING FOR DATA")
                     : ui_text("DISCOVERED"));
-            ui_apply_label_dim(label);
+            ui_value_set_color(label, UI_TEXT_DIM, 0);
         }
     }
 }

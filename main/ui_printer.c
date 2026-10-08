@@ -241,11 +241,11 @@ void ui_printer_preview_show(
              */
             lv_image_set_src(s_preview_image, cached_image);
 
-            ui_thumbnail_fill_object(
+            ui_thumbnail_fit_object(
                 s_preview_image,
                 s_preview_box,
                 (int)cached_image->header.w,
-                (int)cached_image->header.h);
+                (int)cached_image->header.h, 0);
             s_preview_cache_revision = cached_revision;
             s_preview_cache_profile_index = active_profile;
         }

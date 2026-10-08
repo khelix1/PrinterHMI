@@ -1,4 +1,5 @@
 #include "ui_theme.h"
+#include "ui_value_update.h"
 
 #include "custom_theme.h"
 #include "ui_theme_a.h"
@@ -314,10 +315,66 @@ void ui_apply_banner_style(lv_obj_t *obj)
     apply_custom_surface_opacity(obj);
 }
 
+/* Match the final local properties written by the existing theme recipes.
+ * No cached kind/theme: custom tokens, accessibility changes and external
+ * style writes are checked on every refresh and repaired when necessary.
+ */
+static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind)
+{
+    if (!obj) return false;
+    lv_style_value_t v;
+#define MATCH_COLOR(prop, expected) do { \
+    if (lv_obj_get_local_style_prop(obj, prop, &v, 0) != LV_STYLE_RES_FOUND || \
+        !lv_color_eq(v.color, (expected))) return false; \
+} while (0)
+#define MATCH_NUM(prop, expected) do { \
+    if (lv_obj_get_local_style_prop(obj, prop, &v, 0) != LV_STYLE_RES_FOUND || \
+        v.num != (expected)) return false; \
+} while (0)
+    bool classic = s_active_theme == UI_THEME_CLASSIC;
+    bool glass = s_active_theme == UI_THEME_GLASS;
+    lv_color_t status = ui_theme_b_status_color(kind);
+    MATCH_COLOR(LV_STYLE_BG_COLOR, classic ? UI_PANEL_ALT : glass ? UI_GLASS_SHEEN : UI_BG_DEEP);
+    MATCH_COLOR(LV_STYLE_BORDER_COLOR, classic ? UI_BORDER : glass ? UI_GLASS_EDGE : status);
+    uint8_t opacity = LV_OPA_COVER;
+    custom_theme_surface_opacity(&opacity);
+    MATCH_NUM(LV_STYLE_BG_OPA, opacity);
+    MATCH_NUM(LV_STYLE_BORDER_WIDTH, UI_BORDER_THIN);
+    MATCH_NUM(LV_STYLE_RADIUS, classic || glass ? UI_RADIUS_BANNER : UI_RADIUS_BAR);
+    MATCH_NUM(LV_STYLE_PAD_TOP, UI_PAD_CARD);
+    MATCH_NUM(LV_STYLE_PAD_BOTTOM, UI_PAD_CARD);
+    MATCH_NUM(LV_STYLE_PAD_LEFT, UI_PAD_CARD);
+    MATCH_NUM(LV_STYLE_PAD_RIGHT, UI_PAD_CARD);
+    MATCH_NUM(LV_STYLE_SHADOW_WIDTH, classic ? 14 : 0);
+    if (classic) {
+        MATCH_COLOR(LV_STYLE_SHADOW_COLOR, UI_BG_DEEP);
+        MATCH_NUM(LV_STYLE_SHADOW_OPA, LV_OPA_20);
+        MATCH_NUM(LV_STYLE_SHADOW_OFFSET_Y, 4);
+    } else if (glass) {
+        MATCH_COLOR(LV_STYLE_BG_GRAD_COLOR, UI_PANEL_ALT);
+        MATCH_NUM(LV_STYLE_BG_GRAD_DIR, LV_GRAD_DIR_VER);
+        MATCH_NUM(LV_STYLE_BG_MAIN_STOP, 28);
+        MATCH_NUM(LV_STYLE_BG_GRAD_STOP, 224);
+        MATCH_NUM(LV_STYLE_BORDER_OPA, LV_OPA_70);
+        MATCH_COLOR(LV_STYLE_OUTLINE_COLOR, status);
+        MATCH_NUM(LV_STYLE_OUTLINE_WIDTH, 1);
+        MATCH_NUM(LV_STYLE_OUTLINE_OPA, LV_OPA_30);
+        MATCH_NUM(LV_STYLE_OUTLINE_PAD, 2);
+        MATCH_COLOR(LV_STYLE_SHADOW_COLOR, status);
+        MATCH_NUM(LV_STYLE_SHADOW_SPREAD, 0);
+        MATCH_NUM(LV_STYLE_SHADOW_OPA, LV_OPA_30);
+        MATCH_NUM(LV_STYLE_SHADOW_OFFSET_Y, 6);
+    }
+#undef MATCH_COLOR
+#undef MATCH_NUM
+    return true;
+}
+
 void ui_apply_banner_status_style(
     lv_obj_t *obj,
     ui_status_kind_t kind)
 {
+    if (banner_style_matches(obj, kind)) return;
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_banner_style(obj);
         apply_custom_surface_opacity(obj);

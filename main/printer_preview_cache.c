@@ -265,7 +265,7 @@ bool printer_preview_cache_publish_png(
     raw_png.data = png;
     raw_png.data_size = png_size;
 
-    bool rendered = thumbnail_render_to_rgb565(
+    bool rendered = thumbnail_render_to_rgb565_fit(
         &raw_png,
         replacement,
         width,

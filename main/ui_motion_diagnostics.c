@@ -9,6 +9,7 @@
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
+#include "ui_value_update.h"
 
 typedef enum { VIEW_LIMITS, VIEW_DISTANCE, VIEW_DRIVERS } motion_view_t;
 typedef struct {
@@ -37,7 +38,7 @@ static bool init(void)
 
 static void label_text(lv_obj_t *label, const char *text)
 {
-    if (label && strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
+    ui_value_set_text(label, text);
 }
 
 static void close_editor(void)
@@ -131,7 +132,15 @@ static void format_value(char *out, size_t size, bool valid, double value, const
     else snprintf(out, size, "Not reported");
 }
 
-static void render_limits(bool live)
+/* Compare the live widget so newly-created selectors and discovery transitions
+ * populate correctly without a second cached options store. */
+static void set_driver_options(const char *options)
+{
+    if (strcmp(lv_dropdown_get_options(s->driver_selector), options))
+        lv_dropdown_set_options(s->driver_selector, options);
+}
+
+static void render_limits(bool live, const char *status_override)
 {
     static const char *units[] = {"mm/s", "mm/s^2", "mm/s", "%"};
     for (size_t i = 0; i < 4; ++i) {
@@ -140,18 +149,18 @@ static void render_limits(bool live)
             s->snapshot.limits[i] * (i == 3 ? 100 : 1), units[i]);
         label_text(s->limits[i], value);
     }
-    label_text(s->status, live ? "CURRENT RUNTIME LIMITS" : "LIVE LIMITS UNAVAILABLE");
-    if (live) ui_apply_label_bright(s->status); else ui_apply_label_dim(s->status);
+    label_text(s->status, status_override ? status_override : live ? "CURRENT RUNTIME LIMITS" : "LIVE LIMITS UNAVAILABLE");
+    if (live) ui_value_set_color(s->status, UI_TEXT_BRIGHT, 0); else ui_value_set_color(s->status, UI_TEXT_DIM, 0);
 }
 
 static void driver_selected_cb(lv_event_t *event) { (void)event; refresh(NULL); }
 
-static void render_drivers(bool live)
+static void render_drivers(bool live, const char *status_override)
 {
     if (!live) {
         lv_obj_add_state(s->driver_selector, LV_STATE_DISABLED);
-        label_text(s->status, "LIVE DRIVER DATA UNAVAILABLE");
-        ui_apply_label_dim(s->status);
+        label_text(s->status, status_override ? status_override : "LIVE DRIVER DATA UNAVAILABLE");
+        ui_value_set_color(s->status, UI_TEXT_DIM, 0);
         label_text(s->body, "The printer is offline or not ready.\nWaiting for fresh driver readings...");
         return;
     }
@@ -175,14 +184,14 @@ static void render_drivers(bool live)
             if (written > 0 && (size_t)written < sizeof(options) - used) used += (size_t)written;
         }
         s->selector_count = s->snapshot.driver_count;
-        lv_dropdown_set_options(s->driver_selector, options[0] ? options : "No TMC drivers reported");
+        set_driver_options(options[0] ? options : "No TMC drivers reported");
         lv_dropdown_set_selected(s->driver_selector, (uint32_t)restore);
     }
     if (!s->snapshot.driver_count) {
-        lv_dropdown_set_options(s->driver_selector, s->snapshot.discovered ? "No TMC drivers reported" : "Waiting for drivers...");
+        set_driver_options(s->snapshot.discovered ? "No TMC drivers reported" : "Waiting for drivers...");
         lv_obj_add_state(s->driver_selector, LV_STATE_DISABLED);
         label_text(s->status, s->snapshot.discovered ? "NO TMC DRIVERS DETECTED" : "WAITING FOR DRIVER DISCOVERY");
-        ui_apply_label_dim(s->status);
+        ui_value_set_color(s->status, UI_TEXT_DIM, 0);
         label_text(s->body, "TMC diagnostics require drivers exposed by Klipper over UART or SPI.\nStandalone drivers do not report this data.");
         return;
     }
@@ -197,10 +206,10 @@ static void render_drivers(bool live)
     const char *status = !driver->status_valid ? "NO DRIVER STATUS SAMPLE" :
         driver->fault ? "DRIVER FAULT REPORTED" : driver->warning ? "DRIVER WARNING REPORTED" : "NO MONITORED FAULT FLAGS REPORTED";
     label_text(s->status, status);
-    if (driver->fault) ui_apply_label_error(s->status);
-    else if (driver->warning) ui_apply_label_warning(s->status);
-    else if (driver->status_valid) ui_apply_label_success(s->status);
-    else ui_apply_label_dim(s->status);
+    if (driver->fault) ui_value_set_color(s->status, ui_theme_get_active() == UI_THEME_CLASSIC ? UI_TEXT_ERROR : UI_DANGER_BRIGHT, 0);
+    else if (driver->warning) ui_value_set_color(s->status, UI_WARN, 0);
+    else if (driver->status_valid) ui_value_set_color(s->status, UI_OK_BRIGHT, 0);
+    else ui_value_set_color(s->status, UI_TEXT_DIM, 0);
     snprintf(s->text, sizeof(s->text),
         "Run current: %s\nHold current: %s\nDriver temperature: %s\n\n%s\n\n"
         "These are Klipper's last reported driver readings. Disabled drivers may have no status sample. "
@@ -222,9 +231,8 @@ static void refresh(lv_timer_t *timer)
             label_text(s->result, "Printer changed. Close and reopen the calculator.");
             label_text(s->reference, "");
         } else {
-            if (s->view == VIEW_LIMITS) render_limits(false);
-            else render_drivers(false);
-            label_text(s->status, "PRINTER CHANGED: CLOSE AND REOPEN");
+            if (s->view == VIEW_LIMITS) render_limits(false, "PRINTER CHANGED: CLOSE AND REOPEN");
+            else render_drivers(false, "PRINTER CHANGED: CLOSE AND REOPEN");
         }
         return;
     }
@@ -232,8 +240,8 @@ static void refresh(lv_timer_t *timer)
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
     bool live = state.moonraker_ok && state.live_data_ok;
-    if (s->view == VIEW_LIMITS) render_limits(live);
-    else if (s->view == VIEW_DRIVERS) render_drivers(live);
+    if (s->view == VIEW_LIMITS) render_limits(live, NULL);
+    else if (s->view == VIEW_DRIVERS) render_drivers(live, NULL);
     else {
         char x[40], y[40], z[40];
         format_value(x, sizeof(x), s->snapshot.rotation_valid[0], s->snapshot.rotation_distance[0], "mm");

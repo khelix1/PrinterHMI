@@ -60,3 +60,10 @@ and command separators are rejected. Review the final command before Run.
 Printer-profile changes invalidate pending macro actions.
 
 For host and device checks, see [Testing](TESTING.md).
+
+## Live refresh behavior
+
+Endstop text, motion-limit status colors and driver dropdown options update only
+when their displayed values change. Existing query intervals, driver selection,
+fault colors and print/offline/profile guards remain. Closing and reopening the
+popup populates the new widgets from the current snapshot.

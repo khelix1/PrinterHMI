@@ -424,3 +424,66 @@ on the panel. The repository audits and canonical integrated-main IDF6 firmware
 build run through the closeout/end-of-night workflow. Host acceptance covers
 subject lifetimes and redraw behavior; it does not establish measured target
 performance or a completed release soak. Reconnect recovery remains deferred.
+
+## Devices and Drybox refresh checks
+
+Run `python3 tools/audit/live_widget_refresh_test.py` against managed LVGL sources,
+or pass `--lvgl-dir /path/to/lvgl` and optionally `--lvgl-lib /path/to/liblvgl.a`.
+The real-LVGL test checks data-widget refreshes independently of shared banner
+styling; it does not claim the whole page has zero redraws. It uses libc float
+formatting in the Devices fixture when the host archive lacks float printf and
+separately compiles both unmodified production consumers with strict warnings.
+
+On the panel, verify Devices live values still change; filtering and leaving/
+reopening the page populate fresh values. Verify Drybox temperatures, humidity,
+heater/fan readings and active-program highlighting. Check offline placeholders
+and disabled controls, then restored readings and cyan humidity after reconnect.
+Use only an appropriate drying program for the loaded material when testing
+commands. Repeat after theme/text-size changes and profile switching.
+
+## Shared banner refresh follow-up checks
+
+Run `python3 tools/audit/status_observers_test.py` and the Devices/Drybox test
+above. Both accept `--lvgl-dir` and optional `--lvgl-lib`. The Drybox fixture now
+includes the real banner, superseding its earlier data-only redraw scope. The
+banner fixture covers four themes, text sizes, status/file/ETA/progress updates,
+repeated-value redraw silence, custom opacity, accessibility and external style
+repair; all local properties match the concrete theme recipes.
+
+On the panel verify Dashboard and Printer status, filename, ETA and percentage
+updates, including pause/resume and error states. Check Drybox READY/HEATING/
+DRYING/OFFLINE colors and recovery, then switch themes/text size and revisit
+these pages. Normal progress animation and reduced-motion settings should retain
+their previous behavior. Panel performance has not been measured by host tests.
+
+## Preview cutoff regression
+
+Run the preview-fill, preview-cache-ownership and LVGL-modernization host checks.
+The historical preview-fill filename retains checks for the unused explicit fill
+utility and adds aspect-fit pixel/bounds checks. Small-preview consumers must
+use `thumbnail_render_to_rgb565_fit` and zero-inset `ui_thumbnail_fit_object`.
+On hardware, check a wide and tall model in Operator Dashboard/Printer and Files
+ready-to-print popup, then tap fullscreen. Confirm the complete model is visible,
+including after page/profile/theme changes. Space around mismatched proportions
+is expected. No panel performance result is inferred from host tests.
+
+## Tools live refresh checks
+
+Run `python3 tools/audit/tools_live_refresh_test.py`, with `--lvgl-dir` and optional
+`--lvgl-lib` when using external host sources/archive. Production UI functions run
+against real LVGL, with transport/controller snapshot fixtures. The check covers
+unchanged redraw silence, fresh readings, driver discovery/selection and fault
+colors, endstop query cadence and existing print/offline/profile guards.
+
+On the panel check Tools → Calibration → Motion LIMITS and DRIVERS, including
+selecting another driver, then reopen them after a profile/theme change. Check
+Live Endstops when idle; readings should update as switches change. During a print
+it should keep the existing paused-readings notice. No motor motion or settings
+change is introduced by this patch. Confirm previews still show the complete model.
+
+Live-widget branch closeout: the operator accepted the incremental Devices,
+Drybox, shared-banner, complete-preview and Tools functional checks on the panel.
+The host suites validate update/caching lifetimes and rendering/query behavior.
+The canonical integrated-main firmware build and repository audits run through
+the end-of-night closeout; acceptance does not imply a completed soak or measured
+target performance improvement. Stable version remains 6.5.6.

@@ -202,7 +202,7 @@ void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, i
     if (!thumb || !thumb->box || !dsc) return;
 
     /* Match Dashboard and Printer: render the original PNG once into the
-     * shared RGB565 canvas. The lightbox uses this stable initial source, then
+     * shared RGB565 canvas without cropping. The lightbox uses this stable initial source, then
      * replaces it with the complete high-resolution thumbnail.
      */
     if (!thumb->canvas_buf) {
@@ -210,7 +210,7 @@ void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, i
             THUMBNAIL_PREVIEW_WIDTH * THUMBNAIL_PREVIEW_HEIGHT * sizeof(uint16_t),
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
-    if (!thumb->canvas_buf || !thumbnail_render_to_rgb565(
+    if (!thumb->canvas_buf || !thumbnail_render_to_rgb565_fit(
             dsc, thumb->canvas_buf, THUMBNAIL_PREVIEW_WIDTH, THUMBNAIL_PREVIEW_HEIGHT)) {
         ui_thumbnail_set_placeholder(thumb, "PREVIEW UNAVAILABLE");
         return;
@@ -242,11 +242,11 @@ void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, i
         lv_image_set_scale(thumb->canvas, scale);
         lv_obj_center(thumb->canvas);
     } else {
-        ui_thumbnail_fill_object(
+        ui_thumbnail_fit_object(
             thumb->canvas,
             thumb->box,
             (int)dsc->header.w,
-            (int)dsc->header.h);
+            (int)dsc->header.h, 0);
     }
 }
 

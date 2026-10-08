@@ -294,7 +294,7 @@ static void preview_worker(void *arg)
             raw_png.data_size = png_size;
 
             if (rendered && bsp_display_lock(2500)) {
-                rendered_ok = thumbnail_render_to_rgb565(
+                rendered_ok = thumbnail_render_to_rgb565_fit(
                     &raw_png,
                     rendered,
                     ROW_PREVIEW_WIDTH,

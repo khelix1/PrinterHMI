@@ -195,3 +195,71 @@ the complete integration, merges into main and builds/publishes a commit-specifi
 nightly through `tools/end_of_night_checkpoint.sh`. Stable version remains 6.5.6.
 No quantified target performance gain or completed soak test is inferred.
 Reconnect recovery and asynchronous metadata fetching remain deferred.
+
+## Devices and Drybox refresh follow-up
+
+Devices live labels and Drybox data widgets now compare against current widget
+text, local colors, button border/fill properties and instantaneous bar values.
+Equal readings avoid repeated writes without a detached state cache. Catalog
+rebuilds, page teardown, profile changes and theme/accessibility rebuilding retain
+their existing behavior. Drybox online updates restore the humidity value's cyan
+color after the offline placeholder. Commands and refresh intervals are unchanged.
+
+The real-LVGL fixture covers silent repeated data refreshes, changed readings,
+humidity thresholds/clamping, program selection and disabled states, offline
+recovery and rebuilt labels in all three themes/text sizes. Shared status-banner
+styling is outside this patch and excluded from its redraw-free data-widget claim.
+The operator confirmed these functional changes on the panel.
+
+## Shared banner refresh follow-up
+
+Shared banners skip equal ETA/progress text and local color writes. The theme
+dispatcher compares the final local banner properties before invoking the existing
+concrete theme recipe; token, custom-opacity and accessibility changes remain
+visible, and external style changes are repaired. No kind/theme cache is retained.
+Simple banners compare their message width/alignment as well. Progress animation
+continues to use LVGL's existing bar setter and motion preference.
+
+Drybox supplies its final shell status once through the simple-kind setter,
+retaining its previous state/accent text semantics while avoiding an intermediate
+shell style. The earlier data-widget test now includes the real shared banner
+and covers all four themes. Banner tests compare all locally written properties
+against the unchanged concrete recipes and verify unchanged refresh silence.
+
+## Operator preview cutoff follow-up
+
+Small preview consumers now use aspect-fit cache rendering and native `CONTAIN`
+with zero inset. This replaces the earlier two-stage center crop/`COVER` path
+after the operator reported cut-off previews. All themes share the same complete
+model policy; mismatched proportions leave unused space. Cache sizes and original
+fullscreen rendering remain unchanged. See [Preview rendering](PREVIEW_RENDERING.md).
+
+## Tools live refresh follow-up
+
+Live Endstops compares text against its current label before updating. Motion
+limits and driver diagnostics compare local status colors and driver dropdown
+options; profile-change messages render directly without an intermediate offline
+message on every tick. Driver discovery, selected-name restoration and theme-
+specific fault colors retain their previous behavior. No timers, query intervals,
+G-code commands or readiness guards change.
+
+Real-LVGL checks verify repeated refresh silence, changed limits/endstop readings,
+discovery and no-driver transitions, selection after driver reordering, warning/
+fault palettes, offline/print/profile guards, two-second query cadence and cleanup
+in all four themes and text sizes. The operator confirmed these functional changes on the panel.
+
+## Live-widget refresh closeout
+
+The operator accepted Devices/Drybox data refreshes, shared banner refreshes,
+the complete-model preview correction and Tools live diagnostic refreshes. The
+preview policy now uses aspect fit at both cache and viewport stages, replacing
+the earlier crop-to-fill behavior. Host checks cover redraw silence, transition
+correctness, themes/accessibility, preview/cache lifetimes, query timing and
+existing command guards. No measured target performance gain or completed soak
+test is inferred.
+
+The closeout workflow commits the tested scope and documentation, checkpoints
+`feature/live-widget-refresh`, reviews the integration in a disposable worktree,
+merges to `main`, and builds/publishes the nightly through
+`tools/end_of_night_checkpoint.sh`. The branch is removed after success. Stable
+version remains 6.5.6. Reconnect recovery and asynchronous metadata remain deferred.

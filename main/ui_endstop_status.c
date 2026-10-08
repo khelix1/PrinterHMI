@@ -7,6 +7,7 @@
 #include "moonraker_config_controller.h"
 #include "moonraker_live_websocket.h"
 #include "ui_popup.h"
+#include "ui_value_update.h"
 
 static lv_obj_t *s_popup, *s_body;
 static lv_timer_t *s_timer;
@@ -29,7 +30,7 @@ static void refresh(lv_timer_t *timer)
     if (!s_body) return;
     if (s_owner != moonraker_config_generation()) {
         endstop_status_controller_reset();
-        lv_label_set_text(s_body, "Printer changed. Close and reopen Endstops.");
+        ui_value_set_text(s_body, "Printer changed. Close and reopen Endstops.");
         return;
     }
     moonraker_state_t state;
@@ -38,12 +39,12 @@ static void refresh(lv_timer_t *timer)
         !moonraker_live_websocket_connected() ||
         !strcmp(state.printer_state, "error") || !strcmp(state.printer_state, "shutdown")) {
         endstop_status_controller_reset();
-        lv_label_set_text(s_body, "Live readings unavailable. Waiting for the printer...");
+        ui_value_set_text(s_body, "Live readings unavailable. Waiting for the printer...");
         return;
     }
     if (!strcmp(state.printer_state, "printing") || !strcmp(state.printer_state, "paused")) {
         endstop_status_controller_reset();
-        lv_label_set_text(s_body, "Readings paused during a print.\nResume checks when the printer is idle.");
+        ui_value_set_text(s_body, "Readings paused during a print.\nResume checks when the printer is idle.");
         return;
     }
     endstop_status_snapshot_t status;
@@ -60,9 +61,9 @@ static void refresh(lv_timer_t *timer)
     if (status.waiting) {
         /* Keep the last rendered sample briefly; never manufacture a new state. */
         if (!status.count && now - status.updated_us < 500000LL) return;
-        lv_label_set_text(s_body, "Waiting for live endstop readings...");
+        ui_value_set_text(s_body, "Waiting for live endstop readings...");
     } else if (!status.valid) {
-        lv_label_set_text(s_body, status.error[0] ? status.error : "Waiting for the first sample...");
+        ui_value_set_text(s_body, status.error[0] ? status.error : "Waiting for the first sample...");
     } else {
         char text[1024];
         size_t used = 0;
@@ -76,7 +77,7 @@ static void refresh(lv_timer_t *timer)
         snprintf(text + used, sizeof(text) - used, "%s\nLive sample; refreshed every 2 seconds.\n"
             "Sensorless endstops may only trigger during homing.",
             status.truncated ? "Additional endstops omitted." : status.count ? "" : "No endstops reported.");
-        lv_label_set_text(s_body, text);
+        ui_value_set_text(s_body, text);
     }
 }
 

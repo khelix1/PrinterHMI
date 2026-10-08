@@ -164,18 +164,17 @@ static bool render_rgb565(
         destination_width;
 
     int draw_height =
-        (source_height * draw_width) / source_width;
+        (int)((int64_t)source_height * draw_width / source_width);
 
     if (draw_height > destination_height) {
         draw_height = destination_height;
         draw_width =
-            (source_width * draw_height) / source_height;
+            (int)((int64_t)source_width * draw_height / source_height);
     }
 
-    if (draw_width <= 0 || draw_height <= 0) {
-        lv_image_decoder_close(&decoder);
-        return false;
-    }
+    /* A one-pixel-wide/tall thumbnail still has a valid fitted preview. */
+    if (draw_width < 1) draw_width = 1;
+    if (draw_height < 1) draw_height = 1;
 
     int offset_x =
         (destination_width - draw_width) / 2;

@@ -28,11 +28,19 @@ static void render_case(int sw,int sh,int dw,int dh)
         assert(buffer[1+y*dw+x]==pixel(sx,sy));
     }
     assert(buffer[0]==0xABCD && buffer[dw*dh+1]==0xDCBA);
-    if(sw>1 && sh>1){
-        assert(thumbnail_render_to_rgb565_fit(&dsc,buffer+1,dw,dh));
-        if(sw*dh!=sh*dw) assert(buffer[1]==0 || buffer[dw*dh]==0);
-        if(sw==dw && sh==dh) assert(!memcmp(buffer+1,source,(size_t)sw*sh*2));
+    assert(thumbnail_render_to_rgb565_fit(&dsc,buffer+1,dw,dh));
+    int fw=dw,fh=(int)((int64_t)sh*fw/sw);
+    if(fh>dh){fh=dh;fw=(int)((int64_t)sw*fh/sh);}
+    if(fw<1)fw=1;
+    if(fh<1)fh=1;
+    int ox=(dw-fw)/2,oy=(dh-fh)/2;
+    for(int y=0;y<dh;y++)for(int x=0;x<dw;x++){
+        uint16_t expected=0;
+        if(x>=ox && x<ox+fw && y>=oy && y<oy+fh)
+            expected=pixel((int)((int64_t)(x-ox)*sw/fw),(int)((int64_t)(y-oy)*sh/fh));
+        assert(buffer[1+y*dw+x]==expected);
     }
+    assert(buffer[0]==0xABCD && buffer[dw*dh+1]==0xDCBA);
     free(source);free(buffer);
 }
 static void ui_case(int width,int height)
@@ -60,6 +68,12 @@ static void ui_case(int width,int height)
     scale=lv_image_get_scale(image);
     assert((int64_t)286*scale<=lv_obj_get_width(image)*256);
     assert((int64_t)215*scale<=lv_obj_get_height(image)*256);
+    ui_thumbnail_fit_object(image,box,0,0,0);
+    lv_obj_update_layout(box);
+    assert(lv_image_get_inner_align(image)==LV_IMAGE_ALIGN_CONTAIN);
+    scale=lv_image_get_scale(image);
+    assert((int64_t)286*scale<=lv_obj_get_content_width(box)*256);
+    assert((int64_t)215*scale<=lv_obj_get_content_height(box)*256);
     lv_obj_set_size(box,width+73,height+51);
     ui_thumbnail_fill_object(image,box,0,0);lv_obj_update_layout(box);
     scale=lv_image_get_scale(image);
@@ -75,5 +89,5 @@ int main(void)
     render_case(900,520,900,520);render_case(1,17,13,1);
     ui_case(286,215);ui_case(184,160);ui_case(158,220);ui_case(420,160);
     assert(!thumbnail_render_to_rgb565(NULL,NULL,0,0));
-    puts("PASS: proportional preview fill, centered crops, all pixels, bounds, fullscreen fit and LVGL well coverage");
+    puts("PASS: complete-image aspect fit, exact sampling/padding, degenerate sources, buffer bounds, zero-inset containment and retained explicit crop utility");
 }

@@ -1,5 +1,6 @@
 #include "ui_drybox_page.h"
 #include "ui_text.h"
+#include "ui_value_update.h"
 #include "ui_page_layout_profile.h"
 
 #include <stdio.h>
@@ -152,24 +153,24 @@ static void set_program_button_state(
             online &&
             active_program == (drybox_program_t)i;
 
-        lv_obj_set_style_border_color(
+        ui_value_set_border_color(
             button,
             active ? drybox_program_accent((drybox_program_t)i) : UI_BORDER_SOFT,
             0);
 
-        lv_obj_set_style_border_width(
+        ui_value_set_border_width(
             button,
             active
                 ? ui_theme_accessible_border_width(3)
                 : UI_BORDER_THIN,
             0);
 
-        lv_obj_set_style_bg_color(
+        ui_value_set_bg_color(
             button,
             active ? UI_CONTROL_ALT : UI_BG_DEEP,
             0);
 
-        lv_obj_set_style_bg_opa(
+        ui_value_set_bg_opa(
             button,
             online
                 ? LV_OPA_COVER
@@ -178,7 +179,7 @@ static void set_program_button_state(
     }
 
     if (s_active_dot) {
-        lv_obj_set_style_bg_color(
+        ui_value_set_bg_color(
             s_active_dot,
             online && active_program != DRYBOX_PROGRAM_NONE
                 ? drybox_program_accent(active_program)
@@ -220,7 +221,7 @@ static void set_program_button_state(
             }
         }
 
-        lv_label_set_text(s_program_status_label, status);
+        ui_value_set_text(s_program_status_label, status);
 
         set_label_color(
             s_program_status_label,
@@ -248,7 +249,7 @@ static void set_humidity_presentation(float humidity)
     }
 
     if (s_humidity_condition_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             s_humidity_condition_label,
             condition);
 
@@ -266,12 +267,11 @@ static void set_humidity_presentation(float humidity)
             value = 100;
         }
 
-        lv_bar_set_value(
+        ui_value_set_bar(
             s_humidity_bar,
-            value,
-            LV_ANIM_OFF);
+            value);
 
-        lv_obj_set_style_bg_color(
+        ui_value_set_bg_color(
             s_humidity_bar,
             color,
             LV_PART_INDICATOR);
@@ -286,7 +286,7 @@ static void set_label_color(
         return;
     }
 
-    lv_obj_set_style_text_color(label, color, 0);
+    ui_value_set_color(label, color, 0);
 }
 
 static lv_obj_t *make_text(
@@ -881,15 +881,10 @@ void ui_drybox_page_refresh(
         }
 
         if (banner_box) {
-            ui_status_banner_set_simple(
+            ui_status_banner_set_simple_kind(
                 banner_box,
                 drybox_status_text(display_text),
-                "FILAMENT CONDITIONING");
-        }
-
-        if (banner_box) {
-            ui_operator_banner_set_status(
-                banner_box,
+                "FILAMENT CONDITIONING",
                 banner_kind);
         }
     }
@@ -900,7 +895,7 @@ void ui_drybox_page_refresh(
 
     if (!online) {
         if (page->humidity_label) {
-            lv_label_set_text(
+            ui_value_set_text(
                 page->humidity_label,
                 ui_text("--.-"));
 
@@ -910,7 +905,7 @@ void ui_drybox_page_refresh(
         }
 
         if (s_humidity_condition_label) {
-            lv_label_set_text(
+            ui_value_set_text(
                 s_humidity_condition_label,
                 ui_text("NO DATA"));
 
@@ -920,54 +915,52 @@ void ui_drybox_page_refresh(
         }
 
         if (s_humidity_bar) {
-            lv_bar_set_value(
+            ui_value_set_bar(
                 s_humidity_bar,
-                0,
-                LV_ANIM_OFF);
+                0);
         }
 
         if (page->air_label) {
-            lv_label_set_text(page->air_label, ui_text("--.- C"));
+            ui_value_set_text(page->air_label, ui_text("--.- C"));
         }
 
         if (page->center_label) {
-            lv_label_set_text(page->center_label, ui_text("--.- C"));
+            ui_value_set_text(page->center_label, ui_text("--.- C"));
         }
 
         if (page->target_label) {
-            lv_label_set_text(page->target_label, ui_text("-- C"));
+            ui_value_set_text(page->target_label, ui_text("-- C"));
             set_label_color(page->target_label, UI_TEXT_DIM);
         }
 
         if (page->heater_label) {
-            lv_label_set_text(page->heater_label, ui_text("OFFLINE"));
+            ui_value_set_text(page->heater_label, ui_text("OFFLINE"));
             set_label_color(page->heater_label, UI_TEXT_DIM);
         }
 
         if (page->fan_label) {
-            lv_label_set_text(page->fan_label, "-- %");
+            ui_value_set_text(page->fan_label, "-- %");
             set_label_color(page->fan_label, UI_TEXT_DIM);
         }
 
         if (s_heater_dot) {
-            lv_obj_set_style_bg_color(
+            ui_value_set_bg_color(
                 s_heater_dot,
                 UI_TEXT_DIM,
                 0);
         }
 
         if (s_fan_dot) {
-            lv_obj_set_style_bg_color(
+            ui_value_set_bg_color(
                 s_fan_dot,
                 UI_TEXT_DIM,
                 0);
         }
 
         if (s_heater_activity_bar) {
-            lv_bar_set_value(
+            ui_value_set_bar(
                 s_heater_activity_bar,
-                0,
-                LV_ANIM_OFF);
+                0);
         }
 
         return;
@@ -980,9 +973,10 @@ void ui_drybox_page_refresh(
             "%.1f",
             state->humidity);
 
-        lv_label_set_text(
+        ui_value_set_text(
             page->humidity_label,
             buffer);
+        set_label_color(page->humidity_label, UI_ACCENT_CYAN);
     }
 
     set_humidity_presentation(state->humidity);
@@ -994,7 +988,7 @@ void ui_drybox_page_refresh(
             "%.1f C",
             state->air_temp);
 
-        lv_label_set_text(
+        ui_value_set_text(
             page->air_label,
             buffer);
 
@@ -1010,7 +1004,7 @@ void ui_drybox_page_refresh(
             "%.1f C",
             state->center_temp);
 
-        lv_label_set_text(
+        ui_value_set_text(
             page->center_label,
             buffer);
 
@@ -1026,7 +1020,7 @@ void ui_drybox_page_refresh(
             "%.0f C",
             state->heater_target);
 
-        lv_label_set_text(
+        ui_value_set_text(
             page->target_label,
             buffer);
 
@@ -1038,7 +1032,7 @@ void ui_drybox_page_refresh(
     }
 
     if (page->heater_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             page->heater_label,
             state->heater_on ? ui_text("HEATING") : ui_text("OFF"));
 
@@ -1050,7 +1044,7 @@ void ui_drybox_page_refresh(
     }
 
     if (s_heater_dot) {
-        lv_obj_set_style_bg_color(
+        ui_value_set_bg_color(
             s_heater_dot,
             state->heater_on
                 ? UI_OK_BRIGHT
@@ -1059,10 +1053,9 @@ void ui_drybox_page_refresh(
     }
 
     if (s_heater_activity_bar) {
-        lv_bar_set_value(
+        ui_value_set_bar(
             s_heater_activity_bar,
-            state->heater_on ? 100 : 0,
-            LV_ANIM_OFF);
+            state->heater_on ? 100 : 0);
     }
 
     if (page->fan_label) {
@@ -1072,7 +1065,7 @@ void ui_drybox_page_refresh(
             "%.0f %%",
             state->fan_speed);
 
-        lv_label_set_text(
+        ui_value_set_text(
             page->fan_label,
             buffer);
 
@@ -1084,7 +1077,7 @@ void ui_drybox_page_refresh(
     }
 
     if (s_fan_dot) {
-        lv_obj_set_style_bg_color(
+        ui_value_set_bg_color(
             s_fan_dot,
             state->fan_speed > 0.0f
                 ? UI_ACCENT_INFO

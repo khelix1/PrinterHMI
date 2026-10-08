@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lvgl.h"
+#include "ui_theme.h"
 #include "ui_page_geometry.h"
 
 /* Shared page-relative geometry for every primary live-status bar. */
@@ -21,3 +22,8 @@ void ui_status_banner_set_simple(lv_obj_t *banner,
 
 /* Compatibility accessors for page adapters that retain label handles. */
 lv_obj_t *ui_status_banner_state_label(lv_obj_t *banner);
+
+/* Override only the outer shell status; label/accent colors retain the state
+ * text semantics. Avoids applying an intermediate shell style on Drybox. */
+void ui_status_banner_set_simple_kind(lv_obj_t *banner, const char *state,
+    const char *message, ui_status_kind_t shell_kind);

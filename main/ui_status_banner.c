@@ -1,4 +1,5 @@
 #include "ui_status_banner.h"
+#include "ui_value_update.h"
 #include "ui_text.h"
 
 #include "ui_theme.h"
@@ -25,6 +26,14 @@ typedef struct {
     lv_obj_t *eta;
     lv_obj_t *progress;
     lv_obj_t *bar;
+    lv_subject_t state_subject;
+    lv_subject_t message_subject;
+    char state_value[64];
+    char state_previous[64];
+    char message_value[256];
+    char message_previous[256];
+    bool state_bound;
+    bool message_bound;
 } status_banner_ctx_t;
 
 static void status_banner_delete_cb(lv_event_t *event)
@@ -32,7 +41,34 @@ static void status_banner_delete_cb(lv_event_t *event)
     status_banner_ctx_t *ctx =
         (status_banner_ctx_t *)lv_event_get_user_data(event);
 
-    if (ctx) lv_free(ctx);
+    if (ctx) {
+        /* Parent DELETE precedes child deletion. Deinit removes the label's
+         * observer callbacks before freeing the subject's backing storage.
+         */
+        lv_subject_deinit(&ctx->state_subject);
+        lv_subject_deinit(&ctx->message_subject);
+        lv_free(ctx);
+    }
+}
+
+static void set_observed_text(lv_obj_t *label, lv_subject_t *subject,
+                              size_t capacity, bool bound, const char *text)
+{
+    if (!label) return;
+    if (!text) text = "";
+    /* Preserve the public setter's full-text behavior for unusually long
+     * values or a failed observer allocation. No silent truncation.
+     */
+    if (!bound || strlen(text) >= capacity) {
+        ui_value_set_text(label, text);
+        return;
+    }
+    bool unchanged = strcmp(lv_subject_get_string(subject), text) == 0;
+    lv_subject_copy_string(subject, text);
+    /* Restore the widget after long-text fallback or a compatibility writer,
+     * even when the bounded subject already contains this value.
+     */
+    if (unchanged) ui_value_set_text(label, text);
 }
 
 static void set_optional_label(lv_obj_t *label, const char *text)
@@ -352,6 +388,13 @@ lv_obj_t *ui_status_banner_create(
         UI_RADIUS_BAR,
         LV_PART_INDICATOR);
 
+    lv_subject_init_string(&ctx->state_subject, ctx->state_value,
+        ctx->state_previous, sizeof(ctx->state_value), lv_label_get_text(ctx->state));
+    lv_subject_init_string(&ctx->message_subject, ctx->message_value,
+        ctx->message_previous, sizeof(ctx->message_value), lv_label_get_text(ctx->file));
+    ctx->state_bound = lv_label_bind_text(ctx->state, &ctx->state_subject, NULL) != NULL;
+    ctx->message_bound = lv_label_bind_text(ctx->file, &ctx->message_subject, NULL) != NULL;
+
     lv_obj_set_user_data(
         banner,
         ctx);
@@ -387,11 +430,15 @@ void ui_status_banner_set(
     const char *state_text =
         state ? state : "--";
 
-    lv_label_set_text(
-        ctx->state,
-        state_text);
-
-    set_optional_label(ctx->file, file);
+    set_observed_text(ctx->state, &ctx->state_subject,
+        sizeof(ctx->state_value), ctx->state_bound, state_text);
+    set_observed_text(ctx->file, &ctx->message_subject,
+        sizeof(ctx->message_value), ctx->message_bound, file);
+    if (file && file[0]) {
+        lv_obj_remove_flag(ctx->file, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(ctx->file, LV_OBJ_FLAG_HIDDEN);
+    }
     set_optional_label(ctx->eta, eta);
     set_optional_label(ctx->progress, progress);
 

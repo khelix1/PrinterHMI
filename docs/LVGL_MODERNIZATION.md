@@ -129,3 +129,69 @@ splash hold/handoff, chooser refresh and storage/download failure paths. No
 quantified performance gain or completed release soak test is inferred from this
 acceptance. The canonical IDF6 build runs again on integrated `main` as part of
 nightly publication. Stable version and stable release assets remain unchanged.
+
+## Status-label observer pilot
+
+The observer integration scope originated on `feature/lvgl95-status-observers`. The shared
+Dashboard/Printer status banner binds its state and operator-message/active-file
+labels using LVGL 9.5 string subjects and `lv_label_bind_text`. Subjects are
+owned by each banner, publish only on the UI/display-lock path, and include
+previous-value buffers so repeated values do not notify observers. Transport,
+refresh cadence, colors, progress, layout and previews retain their existing
+behavior. This is a binding/lifecycle pilot, not a measured performance claim.
+
+Two current/previous buffer pairs use 640 fixed bytes per banner, plus two
+subjects and observer bookkeeping. There are no extra timers or global model
+registries. Deleting the banner deinitializes subjects before freeing their
+storage; deleting a child label removes its object observer automatically.
+Values exceeding the bounded subject storage preserve their complete text via
+the existing direct setter. Missing bindings also fall back to direct updates.
+A return to short text, or a compatibility writer touching the label, is repaired
+even if the subject value is unchanged. Further labels can adopt bindings after
+panel validation of this pair. Reconnect recovery remains deferred. Version 6.5.6
+is unchanged.
+
+## Chooser status subjects
+
+The operator confirmed the banner observer pilot on the panel. The follow-up
+adds one object-bound string subject to each
+chooser card's status label. The existing health/freshness, active-profile, color
+and preview decisions remain authoritative; only status text publication adopts
+the observer pattern. Current/previous buffers use 128 fixed bytes per card,
+plus its subject/observer bookkeeping (at most four cards).
+
+Card deletion deinitializes the subject before label destruction or static card
+storage reuse. Unavailable bindings and unusually long status text preserve the
+direct setter path. Existing 500ms polling remains, but unchanged status values
+do not notify observers or redraw labels. The chooser's complete unchanged-tick
+redraw/flush checks still pass. Startup worker order and preview behavior are
+unchanged. The operator confirmed this chooser status extension on the panel.
+
+## Chooser profile-text subjects
+
+The profile-text extension binds each card's printer name and endpoint in
+addition to its status. Configured profile edits, clearing a profile, and adding
+a printer to an empty slot publish into the existing card's string subjects.
+Click handlers still resolve the current profile index. Names use the profile
+name capacity; endpoints use host capacity plus 16 bytes for the port/separator.
+Current/previous buffers add 224 fixed bytes per card with current config limits,
+plus two subjects and their object observers.
+
+The card DELETE callback deinitializes all three subjects before slot reuse.
+Binding failure and long-text fallback retain the existing complete text. Name
+and endpoint formatting, dot overflow, status colors, previews and the 500ms
+timer remain. The host no-redraw/no-flush and notification checks cover the
+complete name/endpoint/status trio, edits, empty-slot transitions and click
+routing. The operator confirmed the name/endpoint extension on the panel. Stable
+version remains 6.5.6 and reconnect recovery remains deferred.
+
+## Status observer closeout
+
+The operator confirmed all three increments: shared banner state/message,
+chooser status, and chooser name/endpoint bindings. Host checks verify unchanged
+notifications/refreshes, theme/text-size variants, profile edits, empty slots,
+click routing, fallback repair and subject cleanup. The closeout workflow audits
+the complete integration, merges into main and builds/publishes a commit-specific
+nightly through `tools/end_of_night_checkpoint.sh`. Stable version remains 6.5.6.
+No quantified target performance gain or completed soak test is inferred.
+Reconnect recovery and asynchronous metadata fetching remain deferred.

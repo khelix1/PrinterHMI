@@ -368,3 +368,59 @@ Panel acceptance: the operator reported the SD cache/download cleanup looks
 good. This records functional acceptance, not a filesystem power-loss test or
 quantified memory/performance measurement. Final integration reruns repository
 audits and the canonical IDF6 firmware build through the end-of-night script.
+
+## Status observer pilot
+
+Run `python3 tools/audit/status_observers_test.py`; supply `--lvgl-dir` and
+optionally `--lvgl-lib` for unmanaged host LVGL. The production banner runs on
+real LVGL across all themes and normal/large text. Checks cover 100 unchanged
+updates without subject notifications, independent banner instances, state and
+message transitions, literal filename percentages, progress and palette, null/
+hidden messages, untruncated long-text fallback, repair after fallback or direct
+compatibility writes, unavailable-binding fallback and repeated parent/child
+teardown. The canonical IDF6 config already enables `CONFIG_LV_USE_OBSERVER`.
+
+Build/flash and check Dashboard/Printer state, connection messages, active
+filename scrolling and notices during idle, heating, printing and pause. Switch
+printers/pages, change theme/text size and reopen repeatedly; the new banner
+must show current values without stale text. Check cold/warm splash progress,
+chooser handoff and previews. Host tests cannot prove target performance or
+display timing. The operator confirmed the banner pilot on the panel; version remains 6.5.6.
+
+## Chooser status observer extension
+
+Run `python3 tools/audit/chooser_refresh_test.py` with the LVGL source/archive
+options above. The existing real-LVGL direct-rendering fixture now also verifies
+per-card status subjects, zero notifications on unchanged 500ms callbacks,
+printing/paused/offline/verifying transitions, stale-state dimming and theme
+error colors. It retains preview revision/removal, active-profile and no-redraw
+checks, and adds long/unavailable-binding fallback repair, independent card
+deletion and chooser subject teardown/reopen across all themes/text sizes.
+
+After the canonical IDF6 build/flash, leave the chooser visible for ten seconds
+after cold/warm startup: there must be no delayed white flash. Check current
+active/inactive printer states, health changes, dimming while verifying, preview
+arrival and switching printers. Reopen the chooser and change theme/text size.
+The operator confirmed the preceding banner and chooser status pilots on the
+panel. Reconnect recovery remains deferred; version is 6.5.6.
+
+## Chooser profile-text observer extension
+
+The same `chooser_refresh_test.py` checks all three string bindings with real
+LVGL across themes/text sizes. It now covers renaming, hostname/port edits,
+configured-to-empty and empty-to-configured slots, index-based click routing,
+name/endpoint long-text and unavailable-binding fallback, and unchanged edited
+profiles remaining free of notifications, invalidations and flushes.
+
+After build/flash, rename a profile and edit its endpoint, then reopen the chooser
+and confirm the displayed values and selected printer. Check empty/add-printer
+cards, status changes and restored previews; repeat page/profile/theme changes.
+Cold/warm startup must retain splash progress and the flash-free chooser handoff.
+The operator confirmed the banner, chooser status and name/endpoint observer
+changes on the panel. Stable version remains 6.5.6.
+
+Observer branch closeout: all three incremental functional checks were accepted
+on the panel. The repository audits and canonical integrated-main IDF6 firmware
+build run through the closeout/end-of-night workflow. Host acceptance covers
+subject lifetimes and redraw behavior; it does not establish measured target
+performance or a completed release soak. Reconnect recovery remains deferred.

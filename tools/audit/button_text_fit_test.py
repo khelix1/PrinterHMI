@@ -116,7 +116,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     source=(root/"main/ui_calibration.c").read_text()
     start=source.index('static void layout_bed_geometry_actions(')
     (tmp/"bed_actions.inc").write_text(source[start:source.index('static void refresh_capabilities',start)])
-    sources=["ui_printer_info_cards.c","ui_settings_components.c","ui_printer_actions.c","ui_command_bar.c","ui_calibration_layout.c","ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c"]
+    sources=["ui_printer_info_cards.c","ui_settings_components.c","ui_printer_actions.c","ui_command_bar.c","ui_calibration_layout.c","ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c"]
     executable=tmp/"button_text_fit"
     subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
         "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),

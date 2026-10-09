@@ -94,7 +94,7 @@ static void snapshot(lv_obj_t *root){
  snprintf(path,sizeof(path),"%s/%s-theme%u.ppm",folder,page,theme_case);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",a.x2-a.x1+1,a.y2-a.y1+1);for(int y=a.y1;y<=a.y2;y++)for(int x=a.x1;x<=a.x2;x++){uint16_t v=raster[y*1024+x];unsigned char c[3]={(unsigned char)(((v>>11)&31)*255/31),(unsigned char)(((v>>5)&63)*255/63),(unsigned char)((v&31)*255/31)};fwrite(c,1,3,f);}fclose(f);
 }
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
- for(unsigned custom=0;custom<2;custom++)for(unsigned theme=0;theme<4;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned w=0;w<3;w++){
-  custom_tokens=custom;theme_case=theme;density_case=density;large_case=large;width_case=w;ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});run((int[]){854,640,480}[w]);
+ for(unsigned custom=0;custom<2;custom++)for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned w=0;w<3;w++){
+  custom_tokens=custom;theme_case=theme;density_case=density;large_case=large;width_case=w;ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});run((int[]){theme==UI_THEME_STUDIO_DARK?976:854,640,480}[w]);
  }
- lv_display_delete(d);lv_deinit();puts("PASS: responsive page bounds, wrapping, non-overlap and lifecycle across all four themes, three densities, both text sizes, three viewport widths and custom metric/profile overrides");}
+ lv_display_delete(d);lv_deinit();puts("PASS: responsive page bounds, wrapping, non-overlap and lifecycle across all five themes, three densities, both text sizes, three viewport widths and custom metric/profile overrides");}

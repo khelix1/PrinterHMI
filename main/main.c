@@ -2563,6 +2563,8 @@ static void app_create_wifi_status_label(void)
         LV_TEXT_ALIGN_CENTER,
         0);
     lv_obj_set_pos(wifi_label, 380, 555);
+    /* STUDIO reserves the footer for its dock; Wi-Fi remains in the header. */
+    if (ui_theme_is_studio()) lv_obj_add_flag(wifi_label,LV_OBJ_FLAG_HIDDEN);
 }
 
 static void app_theme_changed(void)

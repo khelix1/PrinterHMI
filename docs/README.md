@@ -47,3 +47,5 @@ the portable encrypted-backup format, restore verification, and recovery rules.
 Current control-dialog closeout: [Nightly validation and pending printing checks](NIGHTLY_VALIDATION.md).
 
 Settings and large-text source closeout: [validation and pending follow-ups](SETTINGS_LAYOUT_VALIDATION.md).
+
+- [STUDIO Dark trial](STUDIO_DARK_TRIAL.md): independent dark theme, native LVGL Dashboard and panel validation.

@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="live-widget-refresh-") as directory:
             objects=list(pool.map(compile_source,(lvgl/"src").rglob("*.c")))
         library=tmp/"liblvgl.a"
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
-    sources=["ui_status_banner.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_font_fallback.c","ui_text.c"]
+    sources=["ui_status_banner.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","ui_font_fallback.c","ui_text.c"]
     executable=tmp/"live_widget_refresh"
     subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
                     "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),

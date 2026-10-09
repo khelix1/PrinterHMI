@@ -1,12 +1,14 @@
 #include "ui_page_title.h"
 #include "ui_text.h"
 #include "ui_theme.h"
+#include "ui_theme_studio.h"
 
 void ui_page_title_create(lv_obj_t *parent,
                           const char *title_text,
                           const char *subtitle_text)
 {
     if (!parent) return;
+    if (ui_theme_is_studio()) ui_theme_studio_page_frame(parent);
 
     lv_obj_t *title = lv_label_create(parent);
     lv_label_set_text(title, title_text ? title_text : ui_text(""));

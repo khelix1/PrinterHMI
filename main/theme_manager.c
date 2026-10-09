@@ -68,12 +68,14 @@ static void load_custom_id(nvs_handle_t handle)
 static bool theme_valid(ui_theme_id_t theme)
 {
     return (unsigned)theme >= (unsigned)UI_THEME_CLASSIC &&
-           (unsigned)theme <= (unsigned)UI_THEME_OPERATOR_SHELL;
+           (unsigned)theme <= (unsigned)UI_THEME_STUDIO_DARK;
 }
 
 static const char *theme_label(ui_theme_id_t theme)
 {
     switch (theme) {
+        case UI_THEME_STUDIO_DARK:
+            return "STUDIO DARK (TRIAL)";
         case UI_THEME_CLASSIC:
             return "FOUNDRY (THEME A)";
         case UI_THEME_GLASS:

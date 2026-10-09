@@ -8,7 +8,7 @@ typedef struct {
     lv_font_t copy;
 } ui_font_fallback_slot_t;
 
-static ui_font_fallback_slot_t s_slots[8];
+static ui_font_fallback_slot_t s_slots[24];
 
 const lv_font_t *ui_font_with_fallback(const lv_font_t *base)
 {
@@ -31,7 +31,7 @@ const lv_font_t *ui_font_with_fallback(const lv_font_t *base)
         }
     }
 
-    /* The UI has fewer than eight shared fonts; keep a safe fallback if that
+    /* The UI has fewer than twenty-four shared fonts; keep a safe fallback if that
      * ever changes rather than returning a descriptor with no fallback. */
     return base;
 }

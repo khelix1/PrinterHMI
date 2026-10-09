@@ -25,6 +25,14 @@ typedef struct {
 static ui_theme_preview_palette_t preview_palette(ui_theme_id_t theme)
 {
     switch (theme) {
+        case UI_THEME_STUDIO_DARK:
+            return (ui_theme_preview_palette_t){
+                .background=0x15161B, .surface=0x22232B, .card=0x292536,
+                .control=0x322746, .border=0x363640, .accent=0x8B6CFF,
+                .text=0xF2F0EC, .muted=0xA8A7B7, .success=0xD8F36A,
+                .danger=0xFF4D65, .radius=18, .surface_opa=LV_OPA_COVER,
+                .name="STUDIO DARK", .code="TRIAL", .description="Bottom dock / studio console",
+            };
         case UI_THEME_CLASSIC:
             return (ui_theme_preview_palette_t){
                 .background = 0x18130F,

@@ -4,6 +4,7 @@
 
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_font_fallback.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +35,7 @@ typedef struct {
     char message_previous[256];
     bool state_bound;
     bool message_bound;
+    bool studio_dashboard;
 } status_banner_ctx_t;
 
 static void status_banner_delete_cb(lv_event_t *event)
@@ -388,6 +390,29 @@ lv_obj_t *ui_status_banner_create(
         UI_RADIUS_BAR,
         LV_PART_INDICATOR);
 
+    ctx->studio_dashboard = ui_theme_is_studio() && w == 600 && h == 424;
+    if (ctx->studio_dashboard) {
+        lv_obj_clear_flag(banner,LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);
+        lv_obj_set_style_border_width(banner,0,0);
+        lv_obj_set_style_pad_all(banner,0,0);
+        lv_obj_add_flag(ctx->accent,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(ctx->state,0,0); lv_obj_set_width(ctx->state,600);
+        lv_label_set_long_mode(ctx->state,LV_LABEL_LONG_MODE_DOTS);
+        ui_apply_custom_label_style(ctx->state,UI_FONT_HEADING,UI_TEXT);
+        lv_obj_set_pos(ctx->file,0,44); lv_obj_set_width(ctx->file,600);
+        lv_obj_set_height(ctx->file,ui_font_with_fallback(UI_FONT_VALUE_SMALL)->line_height);
+        lv_obj_set_height(ctx->state,ui_font_with_fallback(UI_FONT_HEADING)->line_height);
+        lv_label_set_long_mode(ctx->file,LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_pos(ctx->progress,304,136); lv_obj_set_width(ctx->progress,280);
+        ui_apply_text_percent(ctx->progress);
+        lv_obj_set_style_text_align(ctx->progress,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_set_pos(ctx->bar,304,228); lv_obj_set_size(ctx->bar,280,14);
+        ui_apply_progress_bar_style(ctx->bar);
+        lv_obj_set_pos(ctx->eta,304,250); lv_obj_set_width(ctx->eta,280);
+        lv_obj_set_style_text_align(ctx->eta,LV_TEXT_ALIGN_LEFT,0);
+    }
+
     lv_subject_init_string(&ctx->state_subject, ctx->state_value,
         ctx->state_previous, sizeof(ctx->state_value), lv_label_get_text(ctx->state));
     lv_subject_init_string(&ctx->message_subject, ctx->message_value,
@@ -449,7 +474,7 @@ static void status_banner_set(
     lv_color_t state_color =
         ui_status_color(state_kind);
 
-    ui_operator_banner_set_status(
+    if (!ctx->studio_dashboard) ui_operator_banner_set_status(
         banner,
         shell_kind ? *shell_kind : state_kind);
 
@@ -462,7 +487,7 @@ static void status_banner_set(
 
     ui_value_set_color(
         ctx->state,
-        state_color,
+        ctx->studio_dashboard && state_kind != UI_STATUS_DANGER && state_kind != UI_STATUS_WARNING ? UI_TEXT : state_color,
         0);
 
     ui_value_set_color(
@@ -477,13 +502,13 @@ static void status_banner_set(
 
     ui_value_set_color(
         ctx->progress,
-        state_color,
+        ctx->studio_dashboard ? UI_TEXT : state_color,
         0);
 
     if (ctx->bar) {
         ui_value_set_bg_color(
             ctx->bar,
-            state_color,
+            ctx->studio_dashboard ? UI_OK_BRIGHT : state_color,
             LV_PART_INDICATOR);
     }
 

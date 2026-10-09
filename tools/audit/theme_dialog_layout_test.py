@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"freertos").mkdir()
     (tmp/"freertos/FreeRTOS.h").write_text("#pragma once\n#include <stdint.h>\n#define pdMS_TO_TICKS(ms) (ms)\n")
     (tmp/"freertos/task.h").write_text("#pragma once\nvoid vTaskDelay(uint32_t ticks);\n")
-    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c","ui_theme_preview.c"]
+    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c","ui_theme_preview.c"]
     executable=tmp/"theme_dialog_layout"
     subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
         "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),

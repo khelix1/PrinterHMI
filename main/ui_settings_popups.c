@@ -614,7 +614,7 @@ void ui_settings_popups_show_theme(ui_settings_theme_changed_cb_t changed_cb)
     lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_column(grid, UI_GAP_CARD, 0);
     lv_obj_set_style_pad_row(grid, UI_GAP_CARD, 0);
-    for (int theme = UI_THEME_CLASSIC; theme <= UI_THEME_OPERATOR_SHELL; ++theme) {
+    for (int theme = UI_THEME_CLASSIC; theme <= UI_THEME_STUDIO_DARK; ++theme) {
         lv_obj_t *preview = ui_theme_preview_create(grid, theme,
             !theme_manager_custom_active() && theme == (int)theme_manager_active(), 0, 0, 340, 250,
             theme == UI_THEME_OPERATOR_SHELL ? operator_shell_select_cb : theme_select_cb, (void *)(uintptr_t)theme);

@@ -12,6 +12,7 @@ typedef struct {
     lv_obj_t *preview_box;
     lv_obj_t *preview_label;
     lv_obj_t *footer;
+    lv_obj_t *remaining;
 } active_print_ctx_t;
 
 
@@ -291,7 +292,7 @@ lv_obj_t *ui_active_print_create_profile(
     /*
      * Shared Drybox-style card heading.
      */
-    ui_create_operator_card_heading(
+    if (!ui_theme_is_studio()) ui_create_operator_card_heading(
         panel,
         "ACTIVE PRINT",
         layout->heading_x,
@@ -405,6 +406,21 @@ lv_obj_t *ui_active_print_create_profile(
 
     lv_obj_move_foreground(ctx->footer);
 
+    if (ui_theme_is_studio()) {
+        lv_obj_set_style_pad_all(panel,0,0);
+        lv_obj_set_width(ctx->footer,280);
+        lv_obj_set_pos(ctx->footer,304,186);
+        lv_obj_set_style_pad_all(ctx->footer,0,0);
+        lv_obj_set_style_text_align(ctx->footer,LV_TEXT_ALIGN_LEFT,0);
+        ui_apply_custom_label_style(ctx->footer,UI_FONT_BODY,UI_TEXT_DIM);
+        ctx->remaining=lv_label_create(panel);
+        lv_label_set_text(ctx->remaining,"Remaining --:--");
+        ui_apply_custom_label_style(ctx->remaining,UI_FONT_BODY,UI_TEXT);
+        lv_label_set_long_mode(ctx->remaining,LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_size(ctx->remaining,280,LV_SIZE_CONTENT);
+        lv_obj_set_pos(ctx->remaining,304,212);
+    }
+
     lv_obj_set_user_data(panel, ctx);
 
     lv_obj_add_event_cb(
@@ -428,6 +444,11 @@ void ui_active_print_set(lv_obj_t *panel,
     active_print_ctx_t *ctx = (active_print_ctx_t *)lv_obj_get_user_data(panel);
     if (!ctx) return;
 
+    if (ctx->remaining) {
+        lv_label_set_text_fmt(ctx->footer,"Layer %s",layer ? layer : "--/--");
+        lv_label_set_text_fmt(ctx->remaining,"%s",remaining ? remaining : "REM --:--");
+        return;
+    }
     char buf[128];
     snprintf(buf, sizeof(buf),
              "LAYER %s    ELAPSED %s    %s",

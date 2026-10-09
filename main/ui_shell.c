@@ -3,6 +3,9 @@
 #include "ui_button.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_font_fallback.h"
+#include "ui_studio_icons.h"
+#include "ui_text_fit.h"
 #include "ui_global_estop.h"
 
 #include "esp_log.h"
@@ -175,6 +178,19 @@ void ui_shell_create(void)
             NULL);
     }
 
+    if (ui_theme_is_studio()) {
+        lv_obj_set_size(s_shell_printer_button,300,52);
+        lv_obj_set_pos(s_shell_printer_button,338,10);
+        lv_label_set_text(s_shell_title_label,"Select printer " LV_SYMBOL_DOWN);
+        lv_obj_t *brand=lv_label_create(shell_top_bar);
+        lv_label_set_text(brand,"PrinterHMI");
+        ui_apply_custom_label_style(brand,&ui_studio_font_28,UI_TEXT);
+        lv_obj_set_pos(brand,24,22);
+        lv_obj_t *edition=lv_label_create(shell_top_bar);
+        lv_label_set_text(edition,"STUDIO");
+        ui_apply_custom_label_style(edition,&lv_font_montserrat_14,UI_TEXT_DIM);
+        lv_obj_set_pos(edition,240,30);
+    }
     ui_global_estop_create(shell_top_bar);
 
     shell_clock_label = lv_label_create(shell_top_bar);
@@ -197,6 +213,16 @@ void ui_shell_create(void)
                         8 - (i * 2));
     }
 
+    if (ui_theme_is_studio()) {
+        lv_obj_set_align(shell_clock_label,LV_ALIGN_TOP_LEFT);
+        lv_obj_set_size(shell_clock_label,112,LV_SIZE_CONTENT);
+        lv_obj_set_pos(shell_clock_label,720,26);
+        ui_apply_custom_label_style(shell_clock_label,&lv_font_montserrat_18,UI_TEXT_DIM);
+        for (int i=0;i<4;++i) {
+            lv_obj_set_align(shell_topbar_wifi_bars[i],LV_ALIGN_TOP_LEFT);
+            lv_obj_set_pos(shell_topbar_wifi_bars[i],670+i*8,42-i*4);
+        }
+    }
     shell_topbar_eta_label = NULL;
 
     if (!s_clock_timer) {
@@ -358,6 +384,14 @@ void ui_shell_create_nav(void)
     ui_apply_surface_role(shell_nav_rail, UI_SURFACE_SHELL_NAV);
     lv_obj_clear_flag(shell_nav_rail, LV_OBJ_FLAG_SCROLLABLE);
 
+    if (ui_theme_is_studio()) {
+        lv_obj_set_pos(shell_nav_rail,24,516);
+        lv_obj_set_size(shell_nav_rail,976,68);
+        lv_obj_set_flex_flow(shell_nav_rail,LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(shell_nav_rail,LV_FLEX_ALIGN_SPACE_EVENLY,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(shell_nav_rail,2,0);
+    }
+
     typedef struct {
         ui_shell_page_t page;
         const char *icon;
@@ -407,7 +441,7 @@ void ui_shell_create_nav(void)
         if (!button) {
             ESP_LOGE(
                 TAG,
-                "Failed to create navigation button %d",
+                "Failed to create navigation button %zu",
                 i);
             continue;
         }
@@ -419,11 +453,22 @@ void ui_shell_create_nav(void)
          * Center against the rail's actual content area rather than
          * relying on a hard-coded X coordinate.
          */
-        lv_obj_align(
-            button,
-            LV_ALIGN_TOP_LEFT,
-            8,
-            8 + i * 58);
+        if (ui_theme_is_studio()) {
+            lv_obj_set_size(button,118,54);
+            lv_obj_t *icon=lv_obj_get_child(button,0);
+            lv_obj_t *label=lv_obj_get_child(button,1);
+            lv_obj_add_flag(icon,LV_OBJ_FLAG_HIDDEN);
+            lv_obj_t *graphic=ui_studio_icon_create(button,(unsigned)i);
+            lv_obj_align(graphic,LV_ALIGN_TOP_MID,0,1);
+            lv_obj_set_width(icon,108);
+            ui_apply_custom_label_style(icon,&lv_font_montserrat_22,UI_TEXT_DIM);
+            lv_obj_align(icon,LV_ALIGN_TOP_MID,0,2);
+            lv_obj_set_width(label,110);
+            lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
+            ui_text_fit_single_line(label,ui_theme_get_accessibility().large_text ?
+                &ui_studio_font_18 : &ui_studio_font_18);
+            lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,-2);
+        } else lv_obj_align(button,LV_ALIGN_TOP_LEFT,8,8+i*58);
 
         lv_obj_add_event_cb(
             button,
@@ -465,7 +510,10 @@ void ui_shell_set_active_printer_name(const char *printer_name)
             LV_SYMBOL_DOWN);
     }
 
+    if (ui_theme_is_studio()) lv_snprintf(title,sizeof(title),"%s %s",
+        printer_name && printer_name[0] ? printer_name : "Select printer", LV_SYMBOL_DOWN);
     lv_label_set_text(s_shell_title_label, title);
+    if (ui_theme_is_studio()) ui_text_fit_single_line(s_shell_title_label,UI_FONT_BODY_LARGE);
     ui_global_estop_set_printer_name(printer_name);
 }
 

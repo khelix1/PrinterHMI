@@ -102,8 +102,8 @@ static void mode_cb(lv_event_t *event)
 {
     (void)event;
     bool screw = lv_dropdown_get_selected(s->mode) == 1;
-    label_text(s->pitch_label, screw ? "SCREW THREAD PITCH (mm)" : "BELT PITCH (mm)");
-    label_text(s->count_label, screw ? "NUMBER OF THREAD STARTS" : "PULLEY TEETH");
+    label_text(s->pitch_label, screw ? "THREAD PITCH (mm)" : "BELT PITCH (mm)");
+    label_text(s->count_label, screw ? "THREAD STARTS" : "PULLEY TEETH");
     lv_textarea_set_text(s->pitch, "2");
     lv_textarea_set_text(s->count, screw ? "4" : "20");
     label_text(s->result, "Enter the hardware measurements, then Calculate.");
@@ -328,8 +328,10 @@ static void refresh(lv_timer_t *timer)
         format_value(x, sizeof(x), s->snapshot.rotation_valid[0], s->snapshot.rotation_distance[0], "mm");
         format_value(y, sizeof(y), s->snapshot.rotation_valid[1], s->snapshot.rotation_distance[1], "mm");
         format_value(z, sizeof(z), s->snapshot.rotation_valid[2], s->snapshot.rotation_distance[2], "mm");
-        snprintf(s->text, sizeof(s->text), "Config reference: stepper_x %s / stepper_y %s / stepper_z %s", x, y, z);
-        label_text(s->reference, s->text);
+        snprintf(s->text, sizeof(s->text), "Configured rotation distance: X %s / Y %s / Z %s", x, y, z);
+        label_text(s->reference, !s->snapshot.rotation_valid[0] &&
+            !s->snapshot.rotation_valid[1] && !s->snapshot.rotation_valid[2]
+            ? "Configured rotation distance: not reported by this printer." : s->text);
     }
 }
 
@@ -371,18 +373,21 @@ static void show_view(motion_view_t view)
         lv_dropdown_set_options(s->mode, "Belt and pulley\nLeadscrew");
         lv_obj_add_event_cb(s->mode, mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_t *pair = layout_pair(body);
+        static const int32_t input_rows[] = {LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+        lv_obj_set_grid_dsc_array(pair, layout_columns, input_rows);
+        lv_obj_set_style_pad_row(pair, UI_GAP_ROW, 0);
         for (unsigned i = 0; i < 2; ++i) {
-            lv_obj_t *cell = lv_obj_create(pair);
-            lv_obj_remove_style_all(cell);
-            lv_obj_set_height(cell, LV_SIZE_CONTENT);
-            lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
-            lv_obj_set_style_pad_row(cell, UI_GAP_ROW, 0);
-            layout_cell(cell, i);
-            lv_obj_t *label = layout_label(cell, i == 0 ? "BELT PITCH (mm)" : "PULLEY TEETH", true);
-            lv_obj_t *field = ui_popup_add_textarea(cell, 354, 56, LV_ALIGN_TOP_LEFT,
+            lv_obj_t *label = layout_label(pair, i == 0 ? "BELT PITCH (mm)" : "PULLEY TEETH", true);
+            lv_obj_set_grid_cell(label, LV_GRID_ALIGN_STRETCH, i, 1, LV_GRID_ALIGN_END, 0, 1);
+            lv_obj_t *field = ui_popup_add_textarea(pair, 354, 56, LV_ALIGN_TOP_LEFT,
                 0, 0, true, false, 18, i == 0 ? "Pitch" : "Teeth or thread starts",
                 i == 0 ? "2" : "20", i == 0 ? "0123456789." : "0123456789");
-            lv_obj_set_width(field, LV_PCT(100));
+            /* one-line textareas reset their height to content; provide a
+             * touch-sized minimum after construction and center the number. */
+            lv_obj_set_style_text_font(field, UI_FONT_BODY_LARGE, 0);
+            lv_obj_set_style_min_height(field, 56, 0);
+            lv_obj_set_style_pad_ver(field, (56 - UI_FONT_BODY_LARGE->line_height - 2) / 2, 0);
+            lv_obj_set_grid_cell(field, LV_GRID_ALIGN_STRETCH, i, 1, LV_GRID_ALIGN_START, 1, 1);
             lv_obj_add_event_cb(field, field_cb, LV_EVENT_CLICKED, NULL);
             if (i == 0) { s->pitch_label = label; s->pitch = field; }
             else { s->count_label = label; s->count = field; }
@@ -412,11 +417,15 @@ void ui_motion_diagnostics_create(lv_obj_t *card)
     if (!card || !init()) return;
     const char *labels[] = {"LIMITS", "DISTANCE", "DRIVERS"};
     lv_event_cb_t callbacks[] = {limits_cb, distance_cb, drivers_cb};
+    const int widths[] = {100, 132, 110};
+    const int positions[] = {16, 124, 264};
     for (size_t i = 0; i < 3; ++i) {
         lv_obj_t *button = ui_button_create(card, UI_BUTTON_OUTLINED, labels[i]);
         if (!button) continue;
-        lv_obj_set_size(button, 110, 34);
-        lv_obj_set_pos(button, 16 + (int)i * 124, 88);
+        lv_obj_set_size(button, widths[i], 44);
+        lv_obj_set_style_pad_hor(button, 1, 0);
+        lv_obj_set_pos(button, positions[i], 86);
+        lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_CLIP);
         lv_obj_add_event_cb(button, callbacks[i], LV_EVENT_CLICKED, NULL);
     }
 }

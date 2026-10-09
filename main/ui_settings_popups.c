@@ -29,6 +29,12 @@ static lv_obj_t *s_custom_remove_popup = NULL;
 static ui_settings_theme_changed_cb_t s_theme_changed_cb = NULL;
 static ui_settings_theme_changed_cb_t s_pending_theme_changed_cb = NULL;
 static bool s_theme_change_pending = false;
+static int s_custom_selected_index = -1;
+static char s_custom_selected_id[CUSTOM_THEME_ID_MAX + 1];
+static char s_custom_remove_id[CUSTOM_THEME_ID_MAX + 1];
+static lv_obj_t *s_custom_rows[CUSTOM_THEME_MAX_COUNT];
+static lv_obj_t *s_custom_apply_action;
+static lv_obj_t *s_custom_remove_action;
 /* -------------------------------------------------------------------------
  * Shared close helper
  * ------------------------------------------------------------------------- */
@@ -41,6 +47,89 @@ static void settings_popup_delete(lv_obj_t **popup)
 
     lv_obj_delete(*popup);
     *popup = NULL;
+}
+
+static lv_obj_t *settings_dialog_layout(lv_obj_t *popup, const char *title)
+{
+    lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(popup, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(popup, UI_GAP_CARD, 0);
+    lv_obj_t *label = lv_label_create(popup);
+    lv_label_set_text(label, title);
+    ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_obj_set_width(label, LV_PCT(100));
+    lv_obj_t *body = lv_obj_create(popup);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_width(body, LV_PCT(100));
+    lv_obj_set_height(body, 0);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
+    lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    return body;
+}
+
+static lv_obj_t *settings_dialog_footer(lv_obj_t *popup)
+{
+    lv_obj_t *footer = lv_obj_create(popup);
+    lv_obj_remove_style_all(footer);
+    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER,
+        LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(footer, UI_GAP_CARD, 0);
+    return footer;
+}
+
+static void theme_footer_fit(lv_obj_t *footer)
+{
+    lv_obj_set_height(footer, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(footer); ++i) {
+        lv_obj_t *button = lv_obj_get_child(footer, i);
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        int32_t width = lv_obj_get_self_width(label) + 32;
+        lv_obj_set_width(button, width);
+        lv_obj_set_style_min_width(button, width, 0);
+        lv_obj_set_flex_grow(button, 1);
+    }
+}
+
+static int32_t settings_dialog_width(int32_t preferred)
+{
+    int32_t available = lv_display_get_horizontal_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+
+static int32_t settings_dialog_height(int32_t preferred)
+{
+    int32_t available = lv_display_get_vertical_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+
+static void settings_dialog_deleted(lv_event_t *event)
+{
+    lv_obj_t *popup = lv_event_get_target_obj(event);
+    if (popup == s_custom_remove_popup) { s_custom_remove_popup = NULL; s_custom_remove_id[0] = 0; }
+    if (popup == s_custom_theme_popup) {
+        settings_popup_delete(&s_custom_remove_popup);
+        s_custom_theme_popup = NULL; s_custom_selected_index = -1;
+        s_custom_selected_id[0] = 0;
+        s_custom_apply_action = s_custom_remove_action = NULL;
+        memset(s_custom_rows, 0, sizeof(s_custom_rows));
+    }
+    if (popup == s_theme_popup) {
+        settings_popup_delete(&s_custom_theme_popup);
+        settings_popup_delete(&s_custom_remove_popup);
+        s_theme_popup = NULL; s_theme_changed_cb = NULL;
+    }
+    if (popup == s_reset_settings_popup) s_reset_settings_popup = NULL;
+    if (popup == s_timezone_popup) {
+        s_timezone_popup = NULL;
+        s_timezone_changed_cb = NULL;
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -78,59 +167,25 @@ void reset_settings_cb(lv_event_t *e)
         return;
     }
 
-    s_reset_settings_popup =
-        ui_popup_create(
-            lv_screen_active(),
-            680,
-            330,
-            UI_POPUP_DANGER);
-
+    s_reset_settings_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(680),
+        settings_dialog_height(330), UI_POPUP_DANGER);
     if (!s_reset_settings_popup) {
-        ESP_LOGE(TAG, "Failed to create reset popup");
-        return;
+        ESP_LOGE(TAG, "Failed to create reset popup"); return;
     }
-
-    ui_popup_add_title(
-        s_reset_settings_popup,
-        ui_text("RESET SETTINGS?"),
-        true,
-        0);
-
-    ui_popup_add_header_divider(
-        s_reset_settings_popup,
-        44);
-
-    ui_popup_add_body(
-        s_reset_settings_popup,
-        "This will erase saved WiFi, Moonraker, OTA URL, "
-        "and preferences.\n\n"
-        "Firmware, OTA slots, and rollback recovery "
-        "will NOT be erased.",
-        20,
-        62,
-        600);
-
-    ui_popup_add_standard_footer_divider(s_reset_settings_popup);
-
-    ui_popup_add_footer_action(
-        s_reset_settings_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_CLOSE " CANCEL",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        reset_settings_cancel_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_reset_settings_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_TRASH " ERASE",
-        160,
-        UI_POPUP_FOOTER_RIGHT,
-        reset_settings_confirm_cb,
-        NULL,
-        NULL);
+    lv_obj_add_event_cb(s_reset_settings_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = settings_dialog_layout(s_reset_settings_popup, ui_text("RESET SETTINGS?"));
+    lv_obj_t *warning = lv_label_create(body);
+    lv_label_set_text(warning, "This will erase saved WiFi, Moonraker, OTA URL, "
+        "and preferences.\n\nFirmware, OTA slots, and rollback recovery "
+        "will NOT be erased.");
+    ui_apply_custom_label_style(warning, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(warning, LV_PCT(100));
+    lv_obj_t *footer = settings_dialog_footer(s_reset_settings_popup);
+    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL",
+        0, 0, 160, 48, reset_settings_cancel_cb, NULL, NULL);
+    lv_obj_t *erase = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " ERASE",
+        0, 0, 160, 48, reset_settings_confirm_cb, NULL, NULL);
+    lv_obj_set_flex_grow(cancel, 1); lv_obj_set_flex_grow(erase, 1);
 }
 
 /* -------------------------------------------------------------------------
@@ -179,90 +234,36 @@ void ui_settings_popups_show_timezone(
         return;
     }
 
-    s_timezone_popup = ui_popup_create(
-        lv_layer_top(),
-        760,
-        500,
-        UI_POPUP_STANDARD);
-
-    if (!s_timezone_popup) {
-        s_timezone_changed_cb = NULL;
-        return;
-    }
-
-    ui_popup_add_title(
-        s_timezone_popup,
-        ui_text("TIME ZONE"),
-        false,
-        8);
-
-    ui_popup_add_header_divider(s_timezone_popup, 44);
-
-    ui_popup_add_status_label(
-        s_timezone_popup,
-        ui_text("Select local time zone. Daylight-saving rules apply automatically."),
-        24,
-        50,
-        712);
-
-    lv_obj_t *list = ui_popup_add_list(
-        s_timezone_popup,
-        24,
-        82,
-        712,
-        336);
-
-    if (!list) {
-        timezone_popup_close();
-        return;
-    }
-
+    s_timezone_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(760),
+        settings_dialog_height(500), UI_POPUP_STANDARD);
+    if (!s_timezone_popup) { s_timezone_changed_cb = NULL; return; }
+    lv_obj_add_event_cb(s_timezone_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = settings_dialog_layout(s_timezone_popup, ui_text("TIME ZONE"));
+    lv_obj_t *hint = lv_label_create(body);
+    lv_label_set_text(hint, ui_text("Select local time zone. Daylight-saving rules apply automatically."));
+    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    lv_obj_set_width(hint, LV_PCT(100));
     size_t selected = timezone_config_selected_index();
-
-    for (size_t index = 0;
-         index < timezone_config_count();
-         ++index) {
-        const timezone_config_entry_t *entry =
-            timezone_config_entry(index);
-
-        if (!entry) {
-            continue;
-        }
-
-        char text[96];
-        snprintf(
-            text,
-            sizeof(text),
-            "%s   |   %s",
-            entry->label,
-            entry->abbreviation);
-
-        lv_obj_t *row = ui_popup_add_selectable_row(
-            list,
-            text,
-            8,
-            8 + (int32_t)index * 56,
-            680,
-            48,
-            timezone_select_cb,
-            (void *)(uintptr_t)index);
-
-        ui_popup_set_selectable_row_selected(
-            row,
-            index == selected);
+    for (size_t index = 0; index < timezone_config_count(); ++index) {
+        const timezone_config_entry_t *entry = timezone_config_entry(index);
+        if (!entry) continue;
+        lv_obj_t *row = ui_popup_add_selectable_row(body, entry->label,
+            0, 0, 1, 48, timezone_select_cb, (void *)(uintptr_t)index);
+        if (!row) continue;
+        ui_popup_set_selectable_row_selected(row, index == selected);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(row, 48, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_hor(row, UI_PAD_CARD, 0);
+        lv_obj_set_style_pad_ver(row, 10, 0);
+        lv_obj_t *label = lv_obj_get_child(row, 0);
+        lv_label_set_text_fmt(label, "%s   |   %s", entry->label, entry->abbreviation);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(label, LV_PCT(100));
     }
-
-    ui_popup_add_standard_footer_divider(s_timezone_popup);
-
-    ui_popup_add_footer_action(
-        s_timezone_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_CENTER,
-        timezone_close_cb,
-        NULL,
-        NULL);
+    lv_obj_t *footer = settings_dialog_footer(s_timezone_popup);
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, 160, 48, timezone_close_cb, NULL, NULL);
 }
 
 /* -------------------------------------------------------------------------
@@ -360,6 +361,27 @@ static void custom_theme_close_cb(lv_event_t *event)
     settings_popup_delete(&s_custom_theme_popup);
 }
 
+static int custom_selected_index(void)
+{
+    if (s_custom_selected_index < 0) return -1;
+    const custom_theme_summary_t *summary = theme_manager_custom_summary((size_t)s_custom_selected_index);
+    return summary && !strcmp(summary->id, s_custom_selected_id) ? s_custom_selected_index : -1;
+}
+static void custom_theme_select_row_cb(lv_event_t *event)
+{
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || s_theme_change_pending) return;
+    size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= CUSTOM_THEME_MAX_COUNT) return;
+    const custom_theme_summary_t *summary = theme_manager_custom_summary(index);
+    if (!summary) return;
+    s_custom_selected_index = (int)index;
+    snprintf(s_custom_selected_id, sizeof(s_custom_selected_id), "%s", summary->id);
+    for (size_t i = 0; i < CUSTOM_THEME_MAX_COUNT; ++i)
+        if (s_custom_rows[i]) ui_popup_set_selectable_row_selected(s_custom_rows[i], i == index);
+    if (s_custom_apply_action) lv_obj_remove_state(s_custom_apply_action, LV_STATE_DISABLED);
+    if (s_custom_remove_action) lv_obj_remove_state(s_custom_remove_action, LV_STATE_DISABLED);
+}
+
 static void custom_theme_apply_cb(lv_event_t *event)
 {
     if (!event ||
@@ -368,8 +390,9 @@ static void custom_theme_apply_cb(lv_event_t *event)
         return;
     }
 
-    size_t index =
-        (size_t)(uintptr_t)lv_event_get_user_data(event);
+    int selected = custom_selected_index();
+    if (selected < 0) return;
+    size_t index = (size_t)selected;
     if (!theme_manager_select_custom(index)) {
         ESP_LOGE(TAG, "Could not select custom theme %u",
                  (unsigned)index);
@@ -397,6 +420,7 @@ static void custom_remove_confirm_cb(lv_event_t *event)
         (size_t)(uintptr_t)lv_event_get_user_data(event);
     const custom_theme_summary_t *summary =
         theme_manager_custom_summary(index);
+    if (!summary || strcmp(summary->id, s_custom_remove_id)) return;
     bool removing_active =
         summary &&
         theme_manager_custom_active() &&
@@ -421,63 +445,28 @@ static void custom_remove_confirm_cb(lv_event_t *event)
 
 static void custom_theme_remove_cb(lv_event_t *event)
 {
-    if (!event ||
-        lv_event_get_code(event) != LV_EVENT_CLICKED ||
-        s_custom_remove_popup) {
-        return;
-    }
-
-    size_t index =
-        (size_t)(uintptr_t)lv_event_get_user_data(event);
-    const custom_theme_summary_t *summary =
-        theme_manager_custom_summary(index);
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || s_custom_remove_popup || s_theme_change_pending) return;
+    int selected = custom_selected_index();
+    if (selected < 0) return;
+    size_t index = (size_t)selected;
+    const custom_theme_summary_t *summary = theme_manager_custom_summary(index);
     if (!summary) return;
-
-    s_custom_remove_popup = ui_popup_create(
-        lv_layer_top(), 620, 300, UI_POPUP_DANGER);
+    snprintf(s_custom_remove_id, sizeof(s_custom_remove_id), "%s", summary->id);
+    s_custom_remove_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(620), settings_dialog_height(330), UI_POPUP_DANGER);
     if (!s_custom_remove_popup) return;
-
-    ui_popup_add_title(
-        s_custom_remove_popup,
-        ui_text("REMOVE CUSTOM THEME?"),
-        true,
-        8);
-    ui_popup_add_header_divider(
-        s_custom_remove_popup,
-        44);
-
-    char message[220];
-    lv_snprintf(
-        message,
-        sizeof(message),
-        "Remove \"%s\" from the SD card?\n\n"
-        "Built-in themes are protected and cannot be removed.",
-        summary->name);
-    ui_popup_add_body(
-        s_custom_remove_popup,
-        message,
-        24, 68, 572);
-
-    ui_popup_add_standard_footer_divider(
-        s_custom_remove_popup);
-    ui_popup_add_footer_action(
-        s_custom_remove_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_CLOSE " KEEP",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        custom_remove_cancel_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_custom_remove_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_TRASH " REMOVE",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        custom_remove_confirm_cb,
-        (void *)(uintptr_t)index,
-        NULL);
+    lv_obj_add_event_cb(s_custom_remove_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = settings_dialog_layout(s_custom_remove_popup, ui_text("REMOVE CUSTOM THEME?"));
+    lv_obj_t *message = lv_label_create(body);
+    lv_label_set_text_fmt(message, "Remove \"%s\" from the SD card?\n\nBuilt-in themes are protected and cannot be removed.", summary->name);
+    ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(message, LV_PCT(100));
+    lv_obj_t *footer = settings_dialog_footer(s_custom_remove_popup);
+    lv_obj_t *keep = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " KEEP",
+        0, 0, 160, 48, custom_remove_cancel_cb, NULL, NULL);
+    lv_obj_t *remove = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE",
+        0, 0, 180, 48, custom_remove_confirm_cb, (void *)(uintptr_t)index, NULL);
+    lv_obj_set_flex_grow(keep, 1); lv_obj_set_flex_grow(remove, 1);
+    theme_footer_fit(footer);
 }
 
 static const char *custom_base_label(ui_theme_id_t theme)
@@ -523,7 +512,7 @@ static void custom_theme_add_preview(
     if (!row || !summary) return;
 
     lv_obj_t *frame = custom_preview_rect(
-        row, 392, 8, 150, 46,
+        row, 0, 0, 150, 46,
         summary->preview_background, 6);
     if (!frame) return;
 
@@ -549,212 +538,99 @@ static void custom_theme_add_preview(
 
 static void custom_theme_manager_show_cb(lv_event_t *event)
 {
-    if (event && lv_event_get_code(event) != LV_EVENT_CLICKED) {
-        return;
-    }
-
-    if (s_custom_theme_popup) {
-        lv_obj_move_foreground(s_custom_theme_popup);
-        return;
-    }
-
+    if (event && lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (s_theme_change_pending) return;
+    if (s_custom_theme_popup) { lv_obj_move_foreground(s_custom_theme_popup); return; }
     theme_manager_scan_custom_themes();
     size_t count = theme_manager_custom_count();
-
-    s_custom_theme_popup = ui_popup_create(
-        lv_layer_top(), 820, 500, UI_POPUP_STANDARD);
+    if (count > CUSTOM_THEME_MAX_COUNT) count = CUSTOM_THEME_MAX_COUNT;
+    s_custom_selected_index = -1; s_custom_selected_id[0] = 0;
+    s_custom_theme_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(820), settings_dialog_height(520), UI_POPUP_STANDARD);
     if (!s_custom_theme_popup) return;
-
-    ui_popup_add_title(
-        s_custom_theme_popup,
-        ui_text("CUSTOM THEMES"),
-        false,
-        8);
-    ui_popup_add_header_divider(
-        s_custom_theme_popup,
-        44);
-    ui_popup_add_status_label(
-        s_custom_theme_popup,
-        count
-            ? ui_text("Tap a theme to apply it. Remove deletes only the SD-card file.")
-            : ui_text("No valid themes found in /sdcard/PrinterHMI/themes."),
-        24, 50, 772);
-
-    lv_obj_t *list = ui_popup_add_list(
-        s_custom_theme_popup,
-        24, 84, 772, 330);
-    if (!list) {
-        settings_popup_delete(&s_custom_theme_popup);
-        return;
-    }
-
+    lv_obj_add_event_cb(s_custom_theme_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = settings_dialog_layout(s_custom_theme_popup, ui_text("CUSTOM THEMES"));
+    lv_obj_t *hint = lv_label_create(body);
+    lv_label_set_text(hint, count ? ui_text("Select a theme, then Apply. Remove deletes only its SD-card file.") :
+        ui_text("No valid themes found in /sdcard/PrinterHMI/themes."));
+    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    lv_obj_set_width(hint, LV_PCT(100));
     for (size_t index = 0; index < count; ++index) {
-        const custom_theme_summary_t *summary =
-            theme_manager_custom_summary(index);
+        const custom_theme_summary_t *summary = theme_manager_custom_summary(index);
         if (!summary) continue;
-
-        int32_t y = 8 + (int32_t)index * 72;
-        char label[180];
-        lv_snprintf(
-            label,
-            sizeof(label),
-            "%s\n%s%s%s",
-            summary->name,
-            custom_base_label(summary->base_theme),
-            summary->author[0] ? "  |  " : "",
-            summary->author);
-
-        lv_obj_t *row = ui_popup_add_selectable_row(
-            list,
-            label,
-            8, y, 560, 62,
-            custom_theme_apply_cb,
-            (void *)(uintptr_t)index);
-
-        ui_popup_set_selectable_row_selected(
-            row,
-            theme_manager_custom_active() &&
-            strcmp(custom_theme_active_id(),
-                   summary->id) == 0);
-        custom_theme_add_preview(
-            row,
-            summary);
-
-        ui_popup_add_action_at(
-            list,
-            UI_POPUP_ACTION_DANGER,
-            ui_text(LV_SYMBOL_TRASH " REMOVE"),
-            584, y + 7, 156, 48,
-            custom_theme_remove_cb,
-            (void *)(uintptr_t)index,
-            NULL);
+        lv_obj_t *row = ui_popup_add_selectable_row(body, summary->name, 0, 0, 1, 48,
+            custom_theme_select_row_cb, (void *)(uintptr_t)index);
+        if (!row) continue;
+        s_custom_rows[index] = row;
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_all(row, UI_PAD_CARD, 0);
+        lv_obj_set_style_pad_row(row, UI_GAP_ROW, 0);
+        lv_obj_t *label = lv_obj_get_child(row, 0);
+        lv_label_set_text_fmt(label, "%s\n%s%s%s%s", summary->name, custom_base_label(summary->base_theme),
+            summary->author[0] ? "  |  " : "", summary->author,
+            theme_manager_custom_active() && !strcmp(custom_theme_active_id(), summary->id) ? "  [ACTIVE]" : "");
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(label, LV_PCT(100));
+        if (summary->description[0]) {
+            lv_obj_t *description = lv_label_create(row);
+            lv_label_set_text(description, summary->description);
+            ui_apply_custom_label_style(description, UI_FONT_BODY, UI_TEXT_MUTED);
+            lv_obj_set_width(description, LV_PCT(100));
+        }
+        custom_theme_add_preview(row, summary);
     }
-
-    ui_popup_add_standard_footer_divider(
-        s_custom_theme_popup);
-    ui_popup_add_footer_action(
-        s_custom_theme_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_CENTER,
-        custom_theme_close_cb,
-        NULL,
-        NULL);
+    lv_obj_t *footer = settings_dialog_footer(s_custom_theme_popup);
+    lv_obj_set_height(footer, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
+    int32_t width = ui_theme_density_metric(136, 144, 152);
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, width, 48, custom_theme_close_cb, NULL, NULL);
+    s_custom_apply_action = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " APPLY",
+        0, 0, width, 48, custom_theme_apply_cb, NULL, NULL);
+    s_custom_remove_action = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE",
+        0, 0, width, 48, custom_theme_remove_cb, NULL, NULL);
+    lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(s_custom_apply_action, 1); lv_obj_set_flex_grow(s_custom_remove_action, 1);
+    theme_footer_fit(footer);
+    lv_obj_add_state(s_custom_apply_action, LV_STATE_DISABLED); lv_obj_add_state(s_custom_remove_action, LV_STATE_DISABLED);
 }
 
-void ui_settings_popups_show_theme(
-    ui_settings_theme_changed_cb_t changed_cb)
+void ui_settings_popups_show_theme(ui_settings_theme_changed_cb_t changed_cb)
 {
     s_theme_changed_cb = changed_cb;
-
-    if (s_theme_popup) {
-        lv_obj_move_foreground(s_theme_popup);
-        return;
+    if (s_theme_popup) { lv_obj_move_foreground(s_theme_popup); return; }
+    s_theme_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(920), settings_dialog_height(520), UI_POPUP_STANDARD);
+    if (!s_theme_popup) { s_theme_changed_cb = NULL; return; }
+    lv_obj_add_event_cb(s_theme_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = settings_dialog_layout(s_theme_popup, ui_text("INTERFACE THEME"));
+    lv_obj_t *hint = lv_label_create(body);
+    lv_label_set_text(hint, ui_text("Tap a preview to apply it across the interface."));
+    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_t *grid = lv_obj_create(body);
+    lv_obj_remove_style_all(grid);
+    lv_obj_set_size(grid, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_column(grid, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(grid, UI_GAP_CARD, 0);
+    for (int theme = UI_THEME_CLASSIC; theme <= UI_THEME_OPERATOR_SHELL; ++theme) {
+        lv_obj_t *preview = ui_theme_preview_create(grid, theme,
+            !theme_manager_custom_active() && theme == (int)theme_manager_active(), 0, 0, 340, 250,
+            theme == UI_THEME_OPERATOR_SHELL ? operator_shell_select_cb : theme_select_cb, (void *)(uintptr_t)theme);
+        if (preview && theme == UI_THEME_OPERATOR_SHELL)
+            lv_obj_add_event_cb(preview, operator_shell_select_cb, LV_EVENT_PRESSED, NULL);
     }
-
-    s_theme_popup = ui_popup_create(
-        lv_layer_top(),
-        920,
-        470,
-        UI_POPUP_STANDARD);
-
-    if (!s_theme_popup) {
-        s_theme_changed_cb = NULL;
-        return;
-    }
-
-    ui_popup_add_title(
-        s_theme_popup,
-        ui_text("INTERFACE THEME"),
-        false,
-        8);
-
-    ui_popup_add_header_divider(s_theme_popup, 44);
-
-    ui_popup_add_status_label(
-        s_theme_popup,
-        ui_text("Tap a preview to apply it across the interface."),
-        24,
-        50,
-        872);
-
-    static const struct {
-        ui_theme_id_t id;
-    } choices[] = {
-        {UI_THEME_CLASSIC},
-        {UI_THEME_OPERATOR},
-        {UI_THEME_GLASS},
-    };
-
-    ui_theme_id_t selected = theme_manager_active();
-    lv_obj_t *preview_grid = ui_popup_add_list(
-        s_theme_popup, 24, 84, 872, 286);
-    if (!preview_grid) {
-        settings_popup_delete(&s_theme_popup);
-        s_theme_changed_cb = NULL;
-        return;
-    }
-    lv_obj_set_style_pad_all(preview_grid, 0, 0);
-    lv_obj_set_style_bg_opa(preview_grid, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(preview_grid, 0, 0);
-
-    /* First row stays at the original comfortable three-card width. */
-    for (size_t index = 0;
-         index < sizeof(choices) / sizeof(choices[0]);
-         ++index) {
-        ui_theme_preview_create(
-            preview_grid,
-            choices[index].id,
-            !theme_manager_custom_active() &&
-                choices[index].id == selected,
-            8 + (int32_t)index * 288,
-            6,
-            276,
-            250,
-            theme_select_cb,
-            (void *)(uintptr_t)choices[index].id);
-    }
-
-    /* Swipe the preview area upward to reach the additional layout theme. */
-    lv_obj_t *operator_shell_preview = ui_theme_preview_create(
-        preview_grid,
-        UI_THEME_OPERATOR_SHELL,
-        !theme_manager_custom_active() &&
-            UI_THEME_OPERATOR_SHELL == selected,
-        8,
-        268,
-        276,
-        250,
-        operator_shell_select_cb,
-        NULL);
-    if (operator_shell_preview) {
-        lv_obj_add_event_cb(operator_shell_preview,
-                            operator_shell_select_cb,
-                            LV_EVENT_PRESSED, NULL);
-    }
-
-    ui_popup_add_standard_footer_divider(s_theme_popup);
-
-    ui_popup_add_footer_action(
-        s_theme_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_SD_CARD " CUSTOM THEMES",
-        220,
-        UI_POPUP_FOOTER_LEFT,
-        custom_theme_manager_show_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_theme_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_RIGHT,
-        theme_close_cb,
-        NULL,
-        NULL);
+    lv_obj_t *footer = settings_dialog_footer(s_theme_popup);
+    lv_obj_set_height(footer, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
+    lv_obj_t *custom = ui_popup_add_action_at(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SD_CARD " CUSTOM THEMES",
+        0, 0, ui_theme_density_metric(236, 248, 260), 48, custom_theme_manager_show_cb, NULL, NULL);
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, 144, 48, theme_close_cb, NULL, NULL);
+    lv_obj_set_flex_grow(custom, 1); lv_obj_set_flex_grow(close, 1);
+    theme_footer_fit(footer);
 }
 
 /* -------------------------------------------------------------------------

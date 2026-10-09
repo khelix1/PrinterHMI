@@ -48,10 +48,11 @@ static lv_obj_t *make_action_button(
         return NULL;
     }
 
-    lv_obj_set_size(
-        button,
-        width,
-        height);
+    lv_obj_t *icon = lv_obj_get_child(button, 0);
+    lv_obj_set_style_text_font(icon, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_pad_hor(button, 4, 0);
+    lv_obj_set_style_pad_column(button, 2, 0);
+    lv_obj_set_size(button, width, height);
 
     lv_obj_set_pos(
         button,
@@ -88,7 +89,7 @@ void ui_printer_actions_create(
             "MOTION",
             0,
             2,
-            125,
+            128,
             50,
             UI_ACCENT_CYAN,
             motion_cb);
@@ -99,9 +100,9 @@ void ui_printer_actions_create(
             LV_SYMBOL_HOME,
             "HOME",
             "HOME_ALL",
-            135,
+            140,
             2,
-            125,
+            104,
             50,
             UI_ACCENT_INFO,
             command_cb);
@@ -112,9 +113,9 @@ void ui_printer_actions_create(
             LV_SYMBOL_PAUSE,
             "PAUSE",
             "PAUSE",
-            270,
+            256,
             2,
-            125,
+            116,
             50,
             UI_WARN,
             command_cb);
@@ -125,9 +126,9 @@ void ui_printer_actions_create(
             LV_SYMBOL_PLAY,
             "RESUME",
             "RESUME",
-            405,
+            384,
             2,
-            125,
+            136,
             50,
             UI_OK_BRIGHT,
             command_cb);
@@ -138,9 +139,9 @@ void ui_printer_actions_create(
             LV_SYMBOL_LIST,
             "OBJECT",
             "CANCEL_OBJECT",
-            540,
+            532,
             2,
-            125,
+            124,
             50,
             UI_WARN,
             command_cb);
@@ -151,9 +152,9 @@ void ui_printer_actions_create(
             LV_SYMBOL_STOP,
             "CANCEL",
             "CANCEL_PRINT",
-            675,
+            668,
             2,
-            125,
+            128,
             50,
             UI_DANGER_BRIGHT,
             command_cb);

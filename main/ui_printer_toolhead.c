@@ -340,8 +340,8 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     ui_popup_add_caption(popup, ui_text("XY JOG"), 40, 118, 340);
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_UP "  Y+", 155, 140, 110, 52, jog_cb, "Y+");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_LEFT "  X-", 40, 198, 110, 52, jog_cb, "X-");
-    make_button(popup, UI_BUTTON_SUCCESS, LV_SYMBOL_HOME "  HOME", 155, 198, 110, 52, jog_cb, "HOME");
-    make_button(popup, UI_BUTTON_OUTLINED, "X+  " LV_SYMBOL_RIGHT, 270, 198, 110, 52, jog_cb, "X+");
+    make_button(popup, UI_BUTTON_SUCCESS, LV_SYMBOL_HOME "  HOME", 155, 198, 124, 52, jog_cb, "HOME");
+    make_button(popup, UI_BUTTON_OUTLINED, "X+  " LV_SYMBOL_RIGHT, 290, 198, 110, 52, jog_cb, "X+");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_DOWN "  Y-", 155, 256, 110, 52, jog_cb, "Y-");
 
     ui_popup_add_caption(popup, ui_text("XY STEP"), 40, 318, 340);
@@ -368,11 +368,11 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     lv_obj_set_style_text_font(s_offset_label, ui_font_with_fallback(UI_FONT_VALUE_SMALL), 0);
     lv_obj_set_style_text_color(s_offset_label, UI_TEXT_BRIGHT, 0);
 
-    make_button(popup, UI_BUTTON_OUTLINED, "-0.05", 420, 324, 68, 44, z_offset_cb, "-0.05");
-    make_button(popup, UI_BUTTON_OUTLINED, "-0.01", 496, 324, 68, 44, z_offset_cb, "-0.01");
-    make_button(popup, UI_BUTTON_SECONDARY, "RESET", 572, 324, 68, 44, z_offset_cb, "RESET");
-    make_button(popup, UI_BUTTON_OUTLINED, "+0.01", 648, 324, 68, 44, z_offset_cb, "+0.01");
-    make_button(popup, UI_BUTTON_OUTLINED, "+0.05", 648, 376, 68, 44, z_offset_cb, "+0.05");
+    make_button(popup, UI_BUTTON_OUTLINED, "-0.05", 420, 324, 96, 44, z_offset_cb, "-0.05");
+    make_button(popup, UI_BUTTON_OUTLINED, "-0.01", 528, 324, 96, 44, z_offset_cb, "-0.01");
+    make_button(popup, UI_BUTTON_SECONDARY, "RESET", 636, 324, 96, 44, z_offset_cb, "RESET");
+    make_button(popup, UI_BUTTON_OUTLINED, "+0.01", 420, 380, 96, 44, z_offset_cb, "+0.01");
+    make_button(popup, UI_BUTTON_OUTLINED, "+0.05", 528, 380, 96, 44, z_offset_cb, "+0.05");
 
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_PLUS " EXTRUDE", 40, 410, 150, 46, extrude_cb, "EXTRUDE");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_MINUS " RETRACT", 205, 410, 150, 46, extrude_cb, "RETRACT");

@@ -673,8 +673,8 @@ void ui_settings_show_page(
     lv_obj_set_style_pad_top(content, 0, 0);
     lv_obj_set_style_pad_bottom(content, 20, 0);
 
-    const int row_height = ui_theme_density_metric(54, 64, 72);
-    const int action_height = ui_theme_density_metric(60, 70, 80);
+    const int row_height = UI_SETTINGS_ROW_HEIGHT;
+    const int action_height = UI_SETTINGS_ACTION_HEIGHT;
     const int section_gap = ui_theme_density_metric(10, 14, 18);
     const int first_row_y = 48;
     int section_y = 0;

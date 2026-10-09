@@ -1,5 +1,6 @@
 #include "ui_devices_live_values.h"
 #include "ui_text.h"
+#include "ui_text_fit.h"
 #include "ui_value_update.h"
 
 #include <stdbool.h>
@@ -281,6 +282,7 @@ void ui_devices_live_values_update(void)
                     : ui_text("DISCOVERED"));
             ui_value_set_color(label, UI_TEXT_DIM, 0);
         }
+        ui_text_fit_single_line(label, UI_FONT_CAPTION);
     }
 }
 

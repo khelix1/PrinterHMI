@@ -513,3 +513,127 @@ and cancellation dialogs are included in the development nightly. Host checks
 and incremental layout review are complete; physical printing/recovery checks
 remain pending. Stable version stays 6.5.6. Settings Time Zone/Reset layout work
 is deferred until after this closeout. See [Nightly validation](NIGHTLY_VALIDATION.md).
+
+## Responsive Time Zone and Reset Settings dialogs
+
+Time Zone now uses content-height wrapping selectable rows in a native column
+body with fixed Close. Names/abbreviations are formatted directly into LVGL
+labels without a fixed 96-byte intermediate buffer. Selected styling, original
+preset indices, failed-save behavior and change callbacks are preserved. Reset
+Settings uses a separately scrolling wrapped warning with pinned Cancel/Erase;
+the warning and existing NVS erase, 300 ms delay and reboot sequence are
+unchanged. Both dialogs fit the viewport and clear their owners on external
+as well as normal deletion. No timers or transport work are added. Interface
+Theme/custom-theme dialogs retain their current layout.
+
+`tools/audit/settings_dialog_layout_test.py` compiles production Settings popup
+code against real LVGL 9.5 with platform persistence/reboot stubs. It checks all
+four themes, densities/text sizes, 1024/640/480 px widths and a short viewport,
+long labels, footer bounds under scroll, timezone command identity and callbacks,
+failed saves, missing-entry indices, reset Cancel without erase, the stubbed
+reset sequence, repeated opening and external deletion/reopen. Host renders
+were inspected; target build and panel validation remain required. Earlier
+nightly printing/recovery checks remain pending. Stable version stays 6.5.6.
+
+## Full-size button text and Settings rows
+
+Shared action labels wrap within their visible buttons without reducing the
+accessibility font. Content-sized buttons retain natural label widths; horizontal
+icon buttons reserve the icon/gap and let text use the remaining width. The
+legacy widget constructor uses the same label policy. Shared actions explicitly
+reserve modest padding instead of inheriting LVGL's oversized default padding.
+
+Settings action rows measure button width and use a wrapping text column. Value
+and slider rows reserve separate text/value space. Their row-height tokens also
+own section and divider spacing. Navigation allows two-line names with matching
+row height and stride. Camera and Console actions, Devices telemetry/pagination,
+printer management, setup discovery, backup actions, bed-mesh controls and
+Calibration actions have updated bounds. Bed actions use at most two columns;
+probe actions and encrypted backup restore have room for two lines. Toolhead Z
+offset actions use wider buttons in two rows while retaining their exact values.
+Native popup footers measure full text and grow row height when wrapping is
+needed rather than abbreviating action names with dots.
+
+`tools/audit/button_text_fit_test.py` measures source-derived fixed actions with
+real LVGL 9.5 in all stock themes/densities/text sizes. It checks full-label
+containment, icon/text separation, actual Settings/Printer/Dashboard groups,
+value-row separation, navigation, every bed capability combination, dynamic
+Console/fullscreen labels, native footer wrapping and content/bounded sizing.
+Existing dialog and responsive checks remain required. Panel verification and
+printing-dependent recovery/control checks remain pending. Version stays 6.5.6.
+
+## Single-line names, actions and values
+
+Page names, one-word actions, Toolhead Home and numeric step/offset values stay
+on one line at the selected text size. Navigation keeps horizontal icons and
+full-size page names by using more of the existing rail and compact icon spacing.
+Printer action widths reflect their different label lengths; colored symbols
+use a compact font while action text retains its accessibility font. Probe/Z,
+Accuracy and Custom have wider actions in two rows. Bed-mesh grid toggles use
+GRID ON/OFF, keeping the meaning clear within their existing position. Toolhead
+Home has more width and its X+ neighbor moves to preserve separation.
+
+The button host fixture now rejects both wrapping and clipping of atomic labels,
+page names and number/unit pairs, while retaining full-label bounds and overlap
+checks. Multiword descriptions and longer compound actions may wrap at words;
+readable full names remain preferable to shrinking text or dropping actions.
+Panel checks remain required. Stable version and pending printing tests unchanged.
+
+### Remaining atomic text and navigation inset
+
+Navigation buttons retain single-line names and full-size text with an 8 px left inset and 156 px width. Long selected printer/camera names scroll horizontally; camera names no longer use a 16-byte prefix. E-STOP is 140 px wide. Console and calibration banner status labels have more horizontal space. Compact telemetry headings and readings select the largest enabled font that fits, down to 14 px, retaining decimal values and units; temperature slash spacing is compact. Calibration card status uses the same fit rule.
+
+Host button/layout checks cover all four stock themes, three densities, both accessibility text settings, inset navigation, live Printer telemetry, compact card widths, E-STOP and connection statuses. Build/flash and panel validation remain pending. Inspect long configured names, first/last navigation items, telemetry during heating, and calibration discovery transitions.
+
+### Motion distance calculator large text
+
+Distance input labels and fields share two grid rows so both numbers stay aligned when a label wraps. One-line inputs have a 56 px minimum height and centered body-large text. Leadscrew labels use “THREAD PITCH (mm)” and “THREAD STARTS.” Config reference uses compact axis names and one missing-data message when no rotation distances are reported. Motion host checks cover field height/alignment in both modes at all stock themes, densities, text sizes and 1024/640/480 widths; hardware validation remains pending.
+
+Devices catalog filters use intrinsic single-line widths in a horizontally scrollable row, including changing counts. Device cards use separate name, object identifier and kind/value rows, with scrolling for long names and complete live-value fitting. The dedicated Devices text/layout host test covers 96-object counts, long names, active-hotend readings, card bounds, empty states and cleanup in all stock themes/densities/text settings. Panel validation remains pending.
+
+### Calibration Motion card actions
+
+The Motion card is 190 px tall with two 44 px action rows. The diagnostic row uses 100/132/110 px widths; the workflow row uses 100/152/102 px widths. Compact horizontal padding preserves full-size single-line text and gaps. The first row starts at y=86 and the lower row stays at the card bottom. The summary is capped at 24 px. Motion host checks exercise the production Limits/Distance/Drivers construction and measure all six action names across stock themes, densities and text sizes. Build/flash validation remains pending.
+
+## Responsive built-in and custom theme dialogs
+
+The built-in theme chooser now wraps its four previews inside a scrolling
+native layout with fixed Custom Themes/Close actions. Preview captions use
+native wrapping labels above the retained miniature interface, with explicit
+preview palettes that do not change the current theme. Footer actions measure
+their labels and wrap to another row when the viewport/text size requires it.
+
+Custom themes show full names, base/author, descriptions and palette previews
+in content-height rows. Select a row, then use the pinned Apply/Remove/Close
+footer. This replaces immediate application on row tap. The selected row is
+highlighted and an active theme is labelled; Apply/Remove remain disabled until
+selection. Removal confirmation wraps the full name and pins Keep/Remove.
+Selection and removal bind to the captured theme ID to prevent an index change
+from targeting a different theme. Failed apply/remove operations leave the
+existing dialogs open. Built-in preview taps and Operator Shell pressed/clicked
+handling retain the existing deferred, deduplicated theme switch. Active custom
+theme removal also retains its deferred rebuild. External deletion retires
+nested dialog owners, selected rows and action references. No timers or scans
+beyond the existing on-open custom-theme scan are added.
+
+`tools/audit/theme_dialog_layout_test.py` builds production popup and preview
+code against real LVGL 9.5. It checks four themes, all densities/text sizes,
+1024/640/480 px widths, long names/authors/descriptions, wrapping/scroll/preview
+and footer bounds, deferred callbacks, duplicate event fencing, select/Apply,
+Keep/Remove, active removal, failed/stale operations, empty lists and teardown.
+Time Zone/Reset Settings regressions pass. Host renders were inspected; target
+build and panel validation remain required. Stable version stays 6.5.6.
+
+### Printer chooser large text
+
+Chooser cards keep explicit zero padding for their absolute geometry. ACTIVE is on the bottom text row beside the open hint, separate from the printer name. Names and endpoints use single-line horizontal scrolling; connection states fit complete text. Preview placeholder text uses a 108 px width and two caption lines with clipping, preserving its icon and avoiding repeated writes caused by ellipsis-modified text. The subtitle/card grid have more vertical separation. The chooser refresh audit covers four themes, all densities and text sizes, card/label bounds, long names/addresses/files, active/offline states and unchanged 500 ms refreshes without redraw for fitting labels. Long scrolling names intentionally animate. Target build and panel validation remain pending; previous startup flash fixes and printing tests are retained.
+
+### Printer profile manager and main editor
+
+The profile manager, primary add/edit form and remove confirmation use native column layouts with scrolling content and pinned footer actions. Rows separate the profile name from its endpoint and keep both on a single scrolling line. Name, host and port fields use the large body font with a 56 px minimum touch height. Popups cap their size to the current viewport, and action widths follow their full label width; footers wrap on smaller displays. External manager/editor deletion cleans up owned dialogs and test timers.
+
+Run `python3 tools/audit/profiles_layout_test.py` (optionally `--lvgl-dir /path/to/lvgl`). Host checks cover all four themes, three densities, both text sizes, 1024/640/480 px widths and a 400 px height; pinned action bounds, scroll reach, field sizes, selection, discovered endpoints, validation/failure/cancel/save, last-profile removal guards and teardown. Network and configuration storage use typed test stubs. Target build, touch/keyboard validation and earlier printing tests remain pending. Nested authentication, camera, certificate and keyboard layouts remain a separate follow-up.
+
+## Settings and large-text source closeout
+
+Accepted Settings, theme, chooser, profile and large-text fit changes are merged without a nightly. Stable remains 6.5.6; printing tests remain pending. See [Settings validation](SETTINGS_LAYOUT_VALIDATION.md).

@@ -20,6 +20,8 @@
 #include "printer_preview_store.h"
 #include "printer_profile_health.h"
 #include "ui_popup.h"
+#include "ui_button.h"
+#include "ui_theme.h"
 #include "ui_printer_chooser.h"
 
 static lv_obj_t *s_manager_popup = NULL;
@@ -78,6 +80,86 @@ static void editor_camera_open_cb(lv_event_t *event);
 static void editor_camera_discover_cb(lv_event_t *event);
 static void editor_camera_close(void);
 
+static int32_t profiles_width(int32_t preferred)
+{
+    int32_t available = lv_display_get_horizontal_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+static int32_t profiles_height(int32_t preferred)
+{
+    int32_t available = lv_display_get_vertical_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+static lv_obj_t *profiles_label(lv_obj_t *parent, const char *text, bool caption)
+{
+    lv_obj_t *label = lv_label_create(parent);
+    lv_label_set_text(label, text ? text : "");
+    lv_obj_set_width(label, LV_PCT(100));
+    ui_apply_custom_label_style(label, caption ? UI_FONT_CAPTION : UI_FONT_BODY,
+        caption ? UI_TEXT_MUTED : UI_TEXT);
+    return label;
+}
+static lv_obj_t *profiles_body(lv_obj_t *popup, const char *title)
+{
+    lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(popup, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(popup, UI_GAP_CARD, 0);
+    lv_obj_t *heading = profiles_label(popup, title, false);
+    ui_apply_custom_label_style(heading, UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_obj_t *body = lv_obj_create(popup);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, LV_PCT(100), 0);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
+    lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_bg_color(body, UI_TEXT_MUTED, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(body, LV_OPA_70, LV_PART_SCROLLBAR);
+    lv_obj_set_style_width(body, 4, LV_PART_SCROLLBAR);
+    return body;
+}
+static lv_obj_t *profiles_footer(lv_obj_t *popup)
+{
+    lv_obj_t *footer = lv_obj_create(popup);
+    lv_obj_remove_style_all(footer);
+    lv_obj_set_size(footer, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
+    lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
+    return footer;
+}
+static lv_obj_t *profiles_action(lv_obj_t *parent, ui_popup_action_t kind,
+                                 const char *text, lv_event_cb_t callback)
+{
+    lv_obj_t *button = ui_popup_add_action_at(parent, kind, text, 0, 0,
+        LV_SIZE_CONTENT, 48, callback, NULL, NULL);
+    if (button) {
+        lv_obj_set_style_pad_hor(button, 12, 0);
+        if (lv_obj_get_style_flex_flow(parent, 0) == LV_FLEX_FLOW_ROW_WRAP)
+            lv_obj_set_flex_grow(button, 1);
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        lv_point_t size;
+        lv_text_get_size(&size, text, lv_obj_get_style_text_font(label, 0),
+            lv_obj_get_style_text_letter_space(label, 0), 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        lv_obj_set_style_min_width(button, size.x + 28, 0);
+    }
+    return button;
+}
+static lv_obj_t *profiles_field(lv_obj_t *parent, const char *caption,
+                                const char *value, uint32_t max, const char *accepted)
+{
+    profiles_label(parent, caption, true);
+    lv_obj_t *field = ui_popup_add_textarea(parent, 1, 56, LV_ALIGN_TOP_LEFT,
+        0, 0, true, false, max, "", value, accepted);
+    lv_obj_set_width(field, LV_PCT(100));
+    lv_obj_set_style_text_font(field, UI_FONT_BODY_LARGE, 0);
+    lv_obj_set_style_min_height(field, 56, 0);
+    lv_obj_set_style_pad_ver(field, (56 - UI_FONT_BODY_LARGE->line_height - 2) / 2, 0);
+    return field;
+}
+
 static void editor_close(void)
 {
     if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
@@ -116,6 +198,18 @@ void ui_printer_profiles_close_all(void)
     memset(s_profile_rows, 0, sizeof(s_profile_rows));
     s_active_changed_cb = NULL;
     s_discover_cb = NULL;
+}
+
+static void profiles_dialog_deleted(lv_event_t *event)
+{
+    lv_obj_t *popup = lv_event_get_target_obj(event);
+    if (popup == s_manager_popup) {
+        s_manager_popup = NULL;
+        ui_printer_profiles_close_all();
+    } else if (popup == s_editor_popup) {
+        s_editor_popup = NULL;
+        editor_close();
+    } else if (popup == s_delete_popup) s_delete_popup = NULL;
 }
 
 static void manager_close_cb(lv_event_t *event)
@@ -339,34 +433,25 @@ static void manager_rebuild_rows(void)
         char row_text[180];
 
         if (profile && profile->configured) {
-            snprintf(
-                row_text,
-                sizeof(row_text),
-                "%s  %s   %s:%d",
-                index == active
-                    ? LV_SYMBOL_OK
-                    : " ",
-                profile->name,
-                profile->host,
-                profile->port);
-        } else {
-            snprintf(
-                row_text,
-                sizeof(row_text),
-                "    PRINTER %d   EMPTY SLOT",
-                index + 1);
-        }
+            snprintf(row_text, sizeof(row_text), "%s%s", index == active ? LV_SYMBOL_OK "  " : "", profile->name);
+        } else snprintf(row_text, sizeof(row_text), "PRINTER %d — EMPTY SLOT", index + 1);
+        lv_obj_t *row = ui_popup_add_selectable_row(s_manager_list, row_text,
+            0, 0, 1, 56, profile_row_clicked_cb, (void *)(intptr_t)index);
+        s_profile_rows[index] = row;
+        if (!row) continue;
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(row, 70, 0);
+        lv_obj_set_style_pad_all(row, UI_PAD_CARD, 0);
+        lv_obj_set_style_pad_row(row, UI_GAP_ROW, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+        lv_obj_t *name = lv_obj_get_child(row, 0);
+        lv_obj_set_width(name, LV_PCT(100));
+        lv_label_set_long_mode(name, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_t *endpoint = profiles_label(row, "Choose EDIT / ADD to configure this slot.", true);
+        if (profile && profile->configured)
+            lv_label_set_text_fmt(endpoint, "%s:%d", profile->host, profile->port);
+        lv_label_set_long_mode(endpoint, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
-        s_profile_rows[index] =
-            ui_popup_add_selectable_row(
-                s_manager_list,
-                row_text,
-                0,
-                index * 62,
-                680,
-                56,
-                profile_row_clicked_cb,
-                (void *)(intptr_t)index);
     }
 
     manager_refresh_selection();
@@ -471,20 +556,16 @@ static void manager_delete_cb(lv_event_t *event)
 
     s_delete_popup = ui_popup_create(
         lv_screen_active(),
-        640,
-        300,
+        profiles_width(640),
+        profiles_height(330),
         UI_POPUP_DANGER);
 
     if (!s_delete_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_delete_popup,
-        ui_text("REMOVE PRINTER?"),
-        true,
-        0);
-    ui_popup_add_header_divider(s_delete_popup, 44);
+    lv_obj_add_event_cb(s_delete_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_delete_popup, "REMOVE PRINTER?");
 
     char message[256];
     snprintf(
@@ -493,32 +574,11 @@ static void manager_delete_cb(lv_event_t *event)
         "Remove %s from this panel?\n\nIts saved endpoint, health state and cached preview will be deleted.",
         profile->name);
 
-    ui_popup_add_body(
-        s_delete_popup,
-        message,
-        28,
-        70,
-        584);
+    profiles_label(body, message, false);
+    lv_obj_t *footer = profiles_footer(s_delete_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", delete_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE", delete_confirm_cb);
 
-    ui_popup_add_standard_footer_divider(s_delete_popup);
-    ui_popup_add_footer_action(
-        s_delete_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_CLOSE " CANCEL",
-        260,
-        UI_POPUP_FOOTER_LEFT,
-        delete_cancel_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_delete_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_TRASH " REMOVE",
-        260,
-        UI_POPUP_FOOTER_RIGHT,
-        delete_confirm_cb,
-        NULL,
-        NULL);
 }
 
 
@@ -1468,25 +1528,18 @@ static void manager_edit_cb(
         s_selected_profile;
     s_editor_secure = profile && profile->secure_transport;
 
-    s_editor_popup = ui_popup_create(lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
+    s_editor_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
     if (!s_editor_popup) { s_editor_profile = -1; return; }
-    ui_popup_add_title(s_editor_popup, profile && profile->configured ? ui_text("EDIT PRINTER") : ui_text("ADD PRINTER"), false, 0);
-    ui_popup_add_header_divider(s_editor_popup, 44);
-    ui_popup_add_caption(s_editor_popup, ui_text("IDENTITY"), 28, 68, 160);
-    ui_popup_add_caption(s_editor_popup, ui_text("PRINTER NAME"), 28, 96, 160);
-    s_editor_name = ui_popup_add_textarea(s_editor_popup, 520, 48, LV_ALIGN_TOP_LEFT, 240, 83, true, false, MOONRAKER_CONFIG_NAME_LENGTH - 1, ui_text("Printer name"), name, NULL);
-    ui_popup_add_caption(s_editor_popup, ui_text("MOONRAKER CONNECTION"), 28, 151, 240);
-    ui_popup_add_caption(s_editor_popup, ui_text("HOST"), 28, 181, 160);
-    s_editor_host = ui_popup_add_textarea(s_editor_popup, 520, 48, LV_ALIGN_TOP_LEFT, 240, 168, true, false, MOONRAKER_CONFIG_HOST_LENGTH - 1, ui_text("IP address or hostname"), host, NULL);
-    ui_popup_add_caption(s_editor_popup, ui_text("PORT"), 28, 237, 160);
-    s_editor_port = ui_popup_add_textarea(s_editor_popup, 160, 48, LV_ALIGN_TOP_LEFT, 240, 224, true, false, 5, ui_text("7125"), port_text, ui_text("0123456789"));
-    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, ui_text(LV_SYMBOL_REFRESH " DISCOVER"), 420, 224, 340, 48, editor_discover_cb, NULL, NULL);
-    ui_popup_add_caption(s_editor_popup, ui_text("SECURITY & ACCESS"), 28, 278, 240);
-    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? ui_text(LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS") : ui_text(LV_SYMBOL_SETTINGS " STANDARD HTTP"), 28, 302, 356, 48, editor_security_open_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_popup, UI_POPUP_ACTION_SECONDARY, ui_text(LV_SYMBOL_SETTINGS " AUTHENTICATION"), 404, 302, 356, 48, editor_auth_open_cb, NULL, NULL);
-    s_editor_status = ui_popup_add_status_label(s_editor_popup, ui_text("Configure the printer connection, then test and save."), 28, 358, 720);
-    s_editor_keyboard = ui_popup_add_keyboard(s_editor_popup, s_editor_name, 0, 0, LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_TEXT_LOWER);
-    lv_obj_add_flag(s_editor_keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(s_editor_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_editor_popup, profile && profile->configured ? "EDIT PRINTER" : "ADD PRINTER");
+    s_editor_name = profiles_field(body, "PRINTER NAME", name, MOONRAKER_CONFIG_NAME_LENGTH - 1, NULL);
+    s_editor_host = profiles_field(body, "MOONRAKER HOST / IP", host, MOONRAKER_CONFIG_HOST_LENGTH - 1, NULL);
+    s_editor_port = profiles_field(body, "MOONRAKER PORT", port_text, 5, "0123456789");
+    profiles_action(body, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " DISCOVER", editor_discover_cb);
+    profiles_label(body, "SECURITY & ACCESS", true);
+    profiles_action(body, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS" : LV_SYMBOL_SETTINGS " STANDARD HTTP", editor_security_open_cb);
+    profiles_action(body, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SETTINGS " AUTHENTICATION", editor_auth_open_cb);
+    s_editor_status = profiles_label(body, "Configure the printer connection, then test and save.", false);
     if (s_editor_name) {
         lv_obj_add_event_cb(
             s_editor_name,
@@ -1511,56 +1564,11 @@ static void manager_edit_cb(
             NULL);
     }
 
-    ui_popup_add_standard_footer_divider(s_editor_popup);
-
-    ui_popup_add_action_at(
-        s_editor_popup,
-        UI_POPUP_ACTION_CANCEL,
-        ui_text(LV_SYMBOL_CLOSE " CANCEL"),
-        32,
-        508,
-        172,
-        44,
-        editor_cancel_cb,
-        NULL,
-        NULL);
-
-
-    ui_popup_add_action_at(
-        s_editor_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        ui_text(LV_SYMBOL_IMAGE " CAMERA"),
-        220,
-        508,
-        172,
-        44,
-        editor_camera_open_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_action_at(
-        s_editor_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        ui_text(LV_SYMBOL_PLAY " TEST"),
-        408,
-        508,
-        172,
-        44,
-        editor_test_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_action_at(
-        s_editor_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        ui_text(LV_SYMBOL_SAVE " SAVE"),
-        596,
-        508,
-        172,
-        44,
-        editor_save_cb,
-        NULL,
-        NULL);
+    lv_obj_t *footer = profiles_footer(s_editor_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_IMAGE " CAMERA", editor_camera_open_cb);
+    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_PLAY " TEST", editor_test_cb);
+    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " SAVE", editor_save_cb);
 
     lv_obj_move_foreground(
         s_editor_popup);
@@ -1589,83 +1597,27 @@ void ui_printer_profiles_show(
     s_manager_popup =
         ui_popup_create(
             lv_screen_active(),
-            760,
-            520,
+            profiles_width(760),
+            profiles_height(520),
             UI_POPUP_STANDARD);
 
     if (!s_manager_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_manager_popup,
-        ui_text("PRINTER PROFILES"),
-        false,
-        0);
-
-    ui_popup_add_header_divider(
-        s_manager_popup,
-        44);
-
-    s_manager_list =
-        ui_popup_add_list(
-            s_manager_popup,
-            24,
-            58,
-            712,
-            248);
-
-    s_manager_status =
-        ui_popup_add_status_label(
-            s_manager_popup,
-            ui_text("Select a printer profile."),
-            24,
-            316,
-            440);
-
-    ui_popup_add_action_at(
-        s_manager_popup,
-        UI_POPUP_ACTION_DANGER,
-        ui_text(LV_SYMBOL_TRASH " REMOVE SELECTED"),
-        492,
-        328,
-        220,
-        48,
-        manager_delete_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_standard_footer_divider(s_manager_popup);
-
-    ui_popup_add_footer_action(
-        s_manager_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        220,
-        UI_POPUP_FOOTER_LEFT,
-        manager_close_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_manager_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_EDIT " EDIT / ADD",
-        220,
-        UI_POPUP_FOOTER_CENTER,
-        manager_edit_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_manager_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_OK " USE PRINTER",
-        220,
-        UI_POPUP_FOOTER_RIGHT,
-        manager_select_cb,
-        NULL,
-        NULL);
+    lv_obj_add_event_cb(s_manager_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_manager_popup, "PRINTER PROFILES");
+    s_manager_list = lv_obj_create(body);
+    lv_obj_remove_style_all(s_manager_list);
+    lv_obj_set_size(s_manager_list, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(s_manager_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_manager_list, UI_GAP_ROW, 0);
+    s_manager_status = profiles_label(body, "Select a printer profile.", false);
+    profiles_action(body, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE SELECTED", manager_delete_cb);
+    lv_obj_t *footer = profiles_footer(s_manager_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE", manager_close_cb);
+    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_EDIT " EDIT / ADD", manager_edit_cb);
+    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " USE PRINTER", manager_select_cb);
 
     manager_rebuild_rows();
 

@@ -79,7 +79,7 @@ lv_obj_t *ui_settings_section_add_row(
     lv_obj_set_size(
         row,
         UI_PAGE_RAIL_WIDTH - 36,
-        ui_theme_density_metric(54, 64, 72));
+        UI_SETTINGS_ROW_HEIGHT);
     lv_obj_set_pos(row, 18, y);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -91,6 +91,7 @@ lv_obj_t *ui_settings_section_add_row(
         UI_FONT_BODY,
         UI_TEXT_BRIGHT);
 
+    lv_obj_set_width(title_label, UI_PAGE_RAIL_WIDTH - 36 - 316);
     lv_obj_set_pos(
         title_label,
         0,
@@ -105,6 +106,7 @@ lv_obj_t *ui_settings_section_add_row(
             UI_FONT_CAPTION,
             UI_TEXT_DIM);
 
+        lv_obj_set_width(description_label, UI_PAGE_RAIL_WIDTH - 36 - 316);
         lv_obj_set_pos(
             description_label,
             0,
@@ -148,7 +150,7 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
     lv_obj_set_size(
         row,
         UI_PAGE_RAIL_WIDTH - 36,
-        ui_theme_density_metric(54, 64, 72));
+        UI_SETTINGS_ROW_HEIGHT);
     lv_obj_set_pos(row, 18, y);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -160,6 +162,7 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
         UI_FONT_BODY,
         UI_TEXT_BRIGHT);
 
+    lv_obj_set_width(title_label, UI_PAGE_RAIL_WIDTH - 36 - 386);
     lv_obj_set_pos(
         title_label,
         0,
@@ -174,6 +177,7 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
             UI_FONT_CAPTION,
             UI_TEXT_DIM);
 
+        lv_obj_set_width(description_label, UI_PAGE_RAIL_WIDTH - 36 - 386);
         lv_obj_set_pos(
             description_label,
             0,
@@ -253,53 +257,35 @@ lv_obj_t *ui_settings_section_add_action_row(
     lv_obj_set_size(
         row,
         UI_PAGE_RAIL_WIDTH - 36,
-        ui_theme_density_metric(60, 70, 80));
+        UI_SETTINGS_ACTION_HEIGHT);
     lv_obj_set_pos(row, 18, y);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
     ui_apply_surface_role(row, UI_SURFACE_TRANSPARENT);
 
-    lv_obj_t *title_label = settings_component_make_label(
-        row,
-        title,
-        UI_FONT_BODY,
-        danger ? UI_DANGER : UI_TEXT_BRIGHT);
-
-    lv_obj_set_pos(
-        title_label,
-        0,
-        ui_theme_density_metric(5, 10, 12));
-
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_column(row, 16, 0);
+    lv_obj_t *copy = lv_obj_create(row);
+    lv_obj_remove_style_all(copy);
+    lv_obj_set_width(copy, 0);
+    lv_obj_set_height(copy, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(copy, 1);
+    lv_obj_set_flex_flow(copy, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(copy, 6, 0);
+    lv_obj_t *title_label = settings_component_make_label(copy, title,
+        UI_FONT_BODY, danger ? UI_DANGER : UI_TEXT_BRIGHT);
+    lv_obj_set_width(title_label, LV_PCT(100));
     if (description && description[0]) {
-        lv_obj_t *description_label = settings_component_make_label(
-            row,
-            description,
-            UI_FONT_CAPTION,
-            UI_TEXT_DIM);
-
-        lv_obj_set_pos(
-            description_label,
-            0,
-            ui_theme_density_metric(31, 38, 44));
+        lv_obj_t *label = settings_component_make_label(copy, description, UI_FONT_CAPTION, UI_TEXT_DIM);
+        lv_obj_set_width(label, LV_PCT(100));
     }
-
-    lv_obj_t *button =
-        ui_button_create(
-            row,
-            danger
-                ? UI_BUTTON_DANGER
-                : UI_BUTTON_OUTLINED,
-            button_text);
-
-    if (!button) {
-        return NULL;
-    }
-
-    lv_obj_set_size(
-        button,
-        ui_theme_density_metric(164, 178, 194),
-        ui_theme_density_metric(36, 40, 48));
-    lv_obj_align(button, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_t *button = ui_button_create(row,
+        danger ? UI_BUTTON_DANGER : UI_BUTTON_OUTLINED, button_text);
+    if (!button) return NULL;
+    lv_obj_set_size(button, LV_SIZE_CONTENT, 48);
+    lv_obj_set_style_min_width(button, ui_theme_density_metric(164,178,194), 0);
 
     if (event_cb) {
         lv_obj_add_event_cb(

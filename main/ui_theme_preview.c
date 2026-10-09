@@ -160,7 +160,7 @@ static void preview_add_sample_ui(
     int32_t inner_width = preview_width - 28;
     int32_t action_width = (inner_width - 12) / 2;
     lv_obj_t *topbar = preview_rect(
-        button, 14, 76, inner_width, 34,
+        button, 14, 0, inner_width, 34,
         palette->surface,
         palette->border,
         palette->radius / 2,
@@ -183,7 +183,7 @@ static void preview_add_sample_ui(
     }
 
     lv_obj_t *sample_card = preview_rect(
-        button, 14, 118, inner_width, 64,
+        button, 14, 42, inner_width, 64,
         palette->card,
         palette->border,
         palette->radius,
@@ -209,7 +209,7 @@ static void preview_add_sample_ui(
     }
 
     lv_obj_t *action = preview_rect(
-        button, 14, 192, action_width, 36,
+        button, 14, 116, action_width, 36,
         palette->control,
         palette->accent,
         palette->radius / 2,
@@ -223,7 +223,7 @@ static void preview_add_sample_ui(
     }
 
     lv_obj_t *stop = preview_rect(
-        button, 14 + action_width + 12, 192, action_width, 36,
+        button, 14 + action_width + 12, 116, action_width, 36,
         palette->control,
         palette->danger,
         palette->radius / 2,
@@ -270,22 +270,29 @@ lv_obj_t *ui_theme_preview_create(
     lv_obj_set_style_shadow_width(button, 0, 0);
     lv_obj_set_style_outline_width(button, 0, 0);
 
-    preview_label(button, palette.name,
-                  width <= 220 ? UI_FONT_BODY_LARGE : UI_FONT_TITLE,
-                  palette.text, 14, 10);
-    preview_label(button, palette.code, UI_FONT_CAPTION,
-                  palette.accent, 14, 39);
-    preview_label(button, palette.description, UI_FONT_CAPTION,
-                  palette.muted, 96, 39);
-
-    if (selected) {
-        lv_obj_t *check = preview_label(
-            button, LV_SYMBOL_OK, UI_FONT_BODY_LARGE,
-            palette.success, width - 38, 13);
-        (void)check;
-    }
-
-    preview_add_sample_ui(button, &palette, width);
+    lv_obj_set_height(button, LV_SIZE_CONTENT);
+    lv_obj_set_style_min_height(button, height, 0);
+    lv_obj_set_flex_flow(button, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(button, 10, 0);
+    lv_obj_set_style_pad_row(button, 8, 0);
+    lv_obj_t *heading = lv_obj_create(button);
+    lv_obj_remove_style_all(heading);
+    lv_obj_clear_flag(heading, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(heading, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(heading, LV_FLEX_FLOW_ROW);
+    lv_obj_t *name = preview_label(heading, palette.name, UI_FONT_BODY_LARGE, palette.text, 0, 0);
+    lv_obj_set_width(name, 0); lv_obj_set_flex_grow(name, 1);
+    if (selected) preview_label(heading, LV_SYMBOL_OK, UI_FONT_BODY_LARGE, palette.success, 0, 0);
+    lv_obj_t *description = lv_label_create(button);
+    lv_label_set_text_fmt(description, "%s | %s", palette.code, palette.description);
+    lv_obj_set_width(description, LV_PCT(100));
+    lv_obj_set_style_text_font(description, ui_font_with_fallback(UI_FONT_CAPTION), 0);
+    lv_obj_set_style_text_color(description, lv_color_hex(palette.muted), 0);
+    lv_obj_t *sample = lv_obj_create(button);
+    lv_obj_remove_style_all(sample);
+    lv_obj_clear_flag(sample, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(sample, LV_PCT(100), 156);
+    preview_add_sample_ui(sample, &palette, width - 20 - (selected ? 8 : 4));
 
     if (event_cb) {
         lv_obj_add_event_cb(

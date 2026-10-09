@@ -1,6 +1,7 @@
 #include "ui_printer_chooser.h"
 #include "ui_text.h"
 #include "ui_value_update.h"
+#include "ui_text_fit.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -41,6 +42,7 @@ typedef struct {
     lv_obj_t *preview_image;
     uint32_t preview_revision;
     lv_obj_t *active;
+    lv_obj_t *hint;
 } chooser_card_t;
 
 static lv_obj_t *s_root = NULL;
@@ -87,8 +89,10 @@ static void set_card_text(lv_obj_t *label, lv_subject_t *subject,
 static void set_status_text(chooser_card_t *card, const char *text)
 {
     if (!card) return;
+    bool changed = card->status && strcmp(lv_label_get_text(card->status), text ? text : "") != 0;
     set_card_text(card->status, &card->status_subject,
         sizeof(card->status_value), card->status_bound, text);
+    if (changed) ui_text_fit_single_line(card->status, UI_FONT_BODY_LARGE);
 }
 
 static void set_name_text(chooser_card_t *card, const char *text)
@@ -165,6 +169,7 @@ static void create_card(int index, int x, int y)
     lv_obj_clear_flag(card->root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(card->root, LV_OBJ_FLAG_CLICKABLE);
     ui_apply_card_style(card->root);
+    lv_obj_set_style_pad_all(card->root, 0, 0);
 
     lv_obj_add_event_cb(
         card->root,
@@ -177,6 +182,7 @@ static void create_card(int index, int x, int y)
     lv_obj_set_pos(card->preview_box, 12, 34);
     lv_obj_clear_flag(card->preview_box, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_preview_style(card->preview_box);
+    lv_obj_set_style_pad_all(card->preview_box, 0, 0);
 
     card->preview_icon = lv_label_create(card->preview_box);
     lv_label_set_text(card->preview_icon, LV_SYMBOL_FILE);
@@ -186,24 +192,31 @@ static void create_card(int index, int x, int y)
 
     card->preview = lv_label_create(card->preview_box);
     lv_label_set_text(card->preview, "NO LIVE\nPREVIEW");
-    lv_obj_set_width(card->preview, 96);
-    lv_label_set_long_mode(card->preview, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(card->preview, 108);
+    lv_label_set_long_mode(card->preview, LV_LABEL_LONG_CLIP);
     ui_apply_text_caption(card->preview);
+    lv_obj_set_height(card->preview, UI_FONT_CAPTION->line_height * 2);
+    lv_obj_set_style_text_line_space(card->preview, 0, 0);
     ui_apply_label_dim(card->preview);
     lv_obj_set_style_text_align(card->preview, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(card->preview, LV_ALIGN_BOTTOM_MID, 0, -14);
 
-    card->name = make_label(card->root, "PRINTER", 146, 20, 210);
+    card->name = make_label(card->root, "PRINTER", 146, 14, 220);
     ui_apply_text_title(card->name);
     ui_apply_label_bright(card->name);
+    lv_label_set_long_mode(card->name, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_letter_space(card->name, 0, 0);
 
-    card->endpoint = make_label(card->root, "--", 146, 55, 220);
+    card->endpoint = make_label(card->root, "--", 146, 58, 220);
     ui_apply_text_caption(card->endpoint);
     ui_apply_label_dim(card->endpoint);
+    lv_label_set_long_mode(card->endpoint, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_letter_space(card->endpoint, 0, 0);
 
     card->status = make_label(card->root, "CHECKING...", 146, 88, 220);
     ui_apply_text_body_large(card->status);
     ui_apply_label_dim(card->status);
+    ui_text_fit_single_line(card->status, UI_FONT_BODY_LARGE);
     lv_subject_init_string(&card->name_subject, card->name_value,
         card->name_previous, sizeof(card->name_value), "PRINTER");
     lv_subject_init_string(&card->endpoint_subject, card->endpoint_value,
@@ -215,13 +228,16 @@ static void create_card(int index, int x, int y)
     card->status_bound = lv_label_bind_text(card->status, &card->status_subject, NULL) != NULL;
     lv_obj_add_event_cb(card->root, card_subjects_delete_cb, LV_EVENT_DELETE, card);
 
-    lv_obj_t *hint = make_label(card->root, "TAP TO OPEN", 146, 128, 210);
+    lv_obj_t *hint = make_label(card->root, "TAP TO OPEN", 146, 148, 130);
     ui_apply_text_caption(hint);
     ui_apply_label_dim(hint);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
+    card->hint = hint;
 
-    card->active = make_label(card->root, "ACTIVE", 292, 12, 72);
+    card->active = make_label(card->root, "ACTIVE", 284, 148, 82);
     ui_apply_text_caption(card->active);
     ui_apply_label_success(card->active);
+    lv_label_set_long_mode(card->active, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(card->active, LV_TEXT_ALIGN_RIGHT, 0);
 }
 
@@ -312,6 +328,7 @@ static void refresh_cards(void)
             set_name_text(card, empty_name);
             set_endpoint_text(card, ui_text("EMPTY PROFILE SLOT"));
             set_status_text(card, ui_text("NOT CONFIGURED"));
+            ui_value_set_text(card->hint, ui_text("TAP TO ADD"));
             if (!cached_image)
                 ui_value_set_text(card->preview, "ADD A\nPRINTER");
             lv_obj_add_flag(card->active, LV_OBJ_FLAG_HIDDEN);
@@ -322,6 +339,7 @@ static void refresh_cards(void)
         char endpoint[MOONRAKER_CONFIG_HOST_LENGTH + 16];
         snprintf(endpoint, sizeof(endpoint), "%s:%d", profile->host, profile->port);
 
+        ui_value_set_text(card->hint, ui_text("TAP TO OPEN"));
         set_name_text(card, profile->name);
         set_endpoint_text(card, endpoint);
         bool active_live =
@@ -449,6 +467,7 @@ void ui_printer_chooser_show(
                    UI_PAGE_ROOT_Y);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
+    lv_obj_set_style_pad_all(s_root, 0, 0);
 
     lv_obj_t *title = make_label(s_root, "PRINTERS", 20, 12, 360);
     ui_apply_text_heading(title);
@@ -458,8 +477,8 @@ void ui_printer_chooser_show(
         s_root,
         "Choose a printer to open its live operator dashboard.",
         20,
-        48,
-        560);
+        54,
+        520);
     ui_apply_text_caption(subtitle);
     ui_apply_label_dim(subtitle);
 
@@ -472,8 +491,8 @@ void ui_printer_chooser_show(
         UI_BUTTON_ICON_HORIZONTAL);
 
     if (manage) {
-        lv_obj_set_size(manage, 220, 46);
-        lv_obj_set_pos(manage, 606, 12);
+        lv_obj_set_size(manage, 280, 46);
+        lv_obj_set_pos(manage, 546, 12);
 
         if (s_manage_cb) {
             lv_obj_add_event_cb(
@@ -484,10 +503,10 @@ void ui_printer_chooser_show(
         }
     }
 
-    create_card(0, 20, 76);
-    create_card(1, 424, 76);
-    create_card(2, 20, 274);
-    create_card(3, 424, 274);
+    create_card(0, 20, 84);
+    create_card(1, 424, 84);
+    create_card(2, 20, 282);
+    create_card(3, 424, 282);
 
     refresh_cards();
 

@@ -87,8 +87,8 @@ void ui_probe_accuracy_create(lv_obj_t *card, ui_probe_accuracy_send_cb_t send,
     s_send = send; s_ready = ready;
     s_button = ui_button_create(card, UI_BUTTON_OUTLINED, "ACCURACY");
     if (!s_button) return;
-    lv_obj_set_size(s_button, 110, 38);
-    lv_obj_align(s_button, LV_ALIGN_BOTTOM_LEFT, 140, -12);
+    lv_obj_set_size(s_button, 170, 44);
+    lv_obj_align(s_button, LV_ALIGN_BOTTOM_RIGHT, -16, -62);
     lv_obj_add_event_cb(s_button, open_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_flag(s_button, LV_OBJ_FLAG_HIDDEN);
 }

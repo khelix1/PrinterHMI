@@ -172,73 +172,18 @@ static void layout_bed_geometry_actions(
         "BED MESH");
 
     for (size_t index = 0; index < count; ++index) {
-        lv_obj_set_size(
-            visible_buttons[index],
-            110,
-            38);
+        lv_obj_set_size(visible_buttons[index], 170, 44);
+        bool upper = count > 2 && index < 2;
+        lv_obj_align(visible_buttons[index], index % 2 ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_LEFT,
+            index % 2 ? -16 : 16, upper ? -62 : -12);
+    }
+    if (s_calibration->bed.status) lv_obj_add_flag(s_calibration->bed.status, LV_OBJ_FLAG_HIDDEN);
+    if (s_calibration->bed.summary) {
+        ui_apply_text_caption(s_calibration->bed.summary);
+        lv_label_set_long_mode(s_calibration->bed.summary, LV_LABEL_LONG_DOT);
+        lv_obj_set_height(s_calibration->bed.summary, 24);
     }
 
-    if (count == 1) {
-        lv_obj_align(
-            visible_buttons[0],
-            LV_ALIGN_BOTTOM_LEFT,
-            16,
-            -12);
-    } else if (count == 2) {
-        lv_obj_align(
-            visible_buttons[0],
-            LV_ALIGN_BOTTOM_LEFT,
-            16,
-            -12);
-        lv_obj_align(
-            visible_buttons[1],
-            LV_ALIGN_BOTTOM_RIGHT,
-            -16,
-            -12);
-    } else if (count == 3) {
-        lv_obj_align(
-            visible_buttons[0],
-            LV_ALIGN_BOTTOM_LEFT,
-            16,
-            -12);
-        lv_obj_align(
-            visible_buttons[1],
-            LV_ALIGN_BOTTOM_MID,
-            0,
-            -12);
-        lv_obj_align(
-            visible_buttons[2],
-            LV_ALIGN_BOTTOM_RIGHT,
-            -16,
-            -12);
-    } else {
-        if (s_calibration->bed.summary) {
-            lv_label_set_text(
-                s_calibration->bed.summary,
-                ui_text("BED GEOMETRY TOOLS READY"));
-        }
-
-        lv_obj_align(
-            visible_buttons[0],
-            LV_ALIGN_BOTTOM_LEFT,
-            16,
-            -58);
-        lv_obj_align(
-            visible_buttons[1],
-            LV_ALIGN_BOTTOM_RIGHT,
-            -16,
-            -58);
-        lv_obj_align(
-            visible_buttons[2],
-            LV_ALIGN_BOTTOM_LEFT,
-            16,
-            -12);
-        lv_obj_align(
-            visible_buttons[3],
-            LV_ALIGN_BOTTOM_RIGHT,
-            -16,
-            -12);
-    }
 }
 
 
@@ -1377,9 +1322,9 @@ void ui_calibration_show(
         "WAITING FOR PRINTER",
         UI_FONT_CAPTION,
         UI_ACCENT_BRIGHT,
-        590,
-        32,
-        190);
+        550,
+        18,
+        230);
 
     lv_obj_set_style_text_align(
         s_calibration->banner_status,
@@ -1394,6 +1339,7 @@ void ui_calibration_show(
         &s_calibration->bed);
 
     if (bed) {
+        lv_obj_set_height(bed, 190);
         s_calibration->bed_mesh_button =
             ui_button_create(
                 bed,
@@ -1403,8 +1349,8 @@ void ui_calibration_show(
         if (s_calibration->bed_mesh_button) {
             lv_obj_set_size(
                 s_calibration->bed_mesh_button,
-                82,
-                38);
+                170,
+                44);
             lv_obj_align(
                 s_calibration->bed_mesh_button,
                 LV_ALIGN_BOTTOM_LEFT,
@@ -1429,8 +1375,8 @@ void ui_calibration_show(
         if (s_calibration->screws_tilt_button) {
             lv_obj_set_size(
                 s_calibration->screws_tilt_button,
-                82,
-                38);
+                170,
+                44);
             lv_obj_align(
                 s_calibration->screws_tilt_button,
                 LV_ALIGN_BOTTOM_LEFT,
@@ -1455,8 +1401,8 @@ void ui_calibration_show(
         if (s_calibration->gantry_level_button) {
             lv_obj_set_size(
                 s_calibration->gantry_level_button,
-                82,
-                38);
+                170,
+                44);
             lv_obj_align(
                 s_calibration->gantry_level_button,
                 LV_ALIGN_BOTTOM_LEFT,
@@ -1481,8 +1427,8 @@ void ui_calibration_show(
         if (s_calibration->axis_twist_button) {
             lv_obj_set_size(
                 s_calibration->axis_twist_button,
-                82,
-                38);
+                170,
+                44);
             lv_obj_align(
                 s_calibration->axis_twist_button,
                 LV_ALIGN_BOTTOM_LEFT,
@@ -1507,6 +1453,8 @@ void ui_calibration_show(
         &s_calibration->motion);
 
     if (motion) {
+        lv_obj_set_height(motion, 190);
+        lv_obj_set_height(s_calibration->motion.summary, 24);
         lv_obj_add_flag(s_calibration->motion.status, LV_OBJ_FLAG_HIDDEN);
         ui_apply_text_caption(s_calibration->motion.summary);
         lv_label_set_long_mode(s_calibration->motion.summary, LV_LABEL_LONG_DOT);
@@ -1566,6 +1514,11 @@ void ui_calibration_show(
         &s_calibration->probe);
 
     if (probe) {
+        lv_obj_set_height(probe, 190);
+        lv_obj_add_flag(s_calibration->probe.status, LV_OBJ_FLAG_HIDDEN);
+        ui_apply_text_caption(s_calibration->probe.summary);
+        lv_label_set_long_mode(s_calibration->probe.summary, LV_LABEL_LONG_DOT);
+        lv_obj_set_height(s_calibration->probe.summary, 24);
         ui_probe_accuracy_create(probe, s_calibration->send_gcode, calibration_action_ready);
         s_calibration->probe_z_button =
             ui_button_create(
@@ -1576,13 +1529,13 @@ void ui_calibration_show(
         if (s_calibration->probe_z_button) {
             lv_obj_set_size(
                 s_calibration->probe_z_button,
-                110,
-                38);
+                170,
+                44);
             lv_obj_align(
                 s_calibration->probe_z_button,
                 LV_ALIGN_BOTTOM_LEFT,
                 16,
-                -12);
+                -62);
             lv_obj_add_event_cb(
                 s_calibration->probe_z_button,
                 probe_z_button_cb,
@@ -1602,12 +1555,12 @@ void ui_calibration_show(
         if (s_calibration->custom_calibration_button) {
             lv_obj_set_size(
                 s_calibration->custom_calibration_button,
-                110,
-                38);
+                170,
+                44);
             lv_obj_align(
                 s_calibration->custom_calibration_button,
-                LV_ALIGN_BOTTOM_RIGHT,
-                -16,
+                LV_ALIGN_BOTTOM_LEFT,
+                16,
                 -12);
             lv_obj_add_event_cb(
                 s_calibration->custom_calibration_button,

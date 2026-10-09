@@ -3,6 +3,27 @@
 
 #include "ui_theme.h"
 
+static void button_label_resize(lv_event_t *event)
+{
+    lv_obj_t *button = lv_event_get_target_obj(event);
+    lv_obj_t *label = lv_obj_get_child(button, 0);
+    if (!label || !lv_obj_check_type(label, &lv_label_class)) return;
+    int32_t width = lv_obj_get_style_width(button, 0) == LV_SIZE_CONTENT
+        ? LV_SIZE_CONTENT : LV_PCT(100);
+    if (lv_obj_get_style_width(label, 0) != width) lv_obj_set_width(label, width);
+}
+
+static void button_icon_resize(lv_event_t *event)
+{
+    lv_obj_t *button = lv_event_get_target_obj(event);
+    lv_obj_t *label = lv_obj_get_child(button, 1);
+    if (!label) return;
+    bool content = lv_obj_get_style_width(button, 0) == LV_SIZE_CONTENT;
+    lv_obj_set_flex_grow(label, content ? 0 : 1);
+    int32_t width = content ? LV_SIZE_CONTENT : 0;
+    if (lv_obj_get_style_width(label, 0) != width) lv_obj_set_width(label, width);
+}
+
 void ui_button_apply_kind(
     lv_obj_t *button,
     ui_button_kind_t kind)
@@ -45,6 +66,9 @@ void ui_button_apply_kind(
             ui_apply_button_style(button);
             break;
     }
+    /* Reserve readable clearance without inheriting LVGL's oversized defaults. */
+    lv_obj_set_style_pad_hor(button, 6, 0);
+    lv_obj_set_style_pad_ver(button, 3, 0);
 }
 
 lv_obj_t *ui_button_create_label(
@@ -69,7 +93,11 @@ lv_obj_t *ui_button_create_label(
     ui_apply_text_button(label);
     ui_apply_label_bright(label);
 
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
+    lv_obj_add_event_cb(button, button_label_resize, LV_EVENT_SIZE_CHANGED, NULL);
+    lv_obj_send_event(button, LV_EVENT_SIZE_CHANGED, NULL);
 
     return label;
 }
@@ -134,27 +162,17 @@ lv_obj_t *ui_button_create_icon(
     ui_button_icon_layout_t layout)
 {
     /*
-     * This deliberately starts from ui_button_create().
+     * This uses the same empty themed surface as ui_button_create().
      *
      * Drybox and Dashboard therefore receive the exact same themed
      * button object, including border color, border width, radius,
      * focused state and pressed state.
      */
-    lv_obj_t *button =
-        ui_button_create(
-            parent,
-            kind,
-            "");
+    lv_obj_t *button = ui_button_create_empty(parent, kind);
 
     if (!button) {
         return NULL;
     }
-
-    /*
-     * ui_button_create() creates a centered empty label. Remove it
-     * before adding the shared icon/text pair.
-     */
-    lv_obj_clean(button);
 
     lv_obj_clear_flag(
         button,
@@ -260,6 +278,10 @@ lv_obj_t *ui_button_create_icon(
             button,
             ui_theme_density_metric(4, 6, 8),
             0);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_add_event_cb(button, button_icon_resize, LV_EVENT_SIZE_CHANGED, NULL);
+        lv_obj_send_event(button, LV_EVENT_SIZE_CHANGED, NULL);
     }
 
     return button;

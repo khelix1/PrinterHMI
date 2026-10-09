@@ -1,4 +1,5 @@
 #include "moonraker_live_websocket.h"
+#include "moonraker_config_controller.h"
 #include "moonraker_transport_security_controller.h"
 
 #include <stdio.h>
@@ -570,7 +571,7 @@ bool moonraker_live_websocket_send_gcode(
     const char *script)
 {
     if (!script || !script[0] ||
-        !s_client || !s_connected ||
+        !s_client || !moonraker_live_websocket_connected() ||
         !ensure_command_buffer()) {
         return false;
     }
@@ -644,7 +645,7 @@ bool moonraker_live_websocket_send_gcode(
 
 bool moonraker_live_websocket_request_endstops(uint32_t request_id)
 {
-    if (!s_client || !s_connected || request_id < ENDSTOP_REQUEST_FIRST ||
+    if (!s_client || !moonraker_live_websocket_connected() || request_id < ENDSTOP_REQUEST_FIRST ||
         s_generation != __atomic_load_n(&s_accepted_generation, __ATOMIC_ACQUIRE)) return false;
     char request[128];
     int length = snprintf(request, sizeof(request),
@@ -1046,6 +1047,7 @@ static void websocket_event_handler(
     bool current_owner =
         event_client &&
         event_client == s_client &&
+        s_generation == moonraker_config_generation() &&
         s_generation == __atomic_load_n(
             &s_accepted_generation,
             __ATOMIC_ACQUIRE);
@@ -1169,17 +1171,10 @@ void moonraker_live_websocket_stop(void)
 void moonraker_live_websocket_prepare_profile_change(
     uint32_t configuration_generation)
 {
-    if (!s_client || configuration_generation == s_generation) return;
-
-    ESP_LOGI(TAG, "WS_REBIND_IMMEDIATE generation=%u->%u",
-             (unsigned)s_generation,
-             (unsigned)configuration_generation);
-
-    /*
-     * Destroy the old endpoint before any request for the new profile starts.
-     * The next runtime tick creates the new client without a settle timer.
-     */
-    moonraker_live_websocket_stop();
+    /* This callback runs under LVGL. Fence the old owner now; the runtime
+     * task alone may wait for TCP/WebSocket teardown. */
+    __atomic_store_n(&s_accepted_generation, configuration_generation,
+                     __ATOMIC_RELEASE);
 }
 
 
@@ -1354,6 +1349,10 @@ void moonraker_live_websocket_tasklet(
     const char *api_key,
     uint32_t configuration_generation)
 {
+    /* A selection may race a runtime snapshot or slow teardown. Never revive
+     * that snapshot as the selected printer. The next tick uses fresh config. */
+    if (configuration_generation != moonraker_config_generation()) return;
+
     bool endpoint_valid =
         host && host[0] && port > 0 && port <= 65535;
 
@@ -1378,9 +1377,9 @@ void moonraker_live_websocket_tasklet(
                  (unsigned)configuration_generation,
                  s_host,
                  host);
-        moonraker_live_websocket_prepare_profile_change(
-            configuration_generation);
-        return;
+        destroy_client();
+        s_retry_after_us = 0;
+        if (configuration_generation != moonraker_config_generation()) return;
     }
 
     if (!s_client) {
@@ -1433,7 +1432,9 @@ void moonraker_live_websocket_tasklet(
 
 bool moonraker_live_websocket_connected(void)
 {
-    return s_connected;
+    return s_connected && s_generation == moonraker_config_generation() &&
+        s_generation == __atomic_load_n(
+        &s_accepted_generation, __ATOMIC_ACQUIRE);
 }
 
 
@@ -1445,14 +1446,14 @@ bool moonraker_live_websocket_running(void)
 
 bool moonraker_live_websocket_subscribed(void)
 {
-    return s_connected && s_subscribed;
+    return moonraker_live_websocket_connected() && s_subscribed;
 }
 
 
 bool moonraker_live_websocket_fresh(int64_t maximum_age_us)
 {
     int64_t updated = s_last_status_update_us;
-    if (!s_connected || !s_subscribed || updated <= 0 || maximum_age_us <= 0) {
+    if (!moonraker_live_websocket_subscribed() || updated <= 0 || maximum_age_us <= 0) {
         return false;
     }
 
@@ -1463,12 +1464,14 @@ bool moonraker_live_websocket_fresh(int64_t maximum_age_us)
 
 bool moonraker_live_websocket_file_change_pending(void)
 {
-    return __atomic_load_n(&s_file_change_pending, __ATOMIC_ACQUIRE);
+    return moonraker_live_websocket_connected() &&
+        __atomic_load_n(&s_file_change_pending, __ATOMIC_ACQUIRE);
 }
 
 
 bool moonraker_live_websocket_take_file_change(void)
 {
+    if (!moonraker_live_websocket_connected()) return false;
     return __atomic_exchange_n(
         &s_file_change_pending,
         false,

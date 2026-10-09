@@ -30,7 +30,32 @@ static TaskHandle_t s_task = NULL;
 static char s_url[192];
 static const char *s_ca_pem = NULL;
 static QueueHandle_t s_result_queue = NULL;
-static volatile bool s_stop_requested = false;
+static bool s_stop_requested = false;
+
+static bool camera_stop_requested(void)
+{
+    return __atomic_load_n(&s_stop_requested, __ATOMIC_ACQUIRE);
+}
+
+static void camera_discard_results(void)
+{
+    if (!s_result_queue) return;
+    camera_frame_result_t stale;
+    while (xQueueReceive(s_result_queue, &stale, 0) == pdPASS) {
+        if (stale.pixels) heap_caps_free(stale.pixels);
+    }
+}
+
+/* Retry backoff must not delay a page/profile handoff by ten seconds. */
+static void camera_retry_wait(uint32_t delay_ms)
+{
+    for (uint32_t waited = 0; waited < delay_ms && !camera_stop_requested();) {
+        uint32_t slice = delay_ms - waited;
+        if (slice > 50) slice = 50;
+        vTaskDelay(pdMS_TO_TICKS(slice));
+        waited += slice;
+    }
+}
 
 
 static bool camera_stream_open(esp_http_client_handle_t *client_out)
@@ -74,12 +99,12 @@ static void camera_stream_task(void *arg)
     }
 
     uint32_t retry_delay_ms = CAMERA_STREAM_RETRY_MIN_MS;
-    while (!s_stop_requested) {
+    while (!camera_stop_requested()) {
         esp_http_client_handle_t client = NULL;
         if (!camera_stream_open(&client)) {
             camera_frame_result_t failed = {.ok = false};
             (void)xQueueSend(s_result_queue, &failed, 0);
-            vTaskDelay(pdMS_TO_TICKS(retry_delay_ms));
+            camera_retry_wait(retry_delay_ms);
             if (retry_delay_ms < CAMERA_STREAM_RETRY_MAX_MS) {
                 retry_delay_ms *= 2;
                 if (retry_delay_ms > CAMERA_STREAM_RETRY_MAX_MS) {
@@ -94,10 +119,10 @@ static void camera_stream_task(void *arg)
         uint8_t previous = 0;
         size_t used = 0;
         char chunk[2048];
-        while (!s_stop_requested) {
+        while (!camera_stop_requested()) {
             int read = esp_http_client_read(client, chunk, sizeof(chunk));
             if (read <= 0) break;
-            for (int index = 0; index < read && !s_stop_requested; ++index) {
+            for (int index = 0; index < read && !camera_stop_requested(); ++index) {
                 uint8_t byte = (uint8_t)chunk[index];
                 if (!in_frame) {
                     if (previous == 0xff && byte == 0xd8) {
@@ -142,13 +167,13 @@ static void camera_stream_task(void *arg)
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         network_activity_controller_end_shared();
-        if (!s_stop_requested) {
+        if (!camera_stop_requested()) {
             if (!received_frame) {
                 camera_frame_result_t failed = {.ok = false};
                 (void)xQueueSend(s_result_queue, &failed, 0);
             }
             uint32_t delay_ms = received_frame ? 10 : retry_delay_ms;
-            vTaskDelay(pdMS_TO_TICKS(delay_ms));
+            camera_retry_wait(delay_ms);
             if (!received_frame && retry_delay_ms < CAMERA_STREAM_RETRY_MAX_MS) {
                 retry_delay_ms *= 2;
                 if (retry_delay_ms > CAMERA_STREAM_RETRY_MAX_MS) {
@@ -159,6 +184,7 @@ static void camera_stream_task(void *arg)
     }
 
     heap_caps_free(jpeg);
+    camera_discard_results();
     s_task = NULL;
     vTaskDelete(NULL);
 }
@@ -173,12 +199,9 @@ bool camera_stream_start(const char *url)
     }
     if (!s_result_queue) return false;
 
-    camera_frame_result_t stale;
-    while (xQueueReceive(s_result_queue, &stale, 0) == pdPASS) {
-        if (stale.pixels) heap_caps_free(stale.pixels);
-    }
+    camera_discard_results();
     strlcpy(s_url, url, sizeof(s_url));
-    s_stop_requested = false;
+    __atomic_store_n(&s_stop_requested, false, __ATOMIC_RELEASE);
     if (xTaskCreatePinnedToCoreWithCaps(
             camera_stream_task, "camera_view", 12288, NULL, 4, &s_task,
             tskNO_AFFINITY, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
@@ -207,6 +230,10 @@ bool camera_stream_take_result(
     if (!s_result_queue || xQueueReceive(s_result_queue, &result, 0) != pdPASS) {
         return false;
     }
+    if (camera_stop_requested()) {
+        if (result.pixels) heap_caps_free(result.pixels);
+        return false;
+    }
     if (pixels) *pixels = result.pixels;
     else if (result.pixels) heap_caps_free(result.pixels);
     if (pixel_size) *pixel_size = result.pixel_size;
@@ -217,6 +244,12 @@ bool camera_stream_take_result(
 }
 
 
+void camera_stream_request_stop(void)
+{
+    __atomic_store_n(&s_stop_requested, true, __ATOMIC_RELEASE);
+    camera_discard_results();
+}
+
 void camera_stream_stop(void)
 {
     /*
@@ -225,7 +258,7 @@ void camera_stream_stop(void)
      * OTA is network-exclusive; returning early leaves a small race where
      * the camera still owns the shared transport and OTA fails intermittently.
      */
-    s_stop_requested = true;
+    camera_stream_request_stop();
     for (int attempt = 0; attempt < 320 && s_task; ++attempt) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }

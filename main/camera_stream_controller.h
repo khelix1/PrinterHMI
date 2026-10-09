@@ -8,6 +8,9 @@
  * to the caller and must be released with heap_caps_free(). */
 bool camera_stream_start(const char *url);
 bool camera_stream_busy(void);
+/* Navigation retires results immediately; worker cleanup completes asynchronously. */
+void camera_stream_request_stop(void);
+/* Explicit transport quiescence may wait for the worker (e.g. OTA setup). */
 void camera_stream_stop(void);
 bool camera_stream_take_result(
     uint8_t **pixels,

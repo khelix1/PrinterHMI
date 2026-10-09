@@ -210,8 +210,10 @@ void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, i
             THUMBNAIL_PREVIEW_WIDTH * THUMBNAIL_PREVIEW_HEIGHT * sizeof(uint16_t),
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
-    if (!thumb->canvas_buf || !thumbnail_render_to_rgb565_fit(
-            dsc, thumb->canvas_buf, THUMBNAIL_PREVIEW_WIDTH, THUMBNAIL_PREVIEW_HEIGHT)) {
+    int packed_width = 0, packed_height = 0;
+    if (!thumb->canvas_buf || !thumbnail_render_to_rgb565_aspect(
+            dsc, thumb->canvas_buf, THUMBNAIL_PREVIEW_WIDTH, THUMBNAIL_PREVIEW_HEIGHT,
+            &packed_width, &packed_height)) {
         ui_thumbnail_set_placeholder(thumb, "PREVIEW UNAVAILABLE");
         return;
     }
@@ -221,10 +223,10 @@ void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, i
     thumb->canvas_image.header.magic = LV_IMAGE_HEADER_MAGIC;
 #endif
     thumb->canvas_image.header.cf = LV_COLOR_FORMAT_RGB565;
-    thumb->canvas_image.header.w = THUMBNAIL_PREVIEW_WIDTH;
-    thumb->canvas_image.header.h = THUMBNAIL_PREVIEW_HEIGHT;
-    thumb->canvas_image.header.stride = THUMBNAIL_PREVIEW_WIDTH * sizeof(uint16_t);
-    thumb->canvas_image.data_size = THUMBNAIL_PREVIEW_WIDTH * THUMBNAIL_PREVIEW_HEIGHT * sizeof(uint16_t);
+    thumb->canvas_image.header.w = packed_width;
+    thumb->canvas_image.header.h = packed_height;
+    thumb->canvas_image.header.stride = packed_width * sizeof(uint16_t);
+    thumb->canvas_image.data_size = packed_width * packed_height * sizeof(uint16_t);
     thumb->canvas_image.data = thumb->canvas_buf;
     dsc = &thumb->canvas_image;
 

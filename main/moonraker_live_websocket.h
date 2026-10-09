@@ -22,7 +22,7 @@ void moonraker_live_websocket_tasklet(
 
 /*
  * Immediately retires the current profile's logical ownership, then lets the
- * runtime task perform a quiet, two-phase transport rebind. This function is
+ * runtime task stop/destroy the old transport and create its replacement. This function is
  * safe to call from the active-profile selection bridge.
  */
 void moonraker_live_websocket_prepare_profile_change(

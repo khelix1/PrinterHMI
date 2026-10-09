@@ -46,28 +46,32 @@ ui_page_state_t *ui_page_state_create(
                         LV_EVENT_DELETE,
                         state);
 
-    state->icon = lv_label_create(state->root);
-    ui_apply_text_heading(state->icon);
-    lv_obj_align(state->icon, LV_ALIGN_CENTER, 0, -48);
+    lv_obj_t *body = lv_obj_create(state->root);
+    ui_apply_surface_role(body, UI_SURFACE_TRANSPARENT);
+    lv_obj_set_style_pad_all(body, 0, 0);
+    lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(body, lv_pct(90), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
+    lv_obj_center(body);
 
-    state->title = lv_label_create(state->root);
-    lv_obj_set_width(state->title, width - 80);
+    state->icon = lv_label_create(body);
+    ui_apply_text_heading(state->icon);
+    state->spinner = lv_spinner_create(body);
+    lv_obj_set_size(state->spinner, 34, 34);
+    state->title = lv_label_create(body);
+    lv_obj_set_width(state->title, lv_pct(100));
     lv_obj_set_style_text_align(state->title, LV_TEXT_ALIGN_CENTER, 0);
     ui_apply_text_title(state->title);
     ui_apply_label_bright(state->title);
-    lv_obj_align(state->title, LV_ALIGN_CENTER, 0, 0);
-
-    state->detail = lv_label_create(state->root);
-    lv_obj_set_width(state->detail, width - 120);
+    state->detail = lv_label_create(body);
+    lv_obj_set_width(state->detail, lv_pct(100));
     lv_label_set_long_mode(state->detail, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(state->detail, LV_TEXT_ALIGN_CENTER, 0);
     ui_apply_text_body(state->detail);
     ui_apply_label_dim(state->detail);
-    lv_obj_align(state->detail, LV_ALIGN_CENTER, 0, 42);
-
-    state->spinner = lv_spinner_create(state->root);
-    lv_obj_set_size(state->spinner, 34, 34);
-    lv_obj_align(state->spinner, LV_ALIGN_CENTER, 0, -50);
     lv_obj_add_flag(state->root, LV_OBJ_FLAG_HIDDEN);
     return state;
 }

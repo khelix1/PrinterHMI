@@ -270,3 +270,30 @@ Chooser name and endpoint labels now also use card-owned string subjects. The
 existing refresh path publishes current configuration text, and click routing
 continues resolving the card's profile index. All three card subjects are
 deinitialized on card deletion before static storage is cleared or reused.
+
+Camera frame retirement: `ui_camera` detaches the image descriptor and drops its
+LVGL cache before freeing owned RGB565 pixels. A published frame must have enough
+bytes for its packed dimensions before mirror/transform work. Page hide stops the
+worker and retires the frame; view changes update the current viewport transform
+immediately. The continuous MJPEG worker and JPEG decoder retain ownership of
+network acquisition and decode respectively.
+
+
+Offline navigation retires camera consumers and fences the old Moonraker
+WebSocket generation on the LVGL owner without waiting for transport shutdown.
+Camera workers retain transport ownership until their own cleanup completes;
+OTA/setup may still explicitly wait. The runtime task owns WebSocket teardown
+and rebind. Files list HTTP/retries run in a worker with copied endpoint data;
+one current job and one coalesced pending job bound ownership. Only the LVGL
+result timer may parse/render for the current profile/request/page, and it holds
+a queued result while a file confirmation is open. Stale results are freed.
+
+
+Responsive page layout helpers in `main/ui_responsive_layout.h` use native flex
+wrapping with equal card widths resolved only on size changes. Tools and Macros
+own their wrapping tile/button containers; macro rows retain stable objects and
+command/generation ownership. Files owns a column of header, toolbar, breadcrumb
+and a growing viewport; its rows resolve label width from the current row size.
+Shared page-state overlays center content with a native column. These changes
+consume the existing runtime fonts/metrics/palettes and preserve preview and
+transport ownership.

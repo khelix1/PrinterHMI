@@ -7,11 +7,11 @@ extern "C" {
 #endif
 
 /*
- * Fetch and display the Moonraker G-code file list.
+ * Enqueue a Moonraker G-code list load; publish current results on LVGL.
  *
  * This controller owns:
  * - file-list response allocation
- * - Moonraker file-list transport
+ * - background Moonraker file-list transport with bounded/coalesced jobs
  * - JSON/path iteration
  * - population of the Files page
  *

@@ -1,5 +1,6 @@
 #include "ui_camera.h"
 #include "ui_text.h"
+#include "ui_value_update.h"
 
 #include "camera_stream_controller.h"
 #include "camera_catalog_controller.h"
@@ -13,9 +14,9 @@
 #include "ui_theme.h"
 
 #include "esp_heap_caps.h"
-#include "draw/lv_image_decoder_private.h"
 
 #include "lvgl.h"
+#include "misc/cache/instance/lv_image_cache.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -59,13 +60,17 @@ static unsigned s_camera_frame_count = 0;
 static void camera_set_status(const char *text)
 {
     if (s_status) {
-        lv_label_set_text(s_status, text ? text : ui_text(""));
+        ui_value_set_text(s_status, text ? text : ui_text(""));
     }
 }
 
 
 static void camera_release_frame(void)
 {
+    /* Retire LVGL's source/cache while the descriptor and pixels are valid. */
+    if (s_image && lv_image_get_src(s_image) == &s_frame_dsc)
+        lv_image_set_src(s_image, NULL);
+    if (s_frame) lv_image_cache_drop(&s_frame_dsc);
     if (s_frame) {
         heap_caps_free(s_frame);
         s_frame = NULL;
@@ -76,9 +81,6 @@ static void camera_release_frame(void)
 static void camera_mark_unavailable(void)
 {
     camera_release_frame();
-    if (s_image) {
-        lv_image_set_src(s_image, NULL);
-    }
     camera_set_status("CAMERA UNAVAILABLE | reconnecting");
 }
 
@@ -131,10 +133,16 @@ static void camera_apply_view_transform(void)
     int scale_y = (s_view_height * 256) / image_height;
     int scale = scale_x < scale_y ? scale_x : scale_y;
     if (scale < 1) scale = 1;
-    lv_image_set_scale_x(s_image, scale);
-    lv_image_set_scale_y(s_image, scale);
-    lv_image_set_rotation(s_image, (int32_t)(entry.rotation * 10U));
-    lv_obj_center(s_image);
+    if (lv_image_get_scale_x(s_image) != scale)
+        lv_image_set_scale_x(s_image, scale);
+    if (lv_image_get_scale_y(s_image) != scale)
+        lv_image_set_scale_y(s_image, scale);
+    int32_t rotation = (int32_t)(entry.rotation * 10U);
+    if (lv_image_get_rotation(s_image) != rotation)
+        lv_image_set_rotation(s_image, rotation);
+    if (lv_obj_get_style_align(s_image, 0) != LV_ALIGN_CENTER ||
+        lv_obj_get_style_x(s_image, 0) != 0 || lv_obj_get_style_y(s_image, 0) != 0)
+        lv_obj_center(s_image);
 }
 
 static void camera_view_close_cb(lv_event_t *event)
@@ -158,9 +166,12 @@ static void camera_view_set_cb(lv_event_t *event)
     else { rotation = 0; mirror_h = false; mirror_v = false; }
     if (camera_catalog_set_view(profile, s_camera_index, rotation, mirror_h, mirror_v)) {
         /* Fetch a fresh frame because the pixel flip is applied once per frame. */
-        camera_stream_stop();
+        camera_stream_request_stop();
         camera_release_frame();
-        if (s_image) lv_image_set_src(s_image, NULL);
+        s_camera_last_frame_tick = 0;
+        s_camera_stream_started_tick = 0;
+        s_camera_window_tick = 0;
+        s_camera_frame_count = 0;
         camera_set_status("Updating camera view...");
     }
     camera_view_close_cb(NULL);
@@ -234,6 +245,7 @@ static void camera_set_viewport(bool fullscreen)
         lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
         lv_obj_move_background(s_card);
     }
+    camera_apply_view_transform();
 }
 
 
@@ -273,7 +285,10 @@ static void camera_poll_cb(lv_timer_t *timer)
     bool ok = false;
     if (camera_stream_take_result(
             &pixels, &pixel_size, &width, &height, &ok)) {
-        if (!ok || !pixels || pixel_size == 0 || width <= 0 || height <= 0) {
+        if (!ok || !pixels || width <= 0 || height <= 0 ||
+            width > 65535 || height > 65535 ||
+            (size_t)width > SIZE_MAX / sizeof(uint16_t) / (size_t)height ||
+            pixel_size < (size_t)width * (size_t)height * sizeof(uint16_t)) {
             if (pixels) heap_caps_free(pixels);
             camera_mark_unavailable();
         } else if (s_image) {
@@ -325,9 +340,6 @@ static void camera_poll_cb(lv_timer_t *timer)
         if (!camera_catalog_get(profile_index, s_camera_index, &selected) || !selected.configured) {
             /* Never leave the previous printer's last frame visible. */
             camera_release_frame();
-            if (s_image) {
-                lv_image_set_src(s_image, NULL);
-            }
             s_camera_stream_started_tick = 0;
             camera_set_status("No camera is configured for the active printer.");
             return;
@@ -371,7 +383,7 @@ static void camera_update_selector(void)
         } else {
             snprintf(text, sizeof(text), LV_SYMBOL_IMAGE " CAMERA %u", (unsigned)(s_camera_index + 1));
         }
-        lv_label_set_text(selector_label, text);
+        ui_value_set_text(selector_label, text);
     }
     lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_state(s_camera_selector, LV_STATE_DISABLED);
@@ -426,7 +438,7 @@ static void camera_picker_select_cb(lv_event_t *event)
     }
     s_camera_index = index;
     (void)camera_catalog_set_default(profile_index, s_camera_index);
-    camera_stream_stop();
+    camera_stream_request_stop();
     camera_release_frame();
     s_camera_last_frame_tick = 0;
     s_camera_stream_started_tick = 0;
@@ -599,7 +611,7 @@ void ui_camera_destroy(void)
         lv_timer_delete(s_refresh_timer);
         s_refresh_timer = NULL;
     }
-    camera_stream_stop();
+    camera_stream_request_stop();
     camera_release_frame();
     if (s_root) {
         lv_obj_delete(s_root);
@@ -631,7 +643,8 @@ void ui_camera_hide(void)
         lv_timer_delete(s_refresh_timer);
         s_refresh_timer = NULL;
     }
-    camera_stream_stop();
+    camera_stream_request_stop();
+    camera_release_frame();
     s_camera_last_frame_tick = 0;
     s_camera_stream_started_tick = 0;
     s_camera_window_tick = 0;

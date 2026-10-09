@@ -41,6 +41,14 @@ static void render_case(int sw,int sh,int dw,int dh)
         assert(buffer[1+y*dw+x]==expected);
     }
     assert(buffer[0]==0xABCD && buffer[dw*dh+1]==0xDCBA);
+    int packed_w=0,packed_h=0;
+    for(int i=0;i<dw*dh;i++)buffer[1+i]=0xBEEF;
+    assert(thumbnail_render_to_rgb565_aspect(&dsc,buffer+1,dw,dh,&packed_w,&packed_h));
+    assert(packed_w==fw && packed_h==fh);
+    for(int y=0;y<packed_h;y++)for(int x=0;x<packed_w;x++)
+        assert(buffer[1+y*packed_w+x]==pixel((int)((int64_t)x*sw/packed_w),(int)((int64_t)y*sh/packed_h)));
+    for(int i=packed_w*packed_h;i<dw*dh;i++)assert(buffer[1+i]==0xBEEF);
+    assert(buffer[0]==0xABCD && buffer[dw*dh+1]==0xDCBA);
     free(source);free(buffer);
 }
 static void ui_case(int width,int height)
@@ -88,6 +96,8 @@ int main(void)
     render_case(320,240,286,215);render_case(1,1,286,215);
     render_case(900,520,900,520);render_case(1,17,13,1);
     ui_case(286,215);ui_case(184,160);ui_case(158,220);ui_case(420,160);
+    int w=99,h=99;
+    assert(!thumbnail_render_to_rgb565_aspect(NULL,NULL,286,215,&w,&h));assert(w==0 && h==0);
     assert(!thumbnail_render_to_rgb565(NULL,NULL,0,0));
-    puts("PASS: complete-image aspect fit, exact sampling/padding, degenerate sources, buffer bounds, zero-inset containment and retained explicit crop utility");
+    puts("PASS: tightly packed aspect previews, actual dimensions/stride and untouched buffer tails, complete-image aspect fit, exact sampling/padding, degenerate sources, buffer bounds, zero-inset containment and retained explicit crop utility");
 }

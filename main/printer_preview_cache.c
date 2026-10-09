@@ -265,11 +265,12 @@ bool printer_preview_cache_publish_png(
     raw_png.data = png;
     raw_png.data_size = png_size;
 
-    bool rendered = thumbnail_render_to_rgb565_fit(
+    int packed_width = 0, packed_height = 0;
+    bool rendered = thumbnail_render_to_rgb565_aspect(
         &raw_png,
         replacement,
         width,
-        height);
+        height, &packed_width, &packed_height);
 
     if (!rendered ||
         !install_pixels(
@@ -278,9 +279,9 @@ bool printer_preview_cache_publish_png(
             expected_port,
             file,
             replacement,
-            count,
-            width,
-            height)) {
+            (size_t)packed_width * packed_height,
+            packed_width,
+            packed_height)) {
         heap_caps_free(replacement);
         return false;
     }

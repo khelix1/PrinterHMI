@@ -1,8 +1,10 @@
 # Preview rendering
 
 Dashboard, Printer and Files previews preserve the complete source image. The
-shared RGB565 renderer fits the original into its bounded canvas without cutting
-off model edges. Native LVGL `CONTAIN` then fits that canvas into the page's
+shared RGB565 renderer packs the complete original into an aspect-aware canvas
+within the existing 286×215 capacity, without synthetic letterbox pixels or
+cutting off model edges. A 900×520 source produces 286×165 pixels; a portrait
+520×900 source produces 124×215. Native LVGL `CONTAIN` fits that canvas into the page's
 preview frame with no extra inset. Different image/frame proportions leave
 unused space instead of cropping or stretching. This supersedes the earlier
 center-crop/`COVER` policy after Operator previews were reported cut off.
@@ -14,7 +16,7 @@ the image. Cache bounds, loading behavior and tap-to-close are unchanged.
 
 ## Cache ownership and bounds
 
-Profile previews hold at most four 286×215 RGB565 buffers. Active publications
+Profile previews hold at most four RGB565 buffers bounded by 286×215 pixels. Active publications
 reuse an equal-sized buffer; PNG publications keep a staging buffer until decode
 succeeds so a failed decode cannot damage the previous preview. All profile cache
 access is under the display lock. LVGL image resources are dropped before a
@@ -22,7 +24,7 @@ source descriptor or its backing pixels change. Invalidation retains storage
 while old widgets may still reference it; reset requires consumers to be detached
 and keeps revision numbers advancing.
 
-Files keeps at most 24 shared-size RGB565 buffers. The worker renders into one
+Files keeps at most 24 RGB565 buffers with the same maximum capacity. The worker renders into one
 PSRAM staging buffer, then takes the display lock before the slot mutex and
 transfers ownership into the current slot. There is no second permanent copy.
 Stale generations are discarded; old storage is dropped/freed only under the
@@ -87,3 +89,19 @@ PNG size before handing ownership to the caller. Allocation failure preserves
 the complete original buffer; existing decode/publication/release paths remain
 responsible for freeing it. Small previews and 900×520 fullscreen sizing are
 unchanged. Version remains 6.5.6 on the LVGL modernization branch.
+
+## Aspect-aware pipeline checks
+
+`python3 tools/audit/aspect_preview_pipeline_test.py` exercises the production
+Dashboard restore/apply/render-worker functions and Active Print canvas reuse
+against real LVGL. It checks wide/portrait/square dimension changes, packed stride,
+source-header invalidation, profile cache restore, stale worker rejection and
+containment in all four themes/text sizes. Renderer tests verify each packed
+pixel, output dimensions and untouched buffer tails; cache tests cover variable
+Files descriptor dimensions and publication ownership.
+
+On hardware, compare wide, tall and square previews on Dashboard, Printer and
+Files, including the ready-to-print popup and fullscreen fallback. Images should
+use more of the frame where old cache padding limited them, retain the whole
+model and stay stable across profile/page/theme switches. Source PNG black
+borders remain. The full-resolution lightbox path is unchanged.

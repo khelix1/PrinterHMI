@@ -17,6 +17,7 @@
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
+#include "ui_responsive_layout.h"
 
 static const char TAG[] = "ui_macros";
 
@@ -380,12 +381,13 @@ static void rebuild_macro_list(void)
             status.discovered
                 ? ui_text("No public gcode_macro objects were detected.")
                 : ui_text("Waiting for Moonraker object discovery..."));
-        lv_obj_set_width(empty, 730);
+        lv_obj_set_width(empty, lv_pct(100));
         lv_obj_set_style_text_align(
             empty,
             LV_TEXT_ALIGN_CENTER,
             0);
-        lv_obj_set_pos(empty, 28, 42);
+        lv_obj_add_flag(empty, LV_OBJ_FLAG_FLOATING);
+        lv_obj_align(empty, LV_ALIGN_TOP_MID, 0, 24);
         ui_apply_custom_label_style(
             empty,
             UI_FONT_BODY_LARGE,
@@ -410,8 +412,6 @@ static void rebuild_macro_list(void)
         if (!macro_parameter_matches(name, s_macros->query)) continue;
         bool favorite = macro_controller_is_favorite(name);
         if ((pass == 0 && !favorite) || (pass == 1 && favorite)) continue;
-        int32_t column = (int32_t)(displayed % 2);
-        int32_t row = (int32_t)(displayed / 2);
 
         lv_obj_t *button = s_macros->rows[displayed];
         if (!button) {
@@ -429,18 +429,24 @@ static void rebuild_macro_list(void)
         const char *symbol = favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY;
         if (strcmp(lv_label_get_text(icon), symbol)) lv_label_set_text(icon, symbol);
         if (strcmp(lv_label_get_text(label), name)) lv_label_set_text(label, name);
-        lv_obj_set_size(button, 382, 54);
-        lv_obj_set_pos(button, 12 + column * 394, 12 + row * 62);
+        lv_obj_set_height(button, LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(button, 56, 0);
+        lv_obj_set_style_pad_ver(button, 12, 0);
+        lv_obj_set_flex_grow(label, 1);
+        lv_obj_set_width(label, 0);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
         ++displayed;
     }
     }
+    lv_obj_send_event(s_list, LV_EVENT_SIZE_CHANGED, NULL);
     if (s_macros->query[0]) {
         char text[96];
         snprintf(text, sizeof(text), "%u MATCHES: %.47s", (unsigned)displayed, s_macros->query);
         lv_label_set_text(s_status, text);
     }
     if (!displayed) {
-        if (!s_macros->empty) s_macros->empty = ui_popup_add_body(s_list, "", 24, 30, 730);
+        if (!s_macros->empty) s_macros->empty = ui_popup_add_body(s_list, "", 0, 24, lv_pct(100));
+        lv_obj_add_flag(s_macros->empty, LV_OBJ_FLAG_FLOATING);
         lv_obj_remove_flag(s_macros->empty, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(s_macros->empty, "No matching macros. Clear or change the search.");
     }
@@ -503,52 +509,52 @@ void ui_macros_show(
         LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
 
-    lv_obj_t *title = lv_label_create(s_root);
+    lv_obj_set_flex_flow(s_root, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_root, 20, 0);
+    lv_obj_set_style_pad_row(s_root, UI_GAP_ROW, 0);
+    lv_obj_t *header = lv_obj_create(s_root);
+    ui_responsive_column(header);
+    lv_obj_t *title = lv_label_create(header);
     lv_label_set_text(title, ui_text("MACROS"));
-    lv_obj_set_pos(title, UI_PAGE_RAIL_X, 18);
     ui_apply_text_title(title);
     ui_apply_label_bright(title);
-
-    lv_obj_t *subtitle = lv_label_create(s_root);
-    lv_label_set_text(
-        subtitle,
-        ui_text("DETECTED PUBLIC KLIPPER ACTIONS"));
-    lv_obj_set_pos(subtitle, UI_PAGE_RAIL_X, 50);
+    lv_obj_t *subtitle = lv_label_create(header);
+    lv_label_set_text(subtitle, ui_text("DETECTED PUBLIC KLIPPER ACTIONS"));
+    lv_obj_set_width(subtitle, lv_pct(100));
     ui_apply_text_caption(subtitle);
     ui_apply_label_dim(subtitle);
+    s_status = lv_label_create(header);
+    lv_obj_set_width(s_status, lv_pct(100));
+    lv_label_set_long_mode(s_status, LV_LABEL_LONG_WRAP);
+    ui_apply_custom_label_style(s_status, UI_FONT_CAPTION, UI_ACCENT_CYAN);
 
-    s_status = lv_label_create(s_root);
-    lv_obj_set_width(s_status, 300);
-    lv_obj_set_style_text_align(
-        s_status,
-        LV_TEXT_ALIGN_RIGHT,
-        0);
-    lv_obj_set_pos(s_status, 530, 30);
-    ui_apply_custom_label_style(
-        s_status,
-        UI_FONT_CAPTION,
-        UI_ACCENT_CYAN);
-
-    lv_obj_t *search = ui_button_create(s_root, UI_BUTTON_OUTLINED, "SEARCH");
-    lv_obj_set_size(search, 170, 38);
-    lv_obj_set_pos(search, 20, 84);
+    lv_obj_t *actions = lv_obj_create(s_root);
+    ui_responsive_column(actions);
+    lv_obj_set_flex_flow(actions, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(actions, UI_GAP_ROW, 0);
+    lv_obj_t *search = ui_button_create(actions, UI_BUTTON_OUTLINED, "SEARCH");
+    ui_responsive_action(search);
     s_macros->search_label = lv_obj_get_child(search, 0);
     lv_label_set_text(s_macros->search_label, s_macros->query[0] ? "SEARCH*" : "SEARCH");
     lv_obj_add_event_cb(search, search_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *clear = ui_button_create(s_root, UI_BUTTON_OUTLINED, "CLEAR SEARCH");
-    lv_obj_set_size(clear, 180, 38);
-    lv_obj_set_pos(clear, 202, 84);
+    lv_obj_t *clear = ui_button_create(actions, UI_BUTTON_OUTLINED, "CLEAR SEARCH");
+    ui_responsive_action(clear);
     lv_obj_add_event_cb(clear, clear_search_cb, LV_EVENT_CLICKED, NULL);
-    ui_popup_add_body(s_root, "Long-press a macro to change Favorites.", 408, 93, 410);
+    lv_obj_t *hint = lv_label_create(header);
+    lv_label_set_text(hint, "Long-press a macro to change Favorites.");
+    lv_obj_set_width(hint, lv_pct(100));
+    ui_apply_text_caption(hint);
+    ui_apply_label_dim(hint);
+
     s_list = lv_obj_create(s_root);
-    lv_obj_set_size(s_list, 814, 374);
-    lv_obj_set_pos(s_list, 20, 134);
+    lv_obj_set_size(s_list, lv_pct(100), 0);
+    lv_obj_set_flex_grow(s_list, 1);
     ui_apply_card_style(s_list);
-    lv_obj_set_style_pad_all(s_list, 0, 0);
+    lv_obj_set_style_pad_all(s_list, 10, 0);
     lv_obj_set_scroll_dir(s_list, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(
-        s_list,
-        LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_AUTO);
+    ui_responsive_cards(s_list, 320);
+    lv_obj_update_layout(s_root);
 
     rebuild_macro_list();
 

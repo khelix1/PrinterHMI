@@ -155,3 +155,17 @@ when ownership or build membership changes.
 
 Files ending in `.bak_*`, generated build output and managed-component copies
 are not architecture modules and must not be tracked as production source.
+
+
+### Preview, camera and responsive-layout follow-ups
+
+| Files | Ownership |
+| --- | --- |
+| `thumbnail_render`, `printer_preview_cache`, `files_row_preview`, `ui_thumbnail` | Packed aspect-preserving RGB565 dimensions and descriptor rebinding within existing preview buffer budgets |
+| `ui_camera`, `ui_dashboard`, `camera_stream_controller` | Detach/cache retirement before pixel free; nonblocking UI consumer retirement with worker-owned transport cleanup |
+| `moonraker_live_websocket` | Profile generation fencing on selection; runtime-owned WebSocket teardown/rebind |
+| `files_page_controller` | Background file-list HTTP, one coalesced latest job and LVGL-only current-result publication |
+| `ui_responsive_layout.h`, `ui_tools`, `ui_macros`, `ui_files`, `ui_page_state` | Native wrapping/columns, content-sized controls and theme-aware responsive page bounds |
+| `tools/audit/aspect_preview_pipeline_test.py`, `tools/audit/camera_pipeline_test.py` | Preview dimension/ownership and camera lifetime/transform fixtures with real LVGL |
+| `tools/audit/offline_navigation_test.py`, `tools/audit/files_load_worker_test.py` | Nonblocking retirement/rebind and asynchronous file-list ownership checks |
+| `tools/audit/responsive_layout_test.py` | Tools/Macros/Files bounds across every built-in theme, density, text size and representative custom overrides |

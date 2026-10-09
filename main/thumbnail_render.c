@@ -73,7 +73,9 @@ static bool render_rgb565(
     uint16_t *destination,
     int destination_width,
     int destination_height,
-    bool fill)
+    bool fill,
+    int *packed_width,
+    int *packed_height)
 {
     if (!image ||
         !destination ||
@@ -119,6 +121,34 @@ static bool render_rgb565(
 
     const uint8_t *source =
         (const uint8_t *)decoded->data;
+
+    if (packed_width && packed_height) {
+        /* Pack the complete source into the largest aspect-preserving rectangle
+         * within the caller's capacity. No synthetic letterbox pixels. */
+        int width = destination_width;
+        int height = (int)((int64_t)source_height * width / source_width);
+        if (height > destination_height) {
+            height = destination_height;
+            width = (int)((int64_t)source_width * height / source_height);
+        }
+        if (width < 1) width = 1;
+        if (height < 1) height = 1;
+        bool valid = true;
+        for (int y = 0; y < height && valid; y++) {
+            int sy = (int)((int64_t)y * source_height / height);
+            for (int x = 0; x < width; x++) {
+                int sx = (int)((int64_t)x * source_width / width);
+                if (!thumbnail_render_read_pixel(source, stride, sx, sy, color_format,
+                        &destination[(size_t)y * width + x])) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+        lv_image_decoder_close(&decoder);
+        if (valid) { *packed_width = width; *packed_height = height; }
+        return valid;
+    }
 
     if (fill) {
         /* Center-crop the source, then sample every destination pixel. No
@@ -216,11 +246,19 @@ static bool render_rgb565(
 bool thumbnail_render_to_rgb565(const lv_image_dsc_t *image, uint16_t *destination,
     int width, int height)
 {
-    return render_rgb565(image, destination, width, height, true);
+    return render_rgb565(image, destination, width, height, true, NULL, NULL);
 }
 
 bool thumbnail_render_to_rgb565_fit(const lv_image_dsc_t *image, uint16_t *destination,
     int width, int height)
 {
-    return render_rgb565(image, destination, width, height, false);
+    return render_rgb565(image, destination, width, height, false, NULL, NULL);
+}
+
+bool thumbnail_render_to_rgb565_aspect(const lv_image_dsc_t *image,
+    uint16_t *destination, int max_width, int max_height, int *width, int *height)
+{
+    if (!width || !height) return false;
+    *width = *height = 0;
+    return render_rgb565(image, destination, max_width, max_height, false, width, height);
 }

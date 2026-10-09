@@ -189,7 +189,7 @@ static bool fetch_preview_png(
  * transfers its completed staging buffer rather than allocating/copying again.
  */
 static void publish_preview_result(const row_preview_job_t *job, const char *file,
-    uint16_t **rendered, bool rendered_ok)
+    uint16_t **rendered, bool rendered_ok, int width, int height)
 {
     if (!bsp_display_lock(0)) return;
     const lv_image_dsc_t *ready_image = NULL;
@@ -199,7 +199,8 @@ static void publish_preview_result(const row_preview_job_t *job, const char *fil
         job->generation == s_generation &&
         s_slots[job->slot].generation == job->generation &&
         strcmp(s_slots[job->slot].file, file) == 0;
-    if (current && rendered_ok && *rendered) {
+    if (current && rendered_ok && *rendered && width > 0 && height > 0 &&
+        width <= ROW_PREVIEW_WIDTH && height <= ROW_PREVIEW_HEIGHT) {
         row_preview_slot_t *slot = &s_slots[job->slot];
         lv_image_cache_drop(&slot->image);
         heap_caps_free(slot->pixels);
@@ -211,10 +212,10 @@ static void publish_preview_result(const row_preview_job_t *job, const char *fil
         image->header.magic = LV_IMAGE_HEADER_MAGIC;
 #endif
         image->header.cf = LV_COLOR_FORMAT_RGB565;
-        image->header.w = ROW_PREVIEW_WIDTH;
-        image->header.h = ROW_PREVIEW_HEIGHT;
-        image->header.stride = ROW_PREVIEW_WIDTH * sizeof(uint16_t);
-        image->data_size = ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t);
+        image->header.w = width;
+        image->header.h = height;
+        image->header.stride = width * sizeof(uint16_t);
+        image->data_size = width * height * sizeof(uint16_t);
         image->data = (const uint8_t *)slot->pixels;
         slot->state = ROW_PREVIEW_READY;
         ready_image = image;
@@ -278,6 +279,7 @@ static void preview_worker(void *arg)
 
         uint16_t *rendered = NULL;
         bool rendered_ok = false;
+        int width = 0, height = 0;
 
         if (fetched) {
             rendered = heap_caps_malloc(
@@ -294,18 +296,18 @@ static void preview_worker(void *arg)
             raw_png.data_size = png_size;
 
             if (rendered && bsp_display_lock(2500)) {
-                rendered_ok = thumbnail_render_to_rgb565_fit(
+                rendered_ok = thumbnail_render_to_rgb565_aspect(
                     &raw_png,
                     rendered,
                     ROW_PREVIEW_WIDTH,
-                    ROW_PREVIEW_HEIGHT);
+                    ROW_PREVIEW_HEIGHT, &width, &height);
                 bsp_display_unlock();
             }
         }
 
         if (png) heap_caps_free(png);
 
-        publish_preview_result(&job, file, &rendered, rendered_ok);
+        publish_preview_result(&job, file, &rendered, rendered_ok, width, height);
         heap_caps_free(rendered);
 
     }

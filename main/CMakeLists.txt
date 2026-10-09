@@ -93,6 +93,7 @@ idf_component_register(
         "ui_printer_actions.c"
         "ui_printer_banner.c"
         "ui_printer_popups.c"
+        "ui_filament_recovery.c"
         "printer_controller.c"
         "printer_layer_resolver.c"
         "printer_ui_controller.c"

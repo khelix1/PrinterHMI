@@ -576,3 +576,80 @@ These checks do not imply an offline/reconnect or camera soak. The real canonica
 ESP-IDF build, source push and nightly firmware/checksum publication are performed
 by the repository's end-of-night script on integrated main. Stable version 6.5.6
 is restored after the nightly build; branch closure occurs only after success.
+
+## Filament recovery
+
+Run `tools/audit/filament_recovery_test.py` against LVGL 9.5 and
+`tools/audit/filament_recovery_macros_test.py` with Jinja2. Then verify parking,
+load/purge, sensor-triggered pause, cooled pause and cancellation on a small
+test print. See [Filament recovery](FILAMENT_RECOVERY.md).
+
+## Responsive temperature/fan dialogs
+
+Run `tools/audit/control_popups_layout_test.py` against LVGL 9.5. On the panel,
+check nozzle, bed and fan presets; tap a temperature target to open the numeric
+editor; check Back, Set, Off, range validation and keyboard Ready/Cancel. Repeat
+across all four themes, densities and large text. Scroll any overflowing body
+and confirm the footer remains visible. On multi-hotend printers, verify the
+command addresses the selected heater.
+
+## Responsive Motion dialogs
+
+Run `tools/audit/motion_layout_test.py` and `tools/audit/tools_live_refresh_test.py`
+against LVGL 9.5. On the panel check Tools → Calibration → Motion: Limits,
+Drivers and Distance. Try both Belt/pulley and Leadscrew, edit both fields,
+check Done/Cancel and calculate. Repeat across themes, densities and large text;
+confirm labels wrap without overlapping and footer actions stay visible while
+scrolling. Verify driver discovery, selection and offline/profile transitions
+when the printer exposes TMC diagnostics.
+
+## Responsive sensor/status dialogs
+
+Run `tools/audit/sensor_status_layout_test.py` against LVGL 9.5. Check Printer
+filament sensor controls (outside a pause) and Printer Status across every
+theme/density/large-text setting. Verify long names/paths wrap, sensor lists and
+long details scroll, and Close remains visible. Toggle only when appropriate
+for the printer and confirm live acknowledgement or the five-second retry.
+Sensor rows remain bound by name; removed sensors/profile changes cannot send
+a stale toggle. Reopen to display newly discovered sensors. Printer Status
+continues to show an opening-time snapshot.
+
+## Responsive hotend dialogs
+
+Run `tools/audit/hotend_layout_test.py` against LVGL 9.5. On the panel open
+hotend controls in Classic, Operator, Glass and Operator Shell; repeat with
+large text and each density. Verify long names and temperatures wrap, the list
+scrolls and Close remains visible. Select a hotend temperature and check presets,
+Off and custom entry address that heater. During printing and pause, verify
+hotend temperature, bed temperature and fan speed are still editable. On a
+multi-hotend printer, check the active indicator and Back/Activate confirmation
+while idle; activation remains disabled during printing/pause. Reopen after
+hotend discovery changes. Disconnect or switch printers and confirm stale rows
+cannot send commands. Check closing/reopening both dialogs.
+
+## Responsive cancel-object dialogs
+
+Run `tools/audit/object_layout_test.py` against LVGL 9.5. On a multi-object test
+print, open Cancel Object in each theme/density/large-text setting. Check map
+selection, Current/Excluded markers, long wrapping names, object-list scrolling
+and visible Close/Exclude actions. Select an object and verify the confirmation
+shows its full name. Back must leave the print unchanged; Exclude must cancel
+only that object while the others continue. Check close/reopen, unavailable/all
+excluded states and changing printers with an open dialog. Recheck temperature,
+bed and fan adjustments during printing and pause.
+
+## Responsive whole-print cancellation
+
+Run `tools/audit/cancel_layout_test.py` against LVGL 9.5. Open the whole-print
+Cancel confirmation in each theme/density/large-text setting. Check the warning
+and visible Back/Cancel actions. Back must leave the active print unchanged;
+Cancel must invoke the existing whole-job cancellation on a disposable test
+print. Check close/reopen and preserve single-object exclusion behavior.
+
+## Control-dialog nightly closeout
+
+The operator accepted the incremental layout work. Printing-dependent hardware
+checks remain pending: sensor-triggered runout, parking/loading/purging/resume,
+cooled pause, active-print/paused temperature and fan edits, object exclusion and
+whole-print cancellation. This nightly does not claim a completed printing test
+or soak. See [Nightly validation](NIGHTLY_VALIDATION.md).

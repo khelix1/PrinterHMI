@@ -297,3 +297,20 @@ and a growing viewport; its rows resolve label width from the current row size.
 Shared page-state overlays center content with a native column. These changes
 consume the existing runtime fonts/metrics/palettes and preserve preview and
 transport ownership.
+
+## Paused-print filament recovery
+
+`ui_filament_recovery` owns the live modal and endpoint fencing. Dashboard and
+Printer Resume routes open it; printer macros own heat, extrusion and restoring
+the paused position. See [Filament recovery](FILAMENT_RECOVERY.md).
+
+## Responsive operator control dialogs
+
+`ui_printer_popups` owns native wrapping/scrolling bodies and fixed action
+footers for temperature/fan, hotend, filament sensor, printer status and
+cancellation dialogs. Hotend/sensor rows bind by full object name; object
+confirmation captures its own name and rechecks exclusion state.
+`ui_motion_diagnostics` owns responsive Limits/Drivers/Distance dialogs and
+editor teardown. Transport and physical recovery remain owned by Moonraker and
+printer macros. See [Nightly validation](NIGHTLY_VALIDATION.md) for pending
+printing checks.

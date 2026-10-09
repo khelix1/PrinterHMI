@@ -13,6 +13,7 @@ under `history/`.
 | [Flashing and OTA](FLASHING_AND_OTA.md) | USB installation, OTA and recovery |
 | [LVGL modernization](LVGL_MODERNIZATION.md) | Completed modernization, live refresh, aspect previews, offline navigation and responsive page work; remaining follow-up queue |
 | [Preview rendering](PREVIEW_RENDERING.md) | Preview fill/cropping and fullscreen behavior |
+| [Filament recovery](FILAMENT_RECOVERY.md) | Paused-print replacement, temperature control and Sermoon macros |
 | [Tools](TOOLS.md) | Calibration, live endstops, motion diagnostics and macro parameters |
 | [Testing](TESTING.md) | Required host and target validation |
 | [Continuous integration](CI.md) | Automated source policy and clean IDF6 build gate |
@@ -42,3 +43,5 @@ reviewed change rather than silently accepting drift.
 
 See [Encrypted Configuration Backups](ENCRYPTED_CONFIGURATION_BACKUPS.md) for
 the portable encrypted-backup format, restore verification, and recovery rules.
+
+Current control-dialog closeout: [Nightly validation and pending printing checks](NIGHTLY_VALIDATION.md).

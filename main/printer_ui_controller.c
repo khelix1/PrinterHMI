@@ -1,4 +1,5 @@
 #include "printer_ui_controller.h"
+#include "ui_filament_recovery.h"
 
 #include <string.h>
 
@@ -42,6 +43,11 @@ void printer_ui_controller_command_event_cb(lv_event_t *event)
         (const char *)lv_event_get_user_data(event);
 
     if (!command || !command[0]) {
+        return;
+    }
+
+    if (strcmp(command, "RESUME") == 0) {
+        ui_filament_recovery_show(s_send_gcode_cb);
         return;
     }
 

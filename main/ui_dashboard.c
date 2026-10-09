@@ -543,55 +543,46 @@ void ui_dashboard_status_popup_close(void)
     dashboard_status_close_cb(NULL);
 }
 
+static void dashboard_status_deleted_cb(lv_event_t *event)
+{
+    if (lv_event_get_target(event) == s_dashboard_status_popup) s_dashboard_status_popup = NULL;
+}
+
 void ui_dashboard_status_popup_show(const char *title_text, const char *body)
 {
-    if (s_dashboard_status_popup) {
-        lv_obj_delete(s_dashboard_status_popup);
-        s_dashboard_status_popup = NULL;
-    }
-
-    s_dashboard_status_popup =
-        ui_popup_create(
-            lv_screen_active(),
-            620,
-            390,
-            UI_POPUP_STANDARD);
-
-    if (!s_dashboard_status_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_dashboard_status_popup,
-        title_text ? title_text : ui_text("STATUS"),
-        false,
-        0);
-
-    ui_popup_add_header_divider(
-        s_dashboard_status_popup,
-        44);
-
-    ui_popup_add_body(
-        s_dashboard_status_popup,
-        body ? body : "--",
-        25,
-        60,
-        560);
-
-    ui_popup_add_standard_footer_divider(
-        s_dashboard_status_popup);
-
-    ui_popup_add_footer_action(
-        s_dashboard_status_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_CENTER,
-        dashboard_status_close_cb,
-        NULL,
-        NULL);
-
-    lv_obj_move_foreground(s_dashboard_status_popup);
+    ui_dashboard_status_popup_close();
+    int32_t width = lv_display_get_horizontal_resolution(NULL) - 32;
+    int32_t height = lv_display_get_vertical_resolution(NULL) - 32;
+    if (width > 660) width = 660;
+    if (height > 440) height = 440;
+    s_dashboard_status_popup = ui_popup_create(lv_screen_active(), width, height, UI_POPUP_STANDARD);
+    if (!s_dashboard_status_popup) return;
+    lv_obj_add_event_cb(s_dashboard_status_popup, dashboard_status_deleted_cb, LV_EVENT_DELETE, NULL);
+    lv_obj_set_flex_flow(s_dashboard_status_popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_dashboard_status_popup, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(s_dashboard_status_popup, UI_GAP_CARD, 0);
+    lv_obj_t *title = lv_label_create(s_dashboard_status_popup);
+    lv_label_set_text(title, title_text ? title_text : ui_text("STATUS"));
+    ui_apply_custom_label_style(title, UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_obj_set_width(title, LV_PCT(100));
+    lv_obj_t *scroll = lv_obj_create(s_dashboard_status_popup);
+    lv_obj_remove_style_all(scroll);
+    lv_obj_set_size(scroll, LV_PCT(100), 0);
+    lv_obj_set_flex_grow(scroll, 1);
+    lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
+    lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
+    lv_obj_t *message = lv_label_create(scroll);
+    lv_label_set_text(message, body ? body : "--");
+    ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(message, LV_PCT(100));
+    lv_obj_t *footer = lv_obj_create(s_dashboard_status_popup);
+    lv_obj_remove_style_all(footer);
+    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, 160, 48, dashboard_status_close_cb, NULL, NULL);
 }
 
 

@@ -1,0 +1,46 @@
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "custom_theme.h"
+#include "ui_printer_popups.c"
+bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
+bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
+bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
+bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
+static char sent[128];static unsigned sends;
+static void send(const char *s){snprintf(sent,sizeof(sent),"%s",s);sends++;}
+static void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
+static uint16_t raster[1024*600];static int viewport_width=1024;
+static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*viewport_width+x]=*v++;lv_display_flush_ready(d);}
+static void snapshot(int theme,const char *name){const char *folder=getenv("HOTEND_LAYOUT_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%d.ppm",folder,name,theme);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"Outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
+static unsigned invalidations;
+static void invalidated(lv_event_t *e){(void)e;invalidations++;}
+static moonraker_state_t fixture;
+static uint32_t generation=1;
+uint32_t moonraker_config_generation(void){return generation;}
+void moonraker_state_snapshot(moonraker_state_t *out){*out=fixture;}
+static void reset(void){memset(&fixture,0,sizeof(fixture));fixture.hotend_count=4;fixture.moonraker_ok=fixture.live_data_ok=true;strcpy(fixture.printer_state,"standby");for(int i=0;i<4;i++){snprintf(fixture.hotends[i].object_name,24,"extruder_long_name_%04d",i);fixture.hotends[i].temperature=204+i;fixture.hotends[i].target=215;fixture.hotends[i].active=i==0;}generation++;}
+static void layout(lv_obj_t *popup){lv_obj_update_layout(popup);lv_obj_t *footer=lv_obj_get_child(popup,-1),*body=lv_obj_get_child(popup,1);inside(footer,popup);inside(body,popup);for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t *b=lv_obj_get_child(footer,i);inside(b,footer);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,300,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
+static void rows(void){layout(s_hotend_list_popup);lv_obj_t *body=lv_obj_get_child(s_hotend_list_popup,1);for(unsigned i=0;i<4;i++){lv_obj_t *row=lv_obj_get_child(body,i);assert(lv_obj_get_height(row)<210);lv_obj_t *info=lv_obj_get_child(row,0),*actions=lv_obj_get_child(row,1);inside(info,row);inside(actions,row);for(unsigned j=0;j<2;j++){inside(lv_obj_get_child(info,j),info);lv_obj_t *b=lv_obj_get_child(actions,j);inside(b,actions);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_width(b)>100);}lv_area_t a,b;lv_obj_get_coords(info,&a);lv_obj_get_coords(actions,&b);assert(a.x2<b.x1||a.y2<b.y1);assert(strstr(lv_label_get_text(s_hotend_name_labels[i]),fixture.hotends[i].object_name));}assert(strstr(lv_label_get_text(s_hotend_name_labels[0]),"ACTIVE"));}
+int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
+for(int size=0;size<3;size++)for(int theme=0;theme<4;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
+ viewport_width=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport_width,size==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();ui_printer_popups_show_hotends(send,&fixture);rows();if(!size&&density==1&&large)snapshot(theme,"hotends");
+ lv_refr_now(d);invalidations=0;for(int repeat=0;repeat<100;repeat++)refresh_hotend_list(NULL);assert(!invalidations);
+ unsigned before=sends;click(s_hotend_activate_buttons[0]);assert(!s_hotend_activate_popup&&sends==before);click(s_hotend_activate_buttons[1]);assert(s_hotend_activate_popup);layout(s_hotend_activate_popup);if(!size&&density==1&&large)snapshot(theme,"activation");click(lv_obj_get_child(lv_obj_get_child(s_hotend_activate_popup,-1),0));assert(!s_hotend_activate_popup&&sends==before);click(s_hotend_activate_buttons[1]);click(s_hotend_confirm_button);assert(sends==before+1&&!strcmp(sent,"ACTIVATE_EXTRUDER EXTRUDER=extruder_long_name_0001"));
+ strcpy(fixture.printer_state,"printing");refresh_hotend_list(NULL);assert(lv_obj_has_state(s_hotend_activate_buttons[1],LV_STATE_DISABLED));click(s_hotend_activate_buttons[1]);assert(!s_hotend_activate_popup);strcpy(fixture.printer_state,"paused");refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);assert(!s_hotend_activate_popup);strcpy(fixture.printer_state,"standby");refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);strcpy(fixture.printer_state,"printing");confirm_hotend_activate_cb(NULL);assert(sends==before+1&&!s_hotend_activate_popup);strcpy(fixture.printer_state,"standby");refresh_hotend_list(NULL);
+ fixture.moonraker_ok=false;refresh_hotend_list(NULL);click(s_hotend_temp_buttons[1]);click(s_hotend_activate_buttons[1]);assert(!s_control_popup&&!s_hotend_activate_popup);fixture.moonraker_ok=true;refresh_hotend_list(NULL);
+ moonraker_hotend_t swap=fixture.hotends[1];fixture.hotends[1]=fixture.hotends[2];fixture.hotends[2]=swap;refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);click(s_hotend_confirm_button);assert(!strcmp(sent,"ACTIVATE_EXTRUDER EXTRUDER=extruder_long_name_0001"));click(s_hotend_temp_buttons[1]);assert(s_control_popup&&!s_hotend_list_popup&&!s_hotend_refresh_timer);lv_obj_t *presets=lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2);click(lv_obj_get_child(presets,2));assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0001 TARGET=215"));
+ reset();strcpy(fixture.printer_state,"printing");ui_printer_popups_show_hotends(send,&fixture);click(s_hotend_temp_buttons[3]);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),0),1));assert(s_custom_temp_popup);lv_textarea_set_text(s_custom_temp_textarea,"230");set_custom_temp_cb(NULL);assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0003 TARGET=230"));
+ // Temperature and fan changes remain usable during both printing and pause.
+ for(int paused=0;paused<2;paused++){
+  reset();strcpy(fixture.printer_state,paused?"paused":"printing");ui_printer_popups_show_hotends(send,&fixture);click(s_hotend_temp_buttons[1]);assert(s_control_popup);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),1));assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0001 TARGET=200"));
+  ui_printer_popups_show_bed(send,60,60);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),1));assert(!strcmp(sent,"M140 S60"));
+  ui_printer_popups_show_part_fan(send,50);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),4));assert(!strcmp(sent,"M106 S255"));
+ }
+ reset();ui_printer_popups_show_hotends(send,&fixture);before=sends;click(s_hotend_activate_buttons[1]);generation++;refresh_hotend_list(NULL);assert(lv_obj_has_state(s_hotend_confirm_button,LV_STATE_DISABLED));confirm_hotend_activate_cb(NULL);assert(sends==before);lv_obj_delete(s_hotend_list_popup);assert(!s_hotend_refresh_timer&&!s_hotend_row_count);
+ reset();ui_printer_popups_show_hotends(send,&fixture);click(s_hotend_activate_buttons[3]);fixture.hotend_count=3;refresh_hotend_list(NULL);assert(lv_obj_has_state(s_hotend_temp_buttons[3],LV_STATE_DISABLED));confirm_hotend_activate_cb(NULL);assert(sends==before);click(s_hotend_activate_buttons[1]);lv_obj_delete(s_hotend_list_popup);assert(!s_hotend_activate_popup&&!s_hotend_confirm_button&&!s_hotend_refresh_timer);
+ reset();fixture.hotends[1].temperature=-200;strcpy(fixture.hotends[2].object_name,"bad name;cmd");ui_printer_popups_show_hotends(send,&fixture);assert(!strcmp(lv_label_get_text(s_hotend_temp_labels[1]),"-- / -- C"));click(s_hotend_activate_buttons[2]);click(s_hotend_temp_buttons[2]);assert(!s_hotend_activate_popup&&!s_control_popup);close_hotend_list_cb(NULL);
+}
+puts("PASS: hotend wrapping/scroll/pinned actions, four themes, three densities/text sizes and widths; named temperatures/activation, live guards, reordering/removal and teardown");return 0;}

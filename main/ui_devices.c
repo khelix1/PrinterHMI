@@ -176,7 +176,7 @@ void ui_devices_show(
         "TELEMETRY");
 
     if (telemetry) {
-        lv_obj_set_size(telemetry, 132, 34);
+        lv_obj_set_size(telemetry, 160, 34);
         lv_obj_align(
             telemetry,
             LV_ALIGN_BOTTOM_RIGHT,
@@ -192,7 +192,7 @@ void ui_devices_show(
     lv_obj_t *endstops = ui_button_create(banner, UI_BUTTON_OUTLINED, "ENDSTOPS");
     if (endstops) {
         lv_obj_set_size(endstops, 150, 32);
-        lv_obj_align(endstops, LV_ALIGN_BOTTOM_RIGHT, -164, -8);
+        lv_obj_align(endstops, LV_ALIGN_BOTTOM_RIGHT, -192, -8);
         lv_obj_add_event_cb(endstops, endstops_cb, LV_EVENT_CLICKED, NULL);
     }
 

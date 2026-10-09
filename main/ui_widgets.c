@@ -1,3 +1,4 @@
+#include "ui_text_fit.h"
 #include "ui_widgets.h"
 #include "ui_text.h"
 #include "ui_button.h"
@@ -97,14 +98,9 @@ lv_obj_t *ui_create_button(
         UI_CONTROL,
         LV_STATE_PRESSED);
 
-    lv_obj_t *lbl = lv_label_create(btn);
-
-    lv_label_set_text(lbl, text ? text : ui_text(""));
-
-    ui_apply_text_button(lbl);
-    ui_apply_label_bright(lbl);
-
-    lv_obj_center(lbl);
+    lv_obj_set_style_pad_hor(btn, 6, 0);
+    lv_obj_set_style_pad_ver(btn, 3, 0);
+    ui_button_create_label(btn, text);
 
     return btn;
 }
@@ -256,6 +252,8 @@ lv_obj_t *ui_create_operator_info_card(
         0,
         6);
 
+    ui_text_fit_single_line(title_label, UI_FONT_BODY_LARGE);
+
     lv_obj_t *value_label =
         lv_label_create(card);
 
@@ -291,6 +289,7 @@ lv_obj_t *ui_create_operator_info_card(
         0,
         -8);
 
+    ui_text_fit_single_line(value_label, UI_FONT_VALUE_SMALL);
     return value_label;
 }
 
@@ -538,7 +537,7 @@ lv_obj_t *ui_create_operator_nav_button(
      */
     lv_obj_set_width(
         icon_label,
-        28);
+        18);
 
     lv_obj_set_style_text_align(
         icon_label,
@@ -548,7 +547,7 @@ lv_obj_t *ui_create_operator_nav_button(
     lv_obj_align(
         icon_label,
         LV_ALIGN_LEFT_MID,
-        14,
+        4,
         0);
 
     lv_obj_t *text_label =
@@ -559,6 +558,8 @@ lv_obj_t *ui_create_operator_nav_button(
         text ? text : ui_text(""));
 
     ui_apply_text_button(text_label);
+    lv_obj_set_width(text_label, width - 28);
+    lv_label_set_long_mode(text_label, LV_LABEL_LONG_CLIP);
 
     lv_obj_set_style_text_color(
         text_label,
@@ -568,7 +569,7 @@ lv_obj_t *ui_create_operator_nav_button(
     lv_obj_align(
         text_label,
         LV_ALIGN_LEFT_MID,
-        46,
+        22,
         0);
 
     ui_operator_nav_button_set_selected(

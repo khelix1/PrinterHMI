@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "ui_printer_chooser.c"
 
@@ -31,9 +32,17 @@ static void selected(int index){selected_index=index;}
 static void managed(int index){managed_index=index;}
 static unsigned flushes,invalidations,notifications;
 static void notified(lv_observer_t *o,lv_subject_t *subject){(void)o;(void)subject;notifications++;}
-static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){(void)a;(void)p;flushes++;lv_display_flush_ready(d);}
+static uint16_t raster[1024*600];
+static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){(void)a;memcpy(raster,p,sizeof(raster));flushes++;lv_display_flush_ready(d);}
+static void snapshot(int theme){const char*folder=getenv("CHOOSER_TEXT_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/chooser-theme%d.ppm",folder,theme);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+
 static void invalidated(lv_event_t *e){(void)e;invalidations++;}
 static void settle(lv_display_t *d){lv_refr_now(d);invalidations=0;}
+
+static void contained(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);assert(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2);}
+static bool overlapping(lv_obj_t*a,lv_obj_t*b){lv_area_t x,y;lv_obj_get_coords(a,&x);lv_obj_get_coords(b,&y);return x.x1<=y.x2&&y.x1<=x.x2&&x.y1<=y.y2&&y.y1<=x.y2;}
+static void geometry(void){lv_obj_update_layout(s_root);for(int i=0;i<4;i++){chooser_card_t*c=&s_cards[i];contained(c->root,s_root);lv_obj_t*labels[]={c->name,c->endpoint,c->status,c->active,c->hint};for(unsigned j=0;j<5;j++){contained(labels[j],c->root);assert(lv_obj_get_height(labels[j])==lv_obj_get_style_text_font(labels[j],0)->line_height);if(j>=2){lv_point_t n;lv_text_get_size(&n,lv_label_get_text(labels[j]),lv_obj_get_style_text_font(labels[j],0),lv_obj_get_style_text_letter_space(labels[j],0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(n.x<=lv_obj_get_width(labels[j]));}}assert(!overlapping(c->hint,c->active));assert(!overlapping(c->name,c->active));assert(!overlapping(c->name,c->endpoint));assert(!overlapping(c->endpoint,c->status));contained(c->preview,c->preview_box);contained(c->preview_icon,c->preview_box);assert(!overlapping(c->preview,c->preview_icon));}}
+
 int main(void){
  lv_init();lv_display_t *d=lv_display_create(1024,600);
  static uint8_t buffers[2][1024*600*2];
@@ -43,13 +52,16 @@ int main(void){
  profiles[0]=(moonraker_profile_t){.configured=true,.name="Printer A",.host="printer-a.local",.port=7125};
  profiles[1]=(moonraker_profile_t){.configured=true,.name="Printer B",.host="printer-b.local",.port=7126};
  known[1]=online[1]=fresh[1]=true;snprintf(health[1],32,"printing");
- for(int theme=0;theme<3;theme++)for(int large=0;large<2;large++){
+ for(int theme=0;theme<4;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
+  ui_theme_set_density((ui_density_id_t)density);
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   state=(moonraker_state_t){0};active=0;preview_ready=false;revision=1;
   unsigned events=lv_display_get_event_count(d);
   ui_printer_chooser_show(selected,managed);assert(s_root && s_timer);
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"printing"));
   assert(!strcmp(lv_label_get_text(s_cards[2].status),"NOT CONFIGURED"));
+  assert(!strcmp(lv_label_get_text(s_cards[2].hint),"TAP TO ADD"));
+  geometry();if(density==1&&large)snapshot(theme);
   for(int i=0;i<4;i++){
    assert(s_cards[i].status_bound && s_cards[i].name_bound && s_cards[i].endpoint_bound);
    assert(!strcmp(lv_subject_get_string(&s_cards[i].name_subject),lv_label_get_text(s_cards[i].name)));
@@ -87,10 +99,10 @@ int main(void){
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"paused"));
   snprintf(health[1],32,"printing");ui_printer_chooser_refresh();
   moonraker_profile_t original=profiles[0];
-  snprintf(profiles[0].name,sizeof(profiles[0].name),"Renamed Printer");
+  snprintf(profiles[0].name,sizeof(profiles[0].name),"Renamed P4");
   snprintf(profiles[0].host,sizeof(profiles[0].host),"changed.local");profiles[0].port=7443;
   ui_printer_chooser_refresh();
-  assert(!strcmp(lv_label_get_text(s_cards[0].name),"Renamed Printer"));
+  assert(!strcmp(lv_label_get_text(s_cards[0].name),"Renamed P4"));
   assert(!strcmp(lv_label_get_text(s_cards[0].endpoint),"changed.local:7443"));
   settle(d);before=flushes;notified_before=notifications;
   for(int i=0;i<6;i++){lv_tick_inc(500);lv_timer_handler();}
@@ -132,6 +144,7 @@ int main(void){
   assert(!strcmp(lv_label_get_text(s_cards[0].status),"READY"));
   s_cards[0].status_bound=false;set_status_text(&s_cards[0],"fallback");
   assert(!strcmp(lv_label_get_text(s_cards[0].status),"fallback"));s_cards[0].status_bound=true;
+  set_name_text(&s_cards[0],"Workshop printer with long name");set_endpoint_text(&s_cards[0],"workshop-printer-long-hostname.local:7125");set_status_text(&s_cards[0],"OFFLINE / RETRYING");ui_value_set_text(s_cards[0].preview,"a_very_long_print_filename_with_details.gcode");geometry();
   /* A card may be deleted independently before the chooser itself closes. */
   lv_obj_delete(s_cards[3].root);assert(!s_cards[3].root && !s_cards[3].status_bound && !s_cards[3].name_bound && !s_cards[3].endpoint_bound);
   ui_printer_chooser_refresh();
@@ -139,5 +152,5 @@ int main(void){
   assert(lv_display_get_event_count(d)==events);
  }
  lv_display_delete(d);lv_deinit();
- puts("PASS: 500ms chooser timers stay redraw-free when unchanged, all themes/text sizes, active/inactive state lifetime, live status/preview/revision/profile updates, silent name/endpoint/status subjects, profile edits/empty slots/click routing, fallback repair and card/chooser teardown");
+ puts("PASS: 500ms chooser timers stay redraw-free when unchanged, all four themes/densities/text sizes, card/label bounds and active/inactive state lifetime, live status/preview/revision/profile updates, silent name/endpoint/status subjects, profile edits/empty slots/click routing, fallback repair and card/chooser teardown");
 }

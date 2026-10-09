@@ -166,6 +166,8 @@ void ui_shell_create(void)
                 s_shell_printer_button,
                 "PRINTERHMI  |  SELECT PRINTER  " LV_SYMBOL_DOWN);
 
+        lv_label_set_long_mode(s_shell_title_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
         lv_obj_add_event_cb(
             s_shell_printer_button,
             shell_printer_switch_event_cb,
@@ -397,8 +399,8 @@ void ui_shell_create_nav(void)
                 shell_nav_rail,
                 0,
                 0,
-                150,
-                44,
+                156,
+                52,
                 nav[i].icon,
                 nav[i].text);
 
@@ -419,9 +421,9 @@ void ui_shell_create_nav(void)
          */
         lv_obj_align(
             button,
-            LV_ALIGN_TOP_MID,
-            0,
-            8 + i * 50);
+            LV_ALIGN_TOP_LEFT,
+            8,
+            8 + i * 58);
 
         lv_obj_add_event_cb(
             button,

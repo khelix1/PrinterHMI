@@ -397,23 +397,23 @@ static void create_filters(void)
     lv_dropdown_set_selected(s_filter_dropdown, (uint32_t)s_filter);
     lv_obj_add_event_cb(s_filter_dropdown, filter_cb, LV_EVENT_VALUE_CHANGED, NULL);
     s_temperature_button = ui_button_create(s_root, UI_BUTTON_OUTLINED, "TEMPS ON");
-    lv_obj_set_pos(s_temperature_button, 276, 82);
-    lv_obj_set_size(s_temperature_button, 130, 40);
+    lv_obj_set_pos(s_temperature_button, 270, 82);
+    lv_obj_set_size(s_temperature_button, 156, 40);
     s_temperature_label = lv_obj_get_child(s_temperature_button, 0);
     lv_obj_add_event_cb(s_temperature_button, temperature_cb, LV_EVENT_CLICKED, NULL);
     update_temperature_button();
     lv_obj_t *search = ui_button_create(s_root, UI_BUTTON_OUTLINED, s_query[0] ? "SEARCH*" : "SEARCH");
-    lv_obj_set_pos(search, 418, 82);
+    lv_obj_set_pos(search, 438, 82);
     lv_obj_set_size(search, 124, 40);
     s_search_label = lv_obj_get_child(search, 0);
     lv_obj_add_event_cb(search, search_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *reset = ui_button_create(s_root, UI_BUTTON_SECONDARY, "RESET");
-    lv_obj_set_pos(reset, 554, 82);
+    lv_obj_set_pos(reset, 574, 82);
     lv_obj_set_size(reset, 100, 40);
     lv_obj_add_event_cb(reset, reset_filters_cb, LV_EVENT_CLICKED, NULL);
     s_filter_count = lv_label_create(s_root);
-    lv_obj_set_pos(s_filter_count, 670, 93);
-    lv_obj_set_width(s_filter_count, 164);
+    lv_obj_set_pos(s_filter_count, 692, 93);
+    lv_obj_set_width(s_filter_count, 142);
     lv_obj_set_style_text_align(s_filter_count, LV_TEXT_ALIGN_RIGHT, 0);
     ui_apply_custom_label_style(s_filter_count, UI_FONT_CAPTION, UI_TEXT_DIM);
 }
@@ -774,12 +774,13 @@ void ui_console_show(
     ui_apply_label_dim(subtitle);
 
     s_connection = lv_label_create(s_root);
-    lv_obj_set_width(s_connection, 170);
+    lv_obj_set_width(s_connection, 220);
+    lv_label_set_long_mode(s_connection, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(
         s_connection,
         LV_TEXT_ALIGN_RIGHT,
         0);
-    lv_obj_set_pos(s_connection, 314, 31);
+    lv_obj_set_pos(s_connection, 264, 24);
 
     page_button(
         "COMMAND",

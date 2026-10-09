@@ -1,3 +1,4 @@
+#include "ui_text_fit.h"
 #include "ui_value_update.h"
 #include "ui_printer_info_cards.h"
 #include "ui_text.h"
@@ -300,7 +301,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 
     if (cards->nozzle) {
         char nbuf[32];
-        if (printer_nozzle_temp > -100.0) snprintf(nbuf, sizeof(nbuf), "%.1f / %.1f C", printer_nozzle_temp, printer_nozzle_target);
+        if (printer_nozzle_temp > -100.0) snprintf(nbuf, sizeof(nbuf), "%.1f/%.1f C", printer_nozzle_temp, printer_nozzle_target);
         else snprintf(nbuf, sizeof(nbuf), "-- / -- C");
         ui_value_set_text(cards->nozzle, nbuf);
         ui_value_set_color(cards->nozzle, temp_value_color(printer_nozzle_temp, printer_nozzle_target), 0);
@@ -308,7 +309,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 
     if (cards->bed) {
         char bbuf[32];
-        if (printer_bed_temp > -100.0) snprintf(bbuf, sizeof(bbuf), "%.1f / %.1f C", printer_bed_temp, printer_bed_target);
+        if (printer_bed_temp > -100.0) snprintf(bbuf, sizeof(bbuf), "%.1f/%.1f C", printer_bed_temp, printer_bed_target);
         else snprintf(bbuf, sizeof(bbuf), "-- / -- C");
         ui_value_set_text(cards->bed, bbuf);
         ui_value_set_color(cards->bed, temp_value_color(printer_bed_temp, printer_bed_target), 0);
@@ -341,6 +342,11 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
     if (cards->remaining) {
         ui_value_set_text(cards->remaining, (printer_eta_text && printer_eta_text[0]) ? printer_eta_text : ui_text("--:--"));
     }
+    lv_obj_t *values[] = { cards->progress, cards->nozzle, cards->bed,
+        cards->part_fan, cards->eta, cards->elapsed, cards->remaining };
+    for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
+        if (values[i]) ui_text_fit_single_line(values[i],
+            i == 0 ? UI_FONT_HEADING : UI_FONT_VALUE_SMALL);
 }
 
 static const char *card_icon_for_title(const char *title)

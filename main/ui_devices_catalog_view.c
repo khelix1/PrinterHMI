@@ -1,5 +1,6 @@
 #include "ui_devices_catalog_view.h"
 #include "ui_text.h"
+#include "ui_text_fit.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -195,25 +196,28 @@ static void add_device_card(
     int column = (int)(visible_index % 2);
     int row = (int)(visible_index / 2);
     int x = column == 0 ? 0 : 410;
-    int y = row * 102;
+    int y = row * 122;
 
     lv_obj_t *card = s_devices->rows[visible_index].card;
     if (!card) {
-        card = ui_create_operator_card(s_devices->list, x, y, 390, 90);
+        card = ui_create_operator_card(s_devices->list, x, y, 390, 110);
         if (!card) return;
         s_devices->rows[visible_index].card = card;
-        s_devices->rows[visible_index].name = devices_label(card, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT, 14, 10, 250);
-        s_devices->rows[visible_index].kind = devices_label(card, "", UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 270, 13, 104);
+        s_devices->rows[visible_index].name = devices_label(card, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT, 14, 8, 362);
+        s_devices->rows[visible_index].kind = devices_label(card, "", UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 14, 76, 104);
         lv_obj_set_style_text_align(s_devices->rows[visible_index].kind, LV_TEXT_ALIGN_RIGHT, 0);
-        ui_create_operator_card_divider(card, 14, 40, 362);
-        s_devices->rows[visible_index].object = devices_label(card, "", UI_FONT_CAPTION, UI_TEXT_DIM, 14, 55, 205);
-        s_devices->rows[visible_index].value = devices_label(card, "--", UI_FONT_CAPTION, UI_TEXT_BRIGHT, 220, 55, 156);
+        ui_create_operator_card_divider(card, 14, 67, 362);
+        s_devices->rows[visible_index].object = devices_label(card, "", UI_FONT_CAPTION, UI_TEXT_DIM, 14, 38, 362);
+        s_devices->rows[visible_index].value = devices_label(card, "--", UI_FONT_CAPTION, UI_TEXT_BRIGHT, 130, 76, 246);
         lv_obj_set_style_text_align(s_devices->rows[visible_index].value, LV_TEXT_ALIGN_RIGHT, 0);
     }
     lv_obj_remove_flag(card, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(s_devices->rows[visible_index].name, device->display_name);
     lv_label_set_text(s_devices->rows[visible_index].kind, device_catalog_kind_label(device->kind));
     lv_label_set_text(s_devices->rows[visible_index].object, device->object_name);
+    lv_label_set_long_mode(s_devices->rows[visible_index].name, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_label_set_long_mode(s_devices->rows[visible_index].object, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    ui_text_fit_single_line(s_devices->rows[visible_index].kind, UI_FONT_CAPTION);
     lv_obj_t *value = s_devices->rows[visible_index].value;
     lv_label_set_text(value, "--");
 
@@ -351,6 +355,7 @@ static void render_catalog(void)
     lv_label_set_text(
         s_devices->banner_status,
         banner);
+    ui_text_fit_single_line(s_devices->banner_status, UI_FONT_CAPTION);
 
     if (!status.discovered) {
         if (!s_devices->empty) s_devices->empty = devices_label(
@@ -362,6 +367,7 @@ static void render_catalog(void)
             80,
             760);
 
+        lv_label_set_long_mode(s_devices->empty, LV_LABEL_LONG_WRAP);
         lv_obj_t *waiting = s_devices->empty;
         lv_obj_remove_flag(waiting, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(waiting, "Waiting for the active printer's WebSocket capability discovery.");
@@ -408,6 +414,7 @@ static void render_catalog(void)
             80,
             760);
 
+        lv_label_set_long_mode(s_devices->empty, LV_LABEL_LONG_WRAP);
         lv_obj_t *empty = s_devices->empty;
         lv_obj_remove_flag(empty, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(empty, "No devices in this category were reported by the active printer.");
@@ -566,7 +573,7 @@ void ui_devices_catalog_view_create(
     lv_obj_set_size(
         s_devices->filter_strip,
         800,
-        42);
+        48);
     lv_obj_set_pos(
         s_devices->filter_strip,
         20,
@@ -589,6 +596,8 @@ void ui_devices_catalog_view_create(
         s_devices->filter_strip,
         UI_SURFACE_TRANSPARENT);
 
+    lv_obj_set_flex_flow(s_devices->filter_strip, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(s_devices->filter_strip, 8, 0);
     for (size_t index = 0;
          index < DEVICE_FILTER_COUNT;
          ++index) {
@@ -606,16 +615,11 @@ void ui_devices_catalog_view_create(
         s_devices->filter_buttons[index] =
             button;
 
-        /*
-         * Use the original compact target size. Eight complete catalog
-         * categories now extend beyond the viewport and remain reachable by
-         * horizontal swipe.
-         */
-        lv_obj_set_size(button, 108, 38);
-        lv_obj_set_pos(
-            button,
-            (int)index * 115,
-            0);
+        /* Fit both the category and its changing count on one line.
+         * Native row layout keeps wider items spaced and swipeable. */
+        lv_obj_set_size(button, LV_SIZE_CONTENT, 44);
+        lv_obj_set_style_min_width(button, 108, 0);
+        lv_obj_set_style_pad_hor(button, 10, 0);
 
         lv_obj_add_event_cb(
             button,
@@ -657,8 +661,8 @@ void ui_devices_catalog_view_create(
     if (s_devices->previous_button) {
         lv_obj_set_size(
             s_devices->previous_button,
-            132,
-            36);
+            160,
+            44);
         lv_obj_set_pos(
             s_devices->previous_button,
             20,
@@ -692,11 +696,11 @@ void ui_devices_catalog_view_create(
     if (s_devices->next_button) {
         lv_obj_set_size(
             s_devices->next_button,
-            132,
-            36);
+            160,
+            44);
         lv_obj_set_pos(
             s_devices->next_button,
-            688,
+            660,
             466);
         lv_obj_add_event_cb(
             s_devices->next_button,

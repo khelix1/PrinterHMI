@@ -1,3 +1,4 @@
+#include "ui_text_fit.h"
 #include "ui_calibration_layout.h"
 #include "ui_text.h"
 
@@ -35,6 +36,7 @@ lv_obj_t *ui_calibration_layout_card(lv_obj_t *parent, const char *title,
         refs->status = ui_calibration_layout_label(card, "AWAITING DISCOVERY",
             UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 16, 142, 190);
     }
+    if (refs && refs->status) ui_text_fit_single_line(refs->status, UI_FONT_CAPTION);
     return card;
 }
 
@@ -67,6 +69,7 @@ void ui_calibration_layout_set_card(ui_calibration_card_refs_t *refs,
         lv_snprintf(status, sizeof(status), "NOT CONFIGURED");
     }
     lv_label_set_text(refs->status, status);
+    ui_text_fit_single_line(refs->status, UI_FONT_CAPTION);
     if (count > 0 || macro_count > 0) ui_apply_label_bright(refs->status);
     else ui_apply_label_dim(refs->status);
 }

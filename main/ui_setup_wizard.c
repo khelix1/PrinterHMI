@@ -262,7 +262,7 @@ static void show_center(void)
     setup_render_step(s_setup_step);
 
     ui_popup_add_standard_footer_divider(s_center);
-    ui_popup_add_action_at(s_center, UI_POPUP_ACTION_CANCEL, "SET UP LATER", 24, 520, 160, 44, later_cb, NULL, NULL);
+    ui_popup_add_action_at(s_center, UI_POPUP_ACTION_CANCEL, "SET UP LATER", 24, 520, 180, 44, later_cb, NULL, NULL);
     lv_obj_move_foreground(s_center);
 }
 
@@ -576,8 +576,8 @@ static void printer_open(void)
     s_keyboard = ui_popup_add_keyboard(s_setup_content, s_password, 680, 150, LV_ALIGN_TOP_LEFT, 24, 168, LV_KEYBOARD_MODE_TEXT_LOWER);
     if (s_name) lv_obj_add_event_cb(s_name, focus_cb, LV_EVENT_CLICKED, NULL);
     if (s_password) lv_obj_add_event_cb(s_password, focus_cb, LV_EVENT_CLICKED, NULL);
-    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "DISCOVER PRINTERS", 24, 330, 220, 44, printer_discover_cb, NULL, NULL);
-    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_CONFIRM, "TEST PRINTER", 260, 330, 220, 44, printer_test_start_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "DISCOVER PRINTERS", 24, 330, 264, 44, printer_discover_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_CONFIRM, "TEST PRINTER", 300, 330, 180, 44, printer_test_start_cb, NULL, NULL);
     ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, "FULL OPTIONS", 496, 330, 200, 44, printer_full_options_cb, NULL, NULL);
 }
 
@@ -640,7 +640,7 @@ static void camera_discovery_poll(lv_timer_t *timer)
     const int profile = moonraker_config_active_profile_index();
     if (!found || !count) {
         set_status("No enabled cameras found for this printer. Scan again or continue without one.");
-        ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, ui_text("DISCOVER CAMERAS"), 24, 350, 240, 44, center_camera_cb, NULL, NULL);
+        ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, ui_text("DISCOVER CAMERAS"), 24, 350, 264, 44, center_camera_cb, NULL, NULL);
         return;
     }
     set_status(ui_text("SELECT A CAMERA TO TEST ITS STREAM."));
@@ -664,7 +664,7 @@ static void camera_open(void)
     ui_popup_add_caption(s_setup_content, ui_text("DISCOVER CAMERAS"), 24, 28, 680);
     s_status = ui_popup_add_status_label(s_setup_content, ui_text("Searching this printer for configured cameras..."), 24, 74, 680);
     s_camera_list = ui_popup_add_list(s_setup_content, 24, 132, 680, 196);
-    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, ui_text("DISCOVER CAMERAS"), 24, 350, 240, 44, center_camera_cb, NULL, NULL);
+    ui_popup_add_action_at(s_setup_content, UI_POPUP_ACTION_SECONDARY, ui_text("DISCOVER CAMERAS"), 24, 350, 264, 44, center_camera_cb, NULL, NULL);
     const int profile = moonraker_config_active_profile_index();
     const moonraker_profile_t *printer = moonraker_config_profile(profile);
     if (!printer || !printer->configured) {

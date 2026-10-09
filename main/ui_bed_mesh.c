@@ -140,8 +140,8 @@ static void update_surface_grid_button(void)
         lv_label_set_text(
             s.surface_grid_label,
             s.surface_grid_visible
-                ? ui_text("SURFACE GRID ON")
-                : ui_text("SURFACE GRID OFF"));
+                ? ui_text("GRID ON")
+                : ui_text("GRID OFF"));
     }
 
     if (s.surface_grid_button) {
@@ -388,9 +388,9 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         ui_popup_add_action_aligned(
             s.popup,
             UI_POPUP_ACTION_SECONDARY,
-            "SURFACE GRID OFF",
+            "GRID OFF",
             174,
-            46,
+            60,
             LV_ALIGN_TOP_RIGHT,
             -20,
             98,
@@ -405,14 +405,14 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         s.popup,
         ui_text("DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM"),
         20,
-        493,
-        272);
+        442,
+        814);
 
     ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
         "RESET VIEW",
-        132,
+        160,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
         -20,
@@ -427,7 +427,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -162,
+        -190,
         -12,
         plus_cb,
         NULL,
@@ -439,7 +439,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -224,
+        -252,
         -12,
         minus_cb,
         NULL,
@@ -448,10 +448,10 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         s.popup,
         UI_POPUP_ACTION_PRIMARY,
         "CALIBRATE",
-        130,
+        150,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -286,
+        -314,
         -12,
         calibrate_cb,
         NULL,
@@ -463,7 +463,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         140,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -426,
+        -474,
         -12,
         ui_bed_mesh_profiles_show_cb,
         NULL,

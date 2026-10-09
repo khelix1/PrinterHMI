@@ -510,7 +510,9 @@ static lv_obj_t *make_action_button(
         return NULL;
     }
 
-    lv_obj_set_size(button, 110, 34);
+    lv_obj_set_size(button, strcmp(label, "RESONANCE") == 0 ? 152 : strcmp(label, "SHAPER") == 0 ? 100 : 102, 44);
+    lv_obj_set_style_pad_hor(button, 1, 0);
+    lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_CLIP);
     lv_obj_align(button, align, x, -10);
     lv_obj_add_event_cb(
         button,
@@ -546,7 +548,7 @@ void ui_calibration_motion_create(
             card,
             "SHAPER",
             LV_ALIGN_BOTTOM_LEFT,
-            16,
+            10,
             input_shaper_button_cb);
 
     s_motion.resonance_test_button =
@@ -562,7 +564,7 @@ void ui_calibration_motion_create(
             card,
             "SENSOR",
             LV_ALIGN_BOTTOM_RIGHT,
-            -16,
+            -10,
             accelerometer_check_button_cb);
 }
 

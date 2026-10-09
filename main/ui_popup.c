@@ -13,6 +13,7 @@ typedef struct {
     lv_obj_t *footer_buttons[3];
     int32_t footer_widths[3];
     int32_t footer_columns[4];
+    int32_t footer_rows[2];
 } ui_popup_modal_ctx_t;
 
 static void modal_blocker_deleted_cb(lv_event_t *event)
@@ -653,7 +654,6 @@ lv_obj_t *ui_popup_find_owner(lv_obj_t *object)
 static void footer_layout(ui_popup_modal_ctx_t *ctx)
 {
     if (!ctx || !ctx->footer) return;
-    static const int32_t rows[] = {48, LV_GRID_TEMPLATE_LAST};
     lv_obj_update_layout(ctx->popup);
     int32_t width = lv_obj_get_content_width(ctx->popup) - 48;
     if (width < 1) width = 1;
@@ -665,19 +665,41 @@ static void footer_layout(ui_popup_modal_ctx_t *ctx)
     int32_t cell_width = count ? (width - 12 * ((int32_t)count - 1)) / (int32_t)count : width;
     if (cell_width < 1) cell_width = 1;
     unsigned column = 0;
+    int32_t height = 48;
     for (unsigned slot = 0; slot < 3; ++slot) {
         lv_obj_t *button = ctx->footer_buttons[slot];
         if (!button) continue;
         /* Percent widths resolve against the whole footer, not its Grid cell. */
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        const lv_font_t *font = lv_obj_get_style_text_font(label, 0);
+        lv_point_t natural, wrapped;
+        int32_t pad = lv_obj_get_style_pad_left(button, 0) + lv_obj_get_style_pad_right(button, 0)
+            + 2 * lv_obj_get_style_border_width(button, 0);
+        lv_text_get_size(&natural, lv_label_get_text(label), font,
+            lv_obj_get_style_text_letter_space(label, 0), lv_obj_get_style_text_line_space(label, 0),
+            LV_COORD_MAX, LV_TEXT_FLAG_NONE);
         int32_t requested = ctx->footer_widths[slot];
-        lv_obj_set_width(button, requested < cell_width ? requested : cell_width);
+        if (requested < natural.x + pad) requested = natural.x + pad;
+        int32_t actual = requested < cell_width ? requested : cell_width;
+        lv_obj_set_width(button, actual);
+        lv_text_get_size(&wrapped, lv_label_get_text(label), font,
+            lv_obj_get_style_text_letter_space(label, 0), lv_obj_get_style_text_line_space(label, 0),
+            actual > pad ? actual - pad : 1, LV_TEXT_FLAG_NONE);
+        int32_t needed = wrapped.y + lv_obj_get_style_pad_top(button, 0)
+            + lv_obj_get_style_pad_bottom(button, 0) + 2 * lv_obj_get_style_border_width(button, 0);
+        if (needed > height) height = needed;
         ctx->footer_columns[column] = LV_GRID_FR(1);
         lv_grid_align_t align = slot == UI_POPUP_FOOTER_LEFT ? LV_GRID_ALIGN_START :
             slot == UI_POPUP_FOOTER_RIGHT ? LV_GRID_ALIGN_END : LV_GRID_ALIGN_CENTER;
         lv_obj_set_grid_cell(button, align, (int32_t)column++, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     }
     ctx->footer_columns[column] = LV_GRID_TEMPLATE_LAST;
-    lv_obj_set_grid_dsc_array(ctx->footer, ctx->footer_columns, rows);
+    ctx->footer_rows[0] = height;
+    ctx->footer_rows[1] = LV_GRID_TEMPLATE_LAST;
+    lv_obj_set_height(ctx->footer, height);
+    for (unsigned slot = 0; slot < 3; ++slot)
+        if (ctx->footer_buttons[slot]) lv_obj_set_height(ctx->footer_buttons[slot], height);
+    lv_obj_set_grid_dsc_array(ctx->footer, ctx->footer_columns, ctx->footer_rows);
 }
 static void popup_size_cb(lv_event_t *event)
 {
@@ -715,7 +737,7 @@ lv_obj_t *ui_popup_add_footer_action(lv_obj_t *popup,
     lv_obj_set_height(button, 48);
     lv_obj_t *label = lv_obj_get_child(button, 0);
     lv_obj_set_width(label, LV_PCT(100));
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     if (label_out) *label_out = label;
     if (event_cb) lv_obj_add_event_cb(button, event_cb, LV_EVENT_CLICKED, user_data);

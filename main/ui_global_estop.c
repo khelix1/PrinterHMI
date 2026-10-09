@@ -108,7 +108,7 @@ void ui_global_estop_create(lv_obj_t *parent)
     s_estop->button = ui_button_create_empty(parent, UI_BUTTON_DANGER);
     if (!s_estop->button) return;
 
-    lv_obj_set_size(s_estop->button, 125, 52);
+    lv_obj_set_size(s_estop->button, 140, 52);
     lv_obj_set_pos(s_estop->button, 690, 10);
     lv_obj_clear_flag(s_estop->button, LV_OBJ_FLAG_SCROLLABLE);
 

@@ -185,3 +185,13 @@ are not architecture modules and must not be tracked as production source.
 | `tools/audit/sensor_status_layout_test.py` | Live named sensor controls and shared wrapping status dialogs |
 | `tools/audit/object_layout_test.py`, `tools/audit/cancel_layout_test.py` | Targeted object and whole-print cancellation layouts, command identity and lifecycle |
 | `docs/NIGHTLY_VALIDATION.md` | Nightly closeout validation and pending panel/printing checks |
+
+### Settings and large-text checks
+
+| Files | Coverage |
+| --- | --- |
+| `tools/audit/settings_dialog_layout_test.py`, `tools/audit/theme_dialog_layout_test.py` | Scrolling Settings/theme dialogs and pinned actions |
+| `tools/audit/button_text_fit_test.py`, `tools/audit/devices_text_layout_test.py` | Full labels, single-line controls and device rows |
+| `tools/audit/motion_layout_test.py`, `tools/audit/chooser_refresh_test.py` | Motion/Calibration geometry and stable chooser refresh |
+| `tools/audit/profiles_layout_test.py` | Main profile manager/editor/remove geometry, validation and cleanup |
+| `docs/SETTINGS_LAYOUT_VALIDATION.md` | Source closeout and pending hardware/follow-up work |

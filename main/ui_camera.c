@@ -217,8 +217,8 @@ static void camera_set_viewport(bool fullscreen)
         lv_obj_add_flag(s_configure_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(s_status, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(s_fullscreen_button, 816, 548);
-        lv_obj_set_size(s_fullscreen_button, 192, 40);
+        lv_obj_set_pos(s_fullscreen_button, 728, 536);
+        lv_obj_set_size(s_fullscreen_button, 280, 48);
         lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_CLOSE " EXIT FULLSCREEN"));
         lv_obj_move_foreground(s_card);
     } else {
@@ -229,19 +229,19 @@ static void camera_set_viewport(bool fullscreen)
         lv_obj_clear_flag(s_configure_button, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(s_status, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_size(s_fullscreen_button, 184, 36);
+        lv_obj_set_size(s_fullscreen_button, 210, 48);
         lv_obj_set_pos(s_card, 0, 0);
         lv_obj_set_size(s_card, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
         s_view_width = UI_PAGE_ROOT_WIDTH;
         s_view_height = UI_PAGE_ROOT_HEIGHT;
         lv_obj_set_pos(s_image, 0, 0);
         lv_obj_set_size(s_image, s_view_width, s_view_height);
-        lv_obj_set_pos(s_configure_button, 20, 476);
-        lv_obj_set_pos(s_view_button, 178, 476);
-        lv_obj_set_pos(s_camera_selector, 300, 476);
-        lv_obj_set_pos(s_fullscreen_button, 650, 476);
-        lv_obj_set_pos(s_status, 470, 450);
-        lv_obj_set_width(s_status, 170);
+        lv_obj_set_pos(s_configure_button, 20, 464);
+        lv_obj_set_pos(s_view_button, 226, 464);
+        lv_obj_set_pos(s_camera_selector, 356, 464);
+        lv_obj_set_pos(s_fullscreen_button, 624, 464);
+        lv_obj_set_pos(s_status, 470, 430);
+        lv_obj_set_width(s_status, 364);
         lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
         lv_obj_move_background(s_card);
     }
@@ -379,10 +379,11 @@ static void camera_update_selector(void)
     if (selector_label) {
         char text[64];
         if (configured && entry.name[0]) {
-            snprintf(text, sizeof(text), LV_SYMBOL_IMAGE " %.16s", entry.name);
+            snprintf(text, sizeof(text), LV_SYMBOL_IMAGE " %s", entry.name);
         } else {
             snprintf(text, sizeof(text), LV_SYMBOL_IMAGE " CAMERA %u", (unsigned)(s_camera_index + 1));
         }
+        lv_label_set_long_mode(selector_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
         ui_value_set_text(selector_label, text);
     }
     lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
@@ -552,38 +553,38 @@ void ui_camera_show(void)
 
     s_configure_button = ui_button_create(
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " CONFIGURE");
-    lv_obj_set_size(s_configure_button, 148, 36);
-    lv_obj_set_pos(s_configure_button, 20, 476);
+    lv_obj_set_size(s_configure_button, 196, 48);
+    lv_obj_set_pos(s_configure_button, 20, 464);
     ui_button_expand_touch_target(s_configure_button);
     lv_obj_add_event_cb(s_configure_button, camera_configure_cb, LV_EVENT_CLICKED, NULL);
 
     s_view_button = ui_button_create(
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " VIEW");
-    lv_obj_set_size(s_view_button, 112, 36);
-    lv_obj_set_pos(s_view_button, 178, 476);
+    lv_obj_set_size(s_view_button, 120, 48);
+    lv_obj_set_pos(s_view_button, 226, 464);
     ui_button_expand_touch_target(s_view_button);
     lv_obj_add_event_cb(s_view_button, camera_view_open_cb, LV_EVENT_CLICKED, NULL);
 
     s_camera_selector = ui_button_create(
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_IMAGE " CAMERA 1");
-    lv_obj_set_size(s_camera_selector, 160, 36);
-    lv_obj_set_pos(s_camera_selector, 300, 476);
+    lv_obj_set_size(s_camera_selector, 180, 48);
+    lv_obj_set_pos(s_camera_selector, 356, 464);
     ui_button_expand_touch_target(s_camera_selector);
     lv_obj_add_event_cb(s_camera_selector, camera_select_next_cb, LV_EVENT_CLICKED, NULL);
     camera_update_selector();
 
     s_fullscreen_button = ui_button_create(
         s_root, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " FULLSCREEN");
-    lv_obj_set_size(s_fullscreen_button, 184, 36);
-    lv_obj_set_pos(s_fullscreen_button, 650, 476);
+    lv_obj_set_size(s_fullscreen_button, 210, 48);
+    lv_obj_set_pos(s_fullscreen_button, 624, 464);
     ui_button_expand_touch_target(s_fullscreen_button);
     lv_obj_add_event_cb(s_fullscreen_button, camera_fullscreen_cb, LV_EVENT_CLICKED, NULL);
 
     s_status = lv_label_create(s_root);
     ui_apply_text_body(s_status);
     ui_apply_label_dim(s_status);
-    lv_obj_set_width(s_status, 170);
-    lv_obj_set_pos(s_status, 470, 450);
+    lv_obj_set_width(s_status, 364);
+    lv_obj_set_pos(s_status, 470, 430);
     lv_label_set_long_mode(s_status, LV_LABEL_LONG_MODE_CLIP);
     lv_label_set_text(s_status, ui_text("Connecting to configured camera..."));
 

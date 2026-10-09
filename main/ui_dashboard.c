@@ -1,5 +1,6 @@
 #include "ui_dashboard.h"
 #include "ui_text.h"
+#include "misc/cache/instance/lv_image_cache.h"
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include <stdio.h>
@@ -121,6 +122,10 @@ static const char *dashboard_selected_camera_url(void)
 
 static void dashboard_camera_release_frame(void)
 {
+    if (dash32_camera_image &&
+        lv_image_get_src(dash32_camera_image) == &dash32_camera_dsc)
+        lv_image_set_src(dash32_camera_image, NULL);
+    if (dash32_camera_frame) lv_image_cache_drop(&dash32_camera_dsc);
     if (dash32_camera_frame) {
         heap_caps_free(dash32_camera_frame);
         dash32_camera_frame = NULL;
@@ -210,7 +215,7 @@ static void dashboard_camera_mode_set(bool enabled)
             lv_timer_delete(dash32_camera_timer);
             dash32_camera_timer = NULL;
         }
-        camera_stream_stop();
+        camera_stream_request_stop();
         dashboard_camera_release_frame();
         return;
     }

@@ -487,3 +487,92 @@ The host suites validate update/caching lifetimes and rendering/query behavior.
 The canonical integrated-main firmware build and repository audits run through
 the end-of-night closeout; acceptance does not imply a completed soak or measured
 target performance improvement. Stable version remains 6.5.6.
+
+## Aspect-aware preview increment
+
+Run the preview-fill and cache-ownership checks plus
+`python3 tools/audit/aspect_preview_pipeline_test.py`; all accept `--lvgl-dir` and
+optional `--lvgl-lib`. The pipeline fixture compiles production Dashboard functions
+extracted from main.c and production Active Print code, with transport stubs.
+Checks cover actual packed dimensions, every output pixel, untouched tails,
+wide/portrait/square canvas reuse, invalid descriptor rejection, display-lock
+publication and stale profile jobs across four themes/text sizes.
+
+Flash and check full model visibility, increased usable preview size, file
+changes, page/profile/theme switches and fullscreen loading/tap-to-close. Test
+portrait as well as the normal 900×520 thumbnail. Camera/layout changes follow
+this increment's panel acceptance; no performance measurement is inferred.
+
+## Camera pipeline checks
+
+Run `python3 tools/audit/camera_pipeline_test.py` with managed LVGL sources, or
+pass `--lvgl-dir` and optional `--lvgl-lib`. The fixture uses production Camera
+functions with a frame/transport/catalog stub and real LVGL. It asserts source
+detachment before pixel free, all rotation/mirror combinations, instantaneous
+fullscreen fitting, repeated-status/transform redraw silence, truncated-frame
+rejection and hide/destroy cleanup across four themes/text sizes.
+
+On the panel check Camera and Dashboard's fullscreen camera entry. Enter/exit
+fullscreen, tap to exit, select another camera, rotate/mirror/reset, leave and
+reopen the page, and switch profiles/themes. Verify new frames continue, old
+profile frames clear, reconnect status works and the aspect-aware print previews
+remain correct. These host tests do not measure HTTP/JPEG throughput or prove a
+long-running stream soak.
+
+
+## Offline navigation checks
+
+Run `python3 tools/audit/offline_navigation_test.py` and
+`python3 tools/audit/files_load_worker_test.py` (the Files suite accepts
+`--lvgl-dir` and `--lvgl-lib`). Re-run the Camera and preview ownership suites.
+The offline fixture compiles the production camera worker and extracted
+WebSocket lifecycle functions with delayed transport/task mocks. It checks
+nonblocking consumer retirement, late-frame disposal, exclusive worker handoff,
+interruptible retry backoff, preserved explicit quiescence, generation fencing
+and rapid selections during runtime teardown. The Files fixture compiles the
+production controller with real LVGL timers: HTTP occurs only in its worker,
+latest jobs coalesce, stale page/profile/request results never publish, detail
+popups defer publication, and allocation/task failures release ownership.
+
+On the panel, disconnect one printer from the network while PrinterHMI stays
+powered. With Camera live or reconnecting, navigate among Dashboard, Printer,
+Files and Tools, open the chooser and select the online printer. Navigation
+should respond promptly even while new data is pending; the offline connection
+must not keep old frames/readings fresh. Repeat rapid selections, close Files
+during a pending load, restore the endpoint, and check both printers recover.
+Recheck camera fullscreen/rotation/mirror and OTA quiescence. A power cycle
+recovering the printers does not establish that the runtime issue is fixed;
+these host checks do not prove a target offline/recovery soak.
+
+
+## Responsive layout acceptance
+
+Run `python3 tools/audit/responsive_layout_test.py` with managed LVGL, or pass
+`--lvgl-dir` and optional `--lvgl-lib`. It compiles production Tools, Files and
+Macros surfaces against real LVGL, testing all four themes × three densities ×
+two text sizes × three widths, both with and without representative custom
+metric/profile overrides. The checks cover text/control bounds, non-overlap,
+long names, actual Files rows, status overlay title/detail separation, favorites,
+empty search and show/hide/reopen. Set `RESPONSIVE_SCREENSHOTS` to an existing
+folder to export PPM renders for each built-in theme at comfortable density with
+large text. Re-run LVGL modernization, offline-navigation and Files worker suites.
+
+On the 1024×600 panel visit Tools, Macros and Files in Classic, Operator, Glass
+and Operator Shell. Check each density and large-text setting: all tile text and
+controls should be visible, long macro names should wrap, Files actions should
+stay above the list, filenames should leave room for the arrow, and status text
+should not overlap. Verify macro search/favorites/parameters, Files selection,
+scrolling/search/sort/refresh and fullscreen previews. Recheck switching pages/
+printers while one printer is offline. This is the first responsive page pass;
+Dashboard/Printer/camera preview geometry and network ownership are preserved.
+
+
+Preview/camera/layout closeout acceptance: aspect previews and responsive
+Tools/Macros/Files were accepted by the operator. Navigation was reported faster
+after the offline follow-up. Host coverage includes frame/cache lifetimes, stale
+profile/request retirement, worker ownership, native wrapping, all four themes,
+densities, text sizes, viewport widths and representative custom overrides.
+These checks do not imply an offline/reconnect or camera soak. The real canonical
+ESP-IDF build, source push and nightly firmware/checksum publication are performed
+by the repository's end-of-night script on integrated main. Stable version 6.5.6
+is restored after the nightly build; branch closure occurs only after success.

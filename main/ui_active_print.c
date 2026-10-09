@@ -190,16 +190,11 @@ void ui_active_print_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, int h
 
     if (!s_active_print_thumb_canvas) {
         s_active_print_thumb_canvas = lv_canvas_create(box);
-        lv_canvas_set_buffer(s_active_print_thumb_canvas,
-                             s_active_print_thumb_canvas_buf,
-                             w,
-                             h,
-                             LV_COLOR_FORMAT_RGB565);
-        lv_obj_move_foreground(s_active_print_thumb_canvas);
-    } else {
-        lv_obj_invalidate(s_active_print_thumb_canvas);
         lv_obj_move_foreground(s_active_print_thumb_canvas);
     }
+    /* Dimensions/stride can change when the next model has a new aspect. */
+    lv_canvas_set_buffer(s_active_print_thumb_canvas,
+        s_active_print_thumb_canvas_buf, w, h, LV_COLOR_FORMAT_RGB565);
 
     ui_thumbnail_fit_object(
         s_active_print_thumb_canvas,

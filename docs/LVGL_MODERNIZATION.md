@@ -263,3 +263,107 @@ The closeout workflow commits the tested scope and documentation, checkpoints
 merges to `main`, and builds/publishes the nightly through
 `tools/end_of_night_checkpoint.sh`. The branch is removed after success. Stable
 version remains 6.5.6. Reconnect recovery and asynchronous metadata remain deferred.
+
+## Aspect-aware preview canvases
+
+`feature/preview-camera-layout` begins from the accepted live-widget closeout.
+First increment: tightly packed, complete-source preview canvases with actual
+dimensions carried through profile/Files descriptors and Dashboard restoration.
+Maximum allocation capacities remain unchanged. Active Print/Dashboard reused
+canvases rebind dimensions and stride. Worker cache publication remains under
+the display lock, and stale profile jobs are rejected before modifying pixels.
+Native `CONTAIN` fits the packed image without cropping.
+
+Preview hardware validation comes first, followed by the camera pipeline audit
+and remaining responsive-layout work. Reconnect recovery and asynchronous
+metadata remain deferred. Stable version remains 6.5.6.
+
+## Camera pipeline audit
+
+The operator confirmed the aspect-aware preview increment. Camera follow-up:
+`ui_camera` now detaches the live image source and invalidates its cache before
+freeing frame pixels or clearing the descriptor. Hide releases the detached frame
+after retiring the stream consumer. Incoming RGB565 dimensions and byte capacity are
+validated before mirroring/rendering. Reused status/selector text and unchanged
+view transforms skip repeated writes; fullscreen changes transform the current
+frame immediately rather than waiting for another frame. The unused private
+decoder header is removed.
+
+The stream controller publishes a bounded handoff. The offline-navigation
+follow-up below separates UI retirement from worker/transport shutdown. The
+JPEG decoder remains unchanged.
+Mirror operations still run once per fresh frame. View-setting changes reset
+frame-age/FPS counters. Real-LVGL checks exercise source retirement before free,
+rotations/mirrors, repeated update silence, malformed frames, viewport changes
+and hide/destroy in four themes/text sizes. This is correctness/lifecycle work,
+not a measured FPS gain. Responsive-layout work follows panel acceptance.
+
+
+## Offline navigation follow-up
+
+An offline printer exposed transport waits on the LVGL owner: every sidebar
+transition called the waiting camera stop, profile selection stopped/destroyed
+the WebSocket inline, and Files performed up to three HTTP retries in an LVGL
+timer. Navigation now requests camera retirement without waiting. Retired/late
+frames are discarded; a replacement worker starts only after the old worker
+finishes. Camera retry backoff checks cancellation in 50 ms slices. The explicit
+waiting stop remains for OTA/setup transport quiescence.
+
+Profile selection immediately fences old WebSocket events, freshness, commands
+and notifications. The runtime task owns stop/destroy/recreate, checks current
+configuration generations before rebind, and abandons snapshots superseded
+during teardown. Dashboard also detaches its frame/cache before freeing pixels.
+Files loads copy endpoint credentials into one background job, coalesce one
+latest pending job, and publish only on LVGL for the current generation/request/
+page. A confirmation popup defers publication. HTTP waits/retries never run on
+the UI owner; discarded jobs release their buffers. The stable version remains
+6.5.6. Hardware offline/recovery testing is still required.
+
+
+## Responsive Tools, Macros and Files
+
+The next increment on `feature/preview-camera-layout` uses native LVGL flex/grid
+layouts on three fixed surfaces. Tools tiles share the current container width,
+wrap to one column when necessary, and size their title/body from real text.
+Reopening rebuilds the small Tools page so runtime theme/density/font changes
+replace previously applied local styles.
+Macros use equal-width wrapping rows, content-height buttons, and wrapped names;
+search, favorites, parameter dialogs and generation guards retain their owners.
+Files actions occupy a separate wrapping toolbar in the existing theme/profile
+order. Its breadcrumb and remaining list viewport flow below the header. File
+and folder rows follow the viewport width and resolve label space before the
+navigation arrow; cached preview buffers and preview-fit policy do not change.
+Loading/empty/offline state content uses a centered column so title/detail text
+cannot overlap as fonts grow.
+
+Real-LVGL checks exercise all four built-in themes, three density settings,
+large text on/off, 854/640/480 px page widths, and representative custom metric/
+profile overrides. They cover control/label bounds, non-overlap, wrapped macro
+names, file/folder rows, state overlays, favorites/empty states and lifecycle.
+Rendered host surfaces for every built-in theme were inspected. This validates
+the changed surfaces, not every screen or arbitrary custom theme. The operator accepted this responsive pass. Canonical integration build and
+publication run through the closeout below; stable version stays 6.5.6.
+
+## Preview, camera and responsive-layout closeout
+
+The operator accepted aspect-aware print previews and the responsive Tools,
+Macros and Files pass. After a printer went offline and navigation slowed, the
+offline-navigation follow-up removed camera/WebSocket teardown waits and Files
+HTTP retries from the LVGL owner; the operator reported faster navigation. A
+power cycle restored the printers earlier, so that recovery alone is not proof
+of a completed offline/reconnect soak. Camera lifetime/transform checks and
+offline transport ownership were validated with host fixtures; the combined
+follow-up was built/flashed during the operator's incremental workflow.
+
+Responsive host checks cover Classic, Operator, Glass and Operator Shell, all
+three densities, large text on/off, three widths and representative custom
+metric/profile overrides. Rendered host surfaces were inspected; the operator
+accepted the resulting responsive pass. No measured throughput/FPS improvement
+or target soak is claimed. Asynchronous file-list loading is completed; other
+metadata work remains deferred.
+
+Closeout commits the accepted scope and documentation, checkpoints
+`feature/preview-camera-layout`, reviews integration in a disposable worktree,
+merges main, and runs `tools/end_of_night_checkpoint.sh` with nightly publication
+enabled. Remote main, nightly firmware and checksum must verify before the
+merged feature branch is removed. Stable version remains 6.5.6.

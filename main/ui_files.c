@@ -11,6 +11,7 @@
 #include "ui_page_state.h"
 #include "ui_page_geometry.h"
 #include "ui_preview_lightbox.h"
+#include "ui_responsive_layout.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -111,9 +112,8 @@ static void files_refresh_deferred_cb(lv_timer_t *timer)
     lv_timer_delete(timer);
 
     /*
-     * Run the blocking Moonraker request only after the UI has returned to
-     * LVGL. The current page stays visible and is replaced in place when
-     * the result arrives.
+     * Enqueue the file-list worker after the first page draw. HTTP retries
+     * run outside LVGL; its result timer updates the current page in place.
      */
     if (s_refresh_cb) {
         s_refresh_cb();
@@ -213,6 +213,20 @@ static void file_row_event_cb(lv_event_t *e)
     if (s_select_cb) s_select_cb(row->path);
 }
 
+static void file_row_size_changed(lv_event_t *event)
+{
+    lv_obj_t *row = lv_event_get_target_obj(event);
+    int32_t text_x = (int32_t)(intptr_t)lv_event_get_user_data(event);
+    int32_t width = lv_obj_get_width(row) - text_x - 52;
+    if (width < 1) width = 1;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(row); ++i) {
+        lv_obj_t *child = lv_obj_get_child(row, i);
+        if (lv_obj_check_type(child, &lv_label_class) &&
+            lv_obj_get_style_align(child, 0) == LV_ALIGN_LEFT_MID)
+            lv_obj_set_width(child, width);
+    }
+}
+
 void ui_files_add_file_entry(const char *path,
                                  double size,
                                  double modified,
@@ -256,12 +270,12 @@ void ui_files_add_file_entry(const char *path,
 
     lv_obj_set_size(
         btn,
-        790,
+        lv_pct(100),
         row_height);
 
     lv_obj_set_pos(
         btn,
-        10,
+        0,
         y);
 
     lv_obj_clear_flag(
@@ -376,7 +390,7 @@ void ui_files_add_file_entry(const char *path,
 
     lv_obj_set_width(
         label,
-        600);
+        1);
 
     lv_label_set_long_mode(
         label,
@@ -385,6 +399,7 @@ void ui_files_add_file_entry(const char *path,
     ui_apply_text_body(label);
 
     ui_apply_label_bright(label);
+    lv_obj_set_height(label, lv_font_get_line_height(lv_obj_get_style_text_font(label, 0)));
 
     lv_obj_align(
         label,
@@ -421,7 +436,7 @@ void ui_files_add_file_entry(const char *path,
 
     lv_obj_set_width(
         meta,
-        600);
+        1);
 
     lv_label_set_long_mode(
         meta,
@@ -430,6 +445,7 @@ void ui_files_add_file_entry(const char *path,
     ui_apply_custom_label_style(meta,
                                 &lv_font_montserrat_12,
                                 UI_TEXT_DIM);
+    lv_obj_set_height(meta, lv_font_get_line_height(lv_obj_get_style_text_font(meta, 0)));
 
     lv_obj_align(
         meta,
@@ -456,6 +472,10 @@ void ui_files_add_file_entry(const char *path,
         LV_ALIGN_RIGHT_MID,
         -22,
         0);
+
+    lv_obj_add_event_cb(btn, file_row_size_changed, LV_EVENT_SIZE_CHANGED,
+                        (void *)(intptr_t)text_x);
+    lv_obj_send_event(btn, LV_EVENT_SIZE_CHANGED, NULL);
 
     /* The first screenful starts loading immediately; later rows are lazy. */
     if (y < 422) {
@@ -494,9 +514,9 @@ void ui_files_add_folder_button(const char *name,
     if (!button) return;
     lv_obj_set_size(
         button,
-        790,
+        lv_pct(100),
         ui_theme_density_metric(54, 64, 76));
-    lv_obj_set_pos(button, 10, y);
+    lv_obj_set_pos(button, 0, y);
     ui_apply_surface_role(button, UI_SURFACE_LIST_ROW);
 
     folder_event_data_t *data = calloc(1, sizeof(*data));
@@ -512,12 +532,16 @@ void ui_files_add_folder_button(const char *name,
     char text[190];
     snprintf(text, sizeof(text), LV_SYMBOL_DIRECTORY "  %s", name);
     lv_label_set_text(label, text);
-    lv_obj_set_width(label, 700);
+    lv_obj_set_width(label, 1);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     ui_apply_custom_label_style(label,
                                 UI_FONT_BODY_LARGE,
                                 UI_ACCENT_CYAN);
+    lv_obj_set_height(label, lv_font_get_line_height(lv_obj_get_style_text_font(label, 0)));
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 18, 0);
+    lv_obj_add_event_cb(button, file_row_size_changed, LV_EVENT_SIZE_CHANGED,
+                        (void *)(intptr_t)18);
+    lv_obj_send_event(button, LV_EVENT_SIZE_CHANGED, NULL);
 }
 
 void ui_files_clear_rows(void)
@@ -779,68 +803,51 @@ void ui_files_show(void)
     ui_apply_root_style(
         s_printer_file_popup);
 
-    ui_page_title_create(
-        s_printer_file_popup,
-        LV_SYMBOL_FILE " FILES",
-        layout->subtitle);
-
-    s_breadcrumb_label = lv_label_create(s_printer_file_popup);
-    lv_obj_set_width(
-        s_breadcrumb_label,
-        layout->breadcrumb.width);
-    lv_label_set_long_mode(s_breadcrumb_label, LV_LABEL_LONG_DOT);
-    ui_apply_text_caption(s_breadcrumb_label);
-    ui_apply_label_dim(s_breadcrumb_label);
-    lv_obj_set_pos(
-        s_breadcrumb_label,
-        layout->breadcrumb.x,
-        layout->breadcrumb.y);
-    ui_files_set_breadcrumb(NULL);
+    lv_obj_set_flex_flow(s_printer_file_popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_printer_file_popup, 20, 0);
+    lv_obj_set_style_pad_row(s_printer_file_popup, UI_GAP_ROW, 0);
+    lv_obj_t *header = lv_obj_create(s_printer_file_popup);
+    ui_responsive_column(header);
+    lv_obj_t *title = lv_label_create(header);
+    lv_label_set_text(title, LV_SYMBOL_FILE " FILES");
+    ui_apply_text_title(title);
+    ui_apply_label_bright(title);
+    lv_obj_t *subtitle = lv_label_create(header);
+    lv_label_set_text(subtitle, layout->subtitle);
+    lv_obj_set_width(subtitle, lv_pct(100));
+    ui_apply_text_body(subtitle);
+    ui_apply_label_dim(subtitle);
+    lv_obj_t *toolbar = lv_obj_create(s_printer_file_popup);
+    ui_responsive_column(toolbar);
+    lv_obj_set_flex_flow(toolbar, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(toolbar, UI_GAP_ROW, 0);
 
     lv_obj_t *up = ui_button_create_icon(
-        s_printer_file_popup, UI_BUTTON_OUTLINED,
+        toolbar, UI_BUTTON_OUTLINED,
         LV_SYMBOL_UP, "UP", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (up) {
-        lv_obj_set_size(
-            up,
-            layout->up.width,
-            layout->up.height);
-        lv_obj_set_pos(
-            up,
-            layout->up.x,
-            layout->up.y);
+        ui_responsive_action(up);
+
         lv_obj_add_event_cb(up, up_button_cb, LV_EVENT_CLICKED, NULL);
     }
 
     lv_obj_t *search = ui_button_create_icon(
-        s_printer_file_popup, UI_BUTTON_OUTLINED,
+        toolbar, UI_BUTTON_OUTLINED,
         LV_SYMBOL_EDIT, "SEARCH", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (search) {
-        lv_obj_set_size(
-            search,
-            layout->search.width,
-            layout->search.height);
-        lv_obj_set_pos(
-            search,
-            layout->search.x,
-            layout->search.y);
+        ui_responsive_action(search);
+
         s_search_label = lv_obj_get_child(search, 1);
         ui_files_set_search_text(s_search_text);
         lv_obj_add_event_cb(search, search_button_cb, LV_EVENT_CLICKED, NULL);
     }
 
     lv_obj_t *sort = ui_button_create_icon(
-        s_printer_file_popup, UI_BUTTON_OUTLINED,
+        toolbar, UI_BUTTON_OUTLINED,
         LV_SYMBOL_LIST, "NAME", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (sort) {
-        lv_obj_set_size(
-            sort,
-            layout->sort.width,
-            layout->sort.height);
-        lv_obj_set_pos(
-            sort,
-            layout->sort.x,
-            layout->sort.y);
+        ui_responsive_action(sort);
+
         s_sort_label = lv_obj_get_child(sort, 1);
         lv_obj_add_event_cb(sort, sort_button_cb, LV_EVENT_CLICKED, NULL);
     }
@@ -850,7 +857,7 @@ void ui_files_show(void)
      */
     lv_obj_t *refresh =
         ui_button_create_icon(
-            s_printer_file_popup,
+            toolbar,
             UI_BUTTON_OUTLINED,
             LV_SYMBOL_REFRESH,
             "REFRESH",
@@ -858,22 +865,33 @@ void ui_files_show(void)
             UI_BUTTON_ICON_HORIZONTAL);
 
     if (refresh) {
-        lv_obj_set_size(
-            refresh,
-            layout->refresh.width,
-            layout->refresh.height);
-
-        lv_obj_set_pos(
-            refresh,
-            layout->refresh.x,
-            layout->refresh.y);
-
+        ui_responsive_action(refresh);
         lv_obj_add_event_cb(
             refresh,
             files_refresh_event_cb,
             LV_EVENT_CLICKED,
             NULL);
     }
+
+    /* Preserve each theme/custom profile's action order, using native flow. */
+    if (layout->refresh.x < layout->up.x) {
+        if (refresh) lv_obj_move_to_index(refresh, 0);
+        if (sort) lv_obj_move_to_index(sort, 1);
+        if (search) lv_obj_move_to_index(search, 2);
+    }
+    s_breadcrumb_label = lv_label_create(s_printer_file_popup);
+    lv_obj_set_width(s_breadcrumb_label, lv_pct(100));
+    lv_label_set_long_mode(s_breadcrumb_label, LV_LABEL_LONG_DOT);
+    ui_apply_text_caption(s_breadcrumb_label);
+    ui_apply_label_dim(s_breadcrumb_label);
+    ui_files_set_breadcrumb(NULL);
+    ui_files_set_search_text(s_search_text);
+    lv_obj_t *viewport = lv_obj_create(s_printer_file_popup);
+    ui_apply_surface_role(viewport, UI_SURFACE_TRANSPARENT);
+    lv_obj_set_style_pad_all(viewport, 0, 0);
+    lv_obj_clear_flag(viewport, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(viewport, lv_pct(100), 0);
+    lv_obj_set_flex_grow(viewport, 1);
 
     /*
      * TEST73_FILES_FULL_PAGE_LIST
@@ -883,7 +901,7 @@ void ui_files_show(void)
      */
     s_printer_file_list =
         lv_obj_create(
-            s_printer_file_popup);
+            viewport);
 
     if (!s_printer_file_list) {
         lv_obj_delete(
@@ -893,17 +911,11 @@ void ui_files_show(void)
         return;
     }
 
-    lv_obj_set_size(
-        s_printer_file_list,
-        layout->list.width,
-        layout->list.height);
-
-    lv_obj_set_pos(
-        s_printer_file_list,
-        layout->list.x,
-        layout->list.y);
+    lv_obj_set_size(s_printer_file_list, lv_pct(100), lv_pct(100));
+    lv_obj_set_pos(s_printer_file_list, 0, 0);
 
     ui_apply_surface_role(s_printer_file_list, UI_SURFACE_TRANSPARENT);
+    lv_obj_set_style_pad_all(s_printer_file_list, 0, 0);
 
     lv_obj_set_style_pad_row(
         s_printer_file_list,
@@ -929,14 +941,10 @@ void ui_files_show(void)
         NULL);
 
     s_files_state = ui_page_state_create(
-        s_printer_file_popup,
-        layout->list.x,
-        layout->list.y,
-        layout->list.width,
-        layout->list.height);
+        viewport, 0, 0, lv_pct(100), lv_pct(100));
 
     /*
-     * Let LVGL draw the Files page before its synchronous Moonraker request.
+     * Let LVGL draw the Files page before enqueueing its Moonraker worker.
      * This prevents a blank/late page transition on slower responses.
      */
     if (s_refresh_cb && !s_files_refresh_timer) {

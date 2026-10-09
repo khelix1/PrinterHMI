@@ -6,6 +6,7 @@
 #include "ui_files.h"
 #include "ui_theme.h"
 #include "moonraker_live_websocket.h"
+#include "moonraker_config_controller.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -13,6 +14,8 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/idf_additions.h"
+#include "freertos/queue.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -237,135 +240,181 @@ static void fallback_add_path(const char *path, void *user)
     (*count)++;
 }
 
-void files_page_controller_reload(
-    bool wifi_connected,
-    bool moonraker_connected,
-    bool sd_available,
-    const char *host,
-    int port,
-    const char *api_key)
+typedef struct {
+    char host[MOONRAKER_CONFIG_HOST_LENGTH];
+    char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
+    int port;
+    uint32_t generation;
+    uint32_t request;
+    bool sd_available;
+    lv_obj_t *page;
+    char *body;
+    bool fetched;
+    int http_code;
+    esp_err_t error;
+} files_load_job_t;
+
+static QueueHandle_t s_load_results;
+static lv_timer_t *s_load_timer;
+static files_load_job_t *s_pending_load;
+static bool s_load_busy;
+static uint32_t s_load_request;
+
+static void files_load_free(files_load_job_t *job)
 {
-    if (!wifi_connected) {
-        ui_files_set_status("WiFi offline. Connect before loading files.");
-        return;
-    }
+    if (!job) return;
+    heap_caps_free(job->body);
+    heap_caps_free(job);
+}
 
-    if (!moonraker_connected) {
-        ui_files_set_status("Moonraker offline. Check the active printer.");
-        return;
-    }
-
-    if (!host || !host[0]) {
-        ui_files_set_status(
-            "Moonraker host is not configured.");
-        return;
-    }
-
-    if (!api_key) {
-        api_key = "";
-    }
-
-    ui_files_set_browser_callbacks(
-        files_page_controller_set_search,
-        files_page_controller_cycle_sort,
-        files_page_controller_open_folder,
-        files_page_controller_up_folder);
-
-    if (!ensure_entries()) {
-        ui_files_set_status("Unable to allocate the file browser index.");
-        return;
-    }
-
-    files_row_preview_begin(
-        host,
-        port,
-        api_key,
-        sd_available,
-        files_page_controller_preview_ready);
-
-    ui_files_set_status("Loading files...");
-
-    char *file_list_body = heap_caps_malloc(
-        FILES_PAGE_LIST_CAPACITY,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-    if (!file_list_body) {
-        file_list_body = heap_caps_malloc(
-            FILES_PAGE_LIST_CAPACITY,
-            MALLOC_CAP_8BIT);
-    }
-
-    if (!file_list_body) {
-        ui_files_set_status(
-            "Unable to allocate file-list buffer.");
-        return;
-    }
-
-    memset(
-        file_list_body,
-        0,
-        FILES_PAGE_LIST_CAPACITY);
-
-    int http_code = 0;
-    esp_err_t transport_error = ESP_FAIL;
-
-    bool fetched = false;
-    /*
-     * Moonraker can briefly reject the first request while another page's
-     * stream is releasing the shared connection. Retry locally so one
-     * Files tap reliably populates the browser.
-     */
-    for (int attempt = 0; attempt < 3 && !fetched; ++attempt) {
-        fetched = moonraker_fetch_file_list(
-            host,
-            port,
-            api_key,
-            file_list_body,
-            FILES_PAGE_LIST_CAPACITY,
-            &http_code,
-            &transport_error);
-        if (!fetched && attempt < 2) {
-            vTaskDelay(pdMS_TO_TICKS(180));
+static void files_load_worker(void *argument)
+{
+    files_load_job_t *job = argument;
+    job->body = heap_caps_malloc(FILES_PAGE_LIST_CAPACITY,
+                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!job->body) job->body = heap_caps_malloc(FILES_PAGE_LIST_CAPACITY,
+                                               MALLOC_CAP_8BIT);
+    job->error = ESP_FAIL;
+    if (job->body) {
+        for (int attempt = 0; attempt < 3 && !job->fetched; ++attempt) {
+            if (job->generation != moonraker_config_generation()) break;
+            memset(job->body, 0, FILES_PAGE_LIST_CAPACITY);
+            job->fetched = moonraker_fetch_file_list(
+                job->host, job->port, job->api_key, job->body,
+                FILES_PAGE_LIST_CAPACITY, &job->http_code, &job->error);
+            if (!job->fetched && attempt < 2) vTaskDelay(pdMS_TO_TICKS(180));
         }
     }
+    /* One worker owns one result slot; LVGL consumes before launching another. */
+    (void)xQueueSend(s_load_results, &job, portMAX_DELAY);
+    vTaskDelete(NULL);
+}
 
-    if (!fetched) {
+static void files_load_poll(lv_timer_t *timer);
+
+static bool files_load_launch(files_load_job_t *job)
+{
+    if (!s_load_results) s_load_results = xQueueCreate(1, sizeof(job));
+    if (!s_load_results) return false;
+    if (!s_load_timer) s_load_timer = lv_timer_create(files_load_poll, 50, NULL);
+    if (!s_load_timer) return false;
+    s_load_busy = true;
+    if (xTaskCreatePinnedToCoreWithCaps(files_load_worker, "files_load", 8192,
+            job, 3, NULL, 0,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+        s_load_busy = false;
+        return false;
+    }
+    return true;
+}
+
+static void files_load_publish(files_load_job_t *job)
+{
+    if (!job->fetched) {
         char message[160];
-
-        snprintf(
-            message,
-            sizeof(message),
-            "File list failed.\nHTTP %d\n%s",
-            http_code,
-            esp_err_to_name(transport_error));
-
+        snprintf(message, sizeof(message), "File list failed.\nHTTP %d\n%s",
+                 job->http_code, job->body ? esp_err_to_name(job->error) :
+                 "Unable to allocate file-list buffer.");
         ui_files_set_status(message);
-        heap_caps_free(file_list_body);
         return;
     }
-
+    files_row_preview_begin(job->host, job->port, job->api_key,
+                            job->sd_available, files_page_controller_preview_ready);
     memset(s_entries, 0,
            FILES_PAGE_ENTRY_CAPACITY * sizeof(*s_entries));
     int count = printer_files_parse_entries(
-        file_list_body,
+        job->body,
         s_entries,
         FILES_PAGE_ENTRY_CAPACITY);
     if (count == 0) {
         size_t fallback_count = 0;
-        printer_files_for_each_path(file_list_body,
+        printer_files_for_each_path(job->body,
                                     fallback_add_path,
                                     &fallback_count);
         count = (int)fallback_count;
     }
     s_entry_count = count > 0 ? (size_t)count : 0;
 
-    heap_caps_free(file_list_body);
-
     if (count == 0) {
         ui_files_set_status(
             "No files found in Moonraker gcodes root.");
     } else {
         render_entries();
+    }
+}
+
+static void files_load_poll(lv_timer_t *timer)
+{
+    /* Keep the bounded result queued while a file confirmation is open. */
+    if (ui_files_get_popup() && ui_files_detail_is_open()) return;
+    files_load_job_t *job = NULL;
+    if (xQueueReceive(s_load_results, &job, 0) == pdPASS) {
+        s_load_busy = false;
+        if (job->generation == moonraker_config_generation() &&
+            job->request == s_load_request && job->page == ui_files_get_popup() &&
+            job->page) files_load_publish(job);
+        files_load_free(job);
+    }
+    if (!s_load_busy && s_pending_load) {
+        job = s_pending_load;
+        s_pending_load = NULL;
+        if (job->generation != moonraker_config_generation() ||
+            job->page != ui_files_get_popup() || !job->page) files_load_free(job);
+        else if (!files_load_launch(job)) {
+            files_load_free(job);
+            ui_files_set_status("Unable to start file-list worker.");
+        }
+    }
+    if (!s_load_busy && !s_pending_load) {
+        s_load_timer = NULL;
+        lv_timer_delete(timer);
+    }
+}
+
+void files_page_controller_reload(
+    bool wifi_connected, bool moonraker_connected, bool sd_available,
+    const char *host, int port, const char *api_key)
+{
+    ++s_load_request;
+    files_load_free(s_pending_load);
+    s_pending_load = NULL;
+    if (!wifi_connected) {
+        ui_files_set_status("WiFi offline. Connect before loading files.");
+        return;
+    }
+    if (!moonraker_connected) {
+        ui_files_set_status("Moonraker offline. Check the active printer.");
+        return;
+    }
+    if (!host || !host[0]) {
+        ui_files_set_status("Moonraker host is not configured.");
+        return;
+    }
+    ui_files_set_browser_callbacks(files_page_controller_set_search,
+        files_page_controller_cycle_sort, files_page_controller_open_folder,
+        files_page_controller_up_folder);
+    if (!ensure_entries()) {
+        ui_files_set_status("Unable to allocate the file browser index.");
+        return;
+    }
+    files_load_job_t *job = heap_caps_calloc(1, sizeof(*job),
+                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!job) {
+        ui_files_set_status("Unable to allocate file-list job.");
+        return;
+    }
+    snprintf(job->host, sizeof(job->host), "%s", host);
+    snprintf(job->api_key, sizeof(job->api_key), "%s", api_key ? api_key : "");
+    job->port = port;
+    job->generation = moonraker_config_generation();
+    job->request = s_load_request;
+    job->page = ui_files_get_popup();
+    job->sd_available = sd_available;
+    ui_files_set_status("Loading files...");
+    if (s_load_busy) s_pending_load = job;
+    else if (!files_load_launch(job)) {
+        files_load_free(job);
+        ui_files_set_status("Unable to start file-list worker.");
     }
 }
 

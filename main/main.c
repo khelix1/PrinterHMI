@@ -419,6 +419,9 @@ static uint32_t dash_thumb_render_generation = 0;
 
 #define DASH_THUMB_CANVAS_W THUMBNAIL_PREVIEW_WIDTH
 #define DASH_THUMB_CANVAS_H THUMBNAIL_PREVIEW_HEIGHT
+/* Actual packed dimensions; buffer capacity remains the fixed maximum. */
+static int dash_thumb_packed_width = DASH_THUMB_CANVAS_W;
+static int dash_thumb_packed_height = DASH_THUMB_CANVAS_H;
 
 
 static int s_moonraker_code = 0;
@@ -2718,16 +2721,19 @@ static void dashboard_show_loaded_thumbnail(void)
         return;
     }
 
-    if (!thumbnail_render_to_rgb565_fit(
+    int width = 0, height = 0;
+    if (!thumbnail_render_to_rgb565_aspect(
             thumbnail_manager_image_dsc(),
             dash_thumb_canvas_buf,
             DASH_THUMB_CANVAS_W,
-            DASH_THUMB_CANVAS_H)) {
+            DASH_THUMB_CANVAS_H, &width, &height)) {
         ESP_LOGW(TAG, "DASH_CANVAS shared render failed");
         return;
     }
 
 
+    dash_thumb_packed_width = width;
+    dash_thumb_packed_height = height;
     /* CACHE_PUBLISH_SYNC: PREVIEW_PROFILE_OWNERSHIP_COMPLETE */
     const char *cache_file =
         thumbnail_session_selected_file();
@@ -2737,8 +2743,8 @@ static void dashboard_show_loaded_thumbnail(void)
             printer_preview_cache_publish_active(
                 cache_file,
                 dash_thumb_canvas_buf,
-                DASH_THUMB_CANVAS_W,
-                DASH_THUMB_CANVAS_H);
+                width,
+                height);
 
         if (cache_published &&
             thumbnail_manager_has_png()) {
@@ -2762,15 +2768,15 @@ static void dashboard_show_loaded_thumbnail(void)
     lv_canvas_set_buffer(
         dash_thumb_canvas,
         dash_thumb_canvas_buf,
-        DASH_THUMB_CANVAS_W,
-        DASH_THUMB_CANVAS_H,
+        width,
+        height,
         LV_COLOR_FORMAT_RGB565);
 
     ui_thumbnail_fit_object(
         dash_thumb_canvas,
         ui_dashboard_thumb_box(),
-        DASH_THUMB_CANVAS_W,
-        DASH_THUMB_CANVAS_H, 0);
+        width,
+        height, 0);
     lv_obj_move_foreground(dash_thumb_canvas);
 
     ui_dashboard_thumb_clear_placeholder();
@@ -2795,21 +2801,13 @@ static void dashboard_apply_rendered_thumbnail(void)
      */
     if (!dash_thumb_canvas) {
         dash_thumb_canvas = lv_canvas_create(ui_dashboard_thumb_box());
-        lv_canvas_set_buffer(dash_thumb_canvas,
-                             dash_thumb_canvas_buf,
-                             DASH_THUMB_CANVAS_W,
-                             DASH_THUMB_CANVAS_H,
-                             LV_COLOR_FORMAT_RGB565);
         lv_obj_move_foreground(dash_thumb_canvas);
-    } else {
-        lv_obj_invalidate(dash_thumb_canvas);
     }
-
-    ui_thumbnail_fit_object(
-        dash_thumb_canvas,
-        ui_dashboard_thumb_box(),
-        DASH_THUMB_CANVAS_W,
-        DASH_THUMB_CANVAS_H, 0);
+    /* Rebind even on reuse: a new file can have a different packed stride. */
+    lv_canvas_set_buffer(dash_thumb_canvas, dash_thumb_canvas_buf,
+        dash_thumb_packed_width, dash_thumb_packed_height, LV_COLOR_FORMAT_RGB565);
+    ui_thumbnail_fit_object(dash_thumb_canvas, ui_dashboard_thumb_box(),
+        dash_thumb_packed_width, dash_thumb_packed_height, 0);
 
     ui_dashboard_thumb_clear_placeholder();
 
@@ -2839,11 +2837,11 @@ static void dashboard_restore_active_profile_preview(void)
     if (!image ||
         !file || !file[0] ||
         image->header.cf != LV_COLOR_FORMAT_RGB565 ||
-        image->header.w != DASH_THUMB_CANVAS_W ||
-        image->header.h != DASH_THUMB_CANVAS_H ||
+        image->header.w == 0 || image->header.w > DASH_THUMB_CANVAS_W ||
+        image->header.h == 0 || image->header.h > DASH_THUMB_CANVAS_H ||
+        image->header.stride != image->header.w * sizeof(uint16_t) ||
         image->data_size <
-            DASH_THUMB_CANVAS_W *
-            DASH_THUMB_CANVAS_H * sizeof(uint16_t)) {
+            image->header.w * image->header.h * sizeof(uint16_t)) {
         ui_dashboard_thumb_delete_canvas();
         ui_dashboard_thumb_set_placeholder(
             "PRINT\nTHUMBNAIL\n\nNo preview loaded");
@@ -2858,12 +2856,13 @@ static void dashboard_restore_active_profile_preview(void)
     memcpy(
         dash_thumb_canvas_buf,
         image->data,
-        DASH_THUMB_CANVAS_W *
-            DASH_THUMB_CANVAS_H * sizeof(uint16_t));
+        image->header.w * image->header.h * sizeof(uint16_t));
 
+    dash_thumb_packed_width = image->header.w;
+    dash_thumb_packed_height = image->header.h;
     ui_dashboard_thumb_show_canvas_from_buffer(
-        DASH_THUMB_CANVAS_W,
-        DASH_THUMB_CANVAS_H,
+        image->header.w,
+        image->header.h,
         file);
 }
 
@@ -2904,47 +2903,43 @@ static void dash_thumb_render_task(void *arg)
         return;
     }
 
-    bool ok = false;
+    bool ok = false, cache_published = false;
+    int width = 0, height = 0;
 
     if (bsp_display_lock(1000)) {
-        ok = thumbnail_render_to_rgb565_fit(
-            thumbnail_manager_image_dsc(),
-            dash_thumb_canvas_buf,
-            DASH_THUMB_CANVAS_W,
-            DASH_THUMB_CANVAS_H);
-
-        bsp_display_unlock();
-
+        bool same_profile =
+            dash_thumb_render_generation == moonraker_config_generation() &&
+            dash_thumb_render_profile_index == moonraker_config_active_profile_index();
+        if (same_profile) {
+            ok = thumbnail_render_to_rgb565_aspect(
+                thumbnail_manager_image_dsc(), dash_thumb_canvas_buf,
+                DASH_THUMB_CANVAS_W, DASH_THUMB_CANVAS_H, &width, &height);
+        }
         if (ok) {
-            bool same_profile =
-                dash_thumb_render_generation ==
-                    moonraker_config_generation() &&
-                dash_thumb_render_profile_index ==
-                    moonraker_config_active_profile_index();
-
-            if (same_profile && dash_thumb_render_file[0]) {
-                bool cache_published =
-                    printer_preview_cache_publish_active(
-                        dash_thumb_render_file,
-                        dash_thumb_canvas_buf,
-                        DASH_THUMB_CANVAS_W,
-                        DASH_THUMB_CANVAS_H);
-
-                if (cache_published &&
-                    thumbnail_manager_has_png()) {
-                    printer_preview_store_store_active(
-                        dash_thumb_render_file,
-                        thumbnail_manager_png_data(),
-                        thumbnail_manager_png_size());
-                }
-            } else if (!same_profile) {
-                ESP_LOGW(TAG,
-                         "Discarded stale Dashboard preview render");
+            dash_thumb_packed_width = width;
+            dash_thumb_packed_height = height;
+            /* Keep the visible descriptor and packed stride consistent before
+             * releasing the display lock. A stale job never writes the buffer. */
+            if (dash_thumb_canvas) {
+                lv_canvas_set_buffer(dash_thumb_canvas, dash_thumb_canvas_buf,
+                    width, height, LV_COLOR_FORMAT_RGB565);
+                ui_thumbnail_fit_object(dash_thumb_canvas, ui_dashboard_thumb_box(),
+                    width, height, 0);
             }
-
+            if (dash_thumb_render_file[0]) {
+                cache_published = printer_preview_cache_publish_active(
+                    dash_thumb_render_file, dash_thumb_canvas_buf, width, height);
+            }
         } else {
-            ESP_LOGW(TAG,
-                     "DASH_WORKER shared render failed");
+            ESP_LOGW(TAG, "%s", same_profile ? "DASH_WORKER shared render failed" :
+                     "Discarded stale Dashboard preview render");
+        }
+        bsp_display_unlock();
+        if (cache_published && thumbnail_manager_has_png() &&
+            dash_thumb_render_generation == moonraker_config_generation() &&
+            dash_thumb_render_profile_index == moonraker_config_active_profile_index()) {
+            printer_preview_store_store_active(dash_thumb_render_file,
+                thumbnail_manager_png_data(), thumbnail_manager_png_size());
         }
     } else {
         ESP_LOGW(TAG, "DASH_WORKER display lock timeout");

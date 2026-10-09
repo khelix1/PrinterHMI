@@ -51,11 +51,12 @@ static int delivered;static lv_obj_t *consumer;
 static void ready(const char *file,const lv_image_dsc_t *image){assert(display_locked && !strcmp(file,"file.gcode"));delivered++;lv_image_set_src(consumer,image);}
 static void run(void){
  s_slots=heap_caps_calloc(ROW_PREVIEW_SLOT_COUNT,sizeof(*s_slots),MALLOC_CAP_SPIRAM);s_lock=(void*)1;s_generation=1;s_slots[0].generation=1;strcpy(s_slots[0].file,"file.gcode");s_slots[0].state=ROW_PREVIEW_LOADING;s_ready_cb=ready;consumer=lv_image_create(lv_screen_active());
- row_preview_job_t job={.slot=0,.generation=1};uint16_t *pixels=heap_caps_malloc(286*215*2,MALLOC_CAP_SPIRAM);pixels[0]=0x1234;uint16_t *expected=pixels;publish_preview_result(&job,"file.gcode",&pixels,true);assert(!pixels && s_slots[0].pixels==expected && delivered==1 && !display_locked);
- size_t stable_bytes=owned_bytes;lv_image_header_t header;assert(lv_image_decoder_get_info(&s_slots[0].image,&header)==LV_RESULT_OK);
- pixels=heap_caps_malloc(286*215*2,MALLOC_CAP_SPIRAM);pixels[0]=0x5678;publish_preview_result(&job,"file.gcode",&pixels,true);assert(!pixels && owned_bytes==stable_bytes && delivered==2 && *(const uint16_t*)s_slots[0].image.data==0x5678);
- s_generation=2;pixels=heap_caps_malloc(286*215*2,MALLOC_CAP_SPIRAM);expected=pixels;publish_preview_result(&job,"file.gcode",&pixels,true);assert(pixels==expected && delivered==2);heap_caps_free(pixels);pixels=NULL;
- s_generation=1;publish_preview_result(&job,"file.gcode",&pixels,false);assert(s_slots[0].state==ROW_PREVIEW_FAILED && delivered==2 && owned_bytes==stable_bytes);
+ row_preview_job_t job={.slot=0,.generation=1};uint16_t *pixels=heap_caps_malloc(286*215*2,MALLOC_CAP_SPIRAM);pixels[0]=0x1234;uint16_t *expected=pixels;publish_preview_result(&job,"file.gcode",&pixels,true,286,165);assert(!pixels && s_slots[0].pixels==expected && delivered==1 && !display_locked);
+ size_t stable_bytes=owned_bytes;lv_image_header_t header;assert(lv_image_decoder_get_info(&s_slots[0].image,&header)==LV_RESULT_OK);assert(header.w==286 && header.h==165 && header.stride==572 && s_slots[0].image.data_size==286*165*2);
+ pixels=heap_caps_malloc(286*215*2,MALLOC_CAP_SPIRAM);pixels[0]=0x5678;publish_preview_result(&job,"file.gcode",&pixels,true,124,215);assert(!pixels && owned_bytes==stable_bytes && delivered==2 && *(const uint16_t*)s_slots[0].image.data==0x5678);
+ assert(lv_image_decoder_get_info(&s_slots[0].image,&header)==LV_RESULT_OK && header.w==124 && header.h==215 && header.stride==248);
+ s_generation=2;pixels=heap_caps_malloc(286*215*2,MALLOC_CAP_SPIRAM);expected=pixels;publish_preview_result(&job,"file.gcode",&pixels,true,286,165);assert(pixels==expected && delivered==2);heap_caps_free(pixels);pixels=NULL;
+ s_generation=1;publish_preview_result(&job,"file.gcode",&pixels,false,0,0);assert(s_slots[0].state==ROW_PREVIEW_FAILED && delivered==2 && owned_bytes==stable_bytes);
  lv_obj_delete(consumer);lv_image_cache_drop(&s_slots[0].image);heap_caps_free(s_slots[0].pixels);heap_caps_free(s_slots);s_slots=NULL;assert(!owned_bytes);
  puts("PASS: Files display-first publication, single-buffer transfer, replacement lifetime, stale generation discard and failed result retention");
 }

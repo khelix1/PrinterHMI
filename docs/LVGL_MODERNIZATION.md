@@ -367,3 +367,149 @@ Closeout commits the accepted scope and documentation, checkpoints
 merges main, and runs `tools/end_of_night_checkpoint.sh` with nightly publication
 enabled. Remote main, nightly firmware and checksum must verify before the
 merged feature branch is removed. Stable version remains 6.5.6.
+
+## Responsive temperature and fan controls
+
+Temperature and part-fan preset dialogs now use a native column with a pinned
+header/footer and a separately scrolling body. Current/target cards and preset
+buttons use content-sized Grid rows with one/two and one/two/three columns
+selected from available width. Captions wrap within their cards; target taps
+continue to open the custom-temperature editor. The editor uses a column for
+its range hint, numeric input and keyboard; Back/Set stay visible below it.
+Modal dimensions are bounded by the current display. Hotend-specific commands,
+presets, selected borders, Off, range validation and keyboard Ready/Cancel keep
+their previous behavior. Opening another control modal retires the previous
+preset/custom pair. No changes are made to filament recovery or printer macros.
+
+`tools/audit/control_popups_layout_test.py` compiles the actual production popup
+code against LVGL 9.5 and checks four themes, all densities, large text,
+1024/640/480 px display widths, short-height scrolling, pinned footer bounds,
+compact card heights, preset/custom/Off commands, invalid input, keyboard events,
+hotend prefixes and teardown. Host renders were inspected. Target build and
+panel validation remain required; stable version stays 6.5.6.
+
+## Responsive Motion diagnostics
+
+Motion Limits, TMC Driver Diagnostics and Axis Distance Calculator now use
+native columns with a separately scrolling body and a visible footer. Limits
+use two-column content-height rows. Calculator labels/inputs use Grid cells
+with wrapped captions; the measurement editor fits the current display and
+keeps Done/Cancel outside its scrollable input/keyboard area. Runtime refresh,
+driver selection restoration, palettes, calculation rules and generation
+guards retain their previous behavior. Popup/editor delete callbacks retire
+LVGL references and the existing refresh timer on external deletion as well as
+normal close. The permanent PSRAM-first state allocation remains unchanged.
+
+`tools/audit/motion_layout_test.py` uses production UI code and extracts the
+unchanged production calculation functions for host linking. It checks all four
+themes/densities/text sizes, 1024/640/480 px widths, short viewports, label/field
+and footer bounds, scroll isolation, belt/leadscrew results, invalid input,
+editor completion, driver faults/offline/profile changes and deletion/reopen.
+Existing Tools refresh-silence checks pass. Host renders were inspected. Target
+build and panel validation remain required; stable version stays 6.5.6.
+
+## Responsive filament sensors and printer status
+
+Filament sensor controls now use content-height Grid rows in a scrolling body,
+with name/type and live status labels wrapping inside their cells. The Close
+action remains outside the scrolling list. Rows bind to full sensor object
+names, so reordered discovery cannot redirect a toggle. Missing sensors and
+changed endpoint generations disable the corresponding actions; additions are
+shown after reopening. Existing sensor commands, five-second pending timeout,
+status meanings and palettes are retained. Equal text/color/button states avoid
+repeated invalidation. The bounded four-row store and existing 500 ms timer
+are cleared on deletion.
+
+The shared Dashboard status modal used by Printer Status and other status
+messages now has a wrapping title and scrollable message body with pinned Close.
+Its dimensions are bounded by the display; external deletion clears its owner
+pointer. Printer Status includes the full supported 255-character file path
+instead of clipping it at 120 characters. Status remains a snapshot taken on
+open; no polling or transport work is added.
+
+`tools/audit/sensor_status_layout_test.py` builds the production sensor UI and
+extracts the production shared-status functions for real-LVGL host checks. It
+covers four themes, all densities/text sizes, 1024/640/480 px widths, short
+viewports, long sensor names and files, footer bounds under scroll, refresh
+silence, commands, pending acknowledgement/timeout, discovery reorder/removal,
+profile fencing, unsafe names and external deletion/reopen. Temperature/fan and
+Motion layout regressions pass. Host renders were inspected; target build and
+panel validation remain required. Stable version stays 6.5.6.
+
+## Responsive hotend selection and activation
+
+Hotend selection uses content-height Grid rows inside a scrolling body. Names
+and temperature readouts wrap; actions move below the readouts when the viewport
+is narrow. Close stays outside the list. Activation confirmation uses a wrapped
+message and pinned Back/Activate actions. Both dialogs fit the current display
+and retain the theme palette, active indication and four-hotend limit.
+
+Rows bind to full hotend object names. Discovery reordering cannot redirect a
+temperature or activation command. Offline data, removed objects and endpoint
+changes disable actions; new discoveries appear on reopen. Activation rechecks
+fresh state at confirmation and remains blocked while printing or paused.
+Hotend temperature, bed temperature and fan speed remain adjustable during
+printing and pause, including named hotend presets and custom temperatures.
+No toolchanger motion commands are introduced. Delete callbacks clear dialog
+references and retire the existing 500 ms list timer; equal samples avoid
+redrawing unchanged labels.
+
+`tools/audit/hotend_layout_test.py` builds production popup code with real LVGL
+9.5. It checks four themes, all densities/text sizes, 1024/640/480 px widths,
+short viewports, long names, row/footer bounds, scroll isolation, unchanged
+refresh, active indication, named commands, print/pause controls, confirmation
+guards, discovery reorder/removal and deletion/reopen. Temperature/fan and
+sensor/status regressions pass. Host renders were inspected; target build and
+panel validation remain required. Stable version stays 6.5.6.
+
+## Responsive cancel-object dialogs
+
+Cancel Object now has wrapping status text and a native Grid map/list inside a
+scrolling body. Wide layouts place map and list side by side; narrow layouts
+stack them. The object list keeps its own vertical scroll and uses content-height
+rows with full supported 95-character names, including Current/Excluded markers.
+Close and Exclude stay outside scrolling content. Confirmation shows the full
+captured name in a wrapping body with pinned Back/Exclude actions. Map drawing,
+hit testing, theme palettes and the 48-object limit are retained.
+
+Repeated opening retains the existing snapshot and row references. Delete
+callbacks clear the map/rows/dialog owners and free the PSRAM-first snapshot on
+external deletion as well as normal close. Confirmation binds its own name and
+rechecks the current exclusion snapshot and endpoint generation before sending
+`EXCLUDE_OBJECT NAME=...`; reordered discovery or later selection cannot redirect
+it. Missing, already excluded and unavailable objects do not send a command.
+No new polling timer is added. Whole-print cancellation and temperature/fan
+controls retain their previous behavior.
+
+`tools/audit/object_layout_test.py` builds production popup code against real
+LVGL 9.5. It checks four themes, all densities/text sizes, 1024/640/480 px widths,
+short viewports, 48 long-name rows, map hit testing, independent scroll/pinned
+actions, exact captured commands, Back, reorder/removal/excluded/profile guards,
+repeat-open and external teardown. Hotend, temperature/fan and sensor/status
+regressions pass. Host renders were inspected; target build and panel validation
+remain required. Stable version stays 6.5.6.
+
+## Responsive whole-print cancellation
+
+The whole-print cancellation confirmation now fits the current display with a
+native column layout: wrapping title, separately scrolling warning body and
+pinned Back/Cancel actions. It retains the danger palette, warning text and
+existing `CANCEL_PRINT` command. No transport, timer or activation guard is
+added. A delete callback clears the dialog owner on external deletion as well
+as normal close; repeated opening raises the existing dialog.
+
+`tools/audit/cancel_layout_test.py` builds the production popup module with real
+LVGL 9.5 and checks four themes, every density/text size, 1024/640/480 px widths,
+a short viewport, wrapping/overflow scroll, footer bounds, Back without a
+command, exactly one `CANCEL_PRINT`, repeated opening and deletion/reopen.
+Hotend, temperature/fan, object and sensor/status regressions pass. Host renders
+were inspected; target build and panel validation remain required. Stable
+version stays 6.5.6.
+
+## Control-dialog closeout
+
+Filament recovery and responsive temperature/fan, Motion, sensor/status, hotend
+and cancellation dialogs are included in the development nightly. Host checks
+and incremental layout review are complete; physical printing/recovery checks
+remain pending. Stable version stays 6.5.6. Settings Time Zone/Reset layout work
+is deferred until after this closeout. See [Nightly validation](NIGHTLY_VALIDATION.md).

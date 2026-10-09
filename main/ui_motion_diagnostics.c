@@ -47,11 +47,25 @@ static void close_editor(void)
     s->editor = s->editor_value = s->editor_target = NULL;
 }
 
+static void editor_deleted(lv_event_t *event)
+{
+    if (s && lv_event_get_target(event) == s->editor)
+        s->editor = s->editor_value = s->editor_target = NULL;
+}
+static void popup_deleted(lv_event_t *event)
+{
+    if (!s || lv_event_get_target(event) != s->popup) return;
+    close_editor();
+    if (s->timer) lv_timer_delete(s->timer);
+    memset(s, 0, sizeof(*s));
+}
+
 static void close_popup(void)
 {
     if (!s) return;
     close_editor();
     if (s->timer) lv_timer_delete(s->timer);
+    s->timer = NULL;
     if (s->popup) lv_obj_delete(s->popup);
     /* Permanent allocation remains; all LVGL references are retired. */
     memset(s, 0, sizeof(*s));
@@ -106,24 +120,91 @@ static void editor_done_cb(lv_event_t *event)
     ui_apply_label_primary(s->result);
 }
 static void editor_cancel_cb(lv_event_t *event) { (void)event; close_editor(); }
+static int32_t popup_width(int32_t preferred)
+{
+    int32_t available = lv_display_get_horizontal_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+static int32_t popup_height(int32_t preferred)
+{
+    int32_t available = lv_display_get_vertical_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+static lv_obj_t *layout_body(lv_obj_t *popup, const char *title)
+{
+    lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(popup, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(popup, UI_GAP_CARD, 0);
+    lv_obj_t *label = lv_label_create(popup);
+    lv_label_set_text(label, title);
+    ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_obj_set_width(label, LV_PCT(100));
+    lv_obj_t *body = lv_obj_create(popup);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, LV_PCT(100), 0);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
+    lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    return body;
+}
+static lv_obj_t *layout_label(lv_obj_t *parent, const char *text, bool caption)
+{
+    lv_obj_t *label = lv_label_create(parent);
+    lv_label_set_text(label, text);
+    ui_apply_custom_label_style(label, caption ? UI_FONT_CAPTION : UI_FONT_BODY,
+        caption ? UI_TEXT_MUTED : UI_TEXT);
+    lv_obj_set_width(label, LV_PCT(100));
+    return label;
+}
+static lv_obj_t *layout_footer(lv_obj_t *popup)
+{
+    lv_obj_t *footer = lv_obj_create(popup);
+    lv_obj_remove_style_all(footer);
+    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(footer, UI_GAP_CARD, 0);
+    return footer;
+}
+static const int32_t layout_columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t layout_rows[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+static lv_obj_t *layout_pair(lv_obj_t *parent)
+{
+    lv_obj_t *pair = lv_obj_create(parent);
+    lv_obj_remove_style_all(pair);
+    lv_obj_set_size(pair, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_grid_dsc_array(pair, layout_columns, layout_rows);
+    lv_obj_set_style_pad_column(pair, UI_GAP_CARD, 0);
+    return pair;
+}
+static void layout_cell(lv_obj_t *object, unsigned column)
+{
+    lv_obj_set_grid_cell(object, LV_GRID_ALIGN_STRETCH, column, 1, LV_GRID_ALIGN_START, 0, 1);
+}
 static void field_cb(lv_event_t *event)
 {
     if (!owns_printer()) return;
     close_editor();
     s->editor_target = lv_event_get_target(event);
-    s->editor = ui_popup_create(lv_layer_top(), 640, 400, UI_POPUP_STANDARD);
+    s->editor = ui_popup_create(lv_layer_top(), popup_width(640), popup_height(420), UI_POPUP_STANDARD);
     if (!s->editor) { s->editor_target = NULL; return; }
-    ui_popup_add_title(s->editor, "EDIT MEASUREMENT", false, 4);
-    ui_popup_add_header_divider(s->editor, 48);
-    s->editor_value = ui_popup_add_textarea(s->editor, 584, 48, LV_ALIGN_TOP_MID,
-        0, 62, true, false, 18, "", lv_textarea_get_text(s->editor_target), "0123456789.");
-    ui_popup_add_keyboard(s->editor, s->editor_value, 584, 182,
-        LV_ALIGN_TOP_MID, 0, 124, LV_KEYBOARD_MODE_NUMBER);
-    ui_popup_add_standard_footer_divider(s->editor);
-    ui_popup_add_footer_action(s->editor, UI_POPUP_ACTION_CANCEL, "CANCEL", 150,
-        UI_POPUP_FOOTER_LEFT, editor_cancel_cb, NULL, NULL);
-    ui_popup_add_footer_action(s->editor, UI_POPUP_ACTION_CONFIRM, "DONE", 150,
-        UI_POPUP_FOOTER_RIGHT, editor_done_cb, NULL, NULL);
+    lv_obj_add_event_cb(s->editor, editor_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = layout_body(s->editor, "EDIT MEASUREMENT");
+    s->editor_value = ui_popup_add_textarea(body, 584, 56, LV_ALIGN_TOP_MID,
+        0, 0, true, false, 18, "", lv_textarea_get_text(s->editor_target), "0123456789.");
+    lv_obj_set_width(s->editor_value, LV_PCT(100));
+    lv_obj_t *keyboard = ui_popup_add_keyboard(body, s->editor_value, 584, 182,
+        LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_NUMBER);
+    lv_obj_set_width(keyboard, LV_PCT(100));
+    lv_obj_t *footer = layout_footer(s->editor);
+    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, "CANCEL",
+        0, 0, 150, 48, editor_cancel_cb, NULL, NULL);
+    lv_obj_t *done = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM, "DONE",
+        0, 0, 150, 48, editor_done_cb, NULL, NULL);
+    lv_obj_set_flex_grow(cancel, 1);
+    lv_obj_set_flex_grow(done, 1);
 }
 
 static void format_value(char *out, size_t size, bool valid, double value, const char *unit)
@@ -258,59 +339,66 @@ static void show_view(motion_view_t view)
     close_popup();
     s->owner = moonraker_config_generation();
     s->view = view;
-    s->popup = ui_popup_create(lv_layer_top(), view == VIEW_LIMITS ? 720 : 780,
-        view == VIEW_LIMITS ? 440 : 500, UI_POPUP_STANDARD);
+    s->popup = ui_popup_create(lv_layer_top(), popup_width(view == VIEW_LIMITS ? 720 : 780),
+        popup_height(view == VIEW_LIMITS ? 440 : 500), UI_POPUP_STANDARD);
     if (!s->popup) return;
-    ui_popup_add_title(s->popup, view == VIEW_LIMITS ? "MOTION LIMITS" :
-        view == VIEW_DRIVERS ? "TMC DRIVER DIAGNOSTICS" : "AXIS DISTANCE CALCULATOR", false, 4);
-    ui_popup_add_header_divider(s->popup, 48);
+    lv_obj_add_event_cb(s->popup, popup_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = layout_body(s->popup, view == VIEW_LIMITS ? "MOTION LIMITS" :
+        view == VIEW_DRIVERS ? "TMC DRIVER DIAGNOSTICS" : "AXIS DISTANCE CALCULATOR");
     if (view == VIEW_LIMITS) {
-        s->status = ui_popup_add_body(s->popup, "WAITING FOR LIVE LIMITS", 28, 66, 664);
-        ui_apply_text_caption(s->status);
+        s->status = layout_label(body, "WAITING FOR LIVE LIMITS", true);
         const char *labels[] = {"Maximum velocity", "Maximum acceleration", "Square-corner velocity", "Minimum cruise ratio"};
         for (size_t i = 0; i < 4; ++i) {
-            ui_popup_add_body(s->popup, labels[i], 28, 106 + (int)i * 48, 350);
-            s->limits[i] = ui_popup_add_body(s->popup, "Not reported", 406, 106 + (int)i * 48, 286);
+            lv_obj_t *pair = layout_pair(body);
+            lv_obj_t *name = layout_label(pair, labels[i], false);
+            s->limits[i] = layout_label(pair, "Not reported", false);
+            layout_cell(name, 0); layout_cell(s->limits[i], 1);
         }
-        ui_popup_add_body(s->popup, "Live limits may differ from printer.cfg during a print.", 28, 316, 664);
+        layout_label(body, "Live limits may differ from printer.cfg during a print.", false);
     } else if (view == VIEW_DRIVERS) {
-        s->driver_selector = lv_dropdown_create(s->popup);
-        lv_obj_set_size(s->driver_selector, 732, 44);
-        lv_obj_set_pos(s->driver_selector, 24, 64);
+        s->driver_selector = lv_dropdown_create(body);
+        lv_obj_set_size(s->driver_selector, LV_PCT(100), 54);
+        lv_obj_set_style_text_font(s->driver_selector, UI_FONT_BODY, 0);
         lv_dropdown_set_options(s->driver_selector, "Waiting for drivers...");
         lv_obj_add_event_cb(s->driver_selector, driver_selected_cb, LV_EVENT_VALUE_CHANGED, NULL);
-        s->status = ui_popup_add_body(s->popup, "WAITING FOR DRIVER STATUS", 24, 122, 732);
-        ui_apply_text_caption(s->status);
-        lv_obj_t *list = ui_popup_add_list(s->popup, 24, 156, 732, 252);
-        s->body = ui_popup_add_body(list, "Waiting for data...", 12, 12, 690);
+        s->status = layout_label(body, "WAITING FOR DRIVER STATUS", true);
+        s->body = layout_label(body, "Waiting for data...", false);
     } else {
-        ui_popup_add_body(s->popup, "Calculate from belt/pulley or leadscrew geometry.\nRetain gear_ratio for geared axes.", 24, 64, 732);
-        s->mode = lv_dropdown_create(s->popup);
-        lv_obj_set_size(s->mode, 732, 44);
-        lv_obj_set_pos(s->mode, 24, 124);
+        layout_label(body, "Calculate from belt/pulley or leadscrew geometry.\nRetain gear_ratio for geared axes.", false);
+        s->mode = lv_dropdown_create(body);
+        lv_obj_set_size(s->mode, LV_PCT(100), 54);
+        lv_obj_set_style_text_font(s->mode, UI_FONT_BODY, 0);
         lv_dropdown_set_options(s->mode, "Belt and pulley\nLeadscrew");
         lv_obj_add_event_cb(s->mode, mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
-        s->pitch_label = ui_popup_add_body(s->popup, "BELT PITCH (mm)", 24, 184, 354);
-        s->count_label = ui_popup_add_body(s->popup, "PULLEY TEETH", 402, 184, 354);
-        ui_apply_text_caption(s->pitch_label); ui_apply_text_caption(s->count_label);
-        s->pitch = ui_popup_add_textarea(s->popup, 354, 46, LV_ALIGN_TOP_LEFT,
-            24, 216, true, false, 18, "Pitch", "2", "0123456789.");
-        s->count = ui_popup_add_textarea(s->popup, 354, 46, LV_ALIGN_TOP_LEFT,
-            402, 216, true, false, 18, "Teeth or thread starts", "20", "0123456789");
-        lv_obj_add_event_cb(s->pitch, field_cb, LV_EVENT_CLICKED, NULL);
-        lv_obj_add_event_cb(s->count, field_cb, LV_EVENT_CLICKED, NULL);
-        s->result = ui_popup_add_body(s->popup, "Enter the hardware measurements, then Calculate.", 24, 284, 732);
-        s->reference = ui_popup_add_body(s->popup, "Config reference: waiting for printer data.", 24, 340, 732);
-        ui_apply_text_caption(s->reference);
-        lv_obj_t *note = ui_popup_add_body(s->popup, "For screws, enter thread pitch and thread-start count.\nNo motion or configuration changes are sent.", 24, 392, 732);
-        ui_apply_text_caption(note);
+        lv_obj_t *pair = layout_pair(body);
+        for (unsigned i = 0; i < 2; ++i) {
+            lv_obj_t *cell = lv_obj_create(pair);
+            lv_obj_remove_style_all(cell);
+            lv_obj_set_height(cell, LV_SIZE_CONTENT);
+            lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
+            lv_obj_set_style_pad_row(cell, UI_GAP_ROW, 0);
+            layout_cell(cell, i);
+            lv_obj_t *label = layout_label(cell, i == 0 ? "BELT PITCH (mm)" : "PULLEY TEETH", true);
+            lv_obj_t *field = ui_popup_add_textarea(cell, 354, 56, LV_ALIGN_TOP_LEFT,
+                0, 0, true, false, 18, i == 0 ? "Pitch" : "Teeth or thread starts",
+                i == 0 ? "2" : "20", i == 0 ? "0123456789." : "0123456789");
+            lv_obj_set_width(field, LV_PCT(100));
+            lv_obj_add_event_cb(field, field_cb, LV_EVENT_CLICKED, NULL);
+            if (i == 0) { s->pitch_label = label; s->pitch = field; }
+            else { s->count_label = label; s->count = field; }
+        }
+        s->result = layout_label(body, "Enter the hardware measurements, then Calculate.", false);
+        s->reference = layout_label(body, "Config reference: waiting for printer data.", true);
+        layout_label(body, "For screws, enter thread pitch and thread-start count.\nNo motion or configuration changes are sent.", true);
     }
-    ui_popup_add_standard_footer_divider(s->popup);
-    ui_popup_add_footer_action(s->popup, UI_POPUP_ACTION_CLOSE, "CLOSE", 170,
-        view == VIEW_DISTANCE ? UI_POPUP_FOOTER_LEFT : UI_POPUP_FOOTER_RIGHT, close_cb, NULL, NULL);
-    if (view == VIEW_DISTANCE)
-        ui_popup_add_footer_action(s->popup, UI_POPUP_ACTION_PRIMARY, "CALCULATE", 180,
-            UI_POPUP_FOOTER_RIGHT, calculate_cb, NULL, NULL);
+    lv_obj_t *footer = layout_footer(s->popup);
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, "CLOSE",
+        0, 0, 170, 48, close_cb, NULL, NULL);
+    if (view == VIEW_DISTANCE) {
+        lv_obj_t *calculate = ui_popup_add_action_at(footer, UI_POPUP_ACTION_PRIMARY, "CALCULATE",
+            0, 0, 180, 48, calculate_cb, NULL, NULL);
+        lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(calculate, 1);
+    }
     s->timer = lv_timer_create(refresh, 500, NULL);
     refresh(NULL);
 }

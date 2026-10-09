@@ -1,4 +1,7 @@
 #include "ui_printer_popups.h"
+#include "ui_value_update.h"
+#include "moonraker_config_controller.h"
+#include "ui_filament_recovery.h"
 #include "ui_text.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
@@ -21,6 +24,12 @@ static lv_obj_t *s_object_map = NULL;
 static lv_obj_t *s_object_rows[MOONRAKER_EXCLUDE_MAX_OBJECTS];
 static lv_obj_t *s_exclude_action_button = NULL;
 static int s_selected_object_index = -1;
+static uint32_t s_object_owner;
+static char s_confirm_object[MOONRAKER_EXCLUDE_NAME_MAX];
+static lv_obj_t *control_layout(lv_obj_t *popup, const char *title);
+static lv_obj_t *control_footer(lv_obj_t *popup);
+static int32_t control_width(int32_t preferred);
+static int32_t control_height(int32_t preferred);
 static lv_obj_t *s_control_popup = NULL;
 static lv_obj_t *s_hotend_list_popup = NULL;
 static lv_obj_t *s_hotend_activate_popup = NULL;
@@ -53,129 +62,77 @@ static bool s_filament_toggle_expected[
     MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
 static uint8_t s_filament_toggle_wait_ticks[
     MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
+static size_t s_filament_row_count;
+static uint32_t s_filament_owner;
+static char s_filament_row_names[MOONRAKER_MAX_FILAMENT_SENSORS][MOONRAKER_FILAMENT_SENSOR_NAME_MAX];
 static const char *s_custom_temp_title = NULL;
 static const char *s_custom_temp_command_prefix = NULL;
 static int s_custom_temp_max = 0;
 static int s_custom_temp_initial = 0;
 
-static void close_cancel_confirm_cb(lv_event_t *e)
+static void cancel_confirm_deleted(lv_event_t *event)
 {
-    (void)e;
-
-    if (s_cancel_confirm_popup) {
-        lv_obj_delete(s_cancel_confirm_popup);
-        s_cancel_confirm_popup = NULL;
-    }
+    if (lv_event_get_target(event) == s_cancel_confirm_popup) s_cancel_confirm_popup = NULL;
 }
-
-static void confirm_cancel_cb(lv_event_t *e)
+static void close_cancel_confirm_cb(lv_event_t *event)
 {
-    (void)e;
-
-    if (s_send_gcode_cb) {
-        s_send_gcode_cb("CANCEL_PRINT");
-    }
-
-    close_cancel_confirm_cb(e);
+    (void)event;
+    if (s_cancel_confirm_popup) lv_obj_delete(s_cancel_confirm_popup);
 }
-
-static void show_cancel_print_confirm(
-    ui_printer_popups_send_gcode_cb_t send_cb)
+static void confirm_cancel_cb(lv_event_t *event)
+{
+    if (s_send_gcode_cb) s_send_gcode_cb("CANCEL_PRINT");
+    close_cancel_confirm_cb(event);
+}
+static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
 {
     s_send_gcode_cb = send_cb;
-
-    if (s_cancel_confirm_popup) {
-        lv_obj_move_foreground(s_cancel_confirm_popup);
-        return;
-    }
-
-    s_cancel_confirm_popup =
-        ui_popup_create(lv_screen_active(),
-                        420,
-                        230,
-                        UI_POPUP_DANGER);
-
+    if (s_cancel_confirm_popup) { lv_obj_move_foreground(s_cancel_confirm_popup); return; }
+    s_cancel_confirm_popup = ui_popup_create(lv_layer_top(), control_width(520), control_height(260), UI_POPUP_DANGER);
     if (!s_cancel_confirm_popup) return;
-
-    ui_popup_add_title(
-        s_cancel_confirm_popup,
-        ui_text("CANCEL PRINT?"),
-        true,
-        4);
-
-    ui_popup_add_header_divider(
-        s_cancel_confirm_popup,
-        44);
-
-    ui_popup_add_body(
-        s_cancel_confirm_popup,
-        "This will stop the active print job.",
-        20,
-        72,
-        340);
-
-    ui_popup_add_standard_footer_divider(s_cancel_confirm_popup);
-
-    lv_obj_t *back_label = NULL;
-
-    ui_popup_add_footer_action(
-        s_cancel_confirm_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        150,
-        UI_POPUP_FOOTER_LEFT,
-        close_cancel_confirm_cb,
-        NULL,
-        &back_label);
-
-    lv_obj_t *cancel_label = NULL;
-
-    ui_popup_add_footer_action(
-        s_cancel_confirm_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_STOP " CANCEL",
-        150,
-        UI_POPUP_FOOTER_RIGHT,
-        confirm_cancel_cb,
-        NULL,
-        &cancel_label);
-
+    lv_obj_add_event_cb(s_cancel_confirm_popup, cancel_confirm_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(s_cancel_confirm_popup, ui_text("CANCEL PRINT?"));
+    lv_obj_t *warning = lv_label_create(body);
+    lv_label_set_text(warning, "This will stop the active print job.");
+    ui_apply_custom_label_style(warning, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(warning, LV_PCT(100));
+    lv_obj_t *footer = control_footer(s_cancel_confirm_popup);
+    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
+        0, 0, 150, 48, close_cancel_confirm_cb, NULL, NULL);
+    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " CANCEL",
+        0, 0, 150, 48, confirm_cancel_cb, NULL, NULL);
+    lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(cancel, 1);
 }
 
-
+static void object_confirm_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) == s_object_confirm_popup) {
+        s_object_confirm_popup = NULL;
+        s_confirm_object[0] = 0;
+    }
+}
 static void close_object_confirm_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (s_object_confirm_popup) {
-        lv_obj_delete(s_object_confirm_popup);
-        s_object_confirm_popup = NULL;
-    }
+    if (s_object_confirm_popup) lv_obj_delete(s_object_confirm_popup);
 }
-
-
+static void object_list_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) != s_object_list_popup) return;
+    s_object_list_popup = NULL;
+    close_object_confirm_cb(NULL);
+    if (s_exclude_snapshot) heap_caps_free(s_exclude_snapshot);
+    s_exclude_snapshot = NULL;
+    memset(s_object_rows, 0, sizeof(s_object_rows));
+    s_object_map = s_exclude_action_button = NULL;
+    s_selected_object_index = -1;
+    s_selected_object[0] = 0;
+}
 static void close_object_list_cb(lv_event_t *event)
 {
     (void)event;
-
-    close_object_confirm_cb(NULL);
-
-    if (s_object_list_popup) {
-        lv_obj_delete(s_object_list_popup);
-        s_object_list_popup = NULL;
-    }
-
-    if (s_exclude_snapshot) {
-        heap_caps_free(s_exclude_snapshot);
-        s_exclude_snapshot = NULL;
-    }
-
-    memset(s_object_rows, 0, sizeof(s_object_rows));
-    s_object_map = NULL;
-    s_exclude_action_button = NULL;
-    s_selected_object_index = -1;
+    if (s_object_list_popup) lv_obj_delete(s_object_list_popup);
 }
-
 
 static bool object_name_is_safe(const char *name)
 {
@@ -197,85 +154,50 @@ static bool object_name_is_safe(const char *name)
 static void confirm_cancel_object_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (s_send_gcode_cb && object_name_is_safe(s_selected_object)) {
-        char command[sizeof(s_selected_object) + 32];
-        int written = snprintf(command,
-                               sizeof(command),
-                               "EXCLUDE_OBJECT NAME=%s",
-                               s_selected_object);
-
-        if (written > 0 && (size_t)written < sizeof(command)) {
-            s_send_gcode_cb(command);
+    bool valid = false;
+    if (s_exclude_snapshot && s_object_owner == moonraker_config_generation() &&
+        object_name_is_safe(s_confirm_object)) {
+        // The confirmation owns its name; a later list selection cannot redirect it.
+        moonraker_exclude_state_snapshot(s_exclude_snapshot);
+        size_t count = s_exclude_snapshot->object_count;
+        if (count > MOONRAKER_EXCLUDE_MAX_OBJECTS) count = MOONRAKER_EXCLUDE_MAX_OBJECTS;
+        for (size_t i = 0; i < count; ++i) {
+            if (s_exclude_snapshot->available && !s_exclude_snapshot->objects[i].excluded &&
+                !strcmp(s_exclude_snapshot->objects[i].name, s_confirm_object)) valid = true;
         }
     }
-
+    if (valid && s_object_owner == moonraker_config_generation() && s_send_gcode_cb) {
+        char command[sizeof(s_confirm_object) + 32];
+        int written = snprintf(command, sizeof(command), "EXCLUDE_OBJECT NAME=%s", s_confirm_object);
+        if (written > 0 && (size_t)written < sizeof(command)) s_send_gcode_cb(command);
+    }
     close_object_list_cb(NULL);
 }
-
-
 static void show_object_confirm(const char *name)
 {
-    if (!name || !name[0]) return;
-
-    size_t name_length = strnlen(
-        name, sizeof(s_selected_object) - 1);
-    memmove(s_selected_object, name, name_length);
-    s_selected_object[name_length] = '\0';
-
-    if (s_object_confirm_popup) {
-        lv_obj_move_foreground(s_object_confirm_popup);
-        return;
-    }
-
-    s_object_confirm_popup =
-        ui_popup_create(lv_screen_active(),
-                        480,
-                        260,
-                        UI_POPUP_DANGER);
-
+    if (!object_name_is_safe(name) || s_object_owner != moonraker_config_generation()) return;
+    if (s_object_confirm_popup) { lv_obj_move_foreground(s_object_confirm_popup); return; }
+    size_t length = strnlen(name, sizeof(s_confirm_object) - 1);
+    memcpy(s_confirm_object, name, length); s_confirm_object[length] = 0;
+    s_object_confirm_popup = ui_popup_create(lv_layer_top(), control_width(560), control_height(320), UI_POPUP_DANGER);
     if (!s_object_confirm_popup) return;
-
-    ui_popup_add_title(s_object_confirm_popup,
-                       ui_text("CANCEL OBJECT?"),
-                       true,
-                       4);
-    ui_popup_add_header_divider(s_object_confirm_popup, 44);
-
-    char body[160];
-    snprintf(body,
-             sizeof(body),
-             "Stop printing only this object?\n\n%.95s",
-             s_selected_object);
-
-    ui_popup_add_body(s_object_confirm_popup,
-                      body,
-                      20,
-                      64,
-                      440);
-    ui_popup_add_standard_footer_divider(s_object_confirm_popup);
-
-    ui_popup_add_footer_action(
-        s_object_confirm_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_object_confirm_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_object_confirm_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_STOP " EXCLUDE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        confirm_cancel_object_cb,
-        NULL,
-        NULL);
+    lv_obj_add_event_cb(s_object_confirm_popup, object_confirm_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(s_object_confirm_popup, ui_text("CANCEL OBJECT?"));
+    lv_obj_t *message = lv_label_create(body);
+    lv_label_set_text(message, "Stop printing only this object? The rest of the print continues.");
+    ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(message, LV_PCT(100));
+    lv_obj_t *object = lv_label_create(body);
+    lv_label_set_text(object, s_confirm_object);
+    ui_apply_custom_label_style(object, UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT);
+    lv_obj_set_width(object, LV_PCT(100));
+    lv_obj_t *footer = control_footer(s_object_confirm_popup);
+    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
+        0, 0, 170, 48, close_object_confirm_cb, NULL, NULL);
+    lv_obj_t *exclude = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " EXCLUDE",
+        0, 0, 170, 48, confirm_cancel_object_cb, NULL, NULL);
+    lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(exclude, 1);
 }
-
 
 static void object_map_bounds(
     double *min_x,
@@ -486,7 +408,8 @@ static void select_object_index(int index)
 {
     if (!s_exclude_snapshot || index < 0 ||
         (size_t)index >= s_exclude_snapshot->object_count ||
-        s_exclude_snapshot->objects[index].excluded) {
+        s_exclude_snapshot->objects[index].excluded ||
+        s_object_owner != moonraker_config_generation()) {
         return;
     }
 
@@ -525,7 +448,8 @@ static void select_object_index(int index)
     }
 
     if (s_exclude_action_button) {
-        lv_obj_clear_state(s_exclude_action_button, LV_STATE_DISABLED);
+        if (object_name_is_safe(s_selected_object)) lv_obj_clear_state(s_exclude_action_button, LV_STATE_DISABLED);
+        else lv_obj_add_state(s_exclude_action_button, LV_STATE_DISABLED);
     }
     if (s_object_map) lv_obj_invalidate(s_object_map);
 }
@@ -653,178 +577,88 @@ static void exclude_selected_cb(lv_event_t *event)
 }
 
 
+static const int32_t object_columns_wide[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t object_columns_narrow[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t object_layout_rows[] = {LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+static void object_content_resize(lv_event_t *event)
+{
+    lv_obj_t *content = lv_event_get_target_obj(event);
+    bool wide = lv_obj_get_content_width(content) >= ui_theme_density_metric(560, 600, 640);
+    const int32_t *columns = wide ? object_columns_wide : object_columns_narrow;
+    if (lv_obj_get_style_grid_column_dsc_array(content, 0) == columns) return;
+    lv_obj_set_grid_dsc_array(content, columns, object_layout_rows);
+    lv_obj_t *map = lv_obj_get_child(content, 0), *list = lv_obj_get_child(content, 1);
+    lv_obj_set_height(map, wide ? 280 : 210);
+    lv_obj_set_height(list, wide ? 280 : 260);
+    lv_obj_set_grid_cell(map, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
+    lv_obj_set_grid_cell(list, LV_GRID_ALIGN_STRETCH, wide ? 1 : 0, 1, LV_GRID_ALIGN_START, wide ? 0 : 1, 1);
+}
 static void show_cancel_object_list(void)
 {
-    if (s_object_list_popup) {
-        lv_obj_move_foreground(s_object_list_popup);
-        return;
-    }
-
-    s_object_list_popup =
-        ui_popup_create(lv_screen_active(),
-                        760,
-                        450,
-                        UI_POPUP_STANDARD);
-
+    s_object_list_popup = ui_popup_create(lv_layer_top(), control_width(800), control_height(520), UI_POPUP_STANDARD);
     if (!s_object_list_popup) {
-        heap_caps_free(s_exclude_snapshot);
-        s_exclude_snapshot = NULL;
-        return;
+        heap_caps_free(s_exclude_snapshot); s_exclude_snapshot = NULL; return;
     }
-
-    ui_popup_add_title(s_object_list_popup,
-                       ui_text("CANCEL OBJECT"),
-                       false,
-                       8);
-    ui_popup_add_header_divider(s_object_list_popup, 44);
-
+    lv_obj_add_event_cb(s_object_list_popup, object_list_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(s_object_list_popup, ui_text("CANCEL OBJECT"));
     char status[128];
-    if (s_exclude_snapshot->truncated) {
-        snprintf(status,
-                 sizeof(status),
-                 "Select an object to stop. Showing the first %u objects.",
-                 (unsigned)MOONRAKER_EXCLUDE_MAX_OBJECTS);
-    } else {
-        snprintf(status,
-                 sizeof(status),
-                 "%s",
-                 "Select an object to stop; the rest of the print continues.");
-    }
-
-    ui_popup_add_status_label(s_object_list_popup,
-                              status,
-                              22,
-                              50,
-                              716);
-
-    s_object_map = lv_obj_create(s_object_list_popup);
-    lv_obj_set_pos(s_object_map, 20, 82);
-    lv_obj_set_size(s_object_map, 420, 292);
+    if (s_exclude_snapshot->truncated) snprintf(status, sizeof(status),
+        "Select an object to stop. Showing the first %u objects.", (unsigned)MOONRAKER_EXCLUDE_MAX_OBJECTS);
+    else snprintf(status, sizeof(status), "Select an object to stop; the rest of the print continues.");
+    lv_obj_t *hint = lv_label_create(body);
+    lv_label_set_text(hint, status);
+    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_t *content = lv_obj_create(body);
+    lv_obj_remove_style_all(content);
+    lv_obj_set_size(content, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_column(content, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(content, UI_GAP_ROW, 0);
+    lv_obj_add_event_cb(content, object_content_resize, LV_EVENT_SIZE_CHANGED, NULL);
+    s_object_map = lv_obj_create(content);
     ui_apply_surface_role(s_object_map, UI_SURFACE_POPUP_LIST);
-    lv_obj_set_style_pad_all(
-        s_object_map,
-        UI_PAD_PANEL,
-        0);
+    lv_obj_set_style_pad_all(s_object_map, UI_PAD_PANEL, 0);
     lv_obj_clear_flag(s_object_map, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_object_map, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(
-        s_object_map, object_map_draw_cb, LV_EVENT_DRAW_MAIN, NULL);
-    lv_obj_add_event_cb(
-        s_object_map, object_map_input_cb, LV_EVENT_ALL, NULL);
-
-    lv_obj_t *list = lv_obj_create(s_object_list_popup);
-    lv_obj_set_pos(list, 452, 82);
-    lv_obj_set_size(list, 288, 292);
+    lv_obj_add_event_cb(s_object_map, object_map_draw_cb, LV_EVENT_DRAW_MAIN, NULL);
+    lv_obj_add_event_cb(s_object_map, object_map_input_cb, LV_EVENT_ALL, NULL);
+    lv_obj_t *list = lv_obj_create(content);
     lv_obj_set_scroll_dir(list, LV_DIR_VER);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(list,
-                          LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
     ui_apply_surface_role(list, UI_SURFACE_POPUP_LIST);
-    lv_obj_set_style_pad_row(
-        list,
-        UI_GAP_ROW,
-        0);
-
+    lv_obj_set_style_pad_row(list, UI_GAP_ROW, 0);
     for (size_t i = 0; i < s_exclude_snapshot->object_count; ++i) {
-        moonraker_exclude_object_t *object =
-            &s_exclude_snapshot->objects[i];
-
+        moonraker_exclude_object_t *object = &s_exclude_snapshot->objects[i];
         lv_obj_t *row = ui_button_create_empty(list, UI_BUTTON_OUTLINED);
-        lv_obj_set_width(row, LV_PCT(100));
-        lv_obj_set_height(row, 46);
-        lv_obj_set_style_border_width(
-            row,
-            object->current
-                ? UI_BORDER_STRONG
-                : UI_BORDER_THIN,
-            0);
-        lv_obj_set_style_border_color(
-            row,
-            object->current ? UI_ACCENT_CYAN : UI_BORDER_SOFT,
-            0);
-        lv_obj_set_style_pad_hor(
-            row,
-            UI_PAD_CARD,
-            0);
-
-        char label_text[MOONRAKER_EXCLUDE_NAME_MAX + 24];
-        snprintf(label_text,
-                 sizeof(label_text),
-                 object->excluded
-                     ? "[EXCLUDED] %s"
-                     : object->current
-                         ? "[CURRENT] %s"
-                         : "%s",
-                 object->name);
-
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(row, 48, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_hor(row, UI_PAD_CARD, 0);
+        lv_obj_set_style_pad_ver(row, 10, 0);
+        lv_obj_set_style_border_width(row, object->current ? UI_BORDER_STRONG : UI_BORDER_THIN, 0);
+        lv_obj_set_style_border_color(row, object->current ? UI_ACCENT_CYAN : UI_BORDER_SOFT, 0);
+        char text[MOONRAKER_EXCLUDE_NAME_MAX + 24];
+        snprintf(text, sizeof(text), object->excluded ? "[EXCLUDED] %s" : object->current ? "[CURRENT] %s" : "%s", object->name);
         lv_obj_t *label = lv_label_create(row);
-        lv_label_set_text(label, label_text);
-        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_set_width(label, 242);
-        lv_obj_center(label);
-        lv_obj_set_style_text_color(
-            label,
-            object->excluded ? UI_BORDER_SOFT : UI_TEXT,
-            0);
-
-        if (object->excluded) {
-            lv_obj_add_state(row, LV_STATE_DISABLED);
-            lv_obj_set_style_opa(row, LV_OPA_50, 0);
-        } else {
-            s_object_rows[i] = row;
-            lv_obj_add_event_cb(row,
-                                object_row_event_cb,
-                                LV_EVENT_ALL,
-                                object);
-        }
+        lv_label_set_text(label, text);
+        ui_apply_custom_label_style(label, UI_FONT_BODY, object->excluded ? UI_BORDER_SOFT : UI_TEXT);
+        lv_obj_set_width(label, LV_PCT(100));
+        if (object->excluded) { lv_obj_add_state(row, LV_STATE_DISABLED); lv_obj_set_style_opa(row, LV_OPA_50, 0); }
+        else { s_object_rows[i] = row; lv_obj_add_event_cb(row, object_row_event_cb, LV_EVENT_ALL, object); }
     }
-
-    ui_popup_add_standard_footer_divider(s_object_list_popup);
-
-    ui_popup_add_footer_action(
-        s_object_list_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        close_object_list_cb,
-        NULL,
-        NULL);
-
-    lv_obj_t *exclude_action_label = NULL;
-    ui_popup_add_footer_action(
-        s_object_list_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_STOP " EXCLUDE SELECTED",
-        230,
-        UI_POPUP_FOOTER_RIGHT,
-        exclude_selected_cb,
-        NULL,
-        &exclude_action_label);
-
-    s_exclude_action_button = exclude_action_label
-        ? lv_obj_get_parent(exclude_action_label)
-        : NULL;
-
-    if (s_exclude_action_button) {
-        lv_obj_add_state(s_exclude_action_button, LV_STATE_DISABLED);
-    }
-
-    int initial_index = -1;
+    lv_obj_t *footer = control_footer(s_object_list_popup);
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, 160, 48, close_object_list_cb, NULL, NULL);
+    s_exclude_action_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " EXCLUDE",
+        0, 0, 230, 48, exclude_selected_cb, NULL, NULL);
+    lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(s_exclude_action_button, 1);
+    lv_obj_add_state(s_exclude_action_button, LV_STATE_DISABLED);
+    int initial = -1;
     for (size_t i = 0; i < s_exclude_snapshot->object_count; ++i) {
-        if (!s_exclude_snapshot->objects[i].excluded &&
-            s_exclude_snapshot->objects[i].current) {
-            initial_index = (int)i;
-            break;
-        }
-        if (initial_index < 0 &&
-            !s_exclude_snapshot->objects[i].excluded) {
-            initial_index = (int)i;
-        }
+        if (!s_exclude_snapshot->objects[i].excluded && s_exclude_snapshot->objects[i].current) { initial = (int)i; break; }
+        if (initial < 0 && !s_exclude_snapshot->objects[i].excluded) initial = (int)i;
     }
-    if (initial_index >= 0) select_object_index(initial_index);
+    if (initial >= 0) select_object_index(initial);
 }
 
 
@@ -839,7 +673,9 @@ void ui_printer_popups_show_cancel(
 void ui_printer_popups_show_cancel_object(
     ui_printer_popups_send_gcode_cb_t send_cb)
 {
+    if (s_object_list_popup) { lv_obj_move_foreground(s_object_list_popup); return; }
     s_send_gcode_cb = send_cb;
+    s_object_owner = moonraker_config_generation();
 
     if (s_exclude_snapshot) {
         heap_caps_free(s_exclude_snapshot);
@@ -863,6 +699,8 @@ void ui_printer_popups_show_cancel_object(
     }
 
     moonraker_exclude_state_snapshot(s_exclude_snapshot);
+    if (s_exclude_snapshot->object_count > MOONRAKER_EXCLUDE_MAX_OBJECTS)
+        s_exclude_snapshot->object_count = MOONRAKER_EXCLUDE_MAX_OBJECTS;
 
     bool has_available_object = false;
     for (size_t i = 0; i < s_exclude_snapshot->object_count; ++i) {
@@ -1008,627 +846,373 @@ static void custom_temp_keyboard_cb(lv_event_t *event)
 }
 
 
+/* Temperature/fan modals use native layout. Header/footer remain visible;
+ * only the body scrolls when density, font size or viewport needs more space. */
+static lv_obj_t *control_layout(lv_obj_t *popup, const char *title)
+{
+    lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(popup, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(popup, UI_GAP_CARD, 0);
+    lv_obj_t *label = lv_label_create(popup);
+    lv_label_set_text(label, title);
+    ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_obj_set_width(label, LV_PCT(100));
+    lv_obj_t *body = lv_obj_create(popup);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_width(body, LV_PCT(100));
+    lv_obj_set_height(body, 0);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
+    lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    return body;
+}
+
+static lv_obj_t *control_footer(lv_obj_t *popup)
+{
+    lv_obj_t *footer = lv_obj_create(popup);
+    lv_obj_remove_style_all(footer);
+    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER,
+        LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(footer, UI_GAP_CARD, 0);
+    return footer;
+}
+
+static int32_t control_width(int32_t preferred)
+{
+    int32_t available = lv_display_get_horizontal_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+
+static int32_t control_height(int32_t preferred)
+{
+    int32_t available = lv_display_get_vertical_resolution(NULL) - 32;
+    return available < preferred ? available : preferred;
+}
+
+static const int32_t control_columns_one[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t control_columns_two[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t control_columns_three[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t control_rows[] = {LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT,
+    LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+
+static void control_grid_resize(lv_event_t *event)
+{
+    lv_obj_t *grid = lv_event_get_target_obj(event);
+    unsigned maximum = (unsigned)(uintptr_t)lv_event_get_user_data(event);
+    int32_t width = lv_obj_get_content_width(grid);
+    int32_t minimum = maximum == 2 ? 220 : ui_theme_density_metric(140, 160, 180);
+    int32_t gap = UI_GAP_CARD;
+    unsigned columns = width >= minimum * 3 + gap * 2 && maximum == 3 ? 3 :
+        width >= minimum * 2 + gap && maximum >= 2 ? 2 : 1;
+    const int32_t *descriptor = columns == 3 ? control_columns_three :
+        columns == 2 ? control_columns_two : control_columns_one;
+    if (lv_obj_get_style_grid_column_dsc_array(grid, 0) == descriptor) return;
+    lv_obj_set_grid_dsc_array(grid, descriptor, control_rows);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(grid); ++i) {
+        lv_obj_set_grid_cell(lv_obj_get_child(grid, i), LV_GRID_ALIGN_STRETCH,
+            i % columns, 1, LV_GRID_ALIGN_START, i / columns, 1);
+    }
+}
+
+static lv_obj_t *control_grid(lv_obj_t *parent, unsigned maximum)
+{
+    lv_obj_t *grid = lv_obj_create(parent);
+    lv_obj_remove_style_all(grid);
+    lv_obj_set_size(grid, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_column(grid, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(grid, UI_GAP_CARD, 0);
+    lv_obj_add_event_cb(grid, control_grid_resize, LV_EVENT_SIZE_CHANGED,
+        (void *)(uintptr_t)maximum);
+    return grid;
+}
+
 static void open_custom_temp_cb(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
-        !s_custom_temp_title || !s_custom_temp_command_prefix ||
-        s_custom_temp_max <= 0) {
-        return;
-    }
-
-    if (s_custom_temp_popup) {
-        lv_obj_move_foreground(s_custom_temp_popup);
-        return;
-    }
-
-    s_custom_temp_popup = ui_popup_create(
-        lv_layer_top(), 560, 460, UI_POPUP_STANDARD);
+        !s_custom_temp_title || !s_custom_temp_command_prefix || s_custom_temp_max <= 0) return;
+    if (s_custom_temp_popup) { lv_obj_move_foreground(s_custom_temp_popup); return; }
+    s_custom_temp_popup = ui_popup_create(lv_layer_top(), control_width(600),
+        control_height(500), UI_POPUP_STANDARD);
     if (!s_custom_temp_popup) return;
-
-    lv_obj_add_event_cb(
-        s_custom_temp_popup,
-        custom_temp_popup_deleted_cb,
-        LV_EVENT_DELETE,
-        NULL);
-
-    ui_popup_add_title(
-        s_custom_temp_popup, s_custom_temp_title, false, 8);
-    ui_popup_add_header_divider(s_custom_temp_popup, 44);
-
+    lv_obj_add_event_cb(s_custom_temp_popup, custom_temp_popup_deleted_cb,
+        LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(s_custom_temp_popup, s_custom_temp_title);
     char instruction[64];
-    snprintf(instruction,
-             sizeof(instruction),
-             "ENTER 0-%d C  (0 = OFF)",
-             s_custom_temp_max);
-    s_custom_temp_status = ui_popup_add_status_label(
-        s_custom_temp_popup, instruction, 30, 52, 500);
-
+    snprintf(instruction, sizeof(instruction), "ENTER 0-%d C  (0 = OFF)", s_custom_temp_max);
+    s_custom_temp_status = lv_label_create(body);
+    lv_label_set_text(s_custom_temp_status, instruction);
+    ui_apply_custom_label_style(s_custom_temp_status, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(s_custom_temp_status, LV_PCT(100));
     char initial_text[16] = "";
-    if (s_custom_temp_initial > 0) {
-        snprintf(initial_text,
-                 sizeof(initial_text),
-                 "%d",
-                 s_custom_temp_initial);
-    }
-
-    s_custom_temp_textarea = ui_popup_add_textarea(
-        s_custom_temp_popup,
-        220,
-        56,
-        LV_ALIGN_TOP_MID,
-        0,
-        82,
-        true,
-        false,
-        3,
-        ui_text("Temperature"),
-        initial_text,
-        ui_text("0123456789"));
-
-    lv_obj_t *keyboard = ui_popup_add_keyboard(
-        s_custom_temp_popup,
-        s_custom_temp_textarea,
-        500,
-        190,
-        LV_ALIGN_TOP_MID,
-        0,
-        150,
-        LV_KEYBOARD_MODE_NUMBER);
-
+    if (s_custom_temp_initial > 0) snprintf(initial_text, sizeof(initial_text), "%d", s_custom_temp_initial);
+    s_custom_temp_textarea = ui_popup_add_textarea(body, 220, 56,
+        LV_ALIGN_TOP_MID, 0, 0, true, false, 3, ui_text("Temperature"),
+        initial_text, ui_text("0123456789"));
+    lv_obj_set_width(s_custom_temp_textarea, LV_PCT(100));
+    lv_obj_t *keyboard = ui_popup_add_keyboard(body, s_custom_temp_textarea,
+        500, 200, LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_NUMBER);
     if (keyboard) {
-        lv_obj_add_event_cb(
-            keyboard,
-            custom_temp_keyboard_cb,
-            LV_EVENT_READY,
-            NULL);
-        lv_obj_add_event_cb(
-            keyboard,
-            custom_temp_keyboard_cb,
-            LV_EVENT_CANCEL,
-            NULL);
+        lv_obj_set_width(keyboard, LV_PCT(100));
+        lv_obj_add_event_cb(keyboard, custom_temp_keyboard_cb, LV_EVENT_READY, NULL);
+        lv_obj_add_event_cb(keyboard, custom_temp_keyboard_cb, LV_EVENT_CANCEL, NULL);
     }
-
-    ui_popup_add_standard_footer_divider(s_custom_temp_popup);
-    ui_popup_add_footer_action(
-        s_custom_temp_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        close_custom_temp_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_custom_temp_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_OK " SET",
-        160,
-        UI_POPUP_FOOTER_RIGHT,
-        set_custom_temp_cb,
-        NULL,
-        NULL);
-
-    if (s_custom_temp_textarea) {
-        lv_obj_add_state(s_custom_temp_textarea, LV_STATE_FOCUSED);
-    }
+    lv_obj_t *footer = control_footer(s_custom_temp_popup);
+    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_LEFT " BACK", 0, 0, 160, 48, close_custom_temp_cb, NULL, NULL);
+    lv_obj_t *set = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM,
+        LV_SYMBOL_OK " SET", 0, 0, 160, 48, set_custom_temp_cb, NULL, NULL);
+    lv_obj_set_flex_grow(back, 1);
+    lv_obj_set_flex_grow(set, 1);
+    if (s_custom_temp_textarea) lv_obj_add_state(s_custom_temp_textarea, LV_STATE_FOCUSED);
 }
 
-static lv_obj_t *control_popup_button(
-    lv_obj_t *parent,
-    const char *text,
-    int x,
-    int y,
-    int w,
-    int h,
-    const char *cmd,
-    bool off,
-    bool selected)
+static lv_obj_t *control_popup_button(lv_obj_t *parent, const char *text,
+    const char *cmd, bool off, bool selected)
 {
-    lv_obj_t *button = ui_popup_add_action_at(
-        parent,
+    lv_obj_t *button = ui_popup_add_action_at(parent,
         off ? UI_POPUP_ACTION_DANGER : UI_POPUP_ACTION_CHOICE,
-        text,
-        x,
-        y,
-        w,
-        h,
-        gcode_button_event_cb,
-        (void *)cmd,
-        NULL);
-
+        text, 0, 0, 1, 58, gcode_button_event_cb, (void *)cmd, NULL);
     if (button && selected) {
         lv_obj_set_style_border_color(button, UI_ACCENT_CYAN, 0);
-        lv_obj_set_style_border_width(
-            button,
-            ui_theme_accessible_border_width(3),
-            0);
+        lv_obj_set_style_border_width(button, ui_theme_accessible_border_width(3), 0);
     }
-
     return button;
 }
 
-
-static lv_obj_t *control_value_card(
-    lv_obj_t *parent,
-    const char *caption,
-    const char *value,
-    int x,
-    int y,
-    int width,
-    lv_color_t value_color)
+static lv_obj_t *control_value_card(lv_obj_t *parent, const char *caption,
+    const char *value, lv_color_t value_color)
 {
-    if (!parent || !caption || !value) return NULL;
-
     lv_obj_t *card = lv_obj_create(parent);
-    lv_obj_set_pos(card, x, y);
-    lv_obj_set_size(card, width, 78);
+    lv_obj_set_height(card, LV_SIZE_CONTENT);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_surface_role(card, UI_SURFACE_SECTION);
-
-    lv_obj_t *accent = lv_obj_create(card);
-    lv_obj_set_pos(accent, 0, 0);
-    lv_obj_set_size(accent, 5, 78);
-    lv_obj_clear_flag(accent, LV_OBJ_FLAG_SCROLLABLE);
-    ui_apply_surface_role(accent, UI_SURFACE_INDICATOR);
-    lv_obj_set_style_bg_color(accent, value_color, 0);
-
+    lv_obj_set_style_pad_all(card, 14, 0);
+    lv_obj_set_style_pad_row(card, 6, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_border_side(card, LV_BORDER_SIDE_LEFT, 0);
+    lv_obj_set_style_border_width(card, 4, 0);
+    lv_obj_set_style_border_color(card, value_color, 0);
     lv_obj_t *caption_label = lv_label_create(card);
     lv_label_set_text(caption_label, caption);
-    ui_apply_custom_label_style(caption_label,
-                                UI_FONT_BODY,
-                                UI_BORDER_SOFT);
-    lv_obj_align(caption_label, LV_ALIGN_LEFT_MID, 22, -15);
-
+    ui_apply_custom_label_style(caption_label, UI_FONT_BODY, UI_TEXT_MUTED);
+    lv_obj_set_width(caption_label, LV_PCT(100));
     lv_obj_t *value_label = lv_label_create(card);
     lv_label_set_text(value_label, value);
-    ui_apply_custom_label_style(value_label,
-                                UI_FONT_BODY_LARGE,
-                                value_color);
-    lv_obj_align(value_label, LV_ALIGN_LEFT_MID, 22, 14);
-
+    ui_apply_custom_label_style(value_label, UI_FONT_BODY_LARGE, value_color);
+    lv_obj_set_width(value_label, LV_PCT(100));
     return card;
 }
 
-
-static void show_control_popup(
-    const char *title,
-    double current_value,
-    double target_value,
-    const char *unit,
-    bool show_target,
-    const char *cmds[],
-    const char *labels[],
-    const double preset_values[],
-    int count,
-    const char *custom_title,
-    const char *custom_command_prefix,
-    int custom_max)
+static void show_control_popup(const char *title, double current_value,
+    double target_value, const char *unit, bool show_target, const char *cmds[],
+    const char *labels[], const double preset_values[], int count,
+    const char *custom_title, const char *custom_command_prefix, int custom_max)
 {
-    lv_obj_t *popup =
-        ui_popup_create(lv_layer_top(),
-                        660,
-                        430,
-                        UI_POPUP_STANDARD);
-
+    /* Avoid retaining another preset modal with commands from an old hotend. */
+    close_custom_temp_cb(NULL);
+    if (s_control_popup) lv_obj_delete(s_control_popup);
+    lv_obj_t *popup = ui_popup_create(lv_layer_top(), control_width(660),
+        control_height(460), UI_POPUP_STANDARD);
     if (!popup) return;
-
     s_control_popup = popup;
     s_custom_temp_title = custom_title;
     s_custom_temp_command_prefix = custom_command_prefix;
     s_custom_temp_max = custom_max;
-    s_custom_temp_initial = target_value > 0.0
-        ? (int)(target_value + 0.5)
-        : 0;
-    lv_obj_add_event_cb(
-        popup, control_popup_deleted_cb, LV_EVENT_DELETE, NULL);
-
-    ui_popup_add_title(
-        popup,
-        title,
-        false,
-        8);
-
-    ui_popup_add_header_divider(
-        popup,
-        44);
-
-    char current_text[32];
-    char target_text[32];
-    if (current_value > -100.0) {
-        snprintf(current_text,
-                 sizeof(current_text),
-                 "%.0f %s",
-                 current_value,
-                 unit);
-    } else {
-        snprintf(current_text,
-                 sizeof(current_text),
-                 "-- %s",
-                 unit);
-    }
-
-    if (target_value > 0.0) {
-        snprintf(target_text,
-                 sizeof(target_text),
-                 "%.0f %s",
-                 target_value,
-                 unit);
-    } else if (target_value >= 0.0) {
-        snprintf(target_text, sizeof(target_text), "OFF");
-    } else {
-        snprintf(target_text,
-                 sizeof(target_text),
-                 "-- %s",
-                 unit);
-    }
-
+    s_custom_temp_initial = target_value > 0.0 ? (int)(target_value + 0.5) : 0;
+    lv_obj_add_event_cb(popup, control_popup_deleted_cb, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(popup, title);
+    char current_text[32], target_text[32];
+    if (current_value > -100.0) snprintf(current_text, sizeof(current_text), "%.0f %s", current_value, unit);
+    else snprintf(current_text, sizeof(current_text), "-- %s", unit);
+    if (target_value > 0.0) snprintf(target_text, sizeof(target_text), "%.0f %s", target_value, unit);
+    else if (target_value >= 0.0) snprintf(target_text, sizeof(target_text), "OFF");
+    else snprintf(target_text, sizeof(target_text), "-- %s", unit);
+    lv_obj_t *cards = control_grid(body, show_target ? 2 : 1);
+    control_value_card(cards, show_target ? "CURRENT" : "CURRENT SPEED", current_text, UI_TEXT);
     if (show_target) {
-        control_value_card(
-            popup, "CURRENT", current_text, 24, 60, 294, UI_TEXT);
-        lv_obj_t *target_card = control_value_card(
-            popup,
-            custom_command_prefix
-                ? "TARGET  /  TAP TO SET"
-                : "TARGET",
-            target_text,
-            342,
-            60,
-            294,
-            UI_ACCENT_CYAN);
-        if (target_card && custom_command_prefix) {
+        lv_obj_t *target_card = control_value_card(cards,
+            custom_command_prefix ? "TARGET / TAP TO SET" : "TARGET", target_text, UI_ACCENT_CYAN);
+        if (custom_command_prefix) {
             lv_obj_add_flag(target_card, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_set_style_border_color(
-                target_card, UI_ACCENT_CYAN, LV_STATE_PRESSED);
-            lv_obj_set_style_border_width(
-                target_card,
-                ui_theme_accessible_border_width(3),
-                LV_STATE_PRESSED);
-            lv_obj_add_event_cb(
-                target_card,
-                open_custom_temp_cb,
-                LV_EVENT_CLICKED,
-                NULL);
+            lv_obj_set_style_border_color(target_card, UI_ACCENT_CYAN, LV_STATE_PRESSED);
+            lv_obj_add_event_cb(target_card, open_custom_temp_cb, LV_EVENT_CLICKED, NULL);
         }
-    } else {
-        control_value_card(
-            popup, "CURRENT SPEED", current_text, 24, 60, 612, UI_TEXT);
     }
-
-    ui_popup_add_status_label(
-        popup,
-        ui_text("CHOOSE A PRESET"),
-        24,
-        146,
-        612);
-
-    const int columns = 3;
-    const int bw = 188;
-    const int bh = 58;
-    const int gap_x = 16;
-    const int gap_y = 12;
-    const int y0 = 174;
-
-    for (int i = 0; i < count; i++) {
-        int row = i / columns;
-        int col = i % columns;
-        int row_start = row * columns;
-        int items_in_row = count - row_start;
-        if (items_in_row > columns) items_in_row = columns;
-        int row_width = items_in_row * bw +
-            (items_in_row - 1) * gap_x;
-        int x0 = (660 - row_width) / 2;
-
+    lv_obj_t *hint = lv_label_create(body);
+    lv_label_set_text(hint, ui_text("CHOOSE A PRESET"));
+    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_t *presets = control_grid(body, 3);
+    for (int i = 0; i < count; ++i) {
         double difference = target_value - preset_values[i];
         if (difference < 0.0) difference = -difference;
-        bool selected = target_value >= 0.0 && difference < 0.6;
-        bool off = preset_values[i] == 0.0;
-
-        control_popup_button(
-            popup,
-            labels[i],
-            x0 + col * (bw + gap_x),
-            y0 + row * (bh + gap_y),
-            bw,
-            bh,
-            cmds[i],
-            off,
-            selected);
+        control_popup_button(presets, labels[i], cmds[i], preset_values[i] == 0,
+            target_value >= 0 && difference < 0.6);
     }
-
-    ui_popup_add_standard_footer_divider(popup);
-
-    ui_popup_add_footer_action(
-        popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        160,
-        UI_POPUP_FOOTER_CENTER,
-        close_popup_event_cb,
-        popup,
-        NULL);
+    lv_obj_t *footer = control_footer(popup);
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
+        0, 0, 160, 48, close_popup_event_cb, popup, NULL);
 }
 
+static size_t s_hotend_row_count;
+static uint32_t s_hotend_owner;
+static char s_hotend_row_names[MOONRAKER_MAX_HOTENDS][MOONRAKER_HOTEND_NAME_MAX];
+static lv_obj_t *s_hotend_temp_buttons[MOONRAKER_MAX_HOTENDS];
+static lv_obj_t *s_hotend_confirm_button;
+static char s_hotend_confirm_name[MOONRAKER_HOTEND_NAME_MAX];
 
-
+static const moonraker_hotend_t *hotend_row(size_t row)
+{
+    size_t count = s_hotend_list_state.hotend_count;
+    if (count > MOONRAKER_MAX_HOTENDS) count = MOONRAKER_MAX_HOTENDS;
+    if (row >= s_hotend_row_count) return NULL;
+    for (size_t i = 0; i < count; ++i)
+        if (!strcmp(s_hotend_list_state.hotends[i].object_name, s_hotend_row_names[row]))
+            return &s_hotend_list_state.hotends[i];
+    return NULL;
+}
+static bool hotend_name_safe(const char *name)
+{
+    return name && name[0] && strspn(name,
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") == strlen(name);
+}
+static bool hotend_live_here(void)
+{
+    return s_hotend_owner == moonraker_config_generation() &&
+        s_hotend_list_state.moonraker_ok && s_hotend_list_state.live_data_ok;
+}
+static void hotend_activate_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) == s_hotend_activate_popup) {
+        s_hotend_activate_popup = s_hotend_confirm_button = NULL;
+        s_hotend_confirm_name[0] = 0;
+    }
+}
 static void close_hotend_activate_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (s_hotend_activate_popup) {
-        lv_obj_delete(s_hotend_activate_popup);
-        s_hotend_activate_popup = NULL;
-    }
+    if (s_hotend_activate_popup) lv_obj_delete(s_hotend_activate_popup);
 }
-
-
 static void confirm_hotend_activate_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (s_hotend_activate_index >= s_hotend_list_state.hotend_count ||
-        s_hotend_activate_index >= MOONRAKER_MAX_HOTENDS) {
-        close_hotend_activate_cb(NULL);
-        return;
+    moonraker_state_snapshot(&s_hotend_list_state);
+    const moonraker_hotend_t *hotend = hotend_row(s_hotend_activate_index);
+    if (hotend_live_here() && hotend && !hotend->active && hotend_name_safe(hotend->object_name) &&
+        !strcmp(hotend->object_name, s_hotend_confirm_name) &&
+        !printer_controller_is_live_state(s_hotend_list_state.printer_state)) {
+        char command[96];
+        snprintf(command, sizeof(command), "ACTIVATE_EXTRUDER EXTRUDER=%s", s_hotend_confirm_name);
+        if (s_send_gcode_cb) s_send_gcode_cb(command);
     }
-
-    const moonraker_hotend_t *hotend =
-        &s_hotend_list_state.hotends[s_hotend_activate_index];
-
-    if (!hotend->object_name[0] ||
-        printer_controller_is_live_state(
-            s_hotend_list_state.printer_state)) {
-        close_hotend_activate_cb(NULL);
-        return;
-    }
-
-    char command[96];
-    int written = snprintf(
-        command,
-        sizeof(command),
-        "ACTIVATE_EXTRUDER EXTRUDER=%s",
-        hotend->object_name);
-
-    if (written > 0 &&
-        (size_t)written < sizeof(command) &&
-        s_send_gcode_cb) {
-        s_send_gcode_cb(command);
-    }
-
     close_hotend_activate_cb(NULL);
 }
-
-
 static void hotend_activate_event_cb(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
-    if (index >= s_hotend_list_state.hotend_count ||
-        index >= MOONRAKER_MAX_HOTENDS ||
-        s_hotend_list_state.hotends[index].active ||
-        printer_controller_is_live_state(
-            s_hotend_list_state.printer_state)) {
-        return;
-    }
-
+    moonraker_state_snapshot(&s_hotend_list_state);
+    const moonraker_hotend_t *hotend = hotend_row(index);
+    if (!hotend_live_here() || !hotend || hotend->active || !hotend_name_safe(hotend->object_name) ||
+        printer_controller_is_live_state(s_hotend_list_state.printer_state)) return;
+    if (s_hotend_activate_popup) { lv_obj_move_foreground(s_hotend_activate_popup); return; }
     s_hotend_activate_index = index;
-
-    if (s_hotend_activate_popup) {
-        lv_obj_move_foreground(s_hotend_activate_popup);
-        return;
-    }
-
-    s_hotend_activate_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            500,
-            270,
-            UI_POPUP_STANDARD);
-
+    snprintf(s_hotend_confirm_name, sizeof(s_hotend_confirm_name), "%s", hotend->object_name);
+    s_hotend_activate_popup = ui_popup_create(lv_layer_top(), control_width(560),
+        control_height(300), UI_POPUP_STANDARD);
     if (!s_hotend_activate_popup) return;
-
-    char title[48];
-    snprintf(
-        title,
-        sizeof(title),
-        "ACTIVATE T%u?",
-        (unsigned)index);
-
-    ui_popup_add_title(
-        s_hotend_activate_popup,
-        title,
-        false,
-        4);
-
-    ui_popup_add_header_divider(
-        s_hotend_activate_popup,
-        44);
-
-    char body[180];
-    snprintf(
-        body,
-        sizeof(body),
-        "Make %s the active Klipper hotend?\n\n"
-        "This does not move or park a physical toolchanger.",
-        s_hotend_list_state.hotends[index].object_name);
-
-    ui_popup_add_body(
-        s_hotend_activate_popup,
-        body,
-        24,
-        66,
-        452);
-
-    ui_popup_add_standard_footer_divider(
-        s_hotend_activate_popup);
-
-    ui_popup_add_footer_action(
-        s_hotend_activate_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_hotend_activate_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_hotend_activate_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_OK " ACTIVATE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        confirm_hotend_activate_cb,
-        NULL,
-        NULL);
+    lv_obj_add_event_cb(s_hotend_activate_popup, hotend_activate_deleted, LV_EVENT_DELETE, NULL);
+    char title[48], text[180];
+    snprintf(title, sizeof(title), "ACTIVATE T%u?", (unsigned)index);
+    lv_obj_t *body = control_layout(s_hotend_activate_popup, title);
+    snprintf(text, sizeof(text), "Make %s the active Klipper hotend?\n\n"
+        "This does not move or park a physical toolchanger.", s_hotend_confirm_name);
+    lv_obj_t *label = lv_label_create(body);
+    lv_label_set_text(label, text);
+    ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_width(label, LV_PCT(100));
+    lv_obj_t *footer = control_footer(s_hotend_activate_popup);
+    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
+        LV_SYMBOL_LEFT " BACK", 0, 0, 170, 48, close_hotend_activate_cb, NULL, NULL);
+    s_hotend_confirm_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM,
+        LV_SYMBOL_OK " ACTIVATE", 0, 0, 170, 48, confirm_hotend_activate_cb, NULL, NULL);
+    lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(s_hotend_confirm_button, 1);
 }
-
-
 static void refresh_hotend_list(lv_timer_t *timer)
 {
     (void)timer;
-
     if (!s_hotend_list_popup) return;
-
     moonraker_state_snapshot(&s_hotend_list_state);
-
-    size_t count = s_hotend_list_state.hotend_count;
-    if (count > MOONRAKER_MAX_HOTENDS) {
-        count = MOONRAKER_MAX_HOTENDS;
+    bool live = hotend_live_here();
+    bool activation_locked = printer_controller_is_live_state(s_hotend_list_state.printer_state);
+    for (size_t i = 0; i < s_hotend_row_count; ++i) {
+        const moonraker_hotend_t *hotend = live ? hotend_row(i) : NULL;
+        if (!hotend) {
+            ui_value_set_text(s_hotend_temp_labels[i], s_hotend_owner == moonraker_config_generation() ?
+                "UNAVAILABLE / REOPEN" : "PRINTER CHANGED / REOPEN");
+            lv_obj_add_state(s_hotend_temp_buttons[i], LV_STATE_DISABLED);
+            lv_obj_add_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
+            continue;
+        }
+        char name[64], temperature[64];
+        snprintf(name, sizeof(name), "T%u %s(%s)", (unsigned)i, hotend->active ? "ACTIVE " : "", hotend->object_name);
+        ui_value_set_text(s_hotend_name_labels[i], name);
+        ui_value_set_color(s_hotend_name_labels[i], hotend->active ? UI_OK_BRIGHT : UI_TEXT, 0);
+        if (hotend->temperature > -100.0) snprintf(temperature, sizeof(temperature), "%.1f / %.1f C", hotend->temperature, hotend->target);
+        else snprintf(temperature, sizeof(temperature), "-- / -- C");
+        ui_value_set_text(s_hotend_temp_labels[i], temperature);
+        ui_value_set_text(s_hotend_activate_labels[i], hotend->active ? ui_text(LV_SYMBOL_OK " ACTIVE") : ui_text("MAKE ACTIVE"));
+        bool disabled = hotend->active || activation_locked || !hotend_name_safe(hotend->object_name);
+        if (disabled) lv_obj_add_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
+        else lv_obj_remove_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
+        ui_value_set_color(s_hotend_temp_labels[i], UI_TEXT_BRIGHT, 0);
+        if (hotend_name_safe(hotend->object_name)) lv_obj_remove_state(s_hotend_temp_buttons[i], LV_STATE_DISABLED);
+        else lv_obj_add_state(s_hotend_temp_buttons[i], LV_STATE_DISABLED);
+        if (lv_obj_get_style_opa(s_hotend_activate_buttons[i], 0) != (disabled ? LV_OPA_50 : LV_OPA_COVER))
+            lv_obj_set_style_opa(s_hotend_activate_buttons[i], disabled ? LV_OPA_50 : LV_OPA_COVER, 0);
     }
-
-    bool activation_locked =
-        printer_controller_is_live_state(
-            s_hotend_list_state.printer_state);
-
-    for (size_t i = 0; i < count; ++i) {
-        const moonraker_hotend_t *hotend =
-            &s_hotend_list_state.hotends[i];
-
-        if (s_hotend_name_labels[i]) {
-            char name[64];
-            snprintf(
-                name,
-                sizeof(name),
-                hotend->active
-                    ? "T%u  ACTIVE  (%s)"
-                    : "T%u  (%s)",
-                (unsigned)i,
-                hotend->object_name);
-
-            lv_label_set_text(
-                s_hotend_name_labels[i],
-                name);
-
-            lv_obj_set_style_text_color(
-                s_hotend_name_labels[i],
-                hotend->active ? UI_OK_BRIGHT : UI_TEXT,
-                0);
-        }
-
-        if (s_hotend_temp_labels[i]) {
-            char temperature[64];
-
-            if (hotend->temperature > -100.0) {
-                snprintf(
-                    temperature,
-                    sizeof(temperature),
-                    "%.1f / %.1f C",
-                    hotend->temperature,
-                    hotend->target);
-            } else {
-                snprintf(
-                    temperature,
-                    sizeof(temperature),
-                    "-- / -- C");
-            }
-
-            lv_label_set_text(
-                s_hotend_temp_labels[i],
-                temperature);
-        }
-
-        if (s_hotend_activate_labels[i]) {
-            lv_label_set_text(
-                s_hotend_activate_labels[i],
-                hotend->active
-                    ? ui_text(LV_SYMBOL_OK " ACTIVE")
-                    : ui_text("MAKE ACTIVE"));
-        }
-
-        if (s_hotend_activate_buttons[i]) {
-            bool disabled =
-                hotend->active || activation_locked;
-
-            if (disabled) {
-                lv_obj_add_state(
-                    s_hotend_activate_buttons[i],
-                    LV_STATE_DISABLED);
-                lv_obj_set_style_opa(
-                    s_hotend_activate_buttons[i],
-                    LV_OPA_50,
-                    0);
-            } else {
-                lv_obj_clear_state(
-                    s_hotend_activate_buttons[i],
-                    LV_STATE_DISABLED);
-                lv_obj_set_style_opa(
-                    s_hotend_activate_buttons[i],
-                    LV_OPA_COVER,
-                    0);
-            }
-        }
+    if (s_hotend_confirm_button) {
+        const moonraker_hotend_t *hotend = hotend_row(s_hotend_activate_index);
+        if (live && hotend && !hotend->active && !activation_locked &&
+            !strcmp(hotend->object_name, s_hotend_confirm_name))
+            lv_obj_remove_state(s_hotend_confirm_button, LV_STATE_DISABLED);
+        else lv_obj_add_state(s_hotend_confirm_button, LV_STATE_DISABLED);
     }
 }
-
-
+static void hotend_list_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) != s_hotend_list_popup) return;
+    s_hotend_list_popup = NULL;
+    close_hotend_activate_cb(NULL);
+    if (s_hotend_refresh_timer) lv_timer_delete(s_hotend_refresh_timer);
+    s_hotend_refresh_timer = NULL;
+    s_hotend_row_count = 0;
+    memset(s_hotend_row_names, 0, sizeof(s_hotend_row_names));
+    memset(s_hotend_name_labels, 0, sizeof(s_hotend_name_labels));
+    memset(s_hotend_temp_labels, 0, sizeof(s_hotend_temp_labels));
+    memset(s_hotend_temp_buttons, 0, sizeof(s_hotend_temp_buttons));
+    memset(s_hotend_activate_buttons, 0, sizeof(s_hotend_activate_buttons));
+    memset(s_hotend_activate_labels, 0, sizeof(s_hotend_activate_labels));
+}
 static void close_hotend_list_cb(lv_event_t *event)
 {
     (void)event;
-
-    close_hotend_activate_cb(NULL);
-
-    if (s_hotend_refresh_timer) {
-        lv_timer_delete(s_hotend_refresh_timer);
-        s_hotend_refresh_timer = NULL;
-    }
-
-    if (s_hotend_list_popup) {
-        lv_obj_delete(s_hotend_list_popup);
-        s_hotend_list_popup = NULL;
-    }
-
-    memset(
-        s_hotend_name_labels,
-        0,
-        sizeof(s_hotend_name_labels));
-    memset(
-        s_hotend_temp_labels,
-        0,
-        sizeof(s_hotend_temp_labels));
-    memset(
-        s_hotend_activate_buttons,
-        0,
-        sizeof(s_hotend_activate_buttons));
-    memset(
-        s_hotend_activate_labels,
-        0,
-        sizeof(s_hotend_activate_labels));
+    if (s_hotend_list_popup) lv_obj_delete(s_hotend_list_popup);
 }
-
 
 static void hotend_temperature_event_cb(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
 
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
-    if (index >= s_hotend_list_state.hotend_count ||
-        index >= MOONRAKER_MAX_HOTENDS) {
-        return;
-    }
-
-    moonraker_hotend_t hotend =
-        s_hotend_list_state.hotends[index];
+    moonraker_state_snapshot(&s_hotend_list_state);
+    const moonraker_hotend_t *selected = hotend_row(index);
+    if (!hotend_live_here() || !selected || !hotend_name_safe(selected->object_name)) return;
+    moonraker_hotend_t hotend = *selected;
 
     close_hotend_list_cb(NULL);
 
@@ -1699,150 +1283,80 @@ static void hotend_temperature_event_cb(lv_event_t *event)
 }
 
 
-void ui_printer_popups_show_hotends(
-    ui_printer_popups_send_gcode_cb_t send_cb,
+static const int32_t hotend_columns_wide[] = {LV_GRID_FR(1), LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+static const int32_t hotend_columns_narrow[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+static const int32_t hotend_rows[] = {LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+static void hotend_row_resize(lv_event_t *event)
+{
+    lv_obj_t *row = lv_event_get_target_obj(event);
+    bool wide = lv_obj_get_content_width(row) >= ui_theme_density_metric(520, 560, 600);
+    const int32_t *columns = wide ? hotend_columns_wide : hotend_columns_narrow;
+    if (lv_obj_get_style_grid_column_dsc_array(row, 0) == columns) return;
+    lv_obj_set_grid_dsc_array(row, columns, hotend_rows);
+    lv_obj_t *info = lv_obj_get_child(row, 0), *actions = lv_obj_get_child(row, 1);
+    lv_obj_set_grid_cell(info, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
+    lv_obj_set_width(actions, wide ? ui_theme_density_metric(320, 350, 390) : LV_PCT(100));
+    lv_obj_set_grid_cell(actions, wide ? LV_GRID_ALIGN_END : LV_GRID_ALIGN_STRETCH,
+        wide ? 1 : 0, 1, LV_GRID_ALIGN_CENTER, wide ? 0 : 1, 1);
+}
+void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
     const moonraker_state_t *state)
 {
     if (!state || state->hotend_count == 0) return;
-
+    if (s_hotend_list_popup) { lv_obj_move_foreground(s_hotend_list_popup); return; }
     s_send_gcode_cb = send_cb;
-    memcpy(
-        &s_hotend_list_state,
-        state,
-        sizeof(s_hotend_list_state));
-
-    if (s_hotend_list_popup) {
-        lv_obj_move_foreground(s_hotend_list_popup);
-        return;
-    }
-
-    s_hotend_list_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            720,
-            480,
-            UI_POPUP_STANDARD);
-
-    if (!s_hotend_list_popup) return;
-
-    ui_popup_add_title(
-        s_hotend_list_popup,
-        ui_text("HOTEND CONTROL"),
-        false,
-        8);
-
-    ui_popup_add_header_divider(
-        s_hotend_list_popup,
-        44);
-
-    size_t count = s_hotend_list_state.hotend_count;
-    if (count > MOONRAKER_MAX_HOTENDS) {
-        count = MOONRAKER_MAX_HOTENDS;
-    }
-
-    for (size_t i = 0; i < count; ++i) {
-        const moonraker_hotend_t *hotend =
-            &s_hotend_list_state.hotends[i];
-
-        int y = 60 + (int)i * 78;
-
-        lv_obj_t *row = lv_obj_create(s_hotend_list_popup);
-        lv_obj_set_pos(row, 24, y);
-        lv_obj_set_size(row, 342, 66);
-        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    s_hotend_list_state = *state;
+    s_hotend_owner = moonraker_config_generation();
+    s_hotend_row_count = state->hotend_count < MOONRAKER_MAX_HOTENDS ? state->hotend_count : MOONRAKER_MAX_HOTENDS;
+    s_hotend_list_popup = ui_popup_create(lv_layer_top(), control_width(760), control_height(500), UI_POPUP_STANDARD);
+    if (!s_hotend_list_popup) { s_hotend_row_count = 0; return; }
+    lv_obj_add_event_cb(s_hotend_list_popup, hotend_list_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(s_hotend_list_popup, ui_text("HOTEND CONTROL"));
+    static const int32_t action_columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    static const int32_t action_rows[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+    for (size_t i = 0; i < s_hotend_row_count; ++i) {
+        memcpy(s_hotend_row_names[i], state->hotends[i].object_name, sizeof(s_hotend_row_names[i]));
+        s_hotend_row_names[i][sizeof(s_hotend_row_names[i]) - 1] = '\0';
+        lv_obj_t *row = lv_obj_create(body);
         ui_apply_surface_role(row, UI_SURFACE_SECTION);
-
-        char name[64];
-        snprintf(
-            name,
-            sizeof(name),
-            hotend->active
-                ? "T%u  ACTIVE  (%s)"
-                : "T%u  (%s)",
-            (unsigned)i,
-            hotend->object_name);
-
-        lv_obj_t *name_label = lv_label_create(row);
-        s_hotend_name_labels[i] = name_label;
-        lv_label_set_text(name_label, name);
-        ui_apply_text_body(name_label);
-        lv_obj_set_style_text_color(
-            name_label,
-            hotend->active ? UI_OK_BRIGHT : UI_TEXT,
-            0);
-        lv_obj_set_pos(name_label, 18, 8);
-
-        char temperature[64];
-        if (hotend->temperature > -100.0) {
-            snprintf(
-                temperature,
-                sizeof(temperature),
-                "%.1f / %.1f C",
-                hotend->temperature,
-                hotend->target);
-        } else {
-            snprintf(
-                temperature,
-                sizeof(temperature),
-                "-- / -- C");
-        }
-
-        lv_obj_t *temperature_label = lv_label_create(row);
-        s_hotend_temp_labels[i] = temperature_label;
-        lv_label_set_text(temperature_label, temperature);
-        ui_apply_text_value_small(temperature_label);
-        ui_apply_label_bright(temperature_label);
-        lv_obj_set_pos(temperature_label, 18, 33);
-
-        ui_popup_add_action_at(
-            s_hotend_list_popup,
-            UI_POPUP_ACTION_CHOICE,
-            ui_text("SET TEMP"),
-            384,
-            y + 7,
-            138,
-            52,
-            hotend_temperature_event_cb,
-            (void *)(uintptr_t)i,
-            NULL);
-
-        s_hotend_activate_buttons[i] =
-            ui_popup_add_action_at(
-                s_hotend_list_popup,
-                UI_POPUP_ACTION_CONFIRM,
-                hotend->active
-                    ? ui_text(LV_SYMBOL_OK " ACTIVE")
-                    : ui_text("MAKE ACTIVE"),
-                540,
-                y + 7,
-                150,
-                52,
-                hotend_activate_event_cb,
-                (void *)(uintptr_t)i,
-                &s_hotend_activate_labels[i]);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_pad_all(row, 12, 0);
+        lv_obj_set_style_pad_column(row, UI_GAP_CARD, 0);
+        lv_obj_set_style_pad_row(row, UI_GAP_ROW, 0);
+        lv_obj_add_event_cb(row, hotend_row_resize, LV_EVENT_SIZE_CHANGED, NULL);
+        lv_obj_t *info = lv_obj_create(row);
+        lv_obj_remove_style_all(info);
+        lv_obj_set_height(info, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(info, UI_GAP_ROW, 0);
+        s_hotend_name_labels[i] = lv_label_create(info);
+        lv_label_set_text(s_hotend_name_labels[i], "");
+        ui_apply_custom_label_style(s_hotend_name_labels[i], UI_FONT_BODY, UI_TEXT);
+        lv_obj_set_width(s_hotend_name_labels[i], LV_PCT(100));
+        s_hotend_temp_labels[i] = lv_label_create(info);
+        lv_label_set_text(s_hotend_temp_labels[i], "");
+        ui_apply_custom_label_style(s_hotend_temp_labels[i], UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT);
+        lv_obj_set_width(s_hotend_temp_labels[i], LV_PCT(100));
+        lv_obj_t *actions = lv_obj_create(row);
+        lv_obj_remove_style_all(actions);
+        lv_obj_set_height(actions, LV_SIZE_CONTENT);
+        lv_obj_set_grid_dsc_array(actions, action_columns, action_rows);
+        lv_obj_set_style_pad_column(actions, UI_GAP_CARD, 0);
+        s_hotend_temp_buttons[i] = ui_popup_add_action_at(actions, UI_POPUP_ACTION_CHOICE,
+            ui_text("SET TEMP"), 0, 0, 1, 52, hotend_temperature_event_cb, (void *)(uintptr_t)i, NULL);
+        s_hotend_activate_buttons[i] = ui_popup_add_action_at(actions, UI_POPUP_ACTION_CONFIRM,
+            ui_text("MAKE ACTIVE"), 0, 0, 1, 52, hotend_activate_event_cb, (void *)(uintptr_t)i,
+            &s_hotend_activate_labels[i]);
+        lv_obj_set_grid_cell(s_hotend_temp_buttons[i], LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
+        lv_obj_set_grid_cell(s_hotend_activate_buttons[i], LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_START, 0, 1);
     }
-
-    ui_popup_add_standard_footer_divider(
-        s_hotend_list_popup);
-
-    ui_popup_add_footer_action(
-        s_hotend_list_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        170,
-        UI_POPUP_FOOTER_CENTER,
-        close_hotend_list_cb,
-        NULL,
-        NULL);
-
+    lv_obj_t *footer = control_footer(s_hotend_list_popup);
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, 170, 48, close_hotend_list_cb, NULL, NULL);
     refresh_hotend_list(NULL);
-    s_hotend_refresh_timer =
-        lv_timer_create(
-            refresh_hotend_list,
-            500,
-            NULL);
+    s_hotend_refresh_timer = lv_timer_create(refresh_hotend_list, 500, NULL);
 }
-
 
 void ui_printer_popups_show_part_fan(
     ui_printer_popups_send_gcode_cb_t send_cb,
@@ -2010,6 +1524,8 @@ static void filament_list_popup_deleted_cb(lv_event_t *event)
     }
 
     s_filament_list_popup = NULL;
+    s_filament_row_count = 0;
+    memset(s_filament_row_names, 0, sizeof(s_filament_row_names));
 
     if (s_filament_refresh_timer) {
         lv_timer_delete(s_filament_refresh_timer);
@@ -2057,92 +1573,53 @@ static void close_filament_list_cb(lv_event_t *event)
 }
 
 
+static const moonraker_filament_sensor_t *filament_row_sensor(size_t row)
+{
+    size_t count = s_filament_list_state.sensor_count;
+    if (count > MOONRAKER_MAX_FILAMENT_SENSORS) count = MOONRAKER_MAX_FILAMENT_SENSORS;
+    for (size_t i = 0; i < count; ++i)
+        if (!strcmp(s_filament_list_state.sensors[i].object_name, s_filament_row_names[row]))
+            return &s_filament_list_state.sensors[i];
+    return NULL;
+}
+
 static void refresh_filament_list(lv_timer_t *timer)
 {
     (void)timer;
-
     if (!s_filament_list_popup) return;
-
-    moonraker_filament_state_snapshot(
-        &s_filament_list_state);
-
-    size_t count = s_filament_list_state.sensor_count;
-    if (count > MOONRAKER_MAX_FILAMENT_SENSORS) {
-        count = MOONRAKER_MAX_FILAMENT_SENSORS;
-    }
-
-    for (size_t i = 0; i < count; ++i) {
-        const moonraker_filament_sensor_t *sensor =
-            &s_filament_list_state.sensors[i];
-
-        const char *status =
-            !sensor->enabled
-                ? "DISABLED"
-                : !sensor->status_known
-                    ? "CHECKING"
-                    : sensor->filament_detected
-                        ? "FILAMENT PRESENT"
-                        : "RUNOUT";
-
-        if (s_filament_status_labels[i]) {
-            lv_label_set_text(
-                s_filament_status_labels[i],
-                status);
-
-            lv_color_t status_color =
-                !sensor->enabled || !sensor->status_known
-                    ? UI_TEXT
-                    : sensor->filament_detected
-                        ? UI_OK_BRIGHT
-                        : UI_DANGER_BRIGHT;
-
-            lv_obj_set_style_text_color(
-                s_filament_status_labels[i],
-                status_color,
-                0);
+    moonraker_filament_state_snapshot(&s_filament_list_state);
+    bool owns = s_filament_owner == moonraker_config_generation();
+    for (size_t i = 0; i < s_filament_row_count; ++i) {
+        const moonraker_filament_sensor_t *sensor = owns ? filament_row_sensor(i) : NULL;
+        if (!sensor) {
+            ui_value_set_text(s_filament_status_labels[i], owns ? "UNAVAILABLE / REOPEN" : "PRINTER CHANGED / REOPEN");
+            ui_value_set_color(s_filament_status_labels[i], UI_TEXT_DIM, 0);
+            lv_obj_add_state(s_filament_toggle_buttons[i], LV_STATE_DISABLED);
+            continue;
         }
-
+        const char *status = !sensor->enabled ? "DISABLED" : !sensor->status_known ? "CHECKING" :
+            sensor->filament_detected ? "FILAMENT PRESENT" : "RUNOUT";
+        ui_value_set_text(s_filament_status_labels[i], status);
+        ui_value_set_color(s_filament_status_labels[i], !sensor->enabled || !sensor->status_known ? UI_TEXT :
+            sensor->filament_detected ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
         if (s_filament_toggle_pending[i]) {
-            if (sensor->enabled ==
-                s_filament_toggle_expected[i]) {
-                s_filament_toggle_pending[i] = false;
-                s_filament_toggle_wait_ticks[i] = 0;
-            } else if (++s_filament_toggle_wait_ticks[i] >= 10) {
-                /*
-                 * No WebSocket acknowledgement arrived within five
-                 * seconds. Restore the action so the operator can retry.
-                 */
+            if (sensor->enabled == s_filament_toggle_expected[i] ||
+                ++s_filament_toggle_wait_ticks[i] >= 10) {
                 s_filament_toggle_pending[i] = false;
                 s_filament_toggle_wait_ticks[i] = 0;
             }
         }
-
-        lv_obj_t *button =
-            s_filament_toggle_buttons[i];
-        lv_obj_t *label =
-            s_filament_toggle_labels[i];
-
-        if (!button || !label) continue;
-
+        lv_obj_t *button = s_filament_toggle_buttons[i], *label = s_filament_toggle_labels[i];
         if (s_filament_toggle_pending[i]) {
-            lv_label_set_text(label, ui_text("UPDATING"));
+            ui_value_set_text(label, ui_text("UPDATING"));
             lv_obj_add_state(button, LV_STATE_DISABLED);
         } else {
-            lv_obj_clear_state(button, LV_STATE_DISABLED);
-            lv_label_set_text(
-                label,
-                sensor->enabled
-                    ? ui_text("DISABLE")
-                    : ui_text("ENABLE"));
-            ui_button_apply_kind(
-                button,
-                sensor->enabled
-                    ? UI_BUTTON_WARNING
-                    : UI_BUTTON_SUCCESS);
+            lv_obj_remove_state(button, LV_STATE_DISABLED);
+            if (ui_value_set_text(label, sensor->enabled ? ui_text("DISABLE") : ui_text("ENABLE")))
+                ui_button_apply_kind(button, sensor->enabled ? UI_BUTTON_WARNING : UI_BUTTON_SUCCESS);
         }
     }
 }
-
 
 static void filament_toggle_event_cb(lv_event_t *event)
 {
@@ -2158,14 +1635,11 @@ static void filament_toggle_event_cb(lv_event_t *event)
     moonraker_filament_state_snapshot(
         &s_filament_list_state);
 
-    if (index >= s_filament_list_state.sensor_count ||
-        index >= MOONRAKER_MAX_FILAMENT_SENSORS ||
-        s_filament_toggle_pending[index]) {
-        return;
-    }
-
-    const moonraker_filament_sensor_t *sensor =
-        &s_filament_list_state.sensors[index];
+    if (s_filament_owner != moonraker_config_generation() ||
+        index >= s_filament_row_count || s_filament_toggle_pending[index]) return;
+    /* Keep the displayed row bound to its sensor if discovery order changes. */
+    const moonraker_filament_sensor_t *sensor = filament_row_sensor(index);
+    if (!sensor) return;
     const char *sensor_name =
         filament_sensor_display_name(
             sensor->object_name);
@@ -2213,149 +1687,70 @@ static void filament_toggle_event_cb(lv_event_t *event)
 }
 
 
-void ui_printer_popups_show_filament_sensors(
-    ui_printer_popups_send_gcode_cb_t send_cb,
+void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t send_cb,
     const moonraker_filament_state_t *state)
 {
-    if (!state || !state->discovered ||
-        state->total_count == 0) {
-        return;
-    }
-
+    if (!state || !state->discovered || state->total_count == 0) return;
+    if (s_filament_list_popup) { lv_obj_move_foreground(s_filament_list_popup); return; }
     s_send_gcode_cb = send_cb;
-    memcpy(
-        &s_filament_list_state,
-        state,
-        sizeof(s_filament_list_state));
-
-    if (s_filament_list_popup) {
-        lv_obj_move_foreground(s_filament_list_popup);
-        return;
-    }
-
-    s_filament_list_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            720,
-            480,
-            UI_POPUP_STANDARD);
-
-    if (!s_filament_list_popup) return;
-
-    lv_obj_add_event_cb(
-        s_filament_list_popup,
-        filament_list_popup_deleted_cb,
-        LV_EVENT_DELETE,
-        NULL);
-
-    ui_popup_add_title(
-        s_filament_list_popup,
-        ui_text("FILAMENT SENSOR CONTROL"),
-        false,
-        8);
-    ui_popup_add_header_divider(
-        s_filament_list_popup,
-        44);
-
-    size_t count = s_filament_list_state.sensor_count;
-    if (count > MOONRAKER_MAX_FILAMENT_SENSORS) {
-        count = MOONRAKER_MAX_FILAMENT_SENSORS;
-    }
-
-    for (size_t i = 0; i < count; ++i) {
-        const moonraker_filament_sensor_t *sensor =
-            &s_filament_list_state.sensors[i];
-        int y = 60 + (int)i * 78;
-
-        lv_obj_t *row =
-            lv_obj_create(s_filament_list_popup);
-        lv_obj_set_pos(row, 24, y);
-        lv_obj_set_size(row, 470, 66);
-        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    s_filament_list_state = *state;
+    s_filament_owner = moonraker_config_generation();
+    s_filament_row_count = state->sensor_count < MOONRAKER_MAX_FILAMENT_SENSORS ?
+        state->sensor_count : MOONRAKER_MAX_FILAMENT_SENSORS;
+    s_filament_list_popup = ui_popup_create(lv_layer_top(), control_width(720),
+        control_height(480), UI_POPUP_STANDARD);
+    if (!s_filament_list_popup) { s_filament_row_count = 0; return; }
+    lv_obj_add_event_cb(s_filament_list_popup, filament_list_popup_deleted_cb, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = control_layout(s_filament_list_popup, ui_text("FILAMENT SENSOR CONTROL"));
+    static const int32_t columns[] = {LV_GRID_FR(1), LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+    static const int32_t rows[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
+    for (size_t i = 0; i < s_filament_row_count; ++i) {
+        const moonraker_filament_sensor_t *sensor = &state->sensors[i];
+        memcpy(s_filament_row_names[i], sensor->object_name, sizeof(s_filament_row_names[i]));
+        s_filament_row_names[i][sizeof(s_filament_row_names[i]) - 1] = '\0';
+        lv_obj_t *row = lv_obj_create(body);
         ui_apply_surface_role(row, UI_SURFACE_SECTION);
-
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_pad_all(row, 12, 0);
+        lv_obj_set_style_pad_column(row, UI_GAP_CARD, 0);
+        lv_obj_set_grid_dsc_array(row, columns, rows);
+        lv_obj_t *info = lv_obj_create(row);
+        lv_obj_remove_style_all(info);
+        lv_obj_set_height(info, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(info, UI_GAP_ROW, 0);
+        lv_obj_set_grid_cell(info, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
         char name[96];
-        const char *type =
-            strncmp(
-                sensor->object_name,
-                "filament_motion_sensor ",
-                strlen("filament_motion_sensor ")) == 0
-                ? "MOTION"
-                : "SWITCH";
-        snprintf(
-            name,
-            sizeof(name),
-            "%s  (%s)",
-            filament_sensor_display_name(
-                sensor->object_name),
-            type);
-
-        lv_obj_t *name_label = lv_label_create(row);
-        lv_label_set_text(name_label, name);
-        ui_apply_text_body(name_label);
-        lv_obj_set_style_text_color(
-            name_label,
-            UI_TEXT,
-            0);
-        lv_obj_set_pos(name_label, 18, 8);
-
-        s_filament_status_labels[i] =
-            lv_label_create(row);
-        lv_label_set_text(
-            s_filament_status_labels[i],
-            ui_text("CHECKING"));
-        ui_apply_text_value_small(
-            s_filament_status_labels[i]);
-        lv_obj_set_pos(
-            s_filament_status_labels[i],
-            18,
-            33);
-
-        s_filament_toggle_buttons[i] =
-            ui_popup_add_action_at(
-                s_filament_list_popup,
-                sensor->enabled
-                    ? UI_POPUP_ACTION_CHOICE
-                    : UI_POPUP_ACTION_CONFIRM,
-                sensor->enabled
-                    ? ui_text("DISABLE")
-                    : ui_text("ENABLE"),
-                516,
-                y + 7,
-                174,
-                52,
-                filament_toggle_event_cb,
-                (void *)(uintptr_t)i,
-                &s_filament_toggle_labels[i]);
+        bool motion = strncmp(sensor->object_name, "filament_motion_sensor ", strlen("filament_motion_sensor ")) == 0;
+        snprintf(name, sizeof(name), "%s (%s)", filament_sensor_display_name(sensor->object_name), motion ? "MOTION" : "SWITCH");
+        lv_obj_t *label = lv_label_create(info);
+        lv_label_set_text(label, name);
+        ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT);
+        lv_obj_set_width(label, LV_PCT(100));
+        s_filament_status_labels[i] = lv_label_create(info);
+        lv_label_set_text(s_filament_status_labels[i], ui_text("CHECKING"));
+        ui_apply_custom_label_style(s_filament_status_labels[i], UI_FONT_BODY_LARGE, UI_TEXT);
+        lv_obj_set_width(s_filament_status_labels[i], LV_PCT(100));
+        s_filament_toggle_buttons[i] = ui_popup_add_action_at(row,
+            sensor->enabled ? UI_POPUP_ACTION_CHOICE : UI_POPUP_ACTION_CONFIRM,
+            sensor->enabled ? ui_text("DISABLE") : ui_text("ENABLE"), 0, 0,
+            ui_theme_density_metric(150, 170, 190), 52, filament_toggle_event_cb,
+            (void *)(uintptr_t)i, &s_filament_toggle_labels[i]);
+        ui_button_apply_kind(s_filament_toggle_buttons[i], sensor->enabled ? UI_BUTTON_WARNING : UI_BUTTON_SUCCESS);
+        lv_obj_set_grid_cell(s_filament_toggle_buttons[i], LV_GRID_ALIGN_END, 1, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     }
-
     if (state->truncated) {
-        ui_popup_add_caption(
-            s_filament_list_popup,
-            ui_text("Additional sensors are not shown."),
-            24,
-            374,
-            360);
+        lv_obj_t *note = lv_label_create(body);
+        lv_label_set_text(note, ui_text("Additional sensors are not shown."));
+        ui_apply_custom_label_style(note, UI_FONT_CAPTION, UI_TEXT_MUTED);
+        lv_obj_set_width(note, LV_PCT(100));
     }
-
-    ui_popup_add_standard_footer_divider(
-        s_filament_list_popup);
-    ui_popup_add_footer_action(
-        s_filament_list_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        170,
-        UI_POPUP_FOOTER_CENTER,
-        close_filament_list_cb,
-        NULL,
-        NULL);
-
+    lv_obj_t *footer = control_footer(s_filament_list_popup);
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+        0, 0, 170, 48, close_filament_list_cb, NULL, NULL);
     refresh_filament_list(NULL);
-    s_filament_refresh_timer =
-        lv_timer_create(
-            refresh_filament_list,
-            500,
-            NULL);
+    s_filament_refresh_timer = lv_timer_create(refresh_filament_list, 500, NULL);
 }
 
 void ui_printer_popups_show_printer_status(
@@ -2370,12 +1765,12 @@ void ui_printer_popups_show_printer_status(
     double bed_target,
     bool moonraker_connected)
 {
-    char body[512];
+    char body[1024];
 
     snprintf(body,
              sizeof(body),
              "State: %s\n"
-             "File: %.120s\n"
+             "File: %.255s\n"
              "Progress: %s\n"
              "Elapsed: %s\n"
              "Remaining: %s\n"
@@ -2402,6 +1797,7 @@ void ui_printer_popups_show_printer_status(
 
 void ui_printer_popups_close_all(void)
 {
+    ui_filament_recovery_close();
     ui_dashboard_status_popup_close();
     close_custom_temp_cb(NULL);
     if (s_control_popup) lv_obj_delete(s_control_popup);

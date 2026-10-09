@@ -169,3 +169,19 @@ are not architecture modules and must not be tracked as production source.
 | `tools/audit/aspect_preview_pipeline_test.py`, `tools/audit/camera_pipeline_test.py` | Preview dimension/ownership and camera lifetime/transform fixtures with real LVGL |
 | `tools/audit/offline_navigation_test.py`, `tools/audit/files_load_worker_test.py` | Nonblocking retirement/rebind and asynchronous file-list ownership checks |
 | `tools/audit/responsive_layout_test.py` | Tools/Macros/Files bounds across every built-in theme, density, text size and representative custom overrides |
+
+## Paused-print recovery
+
+| Module | Ownership |
+| --- | --- |
+| `ui_filament_recovery` | Temperature selection, paused filament actions, sensor checks and endpoint-fenced modal lifetime |
+
+### Operator control layout checks
+
+| Files | Ownership |
+| --- | --- |
+| `tools/audit/control_popups_layout_test.py`, `tools/audit/hotend_layout_test.py` | Real-LVGL temperature/fan and named hotend layouts, commands and activation guards |
+| `tools/audit/motion_layout_test.py` | Motion field/footer bounds, calculations, driver state and editor lifecycle |
+| `tools/audit/sensor_status_layout_test.py` | Live named sensor controls and shared wrapping status dialogs |
+| `tools/audit/object_layout_test.py`, `tools/audit/cancel_layout_test.py` | Targeted object and whole-print cancellation layouts, command identity and lifecycle |
+| `docs/NIGHTLY_VALIDATION.md` | Nightly closeout validation and pending panel/printing checks |

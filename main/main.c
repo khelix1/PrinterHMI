@@ -157,6 +157,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_printer.h"
 #include "ui_printer_motion.h"
 #include "ui_printer_popups.h"
+#include "ui_filament_recovery.h"
 #include "ui_printer_live_status.h"
 #include "ui_printer_layout.h"
 #include "ui_printer_info_cards.h"
@@ -1516,6 +1517,11 @@ void ui_command_bar_action(const char *action)
 {
     if (!action) return;
 
+    if (strcmp(action, "RESUME") == 0) {
+        ui_filament_recovery_show(moonraker_send_gcode);
+        return;
+    }
+
     if (strcmp(action, "CANCEL_OBJECT") == 0) {
         ui_printer_popups_show_cancel_object(
             printer_popup_send_gcode_bridge);
@@ -1964,6 +1970,13 @@ static void filament_sensor_banner_event_cb(lv_event_t *e)
 
     moonraker_filament_state_t state;
     moonraker_filament_state_snapshot(&state);
+
+    moonraker_state_t printer;
+    moonraker_state_snapshot(&printer);
+    if (printer_controller_is_paused(printer.printer_state)) {
+        ui_filament_recovery_show(moonraker_send_gcode);
+        return;
+    }
 
     /* Filament status opens live controls for one or more sensors. */
     ui_printer_popups_show_filament_sensors(

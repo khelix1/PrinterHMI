@@ -1714,4 +1714,3 @@ lv_font_t ui_studio_font_20 = {
 
 
 #endif /*#if UI_STUDIO_FONT_20*/
-

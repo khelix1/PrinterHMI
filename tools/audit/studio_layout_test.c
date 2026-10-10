@@ -41,18 +41,18 @@ int main(void){
  assert(ui_global_estop_init(sent));
  for(unsigned large=0;large<2;large++) for(unsigned density=0;density<3;density++){
   ui_theme_set_active(UI_THEME_STUDIO_DARK);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});ui_apply_root_style(lv_screen_active());
-  
+
   ui_shell_create();ui_shell_set_active_printer_name("Sermoon D1");ui_shell_create_nav();
-  
+
   ui_dashboard_page_t page=ui_dashboard_page_create(lv_screen_active());
-  
+
   ui_status_banner_set(page.banner_host,"PRINTING","Spool holder.gcode","ETA 3:42 PM","64%");
   ui_active_print_set(page.active_print_host,"171 / 267","01:06","REM 00:38");
-  
+
   ui_machine_status_set(page.machine_status_host,"210.0 / 210.0 C","60.0 / 60.0 C","45.0 C","18.0 %RH","125 mm/s","8.3 mm3/s","65%");
   ui_machine_status_set_active_hotend(page.machine_status_host,"Nozzle","210.0 / 210.0 C");
   ui_machine_status_set_connection(page.machine_status_host,true);ui_machine_status_set_filament(page.machine_status_host,true,NULL);
-  
+
   ui_command_bar_update("printing",true);lv_obj_update_layout(lv_screen_active());
   assert(lv_obj_get_width(page.root)==976&&lv_obj_get_height(page.root)==424);labels(page.root);
   /* Three action routes retain their application contracts; paused swaps resume. */
@@ -60,14 +60,14 @@ int main(void){
   ui_command_bar_update("paused",true);assert(lv_obj_has_flag(s_pause_button,LV_OBJ_FLAG_HIDDEN));assert(!lv_obj_has_flag(s_resume_button,LV_OBJ_FLAG_HIDDEN));click(s_resume_button);assert(!strcmp(last_action,"RESUME"));ui_command_bar_update("printing",true);
   for(int i=0;i<8;i++){const char*names[]={"Dashboard","Printer","Files","Camera","Tools","Console","Drybox","Settings"};lv_obj_t*l=find(lv_screen_active(),names[i]);assert(l);assert(lv_obj_get_height(l)<=lv_obj_get_style_text_font(l,0)->line_height);click(lv_obj_get_parent(l));assert(selected_page==i);}ui_shell_set_active_nav(0);
   lv_obj_t*estop=find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP");assert(estop);labels(lv_obj_get_parent(lv_obj_get_parent(estop)));
-  
+
   /* Hit-test through the transparent status overlay into the real preview. */
   static uint16_t tiny[4];s_active_print_thumb_canvas_buf=tiny;
   ui_active_print_thumb_show_canvas_from_buffer(page.active_print_host,2,2,"fixture.gcode");
   int before=lightboxes;tap(pointer,160,300);assert(lightboxes==before+1);
   ui_active_print_thumb_delete_canvas();ui_active_print_thumb_set_placeholder(page.active_print_host,"PRINT\nTHUMBNAIL");
   if(density==1)screenshot(large?"studio-dark-large":"studio-dark");
-  
+
   click(lv_obj_get_parent(estop));assert(!strcmp(last_action,"M112"));
   lv_obj_t *close=find(lv_layer_top(),LV_SYMBOL_CLOSE " CLOSE");assert(close);click(lv_obj_get_parent(close));
   /* Unknown/capability-less values remain explicit, never fake zero. */
@@ -75,7 +75,7 @@ int main(void){
   ui_command_bar_update("standby",false);assert(lv_obj_has_state(s_pause_button,LV_STATE_DISABLED)&&lv_obj_has_state(s_cancel_button,LV_STATE_DISABLED));
   /* Overlay/root styles must not resize small nested empty-state widgets. */
   lv_obj_t*nested=lv_obj_create(page.root);lv_obj_set_size(nested,400,200);ui_apply_root_style(nested);assert(lv_obj_get_style_width(nested,0)==400);lv_obj_delete(nested);
-  
+
   ui_dashboard_page_destroy(&page);ui_shell_destroy();assert(!find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP"));
  }
  /* Page roots are fixed; only explicit Files/Settings content may scroll. */

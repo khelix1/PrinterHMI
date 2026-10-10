@@ -2941,4 +2941,3 @@ lv_font_t ui_studio_font_32 = {
 
 
 #endif /*#if UI_STUDIO_FONT_32*/
-

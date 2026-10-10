@@ -2,6 +2,8 @@
 #include "ui_text.h"
 
 #include <stddef.h>
+#include "esp_heap_caps.h"
+#include "misc/cache/instance/lv_image_cache.h"
 #include "ui_font_fallback.h"
 
 typedef struct {
@@ -31,7 +33,7 @@ static ui_theme_preview_palette_t preview_palette(ui_theme_id_t theme)
                 .control=0x322746, .border=0x363640, .accent=0x8B6CFF,
                 .text=0xF2F0EC, .muted=0xA8A7B7, .success=0xD8F36A,
                 .danger=0xFF4D65, .radius=18, .surface_opa=LV_OPA_COVER,
-                .name="STUDIO DARK", .code="TRIAL", .description="Bottom dock / studio console",
+                .name="STUDIO DARK", .code="STUDIO", .description="Bottom dock / studio console",
             };
         case UI_THEME_CLASSIC:
             return (ui_theme_preview_palette_t){
@@ -126,6 +128,8 @@ static lv_obj_t *preview_rect(lv_obj_t *parent,
 
     if (!object) return NULL;
 
+    /* Preview geometry is explicit; discard inherited effects/transitions. */
+    lv_obj_remove_style_all(object);
     lv_obj_set_size(object, width, height);
     lv_obj_set_pos(object, x, y);
     lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
@@ -160,11 +164,69 @@ static lv_obj_t *preview_label(lv_obj_t *parent,
     return label;
 }
 
+/* Each miniature is rendered once; scrolling only copies RGB565 pixels. */
+static void preview_pixels_deleted(lv_event_t *event)
+{
+    lv_obj_t *canvas = lv_event_get_target(event);
+    lv_image_cache_drop(lv_image_get_src(canvas));
+    heap_caps_free(lv_event_get_user_data(event));
+}
+
+static void sample_rect(lv_layer_t *layer, int x, int y, int w, int h,
+                        uint32_t bg, uint32_t border, int radius, lv_opa_t opa)
+{
+    lv_draw_rect_dsc_t d;lv_draw_rect_dsc_init(&d);
+    d.bg_color=lv_color_hex(bg);d.bg_opa=opa;d.radius=radius;
+    d.border_color=lv_color_hex(border);d.border_width=border?1:0;
+    lv_area_t a={x,y,x+w-1,y+h-1};lv_draw_rect(layer,&d,&a);
+}
+static void sample_text(lv_layer_t *layer, const char *text, const lv_font_t *font,
+                        uint32_t color, int x, int y, int w, bool center)
+{
+    lv_draw_label_dsc_t d;lv_draw_label_dsc_init(&d);
+    d.text=text;d.font=ui_font_with_fallback(font);d.color=lv_color_hex(color);
+    d.align=center?LV_TEXT_ALIGN_CENTER:LV_TEXT_ALIGN_LEFT;
+    lv_area_t a={x,y,x+w-1,y+font->line_height-1};lv_draw_label(layer,&d,&a);
+}
+static bool preview_cached_sample(lv_obj_t *parent,
+                                  const ui_theme_preview_palette_t *p, int width)
+{
+    uint32_t stride=lv_draw_buf_width_to_stride(width,LV_COLOR_FORMAT_RGB565);
+    void *pixels=heap_caps_calloc(1,(size_t)stride*156,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!pixels)return false; /* Keep the existing widget preview if PSRAM is unavailable. */
+    lv_obj_t *canvas=lv_canvas_create(parent);
+    if(!canvas){heap_caps_free(pixels);return false;}
+    lv_obj_remove_style_all(canvas);
+    lv_obj_clear_flag(canvas,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+    lv_canvas_set_buffer(canvas,pixels,width,156,LV_COLOR_FORMAT_RGB565);
+    lv_obj_add_event_cb(canvas,preview_pixels_deleted,LV_EVENT_DELETE,pixels);
+    lv_canvas_fill_bg(canvas,lv_color_hex(p->background),LV_OPA_COVER);
+    lv_layer_t layer;lv_canvas_init_layer(canvas,&layer);
+    int inner=width-28,action=(inner-12)/2;
+    sample_rect(&layer,14,0,inner,34,p->surface,p->border,p->radius/2,p->surface_opa);
+    sample_rect(&layer,24,10,12,12,p->success,0,LV_RADIUS_CIRCLE,LV_OPA_COVER);
+    sample_text(&layer,"READY",UI_FONT_CAPTION,p->text,44,7,100,false);
+    if(inner>=220)sample_text(&layer,"12:42 PM",UI_FONT_CAPTION,p->muted,14+inner-98,7,98,false);
+    sample_rect(&layer,14,42,inner,64,p->card,p->border,p->radius,p->surface_opa);
+    sample_text(&layer,"NOZZLE",UI_FONT_CAPTION,p->muted,26,50,inner-24,false);
+    sample_text(&layer,"215 / 220 C",UI_FONT_BODY,p->text,26,71,inner-24,false);
+    sample_rect(&layer,14+inner-100,81,88,8,p->background,0,4,LV_OPA_COVER);
+    sample_rect(&layer,14+inner-100,81,67,8,p->accent,0,4,LV_OPA_COVER);
+    sample_rect(&layer,14,116,action,36,p->control,p->accent,p->radius/2,p->surface_opa);
+    sample_rect(&layer,26+action,116,action,36,p->control,p->danger,p->radius/2,p->surface_opa);
+    int text_y=116+(36-UI_FONT_CAPTION->line_height)/2;
+    sample_text(&layer,"ACTION",UI_FONT_CAPTION,p->text,14,text_y,action,true);
+    sample_text(&layer,"STOP",UI_FONT_CAPTION,p->danger,26+action,text_y,action,true);
+    lv_canvas_finish_layer(canvas,&layer);
+    return true;
+}
+
 static void preview_add_sample_ui(
     lv_obj_t *button,
     const ui_theme_preview_palette_t *palette,
     int32_t preview_width)
 {
+    if (preview_cached_sample(button, palette, preview_width)) return;
     int32_t inner_width = preview_width - 28;
     int32_t action_width = (inner_width - 12) / 2;
     lv_obj_t *topbar = preview_rect(
@@ -263,6 +325,7 @@ lv_obj_t *ui_theme_preview_create(
 
     if (!button) return NULL;
 
+    lv_obj_remove_style_all(button);
     lv_obj_set_size(button, width, height);
     lv_obj_set_pos(button, x, y);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);

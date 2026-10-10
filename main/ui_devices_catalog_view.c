@@ -228,7 +228,7 @@ static void add_device_card(
 }
 
 
-static size_t devices_page_size(void){return ui_theme_is_studio()?4:DEVICE_UI_MAX_VISIBLE;}
+static size_t devices_page_size(void){return DEVICE_UI_MAX_VISIBLE;}
 
 static void update_pagination_controls(
     size_t matching_count)
@@ -386,8 +386,8 @@ static void render_catalog(void)
 
     /*
      * Count first so page bounds can be clamped after a filter or printer
-     * change without ever constructing more than 12 LVGL cards. Two full
-     * viewports keep scrolling useful while bounding first-render latency.
+     * change without ever constructing more than 12 LVGL cards. The bounded
+     * page keeps scrolling useful while limiting first-render latency.
      */
     for (size_t index = 0;
          index < status.stored_count;
@@ -513,6 +513,7 @@ static void devices_page_event_cb(
     }
 
     render_catalog();
+    lv_obj_scroll_to_y(s_devices->list, 0, LV_ANIM_OFF);
 }
 
 
@@ -546,6 +547,7 @@ static void devices_filter_event_cb(
     }
 
     render_catalog();
+    lv_obj_scroll_to_y(s_devices->list, 0, LV_ANIM_OFF);
 }
 
 
@@ -716,7 +718,7 @@ void ui_devices_catalog_view_create(
         lv_obj_set_flex_flow(s_devices->filter_strip,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_devices->filter_strip,0,0);
         lv_obj_clear_flag(s_devices->filter_strip,LV_OBJ_FLAG_SCROLLABLE);
         for(size_t i=0;i<DEVICE_FILTER_COUNT;i++){lv_obj_t *b=s_devices->filter_buttons[i];if(b){lv_obj_set_width(b,164);lv_obj_set_style_min_width(b,0,0);}}
-        lv_obj_set_pos(s_devices->list,184,64);lv_obj_set_size(s_devices->list,792,304);lv_obj_clear_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_pos(s_devices->list,184,64);lv_obj_set_size(s_devices->list,792,304);lv_obj_add_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE);
         if(s_devices->previous_button)lv_obj_set_pos(s_devices->previous_button,184,380);
         if(s_devices->next_button)lv_obj_set_pos(s_devices->next_button,816,380);
         lv_obj_set_pos(s_devices->pagination_label,360,390);lv_obj_set_width(s_devices->pagination_label,440);

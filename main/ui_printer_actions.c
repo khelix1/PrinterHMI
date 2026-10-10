@@ -83,12 +83,12 @@ void ui_printer_actions_create(
     }
 
     if(ui_theme_is_studio()) {
-        actions->motion=studio_action(parent,"Motion",0,0,150,52,motion_cb,"MOTION");
-        actions->home=studio_action(parent,"Home",162,0,150,52,command_cb,"HOME_ALL");
-        actions->pause=studio_action(parent,"Pause",324,0,150,52,command_cb,"PAUSE");
-        actions->resume=studio_action(parent,"Resume",486,0,150,52,command_cb,"RESUME");
-        actions->object=studio_action(parent,"Object",648,0,150,52,command_cb,"CANCEL_OBJECT");
-        actions->cancel=studio_action(parent,"Stop",810,0,166,52,command_cb,"CANCEL_PRINT");
+        actions->motion=studio_action(parent,"Toolhead Control",0,0,220,52,motion_cb,"MOTION");
+        actions->home=studio_action(parent,"Home",232,0,128,52,command_cb,"HOME_ALL");
+        actions->pause=studio_action(parent,"Pause",372,0,128,52,command_cb,"PAUSE");
+        actions->resume=studio_action(parent,"Resume",512,0,128,52,command_cb,"RESUME");
+        actions->object=studio_action(parent,"Object",652,0,128,52,command_cb,"CANCEL_OBJECT");
+        actions->cancel=studio_action(parent,"Stop",792,0,184,52,command_cb,"CANCEL_PRINT");
         return;
     }
 

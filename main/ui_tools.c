@@ -38,6 +38,14 @@ static void add_tile(const char *icon, lv_color_t icon_color,
     lv_obj_set_style_pad_row(button, UI_GAP_ROW, 0);
     lv_obj_set_grid_dsc_array(button, columns, rows);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+    if (ui_theme_is_studio()) {
+        lv_obj_set_size(button, 480, 168);
+        lv_obj_set_pos(button, (index % 2) * 496, (index / 2) * 184);
+        lv_obj_set_style_min_height(button, 168, 0);
+        lv_obj_set_style_pad_all(button, 16, 0);
+        lv_obj_set_style_pad_column(button, 16, 0);
+        lv_obj_set_style_pad_row(button, 8, 0);
+    }
 
     lv_obj_t *icon_label = lv_label_create(button);
     lv_label_set_text(icon_label, icon);
@@ -85,17 +93,15 @@ static void tools_size_changed(lv_event_t *event)
 static void studio_tools_create(void)
 {
     studio_text(s_root,"Tools",0,0,976,&ui_studio_font_48,UI_TEXT);
-    const char *names[]={"Calibration","Bed mesh","Devices","Macros"};
-    const char *descriptions[]={"Probe, endstop and motion workflows","Probe and inspect the bed surface","Inspect discovered hardware and live values","Search and run printer macros"};
     s_tiles=studio_plane(s_root,0,72,976,352);
-    for(int i=0;i<4;i++) {
-        lv_obj_t *lane=studio_action(s_tiles,"",0,i*88,976,88,tile_cb,(void*)(intptr_t)i);
-        lv_obj_clean(lane);lv_obj_set_style_border_width(lane,0,0);
-        studio_text(lane,names[i],0,8,880,UI_FONT_TITLE,UI_TEXT);
-        studio_text(lane,descriptions[i],0,48,880,UI_FONT_BODY,UI_TEXT_DIM);
-        studio_text(lane,LV_SYMBOL_RIGHT,920,27,44,UI_FONT_TITLE,UI_ACCENT_BRIGHT);
-        studio_rule(lane,0,87,976,1);
-    }
+    add_tile(LV_SYMBOL_REFRESH, UI_OK_BRIGHT,
+             "CALIBRATION", "Tune and validate your printer.", 0);
+    add_tile(LV_SYMBOL_IMAGE, UI_ACCENT_BRIGHT,
+             "BED MESH", "Probe and visualize the bed surface.", 1);
+    add_tile(LV_SYMBOL_CHARGE, UI_WARN,
+             "DEVICES", "Inspect devices and live readings.", 2);
+    add_tile(LV_SYMBOL_PLAY, UI_OK_BRIGHT,
+             "MACROS", "Run available printer macros.", 3);
 }
 
 void ui_tools_show(void)

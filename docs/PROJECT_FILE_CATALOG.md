@@ -203,4 +203,4 @@ are not architecture modules and must not be tracked as production source.
 - `main/assets/fonts/studio/`: Inter glyph assets, original font and license.
 - `tools/regenerate_studio_fonts.py`: optional font regeneration.
 - `tools/audit/studio_layout_test.py` / `.c`: native layout, pointer and lifecycle validation.
-- `docs/STUDIO_DARK_TRIAL.md`: trial scope and validation status.
+- `docs/STUDIO_DARK_TRIAL.md`: theme composition and validation status.

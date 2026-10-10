@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
             objects=list(pool.map(compile_source,(lvgl/"src").rglob("*.c")))
         library=tmp/"liblvgl.a"
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
-    (tmp/"esp_heap_caps.h").write_text("#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define MALLOC_CAP_INTERNAL 4\n#define heap_caps_calloc(n,size,caps) calloc(n,size)\n#define heap_caps_free(p) free(p)\n")
+    (tmp/"esp_heap_caps.h").write_text("#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define MALLOC_CAP_INTERNAL 4\n#include <stddef.h>\nvoid *theme_test_calloc(size_t,size_t,int);\nvoid theme_test_free(void *);\n#define heap_caps_calloc(n,size,caps) theme_test_calloc(n,size,caps)\n#define heap_caps_free(p) theme_test_free(p)\n")
     (tmp/"esp_err.h").write_text("#pragma once\ntypedef int esp_err_t;\n#define ESP_OK 0\n#define ESP_FAIL -1\n")
     (tmp/"esp_http_client.h").write_text("#pragma once\ntypedef void *esp_http_client_handle_t;\ntypedef struct { int event_id; } esp_http_client_event_t;\n")
     (tmp/"esp_log.h").write_text("#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n")

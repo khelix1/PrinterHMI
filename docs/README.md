@@ -48,4 +48,4 @@ Current control-dialog closeout: [Nightly validation and pending printing checks
 
 Settings and large-text source closeout: [validation and pending follow-ups](SETTINGS_LAYOUT_VALIDATION.md).
 
-- [STUDIO Dark trial](STUDIO_DARK_TRIAL.md): independent dark theme, native LVGL Dashboard and panel validation.
+- [STUDIO Dark](STUDIO_DARK_TRIAL.md): independent dark theme, native LVGL Dashboard and panel validation.

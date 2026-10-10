@@ -3376,7 +3376,7 @@ void ui_printer_create(void)
     printer_remaining_label = printer_info_cards.remaining;
     printer_eta_label = printer_info_cards.eta;
 
-    if (!ui_theme_is_studio()) ui_printer_preview_create(printer_layout.active_panel);
+    ui_printer_preview_create(printer_layout.active_panel);
 
     lv_obj_t *divider = lv_obj_create(printer_panel);
     lv_obj_set_size(divider, 0, 0);

@@ -52,27 +52,86 @@ static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){size_t w=(size_
 static void snapshot(const char *name){if(ui_theme_get_density()!=UI_DENSITY_COMFORTABLE || ui_theme_get_accessibility().large_text)return;const char *dir=getenv("STUDIO_SCREENSHOTS");if(!dir)return;lv_obj_invalidate(lv_screen_active());lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s.ppm",dir,name);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(size_t i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 #if defined(TEST_PRINTER)
 #include "ui_printer_live_status.c"
+#include "ui_printer.c"
+static unsigned preview_opens;
+void ui_preview_lightbox_show_file_object(lv_obj_t *o,const char *f){assert(o && !strcmp(f,"job.gcode"));preview_opens++;}
+int moonraker_config_active_profile_index(void){return 0;}
+const lv_image_dsc_t *printer_preview_cache_image(int profile,const char **file,uint32_t *revision){
+ static uint16_t pixels[20*10];
+ static lv_image_dsc_t image={.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,.w=20,.h=10,.stride=40},.data_size=sizeof(pixels),.data=(const uint8_t *)pixels};
+ assert(profile==0);*file="job.gcode";*revision=1;return &image;
+}
+static void send_motion(const char *c);
+static unsigned toolhead_opens;
+static void open_toolhead(lv_event_t *e){(void)e;toolhead_opens++;static lv_obj_t *a,*b,*c;static double step=10;ui_printer_motion_show(&a,&b,&c,&step,send_motion);}
 #include "ui_printer_layout.h"
 #include "ui_printer_info_cards.h"
 #include "ui_printer_actions.h"
+static void send_motion(const char *c){(void)send_command(c);}
+static void check_toolhead_offset(void){
+ for(int theme=0;theme<5;theme++) {
+  ui_theme_set_active((ui_theme_id_t)theme);lv_obj_t *a=NULL,*b=NULL,*c=NULL;double step=10;
+  ui_printer_motion_show(&a,&b,&c,&step,send_motion);
+  lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);lv_obj_update_layout(popup);
+  lv_obj_t *caption=NULL,*value=NULL,*adjust=NULL;
+  for(uint32_t i=0;i<lv_obj_get_child_count(popup);i++){
+   lv_obj_t *o=lv_obj_get_child(popup,i);if(lv_obj_check_type(o,&lv_button_class)&&lv_obj_get_child_count(o)&&!strcmp(lv_label_get_text(lv_obj_get_child(o,0)),"-0.05"))adjust=o;if(!lv_obj_check_type(o,&lv_label_class))continue;
+   const char *text=lv_label_get_text(o);
+   if(!strcmp(text,"RUNTIME Z OFFSET"))caption=o;
+   if(lv_obj_get_y(o)==326){value=o;lv_label_set_text(value,"-10.000 mm");}
+  }
+  assert(caption&&value&&adjust);lv_area_t ca,va,ba;lv_obj_get_coords(caption,&ca);lv_obj_get_coords(value,&va);lv_obj_get_coords(adjust,&ba);assert(ca.y2<va.y1);assert(va.y2<ba.y1);
+  lv_obj_t *close=lv_obj_get_child(lv_obj_get_child(popup,-1),0);lv_obj_send_event(close,LV_EVENT_CLICKED,NULL);
+  assert(lv_obj_get_child_count(lv_layer_top())==0);
+ }
+ ui_theme_set_active(UI_THEME_STUDIO_DARK);
+}
 static void run(void){
- s_studio_step=10;
+ check_toolhead_offset();
+ /* Reproduce the panel's Operator -> Studio navigation sequence. */
+ for (int cycle=0; cycle<3; cycle++) for (int theme=UI_THEME_CLASSIC; theme<UI_THEME_STUDIO_DARK; theme++) {
+  ui_theme_set_active((ui_theme_id_t)theme);
+  lv_obj_t *old=page_root();lv_obj_t *old_file,*old_speed,*old_flow,*old_layer,*old_filament;
+  ui_printer_live_status_create(old,&old_file,&old_speed,&old_flow,&old_layer,&old_filament,clicked,100,100,send_command);
+  assert(s_speed_factor_slider && s_flow_factor_slider && s_speed_factor_value && s_flow_factor_value);
+  lv_obj_delete(old);
+  assert(!s_tuning_owner && !s_speed_factor_slider && !s_flow_factor_slider && !s_speed_factor_value && !s_flow_factor_value);
+  ui_printer_live_status_refresh(NULL,NULL,NULL,NULL,NULL,NULL,NULL,"standby","",0,0,100,100,0,0,0,0,0,true,NULL);
+  ui_theme_set_active(UI_THEME_STUDIO_DARK);
+  lv_obj_t *next=page_root();
+  ui_printer_live_status_create(next,&old_file,&old_speed,&old_flow,&old_layer,&old_filament,clicked,100,100,send_command);
+  assert(!s_speed_factor_slider && !s_flow_factor_slider);
+  ui_printer_live_status_refresh(next,NULL,old_file,old_speed,old_flow,old_layer,old_filament,"standby","",0,0,100,100,0,0,0,0,0,true,NULL);
+  studio_tuning_open(NULL);assert(s_speed_factor_slider && s_flow_factor_slider);
+  lv_obj_delete(next);
+  assert(!s_tuning_owner && !s_studio_position && !s_studio_tuning_popup && !s_speed_factor_slider && !s_flow_factor_slider);
+
+ }
+ ui_theme_set_active(UI_THEME_STUDIO_DARK);
  lv_obj_t *r=page_root();ui_printer_layout_t l;assert(ui_printer_layout_create(r,&l));
  lv_obj_t *file,*speed,*flow,*layer,*filament;
  ui_printer_live_status_create(l.active_panel,&file,&speed,&flow,&layer,&filament,clicked,1,1,send_command);
  ui_printer_info_cards_t cards;ui_printer_info_cards_create(l.status_panel,&cards,clicked,clicked,clicked);
- ui_printer_actions_t actions;ui_printer_actions_create(l.action_panel,&actions,clicked,clicked);
+ ui_printer_actions_t actions;ui_printer_actions_create(l.action_panel,&actions,clicked,open_toolhead);
+ ui_printer_preview_create(l.active_panel);
+ lv_obj_update_layout(l.active_panel);
+ assert(lv_obj_get_width(s_preview_box)==620 && lv_obj_get_height(s_preview_box)==240);
  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,true,NULL);
  ui_printer_live_status_refresh(r,NULL,file,speed,flow,layer,filament,"standby","job.gcode",120,8.2,1,1,215,336,0,0,.64,true,NULL);
  children_inside(r);assert(!lv_obj_has_flag(r,LV_OBJ_FLAG_SCROLLABLE));snapshot("printer-native");
- unsigned before=sends;lv_obj_send_event(s_studio_jog[0],LV_EVENT_CLICKED,NULL);assert(sends==before+1 && strstr(command,"Y10"));
- lv_obj_send_event(s_studio_steps[0],LV_EVENT_CLICKED,NULL);lv_obj_send_event(s_studio_jog[0],LV_EVENT_CLICKED,NULL);assert(strstr(command,"Y1"));
- lv_obj_send_event(s_studio_jog[5],LV_EVENT_CLICKED,NULL);assert(strstr(command,"Z0.1"));
- state.moonraker_ok=false;before=sends;lv_obj_send_event(s_studio_jog[0],LV_EVENT_CLICKED,NULL);assert(sends==before);state.moonraker_ok=true;
- strcpy(state.printer_state,"printing");lv_obj_send_event(s_studio_jog[0],LV_EVENT_CLICKED,NULL);assert(sends==before);strcpy(state.printer_state,"standby");
- state.homed_axes[0]=0;lv_obj_send_event(s_studio_jog[0],LV_EVENT_CLICKED,NULL);assert(sends==before);strcpy(state.homed_axes,"xyz");
+ assert(lv_obj_get_y(s_studio_position)>lv_obj_get_height(s_preview_box));
+ assert(!strcmp(lv_label_get_text(layer),"215 / 336"));
+ assert(!strcmp(lv_label_get_text(lv_obj_get_child(actions.motion,0)),"Toolhead Control"));
+ unsigned before=toolhead_opens;lv_obj_send_event(actions.motion,LV_EVENT_CLICKED,NULL);assert(toolhead_opens==before+1);
+ lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);children_inside(popup);
+ lv_obj_send_event(lv_obj_get_child(lv_obj_get_child(popup,-1),0),LV_EVENT_CLICKED,NULL);
+ assert(lv_obj_get_child_count(lv_layer_top())==0);
+ ui_printer_preview_show("printing","job.gcode","");
+ assert(s_preview_image && lv_obj_has_flag(s_preview_label,LV_OBJ_FLAG_HIDDEN));
+ unsigned previews=preview_opens;lv_obj_send_event(s_preview_box,LV_EVENT_CLICKED,NULL);assert(preview_opens==previews+1);
+ ui_printer_preview_destroy_refs();
  moonraker_capabilities_t caps={.discovered=true,.has_heated_bed=true,.has_part_fan=false};ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,0,3600,true,&caps);assert(!lv_obj_has_state(l.status_panel,LV_STATE_DISABLED));assert(!strcmp(lv_label_get_text(cards.part_fan),"N/A"));
- studio_tuning_open(NULL);assert(s_studio_tuning_popup);children_inside(s_studio_tuning_popup);lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(!strcmp(command,"M220 S120"));lv_obj_delete(r);assert(!s_studio_position && !s_studio_tuning_popup && !s_speed_factor_slider);
+ studio_tuning_open(NULL);assert(s_studio_tuning_popup);studio_tuning_close(NULL);assert(!s_speed_factor_slider && !s_flow_factor_slider);studio_tuning_open(NULL);assert(s_studio_tuning_popup);children_inside(s_studio_tuning_popup);lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(!strcmp(command,"M220 S120"));lv_obj_delete(r);assert(!s_studio_position && !s_studio_tuning_popup && !s_speed_factor_slider);
 }
 #elif defined(TEST_DRYBOX)
 #include "ui_drybox_page.c"

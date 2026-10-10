@@ -35,6 +35,10 @@ lv_obj_t *ui_popup_create(lv_obj_t *parent,
                           int32_t height,
                           ui_popup_kind_t kind);
 
+/* Screen-local modal for scrolling views that should occlude background redraws. */
+lv_obj_t *ui_popup_create_on_screen(int32_t width, int32_t height,
+                                    ui_popup_kind_t kind);
+
 lv_obj_t *ui_popup_add_title(lv_obj_t *popup,
                              const char *text,
                              bool danger,

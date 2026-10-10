@@ -75,7 +75,7 @@ static const char *theme_label(ui_theme_id_t theme)
 {
     switch (theme) {
         case UI_THEME_STUDIO_DARK:
-            return "STUDIO DARK (TRIAL)";
+            return "STUDIO DARK";
         case UI_THEME_CLASSIC:
             return "FOUNDRY (THEME A)";
         case UI_THEME_GLASS:

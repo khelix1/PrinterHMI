@@ -362,17 +362,18 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     ui_popup_add_caption(popup, ui_text("RUNTIME Z OFFSET"), 420, 292, 300);
 
     s_offset_label = lv_label_create(popup);
-    lv_obj_set_pos(s_offset_label, 575, 290);
-    lv_obj_set_width(s_offset_label, 140);
+    lv_obj_set_pos(s_offset_label, 420, 326);
+    lv_obj_set_width(s_offset_label, 312);
+    lv_label_set_long_mode(s_offset_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(s_offset_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_font(s_offset_label, ui_font_with_fallback(UI_FONT_VALUE_SMALL), 0);
     lv_obj_set_style_text_color(s_offset_label, UI_TEXT_BRIGHT, 0);
 
-    make_button(popup, UI_BUTTON_OUTLINED, "-0.05", 420, 324, 96, 44, z_offset_cb, "-0.05");
-    make_button(popup, UI_BUTTON_OUTLINED, "-0.01", 528, 324, 96, 44, z_offset_cb, "-0.01");
-    make_button(popup, UI_BUTTON_SECONDARY, "RESET", 636, 324, 96, 44, z_offset_cb, "RESET");
-    make_button(popup, UI_BUTTON_OUTLINED, "+0.01", 420, 380, 96, 44, z_offset_cb, "+0.01");
-    make_button(popup, UI_BUTTON_OUTLINED, "+0.05", 528, 380, 96, 44, z_offset_cb, "+0.05");
+    make_button(popup, UI_BUTTON_OUTLINED, "-0.05", 420, 366, 96, 44, z_offset_cb, "-0.05");
+    make_button(popup, UI_BUTTON_OUTLINED, "-0.01", 528, 366, 96, 44, z_offset_cb, "-0.01");
+    make_button(popup, UI_BUTTON_SECONDARY, "RESET", 636, 366, 96, 44, z_offset_cb, "RESET");
+    make_button(popup, UI_BUTTON_OUTLINED, "+0.01", 420, 422, 96, 44, z_offset_cb, "+0.01");
+    make_button(popup, UI_BUTTON_OUTLINED, "+0.05", 528, 422, 96, 44, z_offset_cb, "+0.05");
 
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_PLUS " EXTRUDE", 40, 410, 150, 46, extrude_cb, "EXTRUDE");
     make_button(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_MINUS " RETRACT", 205, 410, 150, 46, extrude_cb, "RETRACT");

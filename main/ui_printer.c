@@ -107,6 +107,7 @@ static void preview_show_placeholder(void)
 
     lv_label_set_text(
         s_preview_label,
+        ui_theme_is_studio() ? "Model preview\n\nNo preview loaded" :
         "PRINT\nTHUMBNAIL\n\nNo preview loaded");
 
     lv_obj_center(s_preview_label);
@@ -126,7 +127,10 @@ void ui_printer_preview_create(lv_obj_t *parent)
     int preview_width = (parent_width * 36) / 100;
     int preview_height = parent_height - 36;
 
-    if (ui_theme_is_operator_shell()) {
+    if (ui_theme_is_studio()) {
+        preview_width = parent_width;
+        preview_height = 240;
+    } else if (ui_theme_is_operator_shell()) {
         /* Keep the job details usable in the narrower split Active Print card. */
         preview_width = (parent_width * 34) / 100;
         if (preview_width < 158) preview_width = 158;
@@ -153,8 +157,8 @@ void ui_printer_preview_create(lv_obj_t *parent)
         preview_height);
     lv_obj_set_pos(
         s_preview_box,
-        16,
-        28);
+        ui_theme_is_studio() ? 0 : 16,
+        ui_theme_is_studio() ? 0 : 28);
     lv_obj_clear_flag(
         s_preview_box,
         LV_OBJ_FLAG_SCROLLABLE);

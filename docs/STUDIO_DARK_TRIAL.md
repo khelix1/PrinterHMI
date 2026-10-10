@@ -1,10 +1,11 @@
-# STUDIO Dark redesign trial
+# STUDIO Dark interface
 
 STUDIO Dark is an opt-in LVGL 9.5 interface for the 1024 × 600 ESP32-P4 panel.
 Select **Settings → Interface Theme → STUDIO DARK**. The saved selection survives
-reboot. Factory defaults remain Operator until the panel trial is accepted;
-firmware identity remains 6.5.6. This update builds on the first local STUDIO trial
-and includes its deferred chooser construction and 16 KB LVGL task stack fix.
+reboot. The operator accepted the current panel layout on October 9, 2026,
+and the theme no longer carries a trial label. Operator remains the factory
+default; firmware identity remains 6.5.6. STUDIO includes deferred chooser
+construction and the 16 KB LVGL task stack correction.
 
 ## Composition
 
@@ -15,12 +16,12 @@ The eight main pages use separately authored compositions:
 
 - Dashboard: borderless preview, oversized progress, open thermal readouts and a
   horizontal telemetry strip. Values use real data and existing unknown/N/A states.
-- Printer: XYZ jog workspace, step selection, thermal column and bottom action
-  strip. Fresh online/homed/printing checks guard jog commands. Tune opens the
-  existing speed/flow controls; Motion retains extrusion and Z-offset controls.
+- Printer: large profile-owned model preview, live XYZ and telemetry strip,
+  thermal column and bottom print actions. Toolhead Control opens the existing
+  guarded jogging, extrusion and Z-offset popup; Tune opens speed/flow controls.
 - Drybox: humidity arc, open temperature readouts and program capsules. Existing
   program commands and availability states remain authoritative; no timer is invented.
-- Tools: typographic instrument index with full-width tool entries.
+- Tools: two-by-two utility card grid with icons and descriptions.
 - Files: scrolling job ledger and embedded preview/metadata inspector. Details
   opens the full metadata text; Print remains disabled until metadata is ready.
 - Camera: feed surface with overlaid status and controls. Configure, view transforms,
@@ -37,7 +38,7 @@ transport, preview ownership, print-action resolution, runout behavior and
 cancellation confirmations continue to use the existing application contracts.
 Shared dialogs receive STUDIO's independent style recipes; their underlying
 control and confirmation logic is reused. The concept boards are design targets,
-while these native layouts are the concrete trial implementation.
+while these native layouts are the native implementation.
 
 ## Fonts
 
@@ -56,7 +57,7 @@ python3 tools/regenerate_studio_fonts.py --converter lv_font_conv
 Real upstream LVGL v9.5.0 host checks cover Dashboard/shell bounds, all eight
 routes, thumbnail hit-testing, print action availability, E-stop recreation,
 unknown telemetry and repeated teardown across densities and text sizes.
-The new page fixture checks Printer jog guards, step selection, M220 tuning,
+The new page fixture checks Printer preview binding and fullscreen entry, Toolhead Control entry, M220 tuning,
 unsupported fan isolation, popup teardown, Drybox online/offline and humidity
 range, Console history paging/filter changes, and Settings component bounds.
 Files checks cover inspector ownership, metadata readiness and full-detail updates.
@@ -74,7 +75,7 @@ recorded as a baseline failure. Host tests do not validate P4 stack headroom,
 firmware link size, display performance or the complete hardware behavior.
 ESP-IDF compilation and panel testing remain required.
 
-## Local panel trial
+## Panel verification
 
 The local installer validates every target file before writing, accepts the
 original trial or the chooser-fixed trial, and refuses unrelated edits to target
@@ -85,14 +86,14 @@ files. It performs no branch switch, commit, merge or push. It can build with
 Check all eight pages, scrolling in Files/Settings, long names, large text,
 control availability, preview/camera changes, printer switching, chooser reopening,
 sleep/wake and reboot restoration. Exercise print and runout workflows with the
-same care as the accepted firmware. Promote the default only after panel acceptance.
+same care as the accepted firmware. Changing the factory default is a separate product decision.
 
 ## Tool destinations and printer chooser width follow-up
 
 Printer profile manager/editor dialogs now use the STUDIO screen width with
 24 px outer margins. Calibration uses two 480 px columns and two 190 px rows
 inside the fixed stage; its bottom actions remain visible. Devices fills the
-stage, showing four entries per page with Previous/Next pinned at the bottom.
+stage, showing twelve entries per page in a vertically scrolling two-column list with Previous/Next pinned at the bottom.
 Bed Mesh uses a wider 776 × 250 canvas and keeps its gesture hint and actions
 inside the stage. Macros fills the stage width without the legacy inner rail inset.
 Legacy themes retain their geometry. Native checks include all five themes for
@@ -111,5 +112,54 @@ single-line text and bounds in normal and large text modes. Legacy theme layouts
 remain unchanged. This correction follows `fix_studio_widths.py` and is provided
 as another guarded local apply/build script for OTA.
 
-The STUDIO Tools landing page now uses four full-width rows beneath its title.
-Its redundant side index has been removed; all four destination callbacks remain.
+The STUDIO Tools landing page uses the original two-by-two utility card layout
+with Studio styling and no side index. All four cards fit the fixed stage without
+scrolling; destination callbacks remain.
+
+## Printer tuning widget lifetime correction
+
+Tuning slider and value references now belong to the Printer page that creates
+them. Deleting that page clears them in every theme; creating the next page
+starts with empty widget references while pending tuning commands persist.
+This fixes the stale Operator slider used by Studio refresh after a theme switch.
+Host regression checks repeat Operator teardown and refresh, then Studio creation,
+tuning popup close/reopen and page deletion across densities and text sizes.
+
+## Theme chooser scroll follow-up
+
+The built-in chooser uses an opaque scrolling viewport, with inherited preview
+effects removed and nested scrolling disabled on the preview grid. Operator Shell
+selects on a completed click rather than touch-down, allowing swipe gestures.
+Dialog checks cover all five themes, densities, text sizes and screen widths;
+physical scrolling performance remains a panel check.
+
+The miniature built-in previews now render once into per-card RGB565 canvases
+in PSRAM. Scrolling reuses those pixels instead of rendering each nested sample
+widget again. Closing releases every buffer; allocation failure retains the
+widget-based preview. Names, descriptions, selection and pinned actions remain
+regular widgets. Tests cover repeated opens, all themes and buffer cleanup/fallback.
+
+## Theme-dependent chooser scrolling correction
+
+LVGL draws the active screen before top-layer modals, so scrolling the chooser
+repainted the Settings page underneath. The built-in chooser now uses a
+screen-local modal with the existing blocker and cleanup behavior. Its opaque
+viewport can occlude the underlying page. Other modals retain their top-layer
+placement. A real-LVGL draw-event regression fails with the previous top-layer
+placement and verifies zero background-page draws during chooser scroll for
+all five themes, densities, text sizes and tested widths. Panel timing still
+requires verification.
+
+## Acceptance and integration
+
+The operator accepted the current STUDIO page composition and theme chooser
+scrolling. The Printer overview replaces duplicate jog controls with a large
+profile-owned model preview, live XYZ and print telemetry; Toolhead Control
+retains the existing popup. Its runtime Z-offset reading occupies a separate
+row below its caption. Devices shows up to twelve entries per page with vertical
+scrolling; Tools uses a two-by-two card grid.
+
+Closeout removes the trial display labels, builds the accepted sources, merges
+the feature branch into main and runs the existing end-of-night checkpoint.
+Stable identity stays 6.5.6. Printing, runout recovery and extended hardware
+soak checks remain pending; acceptance does not substitute for those checks.

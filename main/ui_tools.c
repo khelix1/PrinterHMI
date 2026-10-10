@@ -9,6 +9,7 @@
 #include "ui_button.h"
 #include "ui_shell.h"
 #include "ui_responsive_layout.h"
+#include "ui_studio_layout.h"
 
 static lv_obj_t *s_root;
 static lv_obj_t *s_tiles;
@@ -81,6 +82,22 @@ static void tools_size_changed(lv_event_t *event)
                     lv_obj_get_content_height(s_root) - 108);
 }
 
+static void studio_tools_create(void)
+{
+    studio_text(s_root,"Tools",0,0,976,&ui_studio_font_48,UI_TEXT);
+    const char *names[]={"Calibration","Bed mesh","Devices","Macros"};
+    const char *descriptions[]={"Probe, endstop and motion workflows","Probe and inspect the bed surface","Inspect discovered hardware and live values","Search and run printer macros"};
+    s_tiles=studio_plane(s_root,0,72,976,352);
+    for(int i=0;i<4;i++) {
+        lv_obj_t *lane=studio_action(s_tiles,"",0,i*88,976,88,tile_cb,(void*)(intptr_t)i);
+        lv_obj_clean(lane);lv_obj_set_style_border_width(lane,0,0);
+        studio_text(lane,names[i],0,8,880,UI_FONT_TITLE,UI_TEXT);
+        studio_text(lane,descriptions[i],0,48,880,UI_FONT_BODY,UI_TEXT_DIM);
+        studio_text(lane,LV_SYMBOL_RIGHT,920,27,44,UI_FONT_TITLE,UI_ACCENT_BRIGHT);
+        studio_rule(lane,0,87,976,1);
+    }
+}
+
 void ui_tools_show(void)
 {
     if (s_root) {
@@ -94,6 +111,7 @@ void ui_tools_show(void)
     lv_obj_set_pos(s_root, UI_PAGE_ROOT_X, UI_PAGE_ROOT_Y);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
+    if(ui_theme_is_studio()){studio_tools_create();return;}
     ui_page_title_create(s_root, LV_SYMBOL_SETTINGS " TOOLS",
                          "Calibration and operator utilities");
 

@@ -8,10 +8,10 @@
  * Operator deliberately retains the verified production geometry.
  */
 static const ui_dashboard_layout_profile_t s_studio = {
-    .subtitle="", .banner={0,0,600,424},
-    .active_print={0,86,600,338}, .machine_status={624,0,352,424},
-    .command_bar={304,318,288,106},
-    .active_content={.preview_x=8,.preview_y=8,.preview_width=276,.preview_height=322,
+    .subtitle="", .banner={0,0,720,338},
+    .active_print={0,62,720,276}, .machine_status={0,0,976,424},
+    .command_bar={340,278,360,52},
+    .active_content={.preview_x=0,.preview_y=0,.preview_width=316,.preview_height=276,
         .footer_x=304,.footer_bottom=66},
     .machine_content={.composition=UI_DASHBOARD_MACHINE_SINGLE_CARD},
 };

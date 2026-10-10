@@ -3,6 +3,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "ui_text_fit.h"
+#include "ui_studio_layout.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -137,11 +138,6 @@ static lv_obj_t *studio_label(lv_obj_t *p,const char *t,int x,int y,int w,const 
     ui_apply_custom_label_style(o,f,c);
     ui_text_fit_single_line(o,f); return o;
 }
-static lv_obj_t *studio_tile(lv_obj_t *p,int x,int y,int w,int h)
-{
-    lv_obj_t *o=ui_create_operator_card(p,x,y,w,h);
-    lv_obj_set_style_pad_all(o,0,0); return o;
-}
 static void studio_temperature(lv_obj_t *value,lv_obj_t *target,const char *text)
 {
     float current=0,goal=0;
@@ -157,36 +153,26 @@ static void studio_temperature(lv_obj_t *value,lv_obj_t *target,const char *text
 }
 static lv_obj_t *studio_machine_create(lv_obj_t *parent,const ui_dashboard_rect_t *rect,machine_status_ctx_t *ctx)
 {
-    lv_obj_t *host=lv_obj_create(parent);
-    ui_apply_surface_role(host,UI_SURFACE_TRANSPARENT);
-    lv_obj_set_pos(host,rect->x,rect->y); lv_obj_set_size(host,rect->width,rect->height);
-    lv_obj_clear_flag(host,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *nozzle=studio_tile(host,0,0,170,174);
-    lv_obj_t *bed=studio_tile(host,182,0,170,174);
-    ctx->nozzle_name=studio_label(nozzle,"Nozzle",16,14,138,UI_FONT_BODY_LARGE,UI_TEXT);
-    studio_label(bed,"Bed",16,14,138,UI_FONT_BODY_LARGE,UI_TEXT);
-    ctx->nozzle=studio_label(nozzle,"--°",16,56,138,&ui_studio_font_48,UI_TEXT);
-    ctx->bed=studio_label(bed,"--°",16,56,138,&ui_studio_font_48,UI_TEXT);
-    ctx->nozzle_target=studio_label(nozzle,"Target --°",16,125,138,UI_FONT_BODY,UI_TEXT_DIM);
-    ctx->bed_target=studio_label(bed,"Target --°",16,125,138,UI_FONT_BODY,UI_TEXT_DIM);
-    lv_obj_t *dry=studio_tile(host,0,186,352,120);
-    lv_obj_set_style_bg_color(dry,lv_color_hex(0x292F22),0);
-    studio_label(dry,"Drybox environment",16,12,320,UI_FONT_BODY_LARGE,UI_OK_BRIGHT);
-    ctx->air=studio_label(dry,"-- C",16,48,156,UI_FONT_VALUE,UI_TEXT);
-    ctx->humidity=studio_label(dry,"-- %RH",184,48,152,UI_FONT_VALUE,UI_TEXT);
-    studio_label(dry,"Air temperature",16,88,156,UI_FONT_CAPTION,UI_TEXT_DIM);
-    studio_label(dry,"Humidity",184,88,152,UI_FONT_CAPTION,UI_TEXT_DIM);
-    lv_obj_t *process=studio_tile(host,0,318,352,106);
-    lv_obj_set_style_bg_color(process,UI_PANEL_ALT,0);
-    studio_label(process,"Speed",14,10,116,UI_FONT_CAPTION,UI_TEXT_DIM);
-    studio_label(process,"Flow",140,10,116,UI_FONT_CAPTION,UI_TEXT_DIM);
-    studio_label(process,"Fan",272,10,66,UI_FONT_CAPTION,UI_TEXT_DIM);
-    ctx->speed=studio_label(process,"-- mm/s",14,36,116,UI_FONT_BODY_LARGE,UI_TEXT);
-    ctx->flow=studio_label(process,"-- mm3/s",140,36,116,UI_FONT_BODY_LARGE,UI_TEXT);
-    ctx->fan=studio_label(process,"--%",272,36,66,UI_FONT_BODY_LARGE,UI_TEXT);
-    ctx->live=studio_label(process,"OFFLINE",14,78,96,UI_FONT_CAPTION,UI_DANGER_BRIGHT);
-    studio_label(process,"Filament",130,78,78,UI_FONT_CAPTION,UI_TEXT_DIM);
-    ctx->filament=studio_label(process,"--",212,78,126,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_t *host=studio_plane(parent,rect->x,rect->y,rect->width,rect->height);
+    studio_rule(host,736,0,1,330);
+    ctx->nozzle_name=studio_label(host,"Nozzle",756,4,220,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    ctx->nozzle=studio_label(host,"--°",756,34,220,&ui_studio_font_48,UI_OK_BRIGHT);
+    ctx->nozzle_target=studio_label(host,"Target --°",756,94,220,UI_FONT_BODY,UI_TEXT_DIM);
+    studio_rule(host,756,134,220,1);
+    studio_label(host,"Bed",756,154,220,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    ctx->bed=studio_label(host,"--°",756,184,220,&ui_studio_font_48,UI_OK_BRIGHT);
+    ctx->bed_target=studio_label(host,"Target --°",756,244,220,UI_FONT_BODY,UI_TEXT_DIM);
+    ctx->live=studio_label(host,"OFFLINE",756,298,96,UI_FONT_CAPTION,UI_DANGER_BRIGHT);
+    ctx->filament=studio_label(host,"--",856,298,120,UI_FONT_CAPTION,UI_TEXT_DIM);
+    studio_rule(host,0,346,976,1);
+    const char *names[]={"Speed","Flow","Fan","Drybox air","Humidity"};
+    lv_obj_t **values[]={&ctx->speed,&ctx->flow,&ctx->fan,&ctx->air,&ctx->humidity};
+    for(int i=0;i<5;i++) {
+        int x=i*196;
+        studio_label(host,names[i],x,356,184,UI_FONT_CAPTION,UI_TEXT_DIM);
+        *values[i]=studio_label(host,"--",x,386,184,UI_FONT_BODY_LARGE,UI_TEXT);
+        if(i)studio_rule(host,x-10,356,1,60);
+    }
     lv_obj_set_user_data(host,ctx);
     lv_obj_add_event_cb(host,machine_status_delete_cb,LV_EVENT_DELETE,ctx);
     return host;

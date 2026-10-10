@@ -1,4 +1,5 @@
 #include "ui_text_fit.h"
+#include "ui_studio_layout.h"
 #include "ui_value_update.h"
 #include "ui_printer_info_cards.h"
 #include "ui_text.h"
@@ -110,6 +111,31 @@ void ui_printer_info_cards_create(
         return;
     }
 
+    if(ui_theme_is_studio()) {
+        memset(cards,0,sizeof(*cards));
+        const char *names[]={"Nozzle","Bed"};
+        lv_obj_t **values[]={&cards->nozzle,&cards->bed};
+        lv_obj_t **targets[]={&cards->nozzle_target,&cards->bed_target};
+        lv_event_cb_t callbacks[]={nozzle_cb,bed_cb};
+        for(int i=0;i<2;i++) {
+            lv_obj_t *area=studio_plane(parent,0,i*142,336,136);
+            studio_text(area,names[i],12,0,312,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+            *values[i]=studio_text(area,"--°",12,32,312,&ui_studio_font_48,UI_OK_BRIGHT);
+            *targets[i]=studio_text(area,"Target --°  •  Tap to set",12,94,312,UI_FONT_BODY,UI_TEXT_DIM);
+            if(callbacks[i]) {lv_obj_add_flag(area,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(area,callbacks[i],LV_EVENT_CLICKED,NULL);}
+            studio_rule(area,12,132,312,1);
+        }
+        lv_obj_t *fan_area=studio_plane(parent,12,294,94,40);
+        cards->part_fan=studio_text(fan_area,"--%",0,4,94,UI_FONT_VALUE_SMALL,UI_TEXT);
+        if(part_fan_cb) {lv_obj_add_flag(fan_area,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(fan_area,part_fan_cb,LV_EVENT_CLICKED,NULL);}
+        studio_text(parent,"Fan",12,276,94,UI_FONT_CAPTION,UI_TEXT_DIM);
+        cards->elapsed=studio_text(parent,"--:--",124,298,94,UI_FONT_VALUE_SMALL,UI_TEXT);
+        studio_text(parent,"Elapsed",124,276,94,UI_FONT_CAPTION,UI_TEXT_DIM);
+        cards->remaining=studio_text(parent,"--:--",236,298,100,UI_FONT_VALUE_SMALL,UI_TEXT);
+        studio_text(parent,"Remaining",236,276,100,UI_FONT_CAPTION,UI_TEXT_DIM);
+        cards->progress=studio_text(parent,"--%",12,332,324,UI_FONT_CAPTION,UI_TEXT_DIM);
+        return;
+    }
     lv_obj_update_layout(parent);
     int parent_width = lv_obj_get_width(parent);
     int parent_height = lv_obj_get_height(parent);
@@ -291,8 +317,21 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 {
     if (!printer_panel || !cards) return;
 
+        if(cards->nozzle_target) {
+        char t[64];
+        snprintf(t,sizeof(t),moonraker_ok && printer_nozzle_temp>-100 ? "%.0f°" : "--°",printer_nozzle_temp);ui_value_set_text(cards->nozzle,t);
+        snprintf(t,sizeof(t),moonraker_ok ? "Target %.0f°  •  Tap to set" : "Target --°",printer_nozzle_target);ui_value_set_text(cards->nozzle_target,t);
+        snprintf(t,sizeof(t),moonraker_ok && printer_bed_temp>-100 ? "%.0f°" : "--°",printer_bed_temp);ui_value_set_text(cards->bed,t);
+        snprintf(t,sizeof(t),moonraker_ok ? "Target %.0f°  •  Tap to set" : "Target --°",printer_bed_target);ui_value_set_text(cards->bed_target,t);
+        snprintf(t,sizeof(t),moonraker_ok ? "%.0f%%" : "--%%",printer_part_fan_speed);ui_value_set_text(cards->part_fan,t);
+        snprintf(t,sizeof(t),moonraker_ok ? "Progress %.0f%%" : "Offline",printer_progress*100);ui_value_set_text(cards->progress,t);
+        format_hhmm(t,sizeof(t),moonraker_ok?printer_print_duration:-1);ui_value_set_text(cards->elapsed,t);
+        ui_value_set_text(cards->remaining,printer_eta_text&&printer_eta_text[0]?printer_eta_text:"--:--");
+        return;
+    }
+
     if (cards->progress) {
-        char pbuf[32];
+    char pbuf[32];
         if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%d%%", (int)(printer_progress * 100.0));
         else snprintf(pbuf, sizeof(pbuf), "--%%");
         ui_value_set_text(cards->progress, pbuf);
@@ -543,6 +582,8 @@ void ui_printer_info_cards_refresh_live(
         apply_optional_card_capability(
             cards->bed,
             capabilities->has_heated_bed);
+        if (ui_theme_is_studio() && !capabilities->has_heated_bed && cards->bed_target)
+            ui_value_set_text(cards->bed_target, "Not available");
 
         apply_optional_card_capability(
             cards->part_fan,

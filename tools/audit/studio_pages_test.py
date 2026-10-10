@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build real LVGL host checks for built-in/custom theme chooser and removal layouts in every theme. Supply --lvgl-dir if unmanaged."""
+"""Exercise STUDIO Printer, Drybox, Console and Settings rows against real LVGL."""
 from pathlib import Path
 import argparse
 import concurrent.futures
@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
             objects=list(pool.map(compile_source,(lvgl/"src").rglob("*.c")))
         library=tmp/"liblvgl.a"
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
-    (tmp/"esp_heap_caps.h").write_text("#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define MALLOC_CAP_INTERNAL 4\n#define heap_caps_calloc(n,size,caps) calloc(n,size)\n#define heap_caps_free(p) free(p)\n")
+    (tmp/"esp_heap_caps.h").write_text("#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define MALLOC_CAP_INTERNAL 4\n#define heap_caps_calloc(n,size,caps) calloc(n,size)\n#define heap_caps_free(p) free(p)\n#define heap_caps_malloc(size,caps) malloc(size)\n#define heap_caps_check_integrity(caps,print_errors) true\n")
     (tmp/"esp_err.h").write_text("#pragma once\ntypedef int esp_err_t;\n#define ESP_OK 0\n#define ESP_FAIL -1\n")
     (tmp/"esp_http_client.h").write_text("#pragma once\ntypedef void *esp_http_client_handle_t;\ntypedef struct { int event_id; } esp_http_client_event_t;\n")
     (tmp/"esp_log.h").write_text("#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n")
@@ -37,11 +37,11 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"freertos").mkdir()
     (tmp/"freertos/FreeRTOS.h").write_text("#pragma once\n#include <stdint.h>\n#define pdMS_TO_TICKS(ms) (ms)\n")
     (tmp/"freertos/task.h").write_text("#pragma once\nvoid vTaskDelay(uint32_t ticks);\n")
-    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c","ui_theme_preview.c"]
-    executable=tmp/"theme_dialog_layout"
-    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
-        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
-        str(root/"tools/audit/theme_dialog_layout_test.c"),
-        str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/s) for s in sources],
-        str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
-    subprocess.run([str(executable)],check=True)
+    (tmp/"cJSON.h").write_text("#pragma once\ntypedef struct cJSON cJSON;\n")
+    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c","ui_theme_preview.c","ui_dashboard_page.c","ui_dashboard_layout_profile.c","ui_shell.c","ui_global_estop.c","ui_thumbnail.c"]
+    for variant in ["PRINTER","DRYBOX","CONSOLE","SETTINGS","CALIBRATION","BED_MESH"]:
+        extra={"PRINTER":["ui_printer_layout.c","ui_printer_info_cards.c","ui_printer_actions.c","ui_printer_motion.c","ui_printer_toolhead.c"],"DRYBOX":["ui_status_banner.c"],"CONSOLE":[],"SETTINGS":[],"CALIBRATION":[],"BED_MESH":["ui_bed_mesh_renderer.c","ui_bed_mesh_gestures.c"]}[variant]
+        executable=tmp/variant.lower()
+        subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wno-unused-function","-ffunction-sections","-fdata-sections",*flags,"-DTEST_"+variant,
+            "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),str(root/"tools/audit/studio_pages_test.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/p) for p in sources+extra if p not in ["ui_dashboard_page.c","ui_dashboard_layout_profile.c","ui_shell.c","ui_global_estop.c"]],str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
+        subprocess.run([str(executable)],check=True,timeout=30)

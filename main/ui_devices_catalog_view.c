@@ -195,20 +195,20 @@ static void add_device_card(
 
     int column = (int)(visible_index % 2);
     int row = (int)(visible_index / 2);
-    int x = column == 0 ? 0 : 410;
-    int y = row * 122;
+    int x = column == 0 ? 0 : (ui_theme_is_studio()?408:410);
+    int y = row * (ui_theme_is_studio()?152:122);
 
     lv_obj_t *card = s_devices->rows[visible_index].card;
     if (!card) {
-        card = ui_create_operator_card(s_devices->list, x, y, 390, 110);
+        card = ui_create_operator_card(s_devices->list, x, y, ui_theme_is_studio()?384:390, ui_theme_is_studio()?142:110);
         if (!card) return;
         s_devices->rows[visible_index].card = card;
-        s_devices->rows[visible_index].name = devices_label(card, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT, 14, 8, 362);
-        s_devices->rows[visible_index].kind = devices_label(card, "", UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 14, 76, 104);
+        s_devices->rows[visible_index].name = devices_label(card, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT, 14, 8, ui_theme_is_studio()?356:362);
+        s_devices->rows[visible_index].kind = devices_label(card, "", UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 14, ui_theme_is_studio()?98:76, 104);
         lv_obj_set_style_text_align(s_devices->rows[visible_index].kind, LV_TEXT_ALIGN_RIGHT, 0);
-        ui_create_operator_card_divider(card, 14, 67, 362);
-        s_devices->rows[visible_index].object = devices_label(card, "", UI_FONT_CAPTION, UI_TEXT_DIM, 14, 38, 362);
-        s_devices->rows[visible_index].value = devices_label(card, "--", UI_FONT_CAPTION, UI_TEXT_BRIGHT, 130, 76, 246);
+        ui_create_operator_card_divider(card, 14, ui_theme_is_studio()?84:67, ui_theme_is_studio()?356:362);
+        s_devices->rows[visible_index].object = devices_label(card, "", UI_FONT_CAPTION, UI_TEXT_DIM, 14, ui_theme_is_studio()?52:38, ui_theme_is_studio()?356:362);
+        s_devices->rows[visible_index].value = devices_label(card, "--", UI_FONT_CAPTION, UI_TEXT_BRIGHT, 130, ui_theme_is_studio()?98:76, ui_theme_is_studio()?240:246);
         lv_obj_set_style_text_align(s_devices->rows[visible_index].value, LV_TEXT_ALIGN_RIGHT, 0);
     }
     lv_obj_remove_flag(card, LV_OBJ_FLAG_HIDDEN);
@@ -228,6 +228,8 @@ static void add_device_card(
 }
 
 
+static size_t devices_page_size(void){return ui_theme_is_studio()?4:DEVICE_UI_MAX_VISIBLE;}
+
 static void update_pagination_controls(
     size_t matching_count)
 {
@@ -237,8 +239,8 @@ static void update_pagination_controls(
 
     size_t page_count = matching_count == 0
         ? 1
-        : (matching_count + DEVICE_UI_MAX_VISIBLE - 1) /
-            DEVICE_UI_MAX_VISIBLE;
+        : (matching_count + devices_page_size() - 1) /
+            devices_page_size();
 
     if (s_devices->page_index >= page_count) {
         s_devices->page_index = page_count - 1;
@@ -288,9 +290,9 @@ static void update_pagination_controls(
     }
 
     size_t first =
-        s_devices->page_index * DEVICE_UI_MAX_VISIBLE + 1;
+        s_devices->page_index * devices_page_size() + 1;
     size_t last =
-        first + DEVICE_UI_MAX_VISIBLE - 1;
+        first + devices_page_size() - 1;
 
     if (last > matching_count) {
         last = matching_count;
@@ -365,7 +367,7 @@ static void render_catalog(void)
             UI_TEXT_DIM,
             20,
             80,
-            760);
+            ui_theme_is_studio()?752:760);
 
         lv_label_set_long_mode(s_devices->empty, LV_LABEL_LONG_WRAP);
         lv_obj_t *waiting = s_devices->empty;
@@ -412,7 +414,7 @@ static void render_catalog(void)
             UI_TEXT_DIM,
             20,
             80,
-            760);
+            ui_theme_is_studio()?752:760);
 
         lv_label_set_long_mode(s_devices->empty, LV_LABEL_LONG_WRAP);
         lv_obj_t *empty = s_devices->empty;
@@ -424,13 +426,13 @@ static void render_catalog(void)
             0);
     } else {
         size_t first_match =
-            s_devices->page_index * DEVICE_UI_MAX_VISIBLE;
+            s_devices->page_index * devices_page_size();
         size_t matching_index = 0;
         size_t visible = 0;
 
         for (size_t index = 0;
              index < status.stored_count &&
-             visible < DEVICE_UI_MAX_VISIBLE;
+             visible < devices_page_size();
              ++index) {
             device_descriptor_t device;
 
@@ -709,6 +711,16 @@ void ui_devices_catalog_view_create(
             (void *)(intptr_t)1);
     }
 
+    if(ui_theme_is_studio()) {
+        lv_obj_set_pos(s_devices->filter_strip,0,64);lv_obj_set_size(s_devices->filter_strip,164,352);
+        lv_obj_set_flex_flow(s_devices->filter_strip,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_devices->filter_strip,0,0);
+        lv_obj_clear_flag(s_devices->filter_strip,LV_OBJ_FLAG_SCROLLABLE);
+        for(size_t i=0;i<DEVICE_FILTER_COUNT;i++){lv_obj_t *b=s_devices->filter_buttons[i];if(b){lv_obj_set_width(b,164);lv_obj_set_style_min_width(b,0,0);}}
+        lv_obj_set_pos(s_devices->list,184,64);lv_obj_set_size(s_devices->list,792,304);lv_obj_clear_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE);
+        if(s_devices->previous_button)lv_obj_set_pos(s_devices->previous_button,184,380);
+        if(s_devices->next_button)lv_obj_set_pos(s_devices->next_button,816,380);
+        lv_obj_set_pos(s_devices->pagination_label,360,390);lv_obj_set_width(s_devices->pagination_label,440);
+    }
     s_devices->filter = DEVICE_FILTER_ALL;
     s_devices->rendered_generation = UINT32_MAX;
     render_catalog();

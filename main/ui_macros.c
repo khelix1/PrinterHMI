@@ -18,6 +18,7 @@
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_responsive_layout.h"
+#include "ui_text_fit.h"
 
 static const char TAG[] = "ui_macros";
 
@@ -510,7 +511,7 @@ void ui_macros_show(
     ui_apply_root_style(s_root);
 
     lv_obj_set_flex_flow(s_root, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_root, 20, 0);
+    lv_obj_set_style_pad_all(s_root, ui_theme_is_studio()?0:20, 0);
     lv_obj_set_style_pad_row(s_root, UI_GAP_ROW, 0);
     lv_obj_t *header = lv_obj_create(s_root);
     ui_responsive_column(header);
@@ -550,10 +551,27 @@ void ui_macros_show(
     lv_obj_set_size(s_list, lv_pct(100), 0);
     lv_obj_set_flex_grow(s_list, 1);
     ui_apply_card_style(s_list);
-    lv_obj_set_style_pad_all(s_list, 10, 0);
+    lv_obj_set_style_pad_all(s_list, ui_theme_is_studio()?0:10, 0);
     lv_obj_set_scroll_dir(s_list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_AUTO);
     ui_responsive_cards(s_list, 320);
+    if(ui_theme_is_studio()) {
+        lv_obj_set_style_pad_row(s_root,4,0);
+        lv_obj_set_layout(header,LV_LAYOUT_NONE);lv_obj_set_size(header,lv_pct(100),76);
+        lv_obj_set_pos(title,0,0);lv_obj_set_width(title,200);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
+        lv_obj_add_flag(subtitle,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(s_status,220,10);lv_obj_set_size(s_status,380,26);lv_label_set_long_mode(s_status,LV_LABEL_LONG_DOT);
+        lv_obj_set_pos(hint,0,50);lv_obj_set_width(hint,976);
+        lv_obj_set_parent(search,header);lv_obj_set_parent(clear,header);
+        lv_obj_set_flex_grow(search,0);lv_obj_set_flex_grow(clear,0);
+        lv_obj_set_style_min_width(search,0,0);lv_obj_set_style_min_width(clear,0,0);
+        lv_obj_set_size(search,158,44);lv_obj_set_pos(search,626,0);
+        lv_obj_set_size(clear,180,44);lv_obj_set_pos(clear,796,0);
+        lv_obj_set_style_pad_ver(search,3,0);lv_obj_set_style_pad_ver(clear,3,0);
+        lv_obj_delete(actions);
+        ui_text_fit_single_line(lv_obj_get_child(search,0),UI_FONT_BODY);
+        ui_text_fit_single_line(lv_obj_get_child(clear,0),UI_FONT_BODY);
+    }
     lv_obj_update_layout(s_root);
 
     rebuild_macro_list();

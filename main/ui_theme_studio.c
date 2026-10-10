@@ -27,7 +27,7 @@ static void color(lv_obj_t *obj, lv_color_t ink)
 }
 static void button(lv_obj_t *obj, lv_color_t bg, lv_color_t edge)
 {
-    surface(obj, bg, 14, 1, 6);
+    surface(obj, bg, 24, 1, 6);
     if (!obj) return;
     lv_obj_set_style_border_color(obj, edge, 0);
     lv_obj_set_style_bg_color(obj, UI_CONTROL, LV_STATE_PRESSED);
@@ -47,14 +47,14 @@ void ui_theme_studio_page_frame(lv_obj_t *obj)
 {
     if (!obj || obj == lv_screen_active() ||
         lv_obj_get_style_width(obj,0) != 854 || lv_obj_get_style_height(obj,0) != 528) return;
-    /* Existing auxiliary pages keep their control coordinates in a scroll
-     * viewport during the trial. The new Dashboard has its own composition. */
+    /* Independent fixed stage between the header and navigation shelf.
+     * Files and Settings opt into scrolling only inside their own viewports. */
     lv_obj_set_pos(obj, 24, 80);
     lv_obj_set_size(obj, 976, 424);
-    lv_obj_add_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(obj, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_pad_bottom(obj, 20, 0);
+    lv_obj_set_style_pad_bottom(obj, 0, 0);
 }
 void ui_theme_studio_apply_root_style(lv_obj_t *obj)
 {
@@ -64,7 +64,7 @@ void ui_theme_studio_apply_root_style(lv_obj_t *obj)
 void ui_theme_studio_apply_panel_style(lv_obj_t *o) { surface(o, UI_PANEL, 18, 1, UI_PAD_PANEL); }
 void ui_theme_studio_apply_card_style(lv_obj_t *o) { surface(o, UI_CARD, 18, 1, UI_PAD_CARD); }
 void ui_theme_studio_apply_banner_style(lv_obj_t *o) { surface(o, UI_PANEL, 18, 1, UI_PAD_CARD); }
-void ui_theme_studio_apply_preview_style(lv_obj_t *o) { surface(o, lv_color_hex(0x2A253C), 16, 0, 0); }
+void ui_theme_studio_apply_preview_style(lv_obj_t *o) { surface(o, UI_BG, 0, 0, 0); }
 void ui_theme_studio_apply_info_box_style(lv_obj_t *o) { surface(o, UI_PANEL_ALT, 18, 1, UI_PAD_CARD); }
 void ui_theme_studio_apply_popup_style(lv_obj_t *o) { surface(o, UI_BG_POPUP, 22, 1, 0); }
 void ui_theme_studio_apply_dialog_style(lv_obj_t *o) { surface(o, UI_BG_POPUP, 22, 1, UI_PAD_POPUP); }

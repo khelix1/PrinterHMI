@@ -2,6 +2,7 @@
 #include "ui_text.h"
 #include "ui_preview_lightbox.h"
 #include "ui_theme.h"
+#include "ui_text_fit.h"
 #include "ui_thumbnail.h"
 #include "ui_widgets.h"
 #include "esp_heap_caps.h"
@@ -408,8 +409,10 @@ lv_obj_t *ui_active_print_create_profile(
 
     if (ui_theme_is_studio()) {
         lv_obj_set_style_pad_all(panel,0,0);
+        lv_obj_set_style_bg_opa(panel,LV_OPA_TRANSP,0);
+        lv_obj_set_style_border_width(panel,0,0);
         lv_obj_set_width(ctx->footer,280);
-        lv_obj_set_pos(ctx->footer,304,186);
+        lv_obj_set_pos(ctx->footer,340,166);
         lv_obj_set_style_pad_all(ctx->footer,0,0);
         lv_obj_set_style_text_align(ctx->footer,LV_TEXT_ALIGN_LEFT,0);
         ui_apply_custom_label_style(ctx->footer,UI_FONT_BODY,UI_TEXT_DIM);
@@ -418,7 +421,7 @@ lv_obj_t *ui_active_print_create_profile(
         ui_apply_custom_label_style(ctx->remaining,UI_FONT_BODY,UI_TEXT);
         lv_label_set_long_mode(ctx->remaining,LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_size(ctx->remaining,280,LV_SIZE_CONTENT);
-        lv_obj_set_pos(ctx->remaining,304,212);
+        lv_obj_set_pos(ctx->remaining,340,192);
     }
 
     lv_obj_set_user_data(panel, ctx);
@@ -446,7 +449,8 @@ void ui_active_print_set(lv_obj_t *panel,
 
     if (ctx->remaining) {
         lv_label_set_text_fmt(ctx->footer,"Layer %s",layer ? layer : "--/--");
-        lv_label_set_text_fmt(ctx->remaining,"%s",remaining ? remaining : "REM --:--");
+        lv_label_set_text_fmt(ctx->remaining,"%s elapsed  •  %s",elapsed ? elapsed : "--:--",remaining ? remaining : "REM --:--");
+        ui_text_fit_single_line(ctx->remaining,UI_FONT_BODY);
         return;
     }
     char buf[128];

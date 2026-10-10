@@ -10,7 +10,7 @@ root = Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--converter', default='lv_font_conv')
 args = p.parse_args()
-variants = [(18,400),(20,600),(24,600),(28,700),(32,700),(48,700),(64,700)]
+variants = [(18,400),(20,600),(24,600),(28,700),(32,700),(48,700),(64,700),(96,700)]
 with tempfile.TemporaryDirectory(prefix='studio-fonts-') as folder:
     for weight in {w for _,w in variants}:
         face = instantiateVariableFont(TTFont(root/'main/assets/fonts/studio/Inter.ttf'),

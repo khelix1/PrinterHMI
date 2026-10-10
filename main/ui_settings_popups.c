@@ -29,6 +29,8 @@ static lv_obj_t *s_custom_remove_popup = NULL;
 static ui_settings_theme_changed_cb_t s_theme_changed_cb = NULL;
 static ui_settings_theme_changed_cb_t s_pending_theme_changed_cb = NULL;
 static bool s_theme_change_pending = false;
+static bool s_theme_open_pending = false;
+static void theme_popup_create_async(void *user_data);
 static int s_custom_selected_index = -1;
 static char s_custom_selected_id[CUSTOM_THEME_ID_MAX + 1];
 static char s_custom_remove_id[CUSTOM_THEME_ID_MAX + 1];
@@ -272,6 +274,10 @@ void ui_settings_popups_show_timezone(
 
 static void theme_popup_close(void)
 {
+    if (s_theme_open_pending) {
+        lv_async_call_cancel(theme_popup_create_async, NULL);
+        s_theme_open_pending = false;
+    }
     settings_popup_delete(&s_theme_popup);
     settings_popup_delete(&s_custom_theme_popup);
     settings_popup_delete(&s_custom_remove_popup);
@@ -597,8 +603,25 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
 
 void ui_settings_popups_show_theme(ui_settings_theme_changed_cb_t changed_cb)
 {
+    if (s_theme_change_pending) return;
     s_theme_changed_cb = changed_cb;
     if (s_theme_popup) { lv_obj_move_foreground(s_theme_popup); return; }
+    if (s_theme_open_pending) return;
+    /* Building the preview/flex tree inside pointer event dispatch stacks
+     * layout and label-measurement frames on top of the input event chain. */
+    s_theme_open_pending = true;
+    if (lv_async_call(theme_popup_create_async, NULL) != LV_RESULT_OK) {
+        s_theme_open_pending = false;
+        s_theme_changed_cb = NULL;
+        ESP_LOGE(TAG, "Could not schedule theme chooser");
+    }
+}
+
+static void theme_popup_create_async(void *user_data)
+{
+    (void)user_data;
+    s_theme_open_pending = false;
+    if (s_theme_popup || s_theme_change_pending) return;
     s_theme_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(920), settings_dialog_height(520), UI_POPUP_STANDARD);
     if (!s_theme_popup) { s_theme_changed_cb = NULL; return; }
     lv_obj_add_event_cb(s_theme_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);

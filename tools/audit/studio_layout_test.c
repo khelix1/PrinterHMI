@@ -78,8 +78,9 @@ int main(void){
   
   ui_dashboard_page_destroy(&page);ui_shell_destroy();assert(!find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP"));
  }
- /* Full auxiliary page gets a vertical viewport; its bottom control remains reachable. */
- ui_theme_set_active(UI_THEME_STUDIO_DARK);lv_obj_t*aux=lv_obj_create(lv_screen_active());lv_obj_set_size(aux,854,528);ui_apply_surface_role(aux,UI_SURFACE_PAGE_DEEP);lv_obj_t*b=lv_button_create(aux);lv_obj_set_pos(b,20,456);lv_obj_set_size(b,200,52);lv_obj_update_layout(aux);assert(lv_obj_get_height(aux)==424);lv_obj_scroll_to_y(aux,200,LV_ANIM_OFF);lv_obj_update_layout(aux);inside(b,aux);lv_obj_delete(aux);
+ /* Page roots are fixed; only explicit Files/Settings content may scroll. */
+ ui_theme_set_active(UI_THEME_STUDIO_DARK);lv_obj_t*aux=lv_obj_create(lv_screen_active());lv_obj_set_size(aux,854,528);ui_apply_surface_role(aux,UI_SURFACE_PAGE_DEEP);lv_obj_update_layout(aux);assert(lv_obj_get_height(aux)==424);assert(!lv_obj_has_flag(aux,LV_OBJ_FLAG_SCROLLABLE));lv_obj_delete(aux);
+
  ui_theme_set_active(UI_THEME_OPERATOR);ui_shell_create();ui_shell_create_nav();assert(find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP"));ui_shell_destroy();
- puts("PASS: native STUDIO Dashboard bounds/text across densities and large text, thermal unknowns, print action routes/states, eight navigation routes, auxiliary scrolling, E-stop recreation and repeated teardown");return 0;
+ puts("PASS: native STUDIO Dashboard bounds/text across densities and large text, thermal unknowns, print action routes/states, eight navigation routes, fixed page roots, E-stop recreation and repeated teardown");return 0;
 }

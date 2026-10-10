@@ -12,6 +12,7 @@
 #include "ui_button.h"
 #include "ui_status_banner.h"
 #include "ui_page_geometry.h"
+#include "ui_studio_layout.h"
 
 /*
  * Theme A Drybox control surface.
@@ -38,6 +39,7 @@ static lv_obj_t *s_program_status_label = NULL;
 
 static lv_obj_t *s_humidity_condition_label = NULL;
 static lv_obj_t *s_humidity_bar = NULL;
+static lv_obj_t *s_studio_humidity_arc = NULL;
 static lv_obj_t *s_heater_activity_bar = NULL;
 
 typedef enum {
@@ -753,6 +755,46 @@ static void build_program_panel(
         UI_BG_DANGER_POPUP);
 }
 
+static void studio_drybox_create(ui_drybox_page_t *page)
+{
+    lv_obj_t *p=page->panel;
+    lv_obj_t *banner=studio_plane(p,0,0,976,64);
+    studio_text(banner,"Drybox",0,0,640,&ui_studio_font_48,UI_TEXT);
+    page->banner_label=studio_text(banner,"READY",716,14,260,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    studio_text(p,"Air",0,82,260,UI_FONT_BODY,UI_TEXT_DIM);
+    page->air_label=studio_text(p,"-- C",0,114,260,&ui_studio_font_48,UI_TEXT);
+    studio_rule(p,0,194,260,1);
+    studio_text(p,"Center",0,222,260,UI_FONT_BODY,UI_TEXT_DIM);
+    page->center_label=studio_text(p,"-- C",0,254,260,&ui_studio_font_48,UI_TEXT);
+    s_studio_humidity_arc=lv_arc_create(p);
+    lv_obj_set_pos(s_studio_humidity_arc,316,44);lv_obj_set_size(s_studio_humidity_arc,320,320);
+    lv_arc_set_range(s_studio_humidity_arc,0,100);lv_arc_set_value(s_studio_humidity_arc,0);
+    lv_arc_set_bg_angles(s_studio_humidity_arc,135,405);lv_arc_set_rotation(s_studio_humidity_arc,0);
+    lv_obj_set_style_arc_width(s_studio_humidity_arc,16,LV_PART_MAIN);
+    lv_obj_set_style_arc_width(s_studio_humidity_arc,16,LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(s_studio_humidity_arc,UI_BORDER,LV_PART_MAIN);
+    lv_obj_set_style_arc_color(s_studio_humidity_arc,UI_OK_BRIGHT,LV_PART_INDICATOR);
+    lv_obj_remove_style(s_studio_humidity_arc,NULL,LV_PART_KNOB);
+    lv_obj_clear_flag(s_studio_humidity_arc,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+    page->humidity_label=studio_text(p,"--",354,118,244,&ui_studio_font_96,UI_TEXT);
+    lv_obj_set_style_text_align(page->humidity_label,LV_TEXT_ALIGN_CENTER,0);
+    studio_text(p,"% RH",438,232,112,UI_FONT_TITLE,UI_TEXT_DIM);
+    s_humidity_condition_label=studio_text(p,"NO DATA",396,282,180,UI_FONT_CAPTION,UI_OK_BRIGHT);
+    lv_obj_set_style_text_align(s_humidity_condition_label,LV_TEXT_ALIGN_CENTER,0);
+    studio_text(p,"Target temperature",716,76,260,UI_FONT_BODY,UI_TEXT_DIM);
+    page->target_label=studio_text(p,"-- C",716,110,260,&ui_studio_font_48,UI_TEXT);
+    studio_rule(p,716,196,260,1);
+    studio_text(p,"Heater",716,222,126,UI_FONT_BODY,UI_TEXT_DIM);
+    studio_text(p,"Fan",856,222,120,UI_FONT_BODY,UI_TEXT_DIM);
+    page->heater_label=studio_text(p,"--",716,260,126,UI_FONT_VALUE_SMALL,UI_TEXT);
+    page->fan_label=studio_text(p,"--%",856,260,120,UI_FONT_VALUE_SMALL,UI_TEXT);
+    s_program_status_label=studio_text(p,"NO PROGRAM",0,330,280,UI_FONT_BODY,UI_TEXT_DIM);
+    studio_rule(p,0,358,976,1);
+    const char *names[]={"PLA","PETG","Hold","Resume","Stop"};
+    const char *cmds[]={"DRY_PLA","DRY_PETG","DRY_HOLD","DRY_RESUME","DRY_STOP"};
+    for(int i=0;i<5;i++)s_program_buttons[i+1]=studio_action(p,names[i],i*196,372,192,52,drybox_button_event_cb,(void*)cmds[i]);
+}
+
 bool ui_drybox_page_create(
     ui_drybox_page_t *page,
     ui_drybox_page_action_cb_t action_cb,
@@ -786,6 +828,7 @@ bool ui_drybox_page_create(
         LV_OBJ_FLAG_SCROLLABLE);
 
     ui_apply_root_style(page->panel);
+    if (ui_theme_is_studio()) { studio_drybox_create(page); return true; }
 
     const ui_drybox_layout_profile_t *layout =
         &ui_page_layout_profile_current()->drybox;
@@ -842,6 +885,12 @@ void ui_drybox_page_refresh(
             : "DRYBOX";
 
     bool online = !drybox_banner_is_offline(banner);
+    if (s_studio_humidity_arc) {
+        int humidity=online ? (int)state->humidity : 0;
+        if(humidity<0)humidity=0;
+        if(humidity>100)humidity=100;
+        lv_arc_set_value(s_studio_humidity_arc,humidity);
+    }
 
     drybox_program_t active_program =
         online
@@ -880,12 +929,19 @@ void ui_drybox_page_refresh(
             banner_kind = UI_STATUS_INFO;
         }
 
-        if (banner_box) {
+        if (ui_theme_is_studio()) {
+            ui_value_set_text(page->banner_label,drybox_status_text(display_text));
+            ui_value_set_color(page->banner_label,ui_status_color(banner_kind),0);
+        } else if (banner_box) {
             ui_status_banner_set_simple_kind(
                 banner_box,
                 drybox_status_text(display_text),
                 "FILAMENT CONDITIONING",
                 banner_kind);
+            if(ui_theme_is_studio()) {
+                lv_obj_set_style_bg_opa(banner_box,LV_OPA_TRANSP,0);
+                lv_obj_set_style_border_width(banner_box,0,0);
+            }
         }
     }
 
@@ -976,6 +1032,9 @@ void ui_drybox_page_refresh(
         ui_value_set_text(
             page->humidity_label,
             buffer);
+        if(ui_theme_is_studio()) {
+            lv_obj_set_style_text_font(page->humidity_label, state->humidity>=100 ? &ui_studio_font_64 : &ui_studio_font_96,0);
+        }
         set_label_color(page->humidity_label, UI_ACCENT_CYAN);
     }
 
@@ -1112,6 +1171,7 @@ void ui_drybox_page_cleanup(
     s_program_status_label = NULL;
     s_humidity_condition_label = NULL;
     s_humidity_bar = NULL;
+    s_studio_humidity_arc = NULL;
     s_heater_activity_bar = NULL;
 
     for (int i = 0; i < DRYBOX_PROGRAM_COUNT; ++i) {

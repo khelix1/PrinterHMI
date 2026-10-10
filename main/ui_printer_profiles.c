@@ -82,7 +82,8 @@ static void editor_camera_close(void);
 
 static int32_t profiles_width(int32_t preferred)
 {
-    int32_t available = lv_display_get_horizontal_resolution(NULL) - 32;
+    int32_t available = lv_display_get_horizontal_resolution(NULL) - (ui_theme_is_studio() ? 48 : 32);
+    if(ui_theme_is_studio() && preferred >= 700)return available;
     return available < preferred ? available : preferred;
 }
 static int32_t profiles_height(int32_t preferred)

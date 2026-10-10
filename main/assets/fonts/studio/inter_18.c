@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Size: 18 px
  * Bpp: 4
- * Source: Inter; regenerate with tools/regenerate_studio_fonts.py
+ * Source: Inter, weight 400; regenerate with tools/regenerate_studio_fonts.py
  ******************************************************************************/
 
 #ifdef LV_LVGL_H_INCLUDE_SIMPLE

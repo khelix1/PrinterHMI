@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="aspect-preview-pipeline-") as directory
         end=main_source.index("\n}\n",start)+3
         functions.append(main_source[start:end])
     (tmp/"aspect_dashboard_functions.h").write_text("\n".join(functions))
-    sources=["ui_thumbnail.c","thumbnail_render.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","ui_font_fallback.c","ui_text.c"]
+    sources=["ui_thumbnail.c","thumbnail_render.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c"]
     executable=tmp/"aspect_preview_pipeline"
     subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
                     "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),

@@ -390,26 +390,26 @@ lv_obj_t *ui_status_banner_create(
         UI_RADIUS_BAR,
         LV_PART_INDICATOR);
 
-    ctx->studio_dashboard = ui_theme_is_studio() && w == 600 && h == 424;
+    ctx->studio_dashboard = ui_theme_is_studio() && w == 720 && h == 338;
     if (ctx->studio_dashboard) {
         lv_obj_clear_flag(banner,LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);
         lv_obj_set_style_border_width(banner,0,0);
         lv_obj_set_style_pad_all(banner,0,0);
         lv_obj_add_flag(ctx->accent,LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(ctx->state,0,0); lv_obj_set_width(ctx->state,600);
+        lv_obj_set_pos(ctx->state,0,0); lv_obj_set_width(ctx->state,316);
         lv_label_set_long_mode(ctx->state,LV_LABEL_LONG_MODE_DOTS);
-        ui_apply_custom_label_style(ctx->state,UI_FONT_HEADING,UI_TEXT);
-        lv_obj_set_pos(ctx->file,0,44); lv_obj_set_width(ctx->file,600);
+        ui_apply_custom_label_style(ctx->state,UI_FONT_BODY_LARGE,UI_TEXT);
+        lv_obj_set_pos(ctx->file,0,32); lv_obj_set_width(ctx->file,316);
         lv_obj_set_height(ctx->file,ui_font_with_fallback(UI_FONT_VALUE_SMALL)->line_height);
-        lv_obj_set_height(ctx->state,ui_font_with_fallback(UI_FONT_HEADING)->line_height);
+        lv_obj_set_height(ctx->state,ui_font_with_fallback(UI_FONT_BODY_LARGE)->line_height);
         lv_label_set_long_mode(ctx->file,LV_LABEL_LONG_MODE_DOTS);
-        lv_obj_set_pos(ctx->progress,304,136); lv_obj_set_width(ctx->progress,280);
+        lv_obj_set_pos(ctx->progress,340,54); lv_obj_set_width(ctx->progress,360);
         ui_apply_text_percent(ctx->progress);
         lv_obj_set_style_text_align(ctx->progress,LV_TEXT_ALIGN_LEFT,0);
-        lv_obj_set_pos(ctx->bar,304,228); lv_obj_set_size(ctx->bar,280,14);
+        lv_obj_set_pos(ctx->bar,340,176); lv_obj_set_size(ctx->bar,360,12);
         ui_apply_progress_bar_style(ctx->bar);
-        lv_obj_set_pos(ctx->eta,304,250); lv_obj_set_width(ctx->eta,280);
+        lv_obj_set_pos(ctx->eta,340,194); lv_obj_set_width(ctx->eta,360);
         lv_obj_set_style_text_align(ctx->eta,LV_TEXT_ALIGN_LEFT,0);
     }
 

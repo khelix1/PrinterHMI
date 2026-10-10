@@ -204,16 +204,16 @@ lv_obj_t *ui_command_bar_create(lv_obj_t *parent, int x, int y, int w, int h)
         UI_DANGER_BRIGHT);
 
     if (studio) {
-        lv_obj_set_pos(s_pause_button,0,0); lv_obj_set_size(s_pause_button,138,52);
-        lv_obj_set_pos(s_resume_button,0,0); lv_obj_set_size(s_resume_button,138,52);
-        lv_obj_set_pos(s_cancel_button,150,0); lv_obj_set_size(s_cancel_button,138,52);
-        lv_obj_set_pos(s_object_button,0,62); lv_obj_set_size(s_object_button,288,44);
+        lv_obj_set_pos(s_pause_button,0,0); lv_obj_set_size(s_pause_button,112,52);
+        lv_obj_set_pos(s_resume_button,0,0); lv_obj_set_size(s_resume_button,112,52);
+        lv_obj_set_pos(s_cancel_button,124,0); lv_obj_set_size(s_cancel_button,112,52);
+        lv_obj_set_pos(s_object_button,248,0); lv_obj_set_size(s_object_button,112,52);
         ui_apply_button_style(s_pause_button); ui_apply_button_style(s_resume_button);
         /* Rebuild the label content without changing the established action names. */
         lv_obj_clean(s_pause_button); ui_button_create_label(s_pause_button,LV_SYMBOL_PAUSE " Pause");
         lv_obj_clean(s_resume_button); ui_button_create_label(s_resume_button,LV_SYMBOL_PLAY " Resume");
         lv_obj_clean(s_cancel_button); ui_button_create_label(s_cancel_button,LV_SYMBOL_STOP " Stop");
-        lv_obj_clean(s_object_button); ui_button_create_label(s_object_button,"Cancel object");
+        lv_obj_clean(s_object_button); ui_button_create_label(s_object_button,"Object");
     }
     ui_command_bar_update(NULL, false);
 

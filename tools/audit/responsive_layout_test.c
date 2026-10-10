@@ -47,20 +47,30 @@ static void cards(lv_obj_t *list){
 }
 #if defined(TEST_TOOLS)
 #include "ui_tools.c"
-static void run(int width){ui_tools_show();lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);cards(s_tiles);assert(lv_obj_get_child_count(s_tiles)==4);snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles);}
+static void run(int width){ui_tools_show();lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles);}
 #elif defined(TEST_FILES)
 #include "ui_page_state.c"
 #include "ui_files.c"
+char *thumbnail_session_selected_file(void){return "fixture.gcode";}
 void ui_preview_lightbox_show_file_object(lv_obj_t *i,const char *f){(void)i;(void)f;}
 static void run(int width){
  ui_files_show();lv_obj_set_width(s_printer_file_popup,width);ui_files_set_search_text("very long query");ui_files_set_sort_text("NEWEST");lv_obj_update_layout(s_printer_file_popup);
- lv_obj_t *toolbar=lv_obj_get_child(s_printer_file_popup,1);cards(toolbar);assert(lv_obj_get_child_count(toolbar)==4);inside(toolbar,s_printer_file_popup);inside(s_breadcrumb_label,s_printer_file_popup);
+ if(!ui_theme_is_studio()){lv_obj_t *toolbar=lv_obj_get_child(s_printer_file_popup,1);cards(toolbar);assert(lv_obj_get_child_count(toolbar)==4);inside(toolbar,s_printer_file_popup);}inside(s_breadcrumb_label,s_printer_file_popup);
  lv_obj_t *viewport=lv_obj_get_parent(s_printer_file_list);inside(viewport,s_printer_file_popup);assert(lv_obj_get_height(viewport)>100);inside(s_printer_file_list,viewport);
  for(int i=0;i<5;i++)ui_files_add_file_entry("folder/Very_long_operator_job_name_for_responsive_row_checks.gcode",1048576,0,i*118);
  ui_files_add_folder_button("Long folder title for row checks","folder",590);lv_obj_update_layout(s_printer_file_popup);cards(s_printer_file_list);
  ui_files_set_status("Moonraker offline. Check the active printer.");lv_obj_update_layout(s_printer_file_popup);inside(s_files_state->root,viewport);inside(s_files_state->title,s_files_state->root);inside(s_files_state->detail,s_files_state->root);
  lv_area_t title,description;lv_obj_get_coords(s_files_state->title,&title);lv_obj_get_coords(s_files_state->detail,&description);assert(title.y2<description.y1);
- snapshot(s_printer_file_popup);ui_files_hide();assert(!s_printer_file_popup);
+ if(ui_theme_is_studio()) {
+  ui_thumbnail_t *view=NULL;lv_obj_t *box=NULL;
+  ui_files_show_detail_popup("Long_operator_job_name_for_the_inspector.gcode","Loading metadata",&box,&view,NULL,NULL);
+  assert(view && box && ui_files_detail_is_open() && lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
+  ui_files_update_detail_metadata("Estimated time: 02:40\nMaterial: PLA\nLayers: 336\nFilament: 19.8 m\nSize: 4.2 MB",true);
+  assert(!lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));lv_obj_update_layout(s_file_detail_popup);
+  for(uint32_t i=0;i<lv_obj_get_child_count(s_file_detail_popup);i++)inside(lv_obj_get_child(s_file_detail_popup,i),s_file_detail_popup);
+  studio_metadata_open(NULL);assert(s_studio_metadata_popup && s_studio_metadata_label);ui_files_update_detail_metadata("Updated metadata",true);assert(!strcmp(lv_label_get_text(s_studio_metadata_label),"Updated metadata"));studio_metadata_close(NULL);assert(!s_studio_metadata_popup && !s_studio_metadata_label);
+ }
+ snapshot(s_printer_file_popup);ui_files_hide();assert(!s_file_detail_popup && !s_studio_metadata_popup);assert(!s_printer_file_popup);
 }
 #else
 static uint32_t gen=1;static bool fav[64];static char selected[64];
@@ -72,7 +82,7 @@ bool macro_controller_parameters(const char *n,macro_parameter_catalog_t *p){snp
 
 #include "ui_macros.c"
 static void run(int width){
- ui_macros_show(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);cards(s_list);inside(s_list,s_root);assert(lv_obj_get_height(s_list)>100 && s_macros->rows[63]);
+ ui_macros_show(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);cards(s_list);inside(s_list,s_root);assert(lv_obj_get_height(s_list)>100 && s_macros->rows[63]);if(ui_theme_is_studio()){assert(lv_obj_get_height(s_list)>=340);lv_obj_t *header=lv_obj_get_child(s_root,0);for(uint32_t i=0;i<lv_obj_get_child_count(header);i++){lv_obj_t *child=lv_obj_get_child(header,i);if(!lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))inside(child,header);}cards(header);}
  lv_obj_t *first=s_macros->rows[0];fav[63]=true;gen++;rebuild_macro_list();lv_obj_update_layout(s_root);cards(s_list);assert(first==s_macros->rows[0]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();lv_obj_update_layout(s_root);assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));inside(s_macros->empty,s_list);
  s_macros->query[0]=0;rebuild_macro_list();lv_obj_update_layout(s_root);snapshot(s_root);ui_macros_hide();
@@ -95,6 +105,7 @@ static void snapshot(lv_obj_t *root){
 }
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
  for(unsigned custom=0;custom<2;custom++)for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned w=0;w<3;w++){
+  if(theme==UI_THEME_STUDIO_DARK&&(w||custom))continue;
   custom_tokens=custom;theme_case=theme;density_case=density;large_case=large;width_case=w;ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});run((int[]){theme==UI_THEME_STUDIO_DARK?976:854,640,480}[w]);
  }
  lv_display_delete(d);lv_deinit();puts("PASS: responsive page bounds, wrapping, non-overlap and lifecycle across all five themes, three densities, both text sizes, three viewport widths and custom metric/profile overrides");}

@@ -244,6 +244,13 @@ static void camera_set_viewport(bool fullscreen)
         lv_obj_set_pos(s_status, 470, ui_theme_is_studio() ? 324 : 430);
         lv_obj_set_width(s_status, 364);
         lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
+        if(ui_theme_is_studio()) {
+            lv_obj_set_style_pad_all(s_card,0,0);lv_obj_set_style_radius(s_card,0,0);lv_obj_set_style_border_width(s_card,0,0);
+            lv_obj_set_pos(s_status,16,16);lv_obj_set_width(s_status,560);
+            lv_obj_set_style_bg_color(s_status,UI_BG,0);lv_obj_set_style_bg_opa(s_status,LV_OPA_80,0);lv_obj_set_style_pad_all(s_status,6,0);
+            lv_obj_set_pos(s_configure_button,100,356);lv_obj_set_pos(s_view_button,308,356);
+            lv_obj_set_pos(s_camera_selector,448,356);lv_obj_set_pos(s_fullscreen_button,718,356);
+        }
         lv_obj_move_background(s_card);
     }
     camera_apply_view_transform();
@@ -550,7 +557,7 @@ void ui_camera_show(void)
     lv_obj_set_style_radius(s_image, 0, 0);
 
     /* The title is created after the viewport and therefore stays readable. */
-    ui_page_title_create(s_root, LV_SYMBOL_IMAGE " CAMERA", "Active printer live view");
+    if(!ui_theme_is_studio())ui_page_title_create(s_root, LV_SYMBOL_IMAGE " CAMERA", "Active printer live view");
 
     s_configure_button = ui_button_create(
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " CONFIGURE");

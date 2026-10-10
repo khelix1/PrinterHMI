@@ -13,6 +13,7 @@ LV_FONT_DECLARE(ui_studio_font_28);
 LV_FONT_DECLARE(ui_studio_font_32);
 LV_FONT_DECLARE(ui_studio_font_48);
 LV_FONT_DECLARE(ui_studio_font_64);
+LV_FONT_DECLARE(ui_studio_font_96);
 
 
 /* ============================================================
@@ -223,7 +224,7 @@ bool ui_theme_motion_enabled(void);
 #define UI_FONT_VALUE           (ui_theme_is_studio() ? (ui_theme_get_accessibility().large_text ? &ui_studio_font_32 : &ui_studio_font_32) : ui_theme_density_font(&lv_font_montserrat_26, &lv_font_montserrat_28, &lv_font_montserrat_30, &lv_font_montserrat_32))
 #define UI_FONT_HEADING         (ui_theme_is_studio() ? (ui_theme_get_accessibility().large_text ? &ui_studio_font_32 : &ui_studio_font_32) : ui_theme_density_font(&lv_font_montserrat_28, &lv_font_montserrat_30, &lv_font_montserrat_32, &lv_font_montserrat_32))
 #define UI_FONT_SPLASH_TITLE    (&lv_font_montserrat_32)
-#define UI_FONT_PERCENT         (ui_theme_is_studio() ? (ui_theme_get_accessibility().large_text ? &ui_studio_font_64 : &ui_studio_font_64) : (&lv_font_montserrat_48))
+#define UI_FONT_PERCENT         (ui_theme_is_studio() ? (ui_theme_get_accessibility().large_text ? &ui_studio_font_96 : &ui_studio_font_96) : (&lv_font_montserrat_48))
 
 /* ------------------------------------------------------------
  * Semantic status categories

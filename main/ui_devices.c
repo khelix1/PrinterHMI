@@ -196,6 +196,16 @@ void ui_devices_show(
         lv_obj_add_event_cb(endstops, endstops_cb, LV_EVENT_CLICKED, NULL);
     }
 
+    if(ui_theme_is_studio()) {
+        lv_obj_set_pos(banner,0,0);lv_obj_set_size(banner,976,48);
+        lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(banner,0,0);lv_obj_set_style_pad_all(banner,0,0);
+        lv_obj_t *title=lv_obj_get_child(banner,0);lv_obj_set_pos(title,0,0);lv_obj_set_width(title,420);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
+        lv_obj_add_flag(lv_obj_get_child(banner,1),LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(s_devices->banner_status,448,8);lv_obj_set_size(s_devices->banner_status,170,32);lv_label_set_long_mode(s_devices->banner_status,LV_LABEL_LONG_DOT);
+        if(telemetry){lv_obj_set_size(telemetry,160,44);lv_obj_set_pos(telemetry,636,0);}
+        if(endstops){lv_obj_set_size(endstops,164,44);lv_obj_set_pos(endstops,812,0);}
+    }
+
     ui_devices_catalog_view_create(
         s_devices->root,
         s_devices->banner_status);

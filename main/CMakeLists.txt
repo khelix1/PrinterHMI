@@ -20,6 +20,7 @@ idf_component_register(
         "assets/fonts/studio/inter_32.c"
         "assets/fonts/studio/inter_48.c"
         "assets/fonts/studio/inter_64.c"
+        "assets/fonts/studio/inter_96.c"
         "theme_manager.c"
         "custom_theme.c"
         "ui_theme_preview.c"

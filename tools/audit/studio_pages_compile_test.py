@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build real LVGL host checks for built-in/custom theme chooser and removal layouts in every theme. Supply --lvgl-dir if unmanaged."""
+"""Strict host compilation of the independently composed STUDIO pages."""
 from pathlib import Path
 import argparse
 import concurrent.futures
@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
             objects=list(pool.map(compile_source,(lvgl/"src").rglob("*.c")))
         library=tmp/"liblvgl.a"
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
-    (tmp/"esp_heap_caps.h").write_text("#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define MALLOC_CAP_INTERNAL 4\n#define heap_caps_calloc(n,size,caps) calloc(n,size)\n#define heap_caps_free(p) free(p)\n")
+    (tmp/"esp_heap_caps.h").write_text("#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define MALLOC_CAP_INTERNAL 4\n#define heap_caps_calloc(n,size,caps) calloc(n,size)\n#define heap_caps_free(p) free(p)\n#define heap_caps_malloc(size,caps) malloc(size)\n#define heap_caps_check_integrity(caps,print_errors) true\n")
     (tmp/"esp_err.h").write_text("#pragma once\ntypedef int esp_err_t;\n#define ESP_OK 0\n#define ESP_FAIL -1\n")
     (tmp/"esp_http_client.h").write_text("#pragma once\ntypedef void *esp_http_client_handle_t;\ntypedef struct { int event_id; } esp_http_client_event_t;\n")
     (tmp/"esp_log.h").write_text("#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n")
@@ -37,11 +37,13 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"freertos").mkdir()
     (tmp/"freertos/FreeRTOS.h").write_text("#pragma once\n#include <stdint.h>\n#define pdMS_TO_TICKS(ms) (ms)\n")
     (tmp/"freertos/task.h").write_text("#pragma once\nvoid vTaskDelay(uint32_t ticks);\n")
-    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c","ui_theme_preview.c"]
-    executable=tmp/"theme_dialog_layout"
-    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
-        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
-        str(root/"tools/audit/theme_dialog_layout_test.c"),
-        str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/s) for s in sources],
-        str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
-    subprocess.run([str(executable)],check=True)
+    (tmp/"host_compat.h").write_text("#include <stddef.h>\nsize_t strlcpy(char *,const char *,size_t);\n")
+    (tmp/"cJSON.h").write_text("#pragma once\ntypedef struct cJSON cJSON;\n")
+    (tmp/"bsp").mkdir()
+    (tmp/"bsp/display.h").write_text('#pragma once\n#include "esp_err.h"\nesp_err_t bsp_display_brightness_set(int value);\nesp_err_t bsp_display_backlight_off(void);\n')
+    (tmp/"nvs.h").write_text('#pragma once\n#include "esp_err.h"\n#include <stdint.h>\ntypedef unsigned nvs_handle_t;\n#define NVS_READWRITE 1\n#define NVS_READONLY 0\n#define ESP_ERR_NVS_NOT_FOUND -2\nesp_err_t nvs_open(const char *,int,nvs_handle_t *);\nesp_err_t nvs_set_u8(nvs_handle_t,const char *,uint8_t);\nesp_err_t nvs_get_u8(nvs_handle_t,const char *,uint8_t *);\nesp_err_t nvs_commit(nvs_handle_t);\nvoid nvs_close(nvs_handle_t);\n')
+    (tmp/"esp_app_desc.h").write_text('#pragma once\ntypedef struct { char version[32]; char idf_ver[32]; char date[16]; char time[16]; } esp_app_desc_t;\nconst esp_app_desc_t *esp_app_get_description(void);\n')
+    with (tmp/"esp_err.h").open("a") as f:f.write('const char *esp_err_to_name(esp_err_t);\n')
+    for source in ["ui_calibration.c","ui_calibration_layout.c","ui_devices.c","ui_devices_catalog_view.c","ui_bed_mesh.c","ui_printer_profiles.c","ui_macros.c","ui_settings.c","ui_printer_layout.c","ui_printer_actions.c","ui_printer_info_cards.c","ui_printer_live_status.c","ui_drybox_page.c","ui_settings_components.c","ui_console.c","ui_files.c"]:
+        subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-Wall","-Wextra","-Werror","-fsyntax-only","-include",str(tmp/"host_compat.h"),*flags,"-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),str(root/"main"/source)],check=True)
+        print("PASS:",source)

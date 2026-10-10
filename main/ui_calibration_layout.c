@@ -25,14 +25,16 @@ lv_obj_t *ui_calibration_layout_card(lv_obj_t *parent, const char *title,
                                      int x, int y,
                                      ui_calibration_card_refs_t *refs)
 {
-    lv_obj_t *card = ui_create_operator_card(parent, x, y, 390, 176);
+    int width=ui_theme_is_studio()?480:390;
+    if(ui_theme_is_studio()){x=x>20?496:0;y=y>126?234:44;}
+    lv_obj_t *card = ui_create_operator_card(parent, x, y, width, ui_theme_is_studio()?190:176);
     if (!card) return NULL;
     ui_create_operator_card_heading(card, title, 16, 14);
-    ui_create_operator_card_divider(card, 16, 45, 358);
+    ui_create_operator_card_divider(card, 16, 45, width-32);
     if (refs) {
         refs->summary = ui_calibration_layout_label(card,
             "Waiting for active-printer discovery.", UI_FONT_BODY,
-            UI_TEXT_DIM, 16, 58, 358);
+            UI_TEXT_DIM, 16, 58, width-32);
         refs->status = ui_calibration_layout_label(card, "AWAITING DISCOVERY",
             UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 16, 142, 190);
     }

@@ -3,6 +3,10 @@
 
 #include "printer_controller.h"
 #include "ui_theme.h"
+#include "ui_studio_layout.h"
+#include "ui_printer_motion.h"
+#include "ui_popup.h"
+#include <string.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -335,6 +339,7 @@ static void refresh_filament_label(
         }
     }
 
+    if(ui_theme_is_studio()) {char *value=strchr(text,'\n');if(value)memmove(text,value+1,strlen(value+1)+1);}
     lv_label_set_text(label, text);
 }
 
@@ -389,6 +394,105 @@ static void refresh_factor_slider(
 }
 
 
+static lv_obj_t *s_studio_position;
+static lv_obj_t *s_studio_tuning_popup;
+static lv_obj_t *s_studio_jog[7];
+static lv_obj_t *s_studio_steps[3];
+static double s_studio_step=10.0;
+static bool studio_motion_ready(const moonraker_state_t *state)
+{
+    return state->moonraker_ok && state->live_data_ok &&
+        strcmp(state->printer_state,"printing") && strcmp(state->printer_state,"paused") &&
+        strcmp(state->printer_state,"PRINTING") && strcmp(state->printer_state,"PAUSED");
+}
+static void studio_step_cb(lv_event_t *e)
+{
+    s_studio_step=(double)(intptr_t)lv_event_get_user_data(e);
+    const int steps[]={1,10,50};
+    for(int i=0;i<3;i++)lv_obj_set_style_bg_opa(s_studio_steps[i],s_studio_step==steps[i]?LV_OPA_COVER:LV_OPA_TRANSP,0);
+}
+static void studio_jog_cb(lv_event_t *e)
+{
+    const char *axis=lv_event_get_user_data(e);
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    if(!studio_motion_ready(&state)||!s_send_gcode_cb)return;
+    if(strcmp(axis,"HOME") && !strchr(state.homed_axes,axis[0]+('a'-'A')))return;
+    char command[64];
+    if(ui_printer_motion_format_jog_command(axis,axis[0]=='Z'?0.1:s_studio_step,command,sizeof(command)))s_send_gcode_cb(command);
+}
+static void studio_tuning_deleted(lv_event_t *e)
+{
+    (void)e;s_studio_tuning_popup=NULL;
+    s_speed_factor_slider=s_flow_factor_slider=s_speed_factor_value=s_flow_factor_value=NULL;
+}
+static void studio_tuning_close(lv_event_t *e)
+{
+    (void)e;if(s_studio_tuning_popup)lv_obj_delete(s_studio_tuning_popup);
+}
+static void studio_tuning_open(lv_event_t *e)
+{
+    (void)e;if(s_studio_tuning_popup)return;
+    s_studio_tuning_popup=ui_popup_create(lv_layer_top(),680,280,UI_POPUP_STANDARD);
+    if(!s_studio_tuning_popup)return;
+    lv_obj_add_event_cb(s_studio_tuning_popup,studio_tuning_deleted,LV_EVENT_DELETE,NULL);
+    studio_text(s_studio_tuning_popup,"Print tuning",24,20,500,UI_FONT_TITLE,UI_TEXT);
+    studio_text(s_studio_tuning_popup,"Speed",24,80,280,UI_FONT_BODY,UI_TEXT_DIM);
+    studio_text(s_studio_tuning_popup,"Flow",356,80,280,UI_FONT_BODY,UI_TEXT_DIM);
+    s_speed_factor_value=studio_text(s_studio_tuning_popup,"--%",24,110,280,UI_FONT_VALUE_SMALL,UI_TEXT);
+    s_flow_factor_value=studio_text(s_studio_tuning_popup,"--%",356,110,280,UI_FONT_VALUE_SMALL,UI_TEXT);
+    s_speed_factor_slider=create_tuning_slider(s_studio_tuning_popup,24,164,UI_ACCENT,PRINTER_TUNING_SPEED);
+    s_flow_factor_slider=create_tuning_slider(s_studio_tuning_popup,356,164,UI_OK_BRIGHT,PRINTER_TUNING_FLOW);
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    refresh_factor_slider(s_speed_factor_slider,s_speed_factor_value,state.speed_factor,&s_pending_speed_factor);
+    refresh_factor_slider(s_flow_factor_slider,s_flow_factor_value,state.flow_factor,&s_pending_flow_factor);
+    studio_action(s_studio_tuning_popup,"Close",496,214,160,48,studio_tuning_close,NULL);
+}
+static void studio_motion_deleted(lv_event_t *e)
+{
+    (void)e;studio_tuning_close(NULL);s_studio_position=NULL;
+    memset(s_studio_jog,0,sizeof(s_studio_jog));memset(s_studio_steps,0,sizeof(s_studio_steps));
+    s_speed_factor_slider=s_flow_factor_slider=s_speed_factor_value=s_flow_factor_value=NULL;
+}
+static void studio_motion_refresh(void)
+{
+    if(!s_studio_position)return;
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    char text[128];
+    if(state.toolhead_position_valid)snprintf(text,sizeof(text),"X %.1f    Y %.1f    Z %.2f",state.toolhead_x,state.toolhead_y,state.toolhead_z);
+    else snprintf(text,sizeof(text),"X --    Y --    Z --");
+    lv_label_set_text(s_studio_position,text);
+    const char *axes[]={"Y","X","HOME","X","Y","Z","Z"};
+    for(int i=0;i<7;i++) {
+        bool ready=studio_motion_ready(&state) && (!strcmp(axes[i],"HOME") || strchr(state.homed_axes,axes[i][0]+('a'-'A')));
+        if(ready)lv_obj_remove_state(s_studio_jog[i],LV_STATE_DISABLED);else lv_obj_add_state(s_studio_jog[i],LV_STATE_DISABLED);
+    }
+}
+static void studio_motion_create(lv_obj_t *card,lv_obj_t **speed,lv_obj_t **flow,lv_obj_t **layer,lv_obj_t **filament,lv_event_cb_t filament_cb)
+{
+    s_studio_position=studio_text(card,"X --    Y --    Z --",0,0,620,UI_FONT_TITLE,UI_TEXT);
+    const char *labels[]={LV_SYMBOL_UP,LV_SYMBOL_LEFT,"Home",LV_SYMBOL_RIGHT,LV_SYMBOL_DOWN,"Z +","Z -"};
+    const char *axes[]={"Y+","X-","HOME","X+","Y-","Z+","Z-"};
+    const int xs[]={206,88,206,324,206,514,514};
+    const int ys[]={54,128,128,128,202,54,202};
+    for(int i=0;i<7;i++)s_studio_jog[i]=studio_action(card,labels[i],xs[i],ys[i],i>4?96:106,64,studio_jog_cb,(void*)axes[i]);
+    studio_text(card,"Z step 0.10 mm",486,144,134,UI_FONT_CAPTION,UI_TEXT_DIM);
+    const int steps[]={1,10,50};const char *names[]={"1 mm","10 mm","50 mm"};
+    for(int i=0;i<3;i++) {
+        s_studio_steps[i]=studio_action(card,names[i],88+i*118,280,106,44,studio_step_cb,(void*)(intptr_t)steps[i]);
+        lv_obj_set_style_bg_color(s_studio_steps[i],UI_CONTROL,0);
+        lv_obj_set_style_bg_opa(s_studio_steps[i],s_studio_step==steps[i]?LV_OPA_COVER:LV_OPA_TRANSP,0);
+    }
+    studio_action(card,"Tune",0,280,76,44,studio_tuning_open,NULL);
+    studio_text(card,"Filament",474,308,146,UI_FONT_CAPTION,UI_TEXT_DIM);
+    *speed=studio_text(card,"-- mm/s",0,332,130,UI_FONT_CAPTION,UI_TEXT_DIM);
+    *flow=studio_text(card,"-- mm3/s",144,332,130,UI_FONT_CAPTION,UI_TEXT_DIM);
+    *layer=studio_text(card,"Layer --",288,332,172,UI_FONT_CAPTION,UI_TEXT_DIM);
+    *filament=studio_text(card,"Filament --",474,332,146,UI_FONT_CAPTION,UI_TEXT_DIM);
+    if(filament_cb){lv_obj_add_flag(*filament,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(*filament,filament_cb,LV_EVENT_CLICKED,NULL);}
+    lv_obj_add_event_cb(card,studio_motion_deleted,LV_EVENT_DELETE,NULL);
+    studio_motion_refresh();
+}
+
 void ui_printer_live_status_create(
     lv_obj_t *parent,
     lv_obj_t **active_file_label,
@@ -411,6 +515,12 @@ void ui_printer_live_status_create(
      * factor matches the requested value.
      */
     s_send_gcode_cb = send_gcode_cb;
+    if(ui_theme_is_studio()) {
+        if(active_file_label)*active_file_label=NULL;
+        studio_motion_create(parent,speed_label,flow_label,layer_label,filament_label,filament_event_cb);
+        return;
+    }
+
 
     /*
      * parent is the 800x220 Active Print panel created by
@@ -733,10 +843,14 @@ void ui_printer_live_status_refresh(
      * The Active Print card remains visible and contains thumbnail,
      * layer, live speed, live flow, filament, and tuning controls.
      */
+    studio_motion_refresh();
     (void)active_file_box;
     (void)active_file_label;
     (void)printer_state;
     (void)printer_file;
+    (void)printer_meta_object_height;
+    (void)printer_meta_layer_height;
+    (void)printer_progress;
 
     if (printer_panel && speed_label) {
         char text[48];
@@ -744,7 +858,7 @@ void ui_printer_live_status_refresh(
         snprintf(
             text,
             sizeof(text),
-            "SPEED\n%.0f mm/s",
+            ui_theme_is_studio()?"%.0f mm/s":"SPEED\n%.0f mm/s",
             printer_live_velocity);
 
         lv_label_set_text(
@@ -758,7 +872,7 @@ void ui_printer_live_status_refresh(
         snprintf(
             text,
             sizeof(text),
-            "FLOW\n%.1f mm3/s",
+            ui_theme_is_studio()?"%.1f mm3/s":"FLOW\n%.1f mm3/s",
             printer_live_flow);
 
         lv_label_set_text(
@@ -780,14 +894,14 @@ void ui_printer_live_status_refresh(
             snprintf(
                 text,
                 sizeof(text),
-                "LAYER\n%d / %d",
+                ui_theme_is_studio()?"%d / %d":"LAYER\n%d / %d",
                 current,
                 total);
         } else {
             snprintf(
                 text,
                 sizeof(text),
-                "LAYER\n-- / --");
+                ui_theme_is_studio()?"-- / --":"LAYER\n-- / --");
         }
 
         lv_label_set_text(

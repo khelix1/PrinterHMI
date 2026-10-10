@@ -4,8 +4,8 @@
 #include <stdbool.h>
 #include "ui_theme.h"
 
-#define UI_SETTINGS_ROW_HEIGHT ui_theme_density_metric(88, 96, 104)
-#define UI_SETTINGS_ACTION_HEIGHT ui_theme_density_metric(88, 96, 104)
+#define UI_SETTINGS_ROW_HEIGHT (ui_theme_is_studio() ? 68 : ui_theme_density_metric(88, 96, 104))
+#define UI_SETTINGS_ACTION_HEIGHT (ui_theme_is_studio() ? 68 : ui_theme_density_metric(88, 96, 104))
 
 lv_obj_t *ui_settings_section_create(
     lv_obj_t *parent,

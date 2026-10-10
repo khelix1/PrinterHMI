@@ -179,17 +179,16 @@ void ui_shell_create(void)
     }
 
     if (ui_theme_is_studio()) {
-        lv_obj_set_size(s_shell_printer_button,300,52);
-        lv_obj_set_pos(s_shell_printer_button,338,10);
+        lv_obj_set_size(s_shell_printer_button,360,44);
+        lv_obj_set_pos(s_shell_printer_button,202,14);
+        lv_obj_set_style_bg_opa(s_shell_printer_button,LV_OPA_TRANSP,0);
+        lv_obj_set_style_border_width(s_shell_printer_button,0,0);
         lv_label_set_text(s_shell_title_label,"Select printer " LV_SYMBOL_DOWN);
         lv_obj_t *brand=lv_label_create(shell_top_bar);
         lv_label_set_text(brand,"PrinterHMI");
-        ui_apply_custom_label_style(brand,&ui_studio_font_28,UI_TEXT);
+        ui_apply_custom_label_style(brand,&ui_studio_font_24,UI_TEXT);
         lv_obj_set_pos(brand,24,22);
-        lv_obj_t *edition=lv_label_create(shell_top_bar);
-        lv_label_set_text(edition,"STUDIO");
-        ui_apply_custom_label_style(edition,&lv_font_montserrat_14,UI_TEXT_DIM);
-        lv_obj_set_pos(edition,240,30);
+
     }
     ui_global_estop_create(shell_top_bar);
 
@@ -387,6 +386,8 @@ void ui_shell_create_nav(void)
     if (ui_theme_is_studio()) {
         lv_obj_set_pos(shell_nav_rail,24,516);
         lv_obj_set_size(shell_nav_rail,976,68);
+        lv_obj_set_style_bg_opa(shell_nav_rail,LV_OPA_TRANSP,0);
+        lv_obj_set_style_border_width(shell_nav_rail,0,0);
         lv_obj_set_flex_flow(shell_nav_rail,LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(shell_nav_rail,LV_FLEX_ALIGN_SPACE_EVENLY,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_column(shell_nav_rail,2,0);
@@ -466,7 +467,7 @@ void ui_shell_create_nav(void)
             lv_obj_set_width(label,110);
             lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
             ui_text_fit_single_line(label,ui_theme_get_accessibility().large_text ?
-                &ui_studio_font_18 : &ui_studio_font_18);
+                &lv_font_montserrat_14 : &lv_font_montserrat_14);
             lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,-2);
         } else lv_obj_align(button,LV_ALIGN_TOP_LEFT,8,8+i*58);
 

@@ -14,8 +14,8 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "ui_page_geometry.h"
-#define CW 620
-#define CH 340
+#define CW (ui_theme_is_studio()?776:620)
+#define CH (ui_theme_is_studio()?250:340)
 #define VALUE_CAP ((size_t)BED_MESH_MAX_ROWS*BED_MESH_MAX_COLS)
 typedef struct {
     lv_obj_t *popup;
@@ -347,15 +347,15 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         8);
     ui_popup_add_header_divider(
         s.popup,
-        52);
+        ui_theme_is_studio()?44:52);
 
     s.stats =
         ui_popup_add_caption(
             s.popup,
             ui_text(""),
-            20,
-            58,
-            814);
+            ui_theme_is_studio()?0:20,
+            ui_theme_is_studio()?50:58,
+            ui_theme_is_studio()?976:814);
 
     s.buf =
         alloc_psram_first(
@@ -372,8 +372,8 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
             LV_COLOR_FORMAT_RGB565);
         lv_obj_set_pos(
             s.canvas,
-            20,
-            98);
+            ui_theme_is_studio()?0:20,
+            ui_theme_is_studio()?78:98);
         lv_obj_add_flag(
             s.canvas,
             LV_OBJ_FLAG_CLICKABLE);
@@ -393,20 +393,20 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
             60,
             LV_ALIGN_TOP_RIGHT,
             -20,
-            98,
+            ui_theme_is_studio()?78:98,
             surface_grid_cb,
             NULL,
             &s.surface_grid_label);
     update_surface_grid_button();
 
-    ui_popup_add_standard_footer_divider(
-        s.popup);
+    if(ui_theme_is_studio())ui_popup_add_footer_divider(s.popup,360);
+    else ui_popup_add_standard_footer_divider(s.popup);
     ui_popup_add_caption(
         s.popup,
         ui_text("DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM"),
-        20,
-        442,
-        814);
+        ui_theme_is_studio()?0:20,
+        ui_theme_is_studio()?336:442,
+        ui_theme_is_studio()?976:814);
 
     ui_popup_add_action_aligned(
         s.popup,

@@ -3,6 +3,10 @@
 
 #include "printer_controller.h"
 #include "ui_theme.h"
+#include "ui_studio_layout.h"
+#include "ui_printer_motion.h"
+#include "ui_popup.h"
+#include <string.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -19,6 +23,16 @@ static lv_obj_t *s_speed_factor_slider = NULL;
 static lv_obj_t *s_flow_factor_slider = NULL;
 static lv_obj_t *s_speed_factor_value = NULL;
 static lv_obj_t *s_flow_factor_value = NULL;
+
+/* Tuning widget references belong to one Printer page, across all themes. */
+static lv_obj_t *s_tuning_owner;
+static void tuning_owner_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) != s_tuning_owner) return;
+    s_speed_factor_slider = s_flow_factor_slider = NULL;
+    s_speed_factor_value = s_flow_factor_value = NULL;
+    s_tuning_owner = NULL;
+}
 
 static int s_pending_speed_factor = -1;
 static int s_pending_flow_factor = -1;
@@ -335,6 +349,7 @@ static void refresh_filament_label(
         }
     }
 
+    if(ui_theme_is_studio()) {char *value=strchr(text,'\n');if(value)memmove(text,value+1,strlen(value+1)+1);}
     lv_label_set_text(label, text);
 }
 
@@ -389,6 +404,69 @@ static void refresh_factor_slider(
 }
 
 
+static lv_obj_t *s_studio_position;
+static lv_obj_t *s_studio_tuning_popup;
+static void studio_tuning_deleted(lv_event_t *e)
+{
+    (void)e;s_studio_tuning_popup=NULL;
+    s_speed_factor_slider=s_flow_factor_slider=s_speed_factor_value=s_flow_factor_value=NULL;
+}
+static void studio_tuning_close(lv_event_t *e)
+{
+    (void)e;if(s_studio_tuning_popup)lv_obj_delete(s_studio_tuning_popup);
+}
+static void studio_tuning_open(lv_event_t *e)
+{
+    (void)e;if(s_studio_tuning_popup)return;
+    s_studio_tuning_popup=ui_popup_create(lv_layer_top(),680,280,UI_POPUP_STANDARD);
+    if(!s_studio_tuning_popup)return;
+    lv_obj_add_event_cb(s_studio_tuning_popup,studio_tuning_deleted,LV_EVENT_DELETE,NULL);
+    studio_text(s_studio_tuning_popup,"Print tuning",24,20,500,UI_FONT_TITLE,UI_TEXT);
+    studio_text(s_studio_tuning_popup,"Speed",24,80,280,UI_FONT_BODY,UI_TEXT_DIM);
+    studio_text(s_studio_tuning_popup,"Flow",356,80,280,UI_FONT_BODY,UI_TEXT_DIM);
+    s_speed_factor_value=studio_text(s_studio_tuning_popup,"--%",24,110,280,UI_FONT_VALUE_SMALL,UI_TEXT);
+    s_flow_factor_value=studio_text(s_studio_tuning_popup,"--%",356,110,280,UI_FONT_VALUE_SMALL,UI_TEXT);
+    s_speed_factor_slider=create_tuning_slider(s_studio_tuning_popup,24,164,UI_ACCENT,PRINTER_TUNING_SPEED);
+    s_flow_factor_slider=create_tuning_slider(s_studio_tuning_popup,356,164,UI_OK_BRIGHT,PRINTER_TUNING_FLOW);
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    refresh_factor_slider(s_speed_factor_slider,s_speed_factor_value,state.speed_factor,&s_pending_speed_factor);
+    refresh_factor_slider(s_flow_factor_slider,s_flow_factor_value,state.flow_factor,&s_pending_flow_factor);
+    studio_action(s_studio_tuning_popup,"Close",496,214,160,48,studio_tuning_close,NULL);
+}
+static void studio_motion_deleted(lv_event_t *e)
+{
+    (void)e;studio_tuning_close(NULL);s_studio_position=NULL;
+    s_speed_factor_slider=s_flow_factor_slider=s_speed_factor_value=s_flow_factor_value=NULL;
+}
+static void studio_motion_refresh(void)
+{
+    if(!s_studio_position)return;
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    char text[128];
+    if(state.toolhead_position_valid)snprintf(text,sizeof(text),"X %.1f    Y %.1f    Z %.2f",state.toolhead_x,state.toolhead_y,state.toolhead_z);
+    else snprintf(text,sizeof(text),"X --    Y --    Z --");
+    lv_label_set_text(s_studio_position,text);
+
+}
+static void studio_motion_create(lv_obj_t *card,lv_obj_t **speed,lv_obj_t **flow,lv_obj_t **layer,lv_obj_t **filament,lv_event_cb_t filament_cb)
+{
+    /* The image well occupies y=0..239; telemetry stays below it. */
+    s_studio_position=studio_text(card,"X --    Y --    Z --",0,252,508,UI_FONT_BODY,UI_TEXT);
+    studio_action(card,"Tune",524,246,96,44,studio_tuning_open,NULL);
+    studio_rule(card,0,302,620,1);
+    studio_text(card,"Speed",0,310,130,UI_FONT_CAPTION,UI_TEXT_DIM);
+    studio_text(card,"Flow",144,310,130,UI_FONT_CAPTION,UI_TEXT_DIM);
+    studio_text(card,"Layer",288,310,172,UI_FONT_CAPTION,UI_TEXT_DIM);
+    studio_text(card,"Filament",474,310,146,UI_FONT_CAPTION,UI_TEXT_DIM);
+    *speed=studio_text(card,"-- mm/s",0,332,130,UI_FONT_CAPTION,UI_TEXT);
+    *flow=studio_text(card,"-- mm3/s",144,332,130,UI_FONT_CAPTION,UI_TEXT);
+    *layer=studio_text(card,"-- / --",288,332,172,UI_FONT_CAPTION,UI_TEXT);
+    *filament=studio_text(card,"--",474,332,146,UI_FONT_CAPTION,UI_TEXT);
+    if(filament_cb){lv_obj_add_flag(*filament,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(*filament,filament_cb,LV_EVENT_CLICKED,NULL);}
+    lv_obj_add_event_cb(card,studio_motion_deleted,LV_EVENT_DELETE,NULL);
+    studio_motion_refresh();
+}
+
 void ui_printer_live_status_create(
     lv_obj_t *parent,
     lv_obj_t **active_file_label,
@@ -411,6 +489,16 @@ void ui_printer_live_status_create(
      * factor matches the requested value.
      */
     s_send_gcode_cb = send_gcode_cb;
+    s_speed_factor_slider = s_flow_factor_slider = NULL;
+    s_speed_factor_value = s_flow_factor_value = NULL;
+    s_tuning_owner = parent;
+    lv_obj_add_event_cb(parent, tuning_owner_deleted, LV_EVENT_DELETE, NULL);
+    if(ui_theme_is_studio()) {
+        if(active_file_label)*active_file_label=NULL;
+        studio_motion_create(parent,speed_label,flow_label,layer_label,filament_label,filament_event_cb);
+        return;
+    }
+
 
     /*
      * parent is the 800x220 Active Print panel created by
@@ -733,10 +821,14 @@ void ui_printer_live_status_refresh(
      * The Active Print card remains visible and contains thumbnail,
      * layer, live speed, live flow, filament, and tuning controls.
      */
+    studio_motion_refresh();
     (void)active_file_box;
     (void)active_file_label;
     (void)printer_state;
     (void)printer_file;
+    (void)printer_meta_object_height;
+    (void)printer_meta_layer_height;
+    (void)printer_progress;
 
     if (printer_panel && speed_label) {
         char text[48];
@@ -744,7 +836,7 @@ void ui_printer_live_status_refresh(
         snprintf(
             text,
             sizeof(text),
-            "SPEED\n%.0f mm/s",
+            ui_theme_is_studio()?"%.0f mm/s":"SPEED\n%.0f mm/s",
             printer_live_velocity);
 
         lv_label_set_text(
@@ -758,7 +850,7 @@ void ui_printer_live_status_refresh(
         snprintf(
             text,
             sizeof(text),
-            "FLOW\n%.1f mm3/s",
+            ui_theme_is_studio()?"%.1f mm3/s":"FLOW\n%.1f mm3/s",
             printer_live_flow);
 
         lv_label_set_text(
@@ -780,14 +872,14 @@ void ui_printer_live_status_refresh(
             snprintf(
                 text,
                 sizeof(text),
-                "LAYER\n%d / %d",
+                ui_theme_is_studio()?"%d / %d":"LAYER\n%d / %d",
                 current,
                 total);
         } else {
             snprintf(
                 text,
                 sizeof(text),
-                "LAYER\n-- / --");
+                ui_theme_is_studio()?"-- / --":"LAYER\n-- / --");
         }
 
         lv_label_set_text(

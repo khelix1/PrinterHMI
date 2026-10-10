@@ -9,6 +9,7 @@
 #include "ui_button.h"
 #include "ui_shell.h"
 #include "ui_responsive_layout.h"
+#include "ui_studio_layout.h"
 
 static lv_obj_t *s_root;
 static lv_obj_t *s_tiles;
@@ -37,6 +38,14 @@ static void add_tile(const char *icon, lv_color_t icon_color,
     lv_obj_set_style_pad_row(button, UI_GAP_ROW, 0);
     lv_obj_set_grid_dsc_array(button, columns, rows);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+    if (ui_theme_is_studio()) {
+        lv_obj_set_size(button, 480, 168);
+        lv_obj_set_pos(button, (index % 2) * 496, (index / 2) * 184);
+        lv_obj_set_style_min_height(button, 168, 0);
+        lv_obj_set_style_pad_all(button, 16, 0);
+        lv_obj_set_style_pad_column(button, 16, 0);
+        lv_obj_set_style_pad_row(button, 8, 0);
+    }
 
     lv_obj_t *icon_label = lv_label_create(button);
     lv_label_set_text(icon_label, icon);
@@ -81,6 +90,20 @@ static void tools_size_changed(lv_event_t *event)
                     lv_obj_get_content_height(s_root) - 108);
 }
 
+static void studio_tools_create(void)
+{
+    studio_text(s_root,"Tools",0,0,976,&ui_studio_font_48,UI_TEXT);
+    s_tiles=studio_plane(s_root,0,72,976,352);
+    add_tile(LV_SYMBOL_REFRESH, UI_OK_BRIGHT,
+             "CALIBRATION", "Tune and validate your printer.", 0);
+    add_tile(LV_SYMBOL_IMAGE, UI_ACCENT_BRIGHT,
+             "BED MESH", "Probe and visualize the bed surface.", 1);
+    add_tile(LV_SYMBOL_CHARGE, UI_WARN,
+             "DEVICES", "Inspect devices and live readings.", 2);
+    add_tile(LV_SYMBOL_PLAY, UI_OK_BRIGHT,
+             "MACROS", "Run available printer macros.", 3);
+}
+
 void ui_tools_show(void)
 {
     if (s_root) {
@@ -94,6 +117,7 @@ void ui_tools_show(void)
     lv_obj_set_pos(s_root, UI_PAGE_ROOT_X, UI_PAGE_ROOT_Y);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
+    if(ui_theme_is_studio()){studio_tools_create();return;}
     ui_page_title_create(s_root, LV_SYMBOL_SETTINGS " TOOLS",
                          "Calibration and operator utilities");
 

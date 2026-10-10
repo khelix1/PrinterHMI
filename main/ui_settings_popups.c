@@ -29,6 +29,8 @@ static lv_obj_t *s_custom_remove_popup = NULL;
 static ui_settings_theme_changed_cb_t s_theme_changed_cb = NULL;
 static ui_settings_theme_changed_cb_t s_pending_theme_changed_cb = NULL;
 static bool s_theme_change_pending = false;
+static bool s_theme_open_pending = false;
+static void theme_popup_create_async(void *user_data);
 static int s_custom_selected_index = -1;
 static char s_custom_selected_id[CUSTOM_THEME_ID_MAX + 1];
 static char s_custom_remove_id[CUSTOM_THEME_ID_MAX + 1];
@@ -272,6 +274,10 @@ void ui_settings_popups_show_timezone(
 
 static void theme_popup_close(void)
 {
+    if (s_theme_open_pending) {
+        lv_async_call_cancel(theme_popup_create_async, NULL);
+        s_theme_open_pending = false;
+    }
     settings_popup_delete(&s_theme_popup);
     settings_popup_delete(&s_custom_theme_popup);
     settings_popup_delete(&s_custom_remove_popup);
@@ -341,7 +347,7 @@ static void operator_shell_select_cb(lv_event_t *event)
     }
 
     lv_event_code_t code = lv_event_get_code(event);
-    if (code != LV_EVENT_CLICKED && code != LV_EVENT_PRESSED) {
+    if (code != LV_EVENT_CLICKED) {
         return;
     }
 
@@ -597,12 +603,34 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
 
 void ui_settings_popups_show_theme(ui_settings_theme_changed_cb_t changed_cb)
 {
+    if (s_theme_change_pending) return;
     s_theme_changed_cb = changed_cb;
     if (s_theme_popup) { lv_obj_move_foreground(s_theme_popup); return; }
-    s_theme_popup = ui_popup_create(lv_layer_top(), settings_dialog_width(920), settings_dialog_height(520), UI_POPUP_STANDARD);
+    if (s_theme_open_pending) return;
+    /* Building the preview/flex tree inside pointer event dispatch stacks
+     * layout and label-measurement frames on top of the input event chain. */
+    s_theme_open_pending = true;
+    if (lv_async_call(theme_popup_create_async, NULL) != LV_RESULT_OK) {
+        s_theme_open_pending = false;
+        s_theme_changed_cb = NULL;
+        ESP_LOGE(TAG, "Could not schedule theme chooser");
+    }
+}
+
+static void theme_popup_create_async(void *user_data)
+{
+    (void)user_data;
+    s_theme_open_pending = false;
+    if (s_theme_popup || s_theme_change_pending) return;
+    s_theme_popup = ui_popup_create_on_screen(settings_dialog_width(920), settings_dialog_height(520), UI_POPUP_STANDARD);
     if (!s_theme_popup) { s_theme_changed_cb = NULL; return; }
+    /* Keep scroll damage opaque so underlying pages need not be composited. */
+    lv_obj_set_style_bg_opa(s_theme_popup, LV_OPA_COVER, 0);
+    lv_obj_set_style_shadow_width(s_theme_popup, 0, 0);
     lv_obj_add_event_cb(s_theme_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = settings_dialog_layout(s_theme_popup, ui_text("INTERFACE THEME"));
+    lv_obj_set_style_bg_color(body, lv_obj_get_style_bg_color(s_theme_popup, 0), 0);
+    lv_obj_set_style_bg_opa(body, LV_OPA_COVER, 0);
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, ui_text("Tap a preview to apply it across the interface."));
     ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
@@ -611,15 +639,15 @@ void ui_settings_popups_show_theme(ui_settings_theme_changed_cb_t changed_cb)
     lv_obj_remove_style_all(grid);
     lv_obj_set_size(grid, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_column(grid, UI_GAP_CARD, 0);
     lv_obj_set_style_pad_row(grid, UI_GAP_CARD, 0);
-    for (int theme = UI_THEME_CLASSIC; theme <= UI_THEME_OPERATOR_SHELL; ++theme) {
+    for (int theme = UI_THEME_CLASSIC; theme <= UI_THEME_STUDIO_DARK; ++theme) {
         lv_obj_t *preview = ui_theme_preview_create(grid, theme,
             !theme_manager_custom_active() && theme == (int)theme_manager_active(), 0, 0, 340, 250,
             theme == UI_THEME_OPERATOR_SHELL ? operator_shell_select_cb : theme_select_cb, (void *)(uintptr_t)theme);
-        if (preview && theme == UI_THEME_OPERATOR_SHELL)
-            lv_obj_add_event_cb(preview, operator_shell_select_cb, LV_EVENT_PRESSED, NULL);
+        (void)preview;
     }
     lv_obj_t *footer = settings_dialog_footer(s_theme_popup);
     lv_obj_set_height(footer, LV_SIZE_CONTENT);

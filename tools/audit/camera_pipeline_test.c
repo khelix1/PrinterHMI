@@ -36,7 +36,7 @@ static void fixture(void){
 }
 int main(void){
  lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
- for(unsigned theme=0;theme<4;theme++)for(unsigned large=0;large<2;large++){
+ for(unsigned theme=0;theme<5;theme++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});fixture();
   for(unsigned rotation=0;rotation<4;rotation++)for(unsigned mirror=0;mirror<4;mirror++){
    entry.rotation=rotation*90;entry.mirror_horizontal=mirror&1;entry.mirror_vertical=mirror&2;busy=true;offer(3,2,12);camera_poll_cb(NULL);
@@ -48,7 +48,7 @@ int main(void){
   }
   entry.rotation=0;entry.mirror_horizontal=entry.mirror_vertical=false;busy=true;offer(640,480,640*480*2);camera_poll_cb(NULL);int before=lv_image_get_scale(s_image);
   camera_set_viewport(true);assert(lv_image_get_scale(s_image)==320 && lv_image_get_scale(s_image)!=before);assert(lv_image_get_rotation(s_image)==0);
-  camera_set_viewport(false);assert(lv_image_get_scale(s_image)==(UI_PAGE_ROOT_HEIGHT*256/480));
+  camera_set_viewport(false);assert(lv_image_get_scale(s_image)==((ui_theme_is_studio()?424:UI_PAGE_ROOT_HEIGHT)*256/480));
   offer(10,10,2);camera_poll_cb(NULL);assert(!s_frame && !lv_image_get_src(s_image));
   lv_refr_now(d);invalidations=0;for(int i=0;i<100;i++)camera_mark_unavailable();assert(!invalidations);
   busy=true;offer(3,2,12);camera_poll_cb(NULL);assert(s_frame);ui_camera_hide();assert(!s_frame && !lv_image_get_src(s_image) && !s_refresh_timer && !busy);
@@ -57,5 +57,5 @@ int main(void){
  dash32_camera_image=lv_image_create(lv_screen_active());dash32_camera_frame=heap_caps_malloc(12,0);
  dash32_camera_dsc.header.magic=LV_IMAGE_HEADER_MAGIC;dash32_camera_dsc.header.cf=LV_COLOR_FORMAT_RGB565;dash32_camera_dsc.header.w=3;dash32_camera_dsc.header.h=2;dash32_camera_dsc.header.stride=6;dash32_camera_dsc.data=dash32_camera_frame;dash32_camera_dsc.data_size=12;
  lv_image_set_src(dash32_camera_image,&dash32_camera_dsc);dashboard_camera_release_frame();assert(!dash32_camera_frame && !lv_image_get_src(dash32_camera_image));lv_obj_delete(dash32_camera_image);dash32_camera_image=NULL;
- assert(allocations==frees);lv_display_delete(d);lv_deinit();puts("PASS: camera frame retirement before free, repeated status/transform silence, all rotations/mirrors, immediate fullscreen fit, truncated-frame rejection and hide/destroy ownership across four themes/text sizes plus Dashboard source retirement");
+ assert(allocations==frees);lv_display_delete(d);lv_deinit();puts("PASS: camera frame retirement before free, repeated status/transform silence, all rotations/mirrors, immediate fullscreen fit, truncated-frame rejection and hide/destroy ownership across five themes/text sizes plus Dashboard source retirement");
 }

@@ -5,6 +5,7 @@
 #include "ui_theme_a.h"
 #include "ui_theme_b.h"
 #include "ui_theme_c.h"
+#include "ui_theme_studio.h"
 
 /*
  * Public theme dispatcher.
@@ -73,6 +74,7 @@ void ui_theme_set_active(ui_theme_id_t theme)
         case UI_THEME_OPERATOR:
         case UI_THEME_GLASS:
         case UI_THEME_OPERATOR_SHELL:
+        case UI_THEME_STUDIO_DARK:
             s_active_theme = theme;
             break;
 
@@ -85,6 +87,11 @@ void ui_theme_set_active(ui_theme_id_t theme)
 ui_theme_id_t ui_theme_get_active(void)
 {
     return s_active_theme;
+}
+
+bool ui_theme_is_studio(void)
+{
+    return s_active_theme == UI_THEME_STUDIO_DARK;
 }
 
 bool ui_theme_is_operator_shell(void)
@@ -103,6 +110,8 @@ const char *ui_theme_name(ui_theme_id_t theme)
 
         case UI_THEME_OPERATOR_SHELL:
             return "Operator Shell";
+        case UI_THEME_STUDIO_DARK:
+            return "STUDIO Dark";
 
         case UI_THEME_OPERATOR:
         default:
@@ -271,7 +280,9 @@ bool ui_theme_motion_enabled(void)
 
 #define DISPATCH_VOID(function_name, object)             \
     do {                                                 \
-        if (s_active_theme == UI_THEME_CLASSIC) {         \
+        if (ui_theme_is_studio()) {                       \
+            ui_theme_studio_##function_name(object);      \
+        } else if (s_active_theme == UI_THEME_CLASSIC) {  \
             ui_theme_a_##function_name(object);           \
         } else if (s_active_theme == UI_THEME_GLASS) {   \
             ui_theme_c_##function_name(object);           \
@@ -331,6 +342,7 @@ static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind)
     if (lv_obj_get_local_style_prop(obj, prop, &v, 0) != LV_STYLE_RES_FOUND || \
         v.num != (expected)) return false; \
 } while (0)
+    if (ui_theme_is_studio()) return ui_theme_studio_banner_matches(obj, kind);
     bool classic = s_active_theme == UI_THEME_CLASSIC;
     bool glass = s_active_theme == UI_THEME_GLASS;
     lv_color_t status = ui_theme_b_status_color(kind);
@@ -375,6 +387,7 @@ void ui_apply_banner_status_style(
     ui_status_kind_t kind)
 {
     if (banner_style_matches(obj, kind)) return;
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_banner_status_style(obj, kind); return; }
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_banner_style(obj);
         apply_custom_surface_opacity(obj);
@@ -430,6 +443,7 @@ void ui_apply_dialog_style(lv_obj_t *obj)
 
 void ui_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_surface_role(obj, role); return; }
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_surface_role(obj, role);
     } else if (s_active_theme == UI_THEME_GLASS) {
@@ -453,6 +467,7 @@ void ui_apply_custom_label_style(lv_obj_t *obj,
                                  const lv_font_t *font,
                                  lv_color_t color)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_custom_label_style(obj, font, color); return; }
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_custom_label_style(obj, font, color);
     } else if (s_active_theme == UI_THEME_GLASS) {
@@ -464,6 +479,7 @@ void ui_apply_custom_label_style(lv_obj_t *obj,
 
 void ui_apply_slider_style(lv_obj_t *obj)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_slider_style(obj); return; }
     if (s_active_theme == UI_THEME_CLASSIC) ui_theme_a_apply_slider_style(obj);
     else if (s_active_theme == UI_THEME_GLASS) ui_theme_c_apply_slider_style(obj);
     else ui_theme_b_apply_slider_style(obj);
@@ -471,6 +487,7 @@ void ui_apply_slider_style(lv_obj_t *obj)
 
 void ui_apply_progress_bar_style(lv_obj_t *obj)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_progress_bar_style(obj); return; }
     if (s_active_theme == UI_THEME_CLASSIC) ui_theme_a_apply_progress_bar_style(obj);
     else if (s_active_theme == UI_THEME_GLASS) ui_theme_c_apply_progress_bar_style(obj);
     else ui_theme_b_apply_progress_bar_style(obj);
@@ -478,6 +495,7 @@ void ui_apply_progress_bar_style(lv_obj_t *obj)
 
 void ui_apply_telemetry_plot_style(lv_obj_t *obj)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_telemetry_plot_style(obj); return; }
     if (s_active_theme == UI_THEME_CLASSIC) ui_theme_a_apply_telemetry_plot_style(obj);
     else if (s_active_theme == UI_THEME_GLASS) ui_theme_c_apply_telemetry_plot_style(obj);
     else ui_theme_b_apply_telemetry_plot_style(obj);
@@ -485,6 +503,7 @@ void ui_apply_telemetry_plot_style(lv_obj_t *obj)
 
 void ui_apply_trace_marker_style(lv_obj_t *obj, lv_color_t color)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_trace_marker_style(obj, color); return; }
     if (s_active_theme == UI_THEME_CLASSIC) ui_theme_a_apply_trace_marker_style(obj, color);
     else if (s_active_theme == UI_THEME_GLASS) ui_theme_c_apply_trace_marker_style(obj, color);
     else ui_theme_b_apply_trace_marker_style(obj, color);
@@ -492,6 +511,7 @@ void ui_apply_trace_marker_style(lv_obj_t *obj, lv_color_t color)
 
 void ui_apply_reference_line_style(lv_obj_t *obj, lv_color_t color)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_reference_line_style(obj, color); return; }
     if (s_active_theme == UI_THEME_CLASSIC) ui_theme_a_apply_reference_line_style(obj, color);
     else if (s_active_theme == UI_THEME_GLASS) ui_theme_c_apply_reference_line_style(obj, color);
     else ui_theme_b_apply_reference_line_style(obj, color);
@@ -541,6 +561,7 @@ void ui_apply_button_status_style(
     lv_obj_t *obj,
     ui_status_kind_t kind)
 {
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_button_status_style(obj, kind); return; }
     if (s_active_theme == UI_THEME_GLASS) {
         ui_theme_c_apply_button_status_style(obj, kind);
         return;
@@ -671,6 +692,7 @@ void ui_apply_text_percent(lv_obj_t *obj)
 
 lv_color_t ui_status_color(ui_status_kind_t kind)
 {
+    if (ui_theme_is_studio()) return ui_theme_studio_status_color(kind);
     if (s_active_theme == UI_THEME_CLASSIC) {
         return ui_theme_a_status_color(kind);
     }

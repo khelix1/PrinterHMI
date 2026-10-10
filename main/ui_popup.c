@@ -44,12 +44,12 @@ static void modal_popup_deleted_cb(lv_event_t *event)
     free(ctx);
 }
 
-lv_obj_t *ui_popup_create(lv_obj_t *parent,
+static lv_obj_t *popup_create_on_parent(lv_obj_t *modal_parent,
                           int32_t width,
                           int32_t height,
                           ui_popup_kind_t kind)
 {
-    if (!parent) return NULL;
+    if (!modal_parent) return NULL;
 
     /*
      * Popups are modal application surfaces. A transparent clickable
@@ -58,8 +58,7 @@ lv_obj_t *ui_popup_create(lv_obj_t *parent,
      * popup. It intentionally has no click action: the operator must use a
      * footer action to close the popup before interacting elsewhere.
      */
-    lv_obj_t *modal_parent = lv_layer_top();
-    if (!modal_parent) modal_parent = parent;
+
     lv_obj_t *blocker = lv_obj_create(modal_parent);
     if (!blocker) return NULL;
 
@@ -112,6 +111,22 @@ lv_obj_t *ui_popup_create(lv_obj_t *parent,
 
     lv_obj_move_foreground(popup);
     return popup;
+}
+
+lv_obj_t *ui_popup_create(lv_obj_t *parent, int32_t width, int32_t height,
+                          ui_popup_kind_t kind)
+{
+    if (!parent) return NULL;
+    lv_obj_t *layer = lv_layer_top();
+    return popup_create_on_parent(layer ? layer : parent, width, height, kind);
+}
+
+lv_obj_t *ui_popup_create_on_screen(int32_t width, int32_t height,
+                                    ui_popup_kind_t kind)
+{
+    /* Screen-local opaque descendants can occlude background drawing.
+     * LVGL renders top-layer popups only after the active screen is drawn. */
+    return popup_create_on_parent(lv_screen_active(), width, height, kind);
 }
 
 lv_obj_t *ui_popup_add_title(lv_obj_t *popup,

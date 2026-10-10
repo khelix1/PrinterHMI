@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     parse=controller[controller.index("static bool parse_positive("):controller.index("void motion_diagnostics_controller_update_config(")]
     calculate=controller[controller.index("bool motion_axis_distance_calculate("):]
     (tmp/"motion_calculation.c").write_text("#include <stdbool.h>\n#include <ctype.h>\n#include <math.h>\n#include <stdlib.h>\n"+parse+calculate)
-    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c"]
+    sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c"]
     executable=tmp/"motion_layout"
     subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
         "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),

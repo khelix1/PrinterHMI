@@ -15,6 +15,7 @@
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
+#include "ui_studio_layout.h"
 #include "ui_toast.h"
 
 static lv_obj_t *s_root = NULL;
@@ -42,6 +43,10 @@ static bool console_rows_init(void)
     return s_rows != NULL;
 }
 static bool s_follow = true;
+static size_t s_studio_page_offset;
+static console_filter_kind_t s_studio_last_filter;
+static bool s_studio_last_hide;
+static char s_studio_last_query[64];
 static console_filter_kind_t s_filter = CONSOLE_FILTER_ALL;
 static bool s_hide_temperatures;
 static char s_query[64];
@@ -134,6 +139,9 @@ static void rebuild_output(void)
         return;
     }
 
+    if(ui_theme_is_studio() && (s_follow || s_studio_last_filter!=s_filter || s_studio_last_hide!=s_hide_temperatures || strcmp(s_studio_last_query,s_query)))s_studio_page_offset=0;
+    s_studio_last_filter=s_filter;s_studio_last_hide=s_hide_temperatures;
+    snprintf(s_studio_last_query,sizeof(s_studio_last_query),"%s",s_query);
     int32_t scroll_y = lv_obj_get_scroll_y(s_output);
     /* Rows retain their LVGL identity across new messages and filter changes. */
 
@@ -144,6 +152,7 @@ static void rebuild_output(void)
 
     lv_obj_t *last = NULL;
     size_t visible = 0;
+    size_t matched = 0;
 
     for (size_t row = 0; row < count; ++row) {
         size_t newest_index = count - 1 - row;
@@ -156,6 +165,11 @@ static void rebuild_output(void)
         }
 
         if (!console_filter_matches(&entry, s_filter, s_query, s_hide_temperatures)) continue;
+        if(ui_theme_is_studio()) {
+            size_t position=matched++;
+            if(position<s_studio_page_offset || visible>=6)continue;
+        }
+
 
         char time_text[24] = "";
         char line[256];
@@ -182,10 +196,10 @@ static void rebuild_output(void)
         lv_label_set_long_mode(
             label,
             LV_LABEL_LONG_DOT);
-        lv_obj_set_size(label, 760, 34);
+        lv_obj_set_size(label, ui_theme_is_studio()?952:760, 34);
         lv_obj_set_pos(
             label,
-            16,
+            ui_theme_is_studio()?0:16,
             10 + (int32_t)visible * 38);
 
         ui_apply_custom_label_style(
@@ -196,6 +210,10 @@ static void rebuild_output(void)
         ++visible;
     }
 
+    if(ui_theme_is_studio() && s_studio_page_offset>=matched && s_studio_page_offset) {
+        s_studio_page_offset=matched?((matched-1)/6)*6:0;
+        rebuild_output();return;
+    }
     char count_text[32];
     snprintf(count_text, sizeof(count_text), "%u / %u", (unsigned)visible, (unsigned)count);
     lv_label_set_text(s_filter_count, count_text);
@@ -213,13 +231,22 @@ static void rebuild_output(void)
         lv_obj_add_flag(s_rows->empty, LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_update_layout(s_output);
-    if (s_follow && last) {
+    if (s_follow && last && !ui_theme_is_studio()) {
         lv_obj_scroll_to_view(last, LV_ANIM_OFF);
     } else if (!s_follow) {
         lv_obj_scroll_to_y(s_output, scroll_y, LV_ANIM_OFF);
     }
 }
 
+
+static void studio_history_page_cb(lv_event_t *event)
+{
+    intptr_t direction=(intptr_t)lv_event_get_user_data(event);
+    s_follow=false;
+    if(direction>0)s_studio_page_offset+=6;
+    else s_studio_page_offset=s_studio_page_offset>=6?s_studio_page_offset-6:0;
+    rebuild_output();
+}
 
 static void update_connection(void)
 {
@@ -759,6 +786,31 @@ void ui_console_show(
         LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
 
+    if(ui_theme_is_studio()) {
+        studio_text(s_root,"Console",0,0,236,&ui_studio_font_48,UI_TEXT);
+        create_filters();
+        lv_obj_set_pos(s_filter_dropdown,246,8);lv_obj_set_size(s_filter_dropdown,186,44);
+        lv_obj_set_style_bg_opa(s_filter_dropdown,LV_OPA_TRANSP,0);
+        lv_obj_set_style_radius(s_filter_dropdown,22,0);
+        lv_obj_set_pos(s_temperature_button,444,8);lv_obj_set_size(s_temperature_button,148,44);
+        lv_obj_t *search=lv_obj_get_parent(s_search_label);lv_obj_set_pos(search,604,8);lv_obj_set_size(search,124,44);
+        lv_obj_t *reset=lv_obj_get_child(s_root,lv_obj_get_index(s_filter_count)-1);
+        lv_obj_set_pos(reset,740,8);lv_obj_set_size(reset,106,44);
+        lv_obj_set_pos(s_filter_count,856,22);lv_obj_set_width(s_filter_count,120);
+        s_connection=studio_text(s_root,"Connecting",0,62,976,UI_FONT_CAPTION,UI_TEXT_DIM);
+        studio_rule(s_root,0,88,976,1);
+        s_output=studio_plane(s_root,0,94,976,250);
+        studio_rule(s_root,0,354,976,1);
+        studio_action(s_root,"Enter G-code",0,372,436,52,open_command_cb,NULL);
+        s_follow_button=studio_action(s_root,"Follow",448,372,156,52,follow_cb,NULL);
+        s_follow_label=lv_obj_get_child(s_follow_button,0);
+        studio_action(s_root,"Clear",616,372,100,52,clear_cb,NULL);
+        studio_action(s_root,"Older",728,372,118,52,studio_history_page_cb,(void*)1);
+        studio_action(s_root,"Newer",858,372,118,52,studio_history_page_cb,(void*)-1);
+        s_studio_page_offset=0;
+        goto console_page_ready;
+    }
+
     lv_obj_t *title = lv_label_create(s_root);
     lv_label_set_text(title, ui_text("CONSOLE"));
     lv_obj_set_pos(title, UI_PAGE_RAIL_X, 18);
@@ -819,6 +871,7 @@ void ui_console_show(
         s_output,
         LV_SCROLLBAR_MODE_AUTO);
 
+console_page_ready:
     update_follow_button();
     rebuild_output();
     update_connection();

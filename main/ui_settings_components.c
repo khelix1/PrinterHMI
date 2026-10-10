@@ -4,6 +4,7 @@
 #include "ui_button.h"
 
 #include "ui_theme.h"
+#include "ui_studio_layout.h"
 #include "ui_page_geometry.h"
 
 #include <stddef.h>
@@ -22,12 +23,25 @@ static lv_obj_t *settings_component_make_label(
     return label;
 }
 
+static lv_obj_t *studio_settings_row(lv_obj_t *section,const char *title,const char *description,int y)
+{
+    lv_obj_t *row=studio_plane(section,0,y,976,68);
+    studio_text(row,title,0,6,540,UI_FONT_BODY_LARGE,UI_TEXT);
+    if(description&&description[0])studio_text(row,description,0,38,540,UI_FONT_CAPTION,UI_TEXT_DIM);
+    studio_rule(row,0,67,976,1);return row;
+}
+
 lv_obj_t *ui_settings_section_create(
     lv_obj_t *parent,
     const char *title,
     int y,
     int h)
 {
+    if(ui_theme_is_studio()) {
+        lv_obj_t *section=studio_plane(parent,0,y,976,h);
+        studio_text(section,title,0,6,936,UI_FONT_TITLE,UI_TEXT_DIM);
+        return section;
+    }
     lv_obj_t *section = lv_obj_create(parent);
 
     lv_obj_set_size(section, UI_PAGE_RAIL_WIDTH, h);
@@ -57,6 +71,7 @@ void ui_settings_section_add_divider(
     lv_obj_t *section,
     int y)
 {
+    if(ui_theme_is_studio())return;
     lv_obj_t *line = lv_obj_create(section);
 
     lv_obj_set_size(line, UI_PAGE_RAIL_WIDTH - 36, 1);
@@ -74,6 +89,16 @@ lv_obj_t *ui_settings_section_add_row(
     int y,
     lv_event_cb_t event_cb)
 {
+    if(ui_theme_is_studio()) {
+        lv_obj_t *row=studio_settings_row(section,title,description,y);
+        lv_obj_t *label=studio_text(row,value,560,22,370,UI_FONT_BODY,UI_TEXT);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_RIGHT,0);
+        if(event_cb) {
+            studio_text(row,LV_SYMBOL_RIGHT,944,24,32,UI_FONT_BODY,UI_ACCENT_BRIGHT);
+            lv_obj_add_flag(row,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(row,event_cb,LV_EVENT_CLICKED,NULL);
+        }
+        return label;
+    }
     lv_obj_t *row = lv_obj_create(section);
 
     lv_obj_set_size(
@@ -145,6 +170,17 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
     int y,
     lv_event_cb_t event_cb)
 {
+    if(ui_theme_is_studio()) {
+        lv_obj_t *row=studio_settings_row(section,title,description,y);
+        char text[16];lv_snprintf(text,sizeof(text),"%d%%",value);
+        lv_obj_t *label=studio_text(row,text,902,22,74,UI_FONT_BODY,UI_TEXT);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_RIGHT,0);
+        lv_obj_t *slider=lv_slider_create(row);lv_obj_set_pos(slider,586,32);lv_obj_set_size(slider,286,10);
+        lv_slider_set_range(slider,minimum,maximum);lv_slider_set_value(slider,value,LV_ANIM_OFF);
+        ui_apply_slider_style(slider);lv_obj_set_user_data(slider,label);
+        if(event_cb)lv_obj_add_event_cb(slider,event_cb,LV_EVENT_VALUE_CHANGED,NULL);
+        return slider;
+    }
     lv_obj_t *row = lv_obj_create(section);
 
     lv_obj_set_size(
@@ -252,6 +288,12 @@ lv_obj_t *ui_settings_section_add_action_row(
     lv_event_cb_t event_cb,
     bool danger)
 {
+    if(ui_theme_is_studio()) {
+        lv_obj_t *row=studio_settings_row(section,title,description,y);
+        lv_obj_t *action=studio_action(row,button_text,700,10,276,48,event_cb,NULL);
+        if(danger)lv_obj_set_style_border_color(action,UI_DANGER_BRIGHT,0);
+        return action;
+    }
     lv_obj_t *row = lv_obj_create(section);
 
     lv_obj_set_size(

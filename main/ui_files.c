@@ -4,6 +4,7 @@
 
 #include "lvgl.h"
 #include "ui_theme.h"
+#include "ui_studio_layout.h"
 #include "ui_page_title.h"
 #include "ui_button.h"
 #include "ui_popup.h"
@@ -31,6 +32,7 @@ static ui_files_action_cb_t s_sort_cb = NULL;
 static ui_files_folder_cb_t s_folder_cb = NULL;
 static ui_files_action_cb_t s_up_cb = NULL;
 static lv_obj_t *s_breadcrumb_label = NULL;
+static lv_obj_t *s_studio_file_hint;
 static lv_obj_t *s_sort_label = NULL;
 static lv_obj_t *s_search_label = NULL;
 static lv_obj_t *s_search_popup = NULL;
@@ -769,6 +771,31 @@ void ui_files_show(void)
         return;
     }
 
+    if(ui_theme_is_studio()) {
+        s_printer_file_popup=lv_obj_create(lv_screen_active());
+        lv_obj_set_size(s_printer_file_popup,854,528);ui_apply_root_style(s_printer_file_popup);
+        studio_text(s_printer_file_popup,"Job library",0,0,580,&ui_studio_font_48,UI_TEXT);
+        studio_action(s_printer_file_popup,"Up",0,70,100,44,up_button_cb,NULL);
+        lv_obj_t *search=studio_action(s_printer_file_popup,"Search",110,70,148,44,search_button_cb,NULL);
+        s_search_label=lv_obj_get_child(search,0);
+        lv_obj_t *sort=studio_action(s_printer_file_popup,"Name",268,70,144,44,sort_button_cb,NULL);
+        s_sort_label=lv_obj_get_child(sort,0);
+        studio_action(s_printer_file_popup,"Refresh",422,70,154,44,files_refresh_event_cb,NULL);
+        s_breadcrumb_label=studio_text(s_printer_file_popup,"/gcodes",0,120,576,UI_FONT_CAPTION,UI_TEXT_DIM);
+        ui_files_set_breadcrumb(NULL);ui_files_set_search_text(s_search_text);
+        lv_obj_t *viewport=studio_plane(s_printer_file_popup,0,150,576,274);
+        s_printer_file_list=studio_plane(viewport,0,0,576,274);
+        lv_obj_add_flag(s_printer_file_list,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(s_printer_file_list,LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(s_printer_file_list,LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_add_event_cb(s_printer_file_list,file_list_scroll_event_cb,LV_EVENT_ALL,NULL);
+        s_files_state=ui_page_state_create(viewport,0,0,576,274);
+        studio_rule(s_printer_file_popup,600,0,1,424);
+        s_studio_file_hint=studio_text(s_printer_file_popup,"Select a file to inspect\nits preview and metadata",624,154,352,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+        lv_label_set_long_mode(s_studio_file_hint,LV_LABEL_LONG_WRAP);lv_obj_set_height(s_studio_file_hint,100);
+        goto schedule_files_refresh;
+    }
+
     const ui_files_layout_profile_t *layout =
         &ui_page_layout_profile_current()->files;
 
@@ -943,6 +970,7 @@ void ui_files_show(void)
     s_files_state = ui_page_state_create(
         viewport, 0, 0, lv_pct(100), lv_pct(100));
 
+schedule_files_refresh:
     /*
      * Let LVGL draw the Files page before enqueueing its Moonraker worker.
      * This prevents a blank/late page transition on slower responses.
@@ -977,6 +1005,7 @@ void ui_files_hide(void)
         s_breadcrumb_label = NULL;
         s_sort_label = NULL;
         s_search_label = NULL;
+        s_studio_file_hint = NULL;
     }
 }
 
@@ -1015,6 +1044,8 @@ void ui_files_set_callbacks(ui_files_refresh_cb_t refresh_cb,
 /* File detail popup */
 
 static lv_obj_t *s_file_detail_popup = NULL;
+static lv_obj_t *s_studio_metadata_popup = NULL;
+static lv_obj_t *s_studio_metadata_label = NULL;
 static ui_files_detail_cb_t s_detail_cancel_cb = NULL;
 static ui_files_detail_cb_t s_detail_start_cb = NULL;
 static lv_obj_t *s_detail_info_label = NULL;
@@ -1027,6 +1058,8 @@ bool ui_files_detail_is_open(void)
 
 void ui_files_close_detail_popup(void)
 {
+    if (s_studio_metadata_popup) {lv_obj_delete(s_studio_metadata_popup);s_studio_metadata_popup=NULL;s_studio_metadata_label=NULL;}
+    if (s_studio_file_hint) lv_obj_remove_flag(s_studio_file_hint,LV_OBJ_FLAG_HIDDEN);
     if (s_file_detail_popup) {
         lv_obj_delete(s_file_detail_popup);
         s_file_detail_popup = NULL;
@@ -1055,6 +1088,28 @@ static void detail_start_event_cb(lv_event_t *e)
     }
 }
 
+static void studio_metadata_close(lv_event_t *e)
+{
+    (void)e;
+    if(s_studio_metadata_popup) {lv_obj_delete(s_studio_metadata_popup);s_studio_metadata_popup=NULL;s_studio_metadata_label=NULL;}
+}
+static void studio_metadata_open(lv_event_t *e)
+{
+    (void)e;
+    if(s_studio_metadata_popup || !s_detail_info_label)return;
+    s_studio_metadata_popup=ui_popup_create(lv_layer_top(),640,440,UI_POPUP_STANDARD);
+    if(!s_studio_metadata_popup)return;
+    studio_text(s_studio_metadata_popup,"File details",24,18,592,UI_FONT_TITLE,UI_TEXT);
+    lv_obj_t *body=studio_plane(s_studio_metadata_popup,24,72,592,280);
+    lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(body,LV_DIR_VER);
+    lv_obj_t *label=studio_text(body,lv_label_get_text(s_detail_info_label),0,0,568,UI_FONT_BODY,UI_TEXT);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+    lv_obj_set_height(label,LV_SIZE_CONTENT);
+    s_studio_metadata_label=label;
+    studio_action(s_studio_metadata_popup,"Close",432,368,184,48,studio_metadata_close,NULL);
+}
+
 void ui_files_show_detail_popup(const char *filename_text,
                                     const char *metadata_text,
                                     lv_obj_t **thumb_box_out,
@@ -1073,6 +1128,25 @@ void ui_files_show_detail_popup(const char *filename_text,
 
     if (thumb_view_out) {
         *thumb_view_out = NULL;
+    }
+
+    if(ui_theme_is_studio() && s_printer_file_popup) {
+        if(s_studio_file_hint)lv_obj_add_flag(s_studio_file_hint,LV_OBJ_FLAG_HIDDEN);
+        s_file_detail_popup=studio_plane(s_printer_file_popup,624,0,352,424);
+        ui_thumbnail_t *view=ui_thumbnail_create(s_file_detail_popup,0,0,352,228);
+        if(!view){ui_files_close_detail_popup();return;}
+        ui_thumbnail_set_placeholder(view,"PRINT\nTHUMBNAIL");
+        if(thumb_box_out)*thumb_box_out=ui_thumbnail_box(view);
+        if(thumb_view_out)*thumb_view_out=view;
+        studio_text(s_file_detail_popup,filename_text,0,240,352,UI_FONT_TITLE,UI_TEXT);
+        s_detail_info_label=studio_text(s_file_detail_popup,metadata_text,0,282,352,UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_label_set_long_mode(s_detail_info_label,LV_LABEL_LONG_WRAP);
+        lv_obj_set_height(s_detail_info_label,74);
+        s_detail_start_button=studio_action(s_file_detail_popup,"Print",0,372,166,52,detail_start_event_cb,NULL);
+        lv_obj_add_state(s_detail_start_button,LV_STATE_DISABLED);
+        studio_action(s_file_detail_popup,"Details",178,372,98,52,studio_metadata_open,NULL);
+        studio_action(s_file_detail_popup,"Clear",288,372,64,52,detail_cancel_event_cb,NULL);
+        return;
     }
 
     /*
@@ -1351,6 +1425,7 @@ void ui_files_update_detail_metadata(
     }
 
     lv_label_set_text(s_detail_info_label, detail);
+    if(s_studio_metadata_label)lv_label_set_text(s_studio_metadata_label,detail);
 
     if (s_detail_start_button && ready) {
         lv_obj_clear_state(s_detail_start_button, LV_STATE_DISABLED);

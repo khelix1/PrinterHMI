@@ -1,4 +1,5 @@
 #include "ui_text_fit.h"
+#include "ui_studio_icons.h"
 #include "ui_widgets.h"
 #include "ui_text.h"
 #include "ui_button.h"
@@ -594,6 +595,19 @@ void ui_operator_nav_button_set_selected(
     lv_obj_t *text_label =
         operator_nav_text(button);
 
+    if (ui_theme_is_studio()) {
+        ui_apply_button_dark_style(button);
+        lv_obj_set_style_bg_color(button,selected ? UI_ACCENT_BRIGHT : UI_NAV,0);
+        lv_obj_set_style_bg_opa(button,selected ? LV_OPA_COVER : LV_OPA_TRANSP,0);
+        lv_obj_set_style_radius(button,28,0);
+        lv_obj_set_style_border_width(button,0,0);
+        lv_obj_set_style_pad_all(button,0,0);
+        if (icon_label) lv_obj_set_style_text_color(icon_label,selected ? UI_BG : UI_TEXT_DIM,0);
+        if (lv_obj_get_child_count(button)>2) ui_studio_icon_color(lv_obj_get_child(button,2),
+            selected ? UI_BG : UI_TEXT_DIM);
+        if (text_label) lv_obj_set_style_text_color(text_label,selected ? UI_BG : UI_TEXT,0);
+        return;
+    }
     if (selected) {
         /*
          * Selected navigation uses the Operator information blue.

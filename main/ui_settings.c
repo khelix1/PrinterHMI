@@ -21,6 +21,7 @@
 #include "ui_page_geometry.h"
 #include "ui_page_title.h"
 #include "ui_widgets.h"
+#include "ui_studio_layout.h"
 #include "ui_shell.h"
 
 static const char *TAG = "ui_settings";
@@ -673,6 +674,14 @@ void ui_settings_show_page(
     lv_obj_set_style_pad_top(content, 0, 0);
     lv_obj_set_style_pad_bottom(content, 20, 0);
 
+    if(ui_theme_is_studio()) {
+        lv_obj_set_pos(content,0,66);lv_obj_set_size(content,976,358);
+        lv_obj_set_pos(banner,0,0);lv_obj_set_size(banner,976,62);
+        lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(banner,0,0);
+        lv_obj_set_pos(banner_title,0,0);ui_apply_custom_label_style(banner_title,&ui_studio_font_48,UI_TEXT);
+        lv_obj_add_flag(banner_subtitle,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(status,LV_OBJ_FLAG_HIDDEN);
+    }
+
     const int row_height = UI_SETTINGS_ROW_HEIGHT;
     const int action_height = UI_SETTINGS_ACTION_HEIGHT;
     const int section_gap = ui_theme_density_metric(10, 14, 18);
@@ -1081,6 +1090,13 @@ void ui_settings_show_page(
         settings_about_cb,
         false);
 
+    if(ui_theme_is_studio()) {
+        lv_obj_t *sections[]={display,connections,setup,device,time_region,firmware,system,storage,operator_section,about};
+        int y=0;lv_obj_update_layout(content);
+        for(unsigned i=0;i<sizeof(sections)/sizeof(sections[0]);i++) {
+            lv_obj_set_pos(sections[i],0,y);y+=lv_obj_get_height(sections[i])+20;
+        }
+    }
     ui_settings_refresh();
 }
 

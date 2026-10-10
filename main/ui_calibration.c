@@ -1,4 +1,5 @@
 #include "ui_calibration.h"
+#include "ui_studio_layout.h"
 #include "ui_text.h"
 
 #include <stdbool.h>
@@ -1291,6 +1292,11 @@ void ui_calibration_show(
         s_calibration->root,
         UI_SURFACE_PAGE_DEEP);
 
+    if(ui_theme_is_studio()) {
+        studio_text(s_calibration->root,"Calibration",0,0,620,UI_FONT_TITLE,UI_TEXT);
+        s_calibration->banner_status=studio_text(s_calibration->root,"WAITING FOR PRINTER",640,8,336,UI_FONT_CAPTION,UI_ACCENT_BRIGHT);
+        lv_obj_set_style_text_align(s_calibration->banner_status,LV_TEXT_ALIGN_RIGHT,0);
+    } else {
     lv_obj_t *banner = ui_create_operator_banner(
         s_calibration->root,
         20,
@@ -1330,6 +1336,8 @@ void ui_calibration_show(
         s_calibration->banner_status,
         LV_TEXT_ALIGN_RIGHT,
         0);
+
+    }
 
     lv_obj_t *bed = ui_calibration_layout_card(
         s_calibration->root,

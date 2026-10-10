@@ -52,7 +52,7 @@ int main(void){
  profiles[0]=(moonraker_profile_t){.configured=true,.name="Printer A",.host="printer-a.local",.port=7125};
  profiles[1]=(moonraker_profile_t){.configured=true,.name="Printer B",.host="printer-b.local",.port=7126};
  known[1]=online[1]=fresh[1]=true;snprintf(health[1],32,"printing");
- for(int theme=0;theme<4;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
+ for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
   ui_theme_set_density((ui_density_id_t)density);
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   state=(moonraker_state_t){0};active=0;preview_ready=false;revision=1;
@@ -61,7 +61,7 @@ int main(void){
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"printing"));
   assert(!strcmp(lv_label_get_text(s_cards[2].status),"NOT CONFIGURED"));
   assert(!strcmp(lv_label_get_text(s_cards[2].hint),"TAP TO ADD"));
-  geometry();if(density==1&&large)snapshot(theme);
+  geometry();if(ui_theme_is_studio()){assert(lv_obj_get_x(s_cards[1].root)+lv_obj_get_width(s_cards[1].root)==976);assert(lv_obj_get_y(s_cards[3].root)+lv_obj_get_height(s_cards[3].root)==424);}if(density==1&&large)snapshot(theme);
   for(int i=0;i<4;i++){
    assert(s_cards[i].status_bound && s_cards[i].name_bound && s_cards[i].endpoint_bound);
    assert(!strcmp(lv_subject_get_string(&s_cards[i].name_subject),lv_label_get_text(s_cards[i].name)));
@@ -152,5 +152,5 @@ int main(void){
   assert(lv_display_get_event_count(d)==events);
  }
  lv_display_delete(d);lv_deinit();
- puts("PASS: 500ms chooser timers stay redraw-free when unchanged, all four themes/densities/text sizes, card/label bounds and active/inactive state lifetime, live status/preview/revision/profile updates, silent name/endpoint/status subjects, profile edits/empty slots/click routing, fallback repair and card/chooser teardown");
+ puts("PASS: 500ms chooser timers stay redraw-free when unchanged, all five themes/densities/text sizes, card/label bounds and active/inactive state lifetime, live status/preview/revision/profile updates, silent name/endpoint/status subjects, profile edits/empty slots/click routing, fallback repair and card/chooser teardown");
 }

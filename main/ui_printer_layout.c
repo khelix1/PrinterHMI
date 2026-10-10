@@ -6,6 +6,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "ui_page_geometry.h"
+#include "ui_studio_layout.h"
 
 static lv_obj_t *make_transparent_container(
     lv_obj_t *parent,
@@ -55,6 +56,13 @@ bool ui_printer_layout_create(
     }
 
     memset(layout, 0, sizeof(*layout));
+    if(ui_theme_is_studio()) {
+        layout->active_panel=studio_plane(page,0,0,620,354);
+        layout->status_panel=studio_plane(page,640,0,336,354);
+        layout->action_panel=studio_plane(page,0,370,976,54);
+        return true;
+    }
+
 
     const ui_printer_layout_profile_t *profile =
         &ui_page_layout_profile_current()->printer;

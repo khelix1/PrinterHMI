@@ -7,6 +7,15 @@
  *
  * Operator deliberately retains the verified production geometry.
  */
+static const ui_dashboard_layout_profile_t s_studio = {
+    .subtitle="", .banner={0,0,720,338},
+    .active_print={0,62,720,276}, .machine_status={0,0,976,424},
+    .command_bar={340,278,360,52},
+    .active_content={.preview_x=0,.preview_y=0,.preview_width=316,.preview_height=276,
+        .footer_x=304,.footer_bottom=66},
+    .machine_content={.composition=UI_DASHBOARD_MACHINE_SINGLE_CARD},
+};
+
 static const ui_dashboard_layout_profile_t s_operator = {
     .subtitle = "Printer and Drybox Overview",
     .banner = {20, 52, 800, 54},
@@ -129,6 +138,7 @@ const ui_dashboard_layout_profile_t *
 ui_dashboard_layout_profile_for_theme(ui_theme_id_t theme)
 {
     switch (theme) {
+        case UI_THEME_STUDIO_DARK: return &s_studio;
         case UI_THEME_CLASSIC:
             return &s_foundry;
         case UI_THEME_GLASS:

@@ -127,6 +127,7 @@ static void start_sntp_time_sync(void);
 static void sntp_wait_task(void *arg);
 
 #include "ui_theme.h"
+#include "ui_theme_studio.h"
 #include "theme_manager.h"
 #include "ui_cards.h"
 #include "ui_page_title.h"
@@ -2563,6 +2564,8 @@ static void app_create_wifi_status_label(void)
         LV_TEXT_ALIGN_CENTER,
         0);
     lv_obj_set_pos(wifi_label, 380, 555);
+    /* STUDIO reserves the footer for its dock; Wi-Fi remains in the header. */
+    if (ui_theme_is_studio()) lv_obj_add_flag(wifi_label,LV_OBJ_FLAG_HIDDEN);
 }
 
 static void app_theme_changed(void)
@@ -3326,10 +3329,14 @@ void ui_printer_create(void)
     lv_obj_set_style_radius(printer_panel, 0, 0);
     lv_obj_set_style_pad_all(printer_panel, 0, 0);
 
+    if (!ui_theme_is_studio()) {
     ui_page_title_create(
         printer_panel,
         LV_SYMBOL_LIST " PRINTER",
         ui_page_layout_profile_current()->printer.subtitle);
+    } else {
+        ui_theme_studio_page_frame(printer_panel);
+    }
 
     if (!ui_printer_layout_create(
             printer_panel,
@@ -3340,7 +3347,7 @@ void ui_printer_create(void)
         return;
     }
 
-    ui_printer_banner_create(printer_panel,
+    if (!ui_theme_is_studio()) ui_printer_banner_create(printer_panel,
                              &printer_banner_label,
                              printer_banner_text());
 
@@ -3951,6 +3958,11 @@ void app_main(void)
      * which performs its initialization work on CPU 0.
      */
     cfg.lvgl_port_cfg.task_affinity = 1;
+
+    /* Theme previews and nested flex layout exceeded the port default (7168
+     * bytes) on the P4. Keep headroom on the internal-RAM LVGL task stack. */
+    cfg.lvgl_port_cfg.task_stack = 16 * 1024;
+    ESP_LOGI(TAG, "LVGL task stack: %d bytes", cfg.lvgl_port_cfg.task_stack);
 
     ESP_LOGI(TAG, "Starting known-good BSP display/touch path");
     bsp_display_start_with_config(&cfg);

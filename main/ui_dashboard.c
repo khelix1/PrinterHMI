@@ -356,10 +356,13 @@ void ui_dashboard_create(void)
     dash32_camera_toggle = ui_button_create(
         dash32_active_print, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " CAMERA");
     if (dash32_camera_toggle) {
-        lv_obj_set_size(dash32_camera_toggle, 172, 32);
+        lv_obj_set_size(dash32_camera_toggle, 172, ui_theme_is_studio() ? 44 : 32);
         /* Keep the Camera/Thumbnail toggle inside the active-print card
          * for every theme, including Operator Shell and custom themes. */
-        lv_obj_align(dash32_camera_toggle, LV_ALIGN_TOP_RIGHT, -8, 8);
+        if (ui_theme_is_studio()) {
+            lv_obj_set_parent(dash32_camera_toggle,preview_box);
+            lv_obj_align(dash32_camera_toggle,LV_ALIGN_TOP_RIGHT,-8,8);
+        } else lv_obj_align(dash32_camera_toggle, LV_ALIGN_TOP_RIGHT, -8, 8);
         /* Bind the callback even when the initial printer has no camera.
          * Active-printer changes can make this same button visible later. */
         ui_button_expand_touch_target(dash32_camera_toggle);

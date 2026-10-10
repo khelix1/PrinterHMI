@@ -164,7 +164,7 @@ static void create_card(int index, int x, int y)
     chooser_card_t *card = &s_cards[index];
 
     card->root = lv_obj_create(s_root);
-    lv_obj_set_size(card->root, 390, 184);
+    lv_obj_set_size(card->root, ui_theme_is_studio()?480:390, ui_theme_is_studio()?176:184);
     lv_obj_set_pos(card->root, x, y);
     lv_obj_clear_flag(card->root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(card->root, LV_OBJ_FLAG_CLICKABLE);
@@ -201,19 +201,19 @@ static void create_card(int index, int x, int y)
     lv_obj_set_style_text_align(card->preview, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(card->preview, LV_ALIGN_BOTTOM_MID, 0, -14);
 
-    card->name = make_label(card->root, "PRINTER", 146, 14, 220);
+    card->name = make_label(card->root, "PRINTER", 146, 14, ui_theme_is_studio()?310:220);
     ui_apply_text_title(card->name);
     ui_apply_label_bright(card->name);
     lv_label_set_long_mode(card->name, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_letter_space(card->name, 0, 0);
 
-    card->endpoint = make_label(card->root, "--", 146, 58, 220);
+    card->endpoint = make_label(card->root, "--", 146, 58, ui_theme_is_studio()?310:220);
     ui_apply_text_caption(card->endpoint);
     ui_apply_label_dim(card->endpoint);
     lv_label_set_long_mode(card->endpoint, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_letter_space(card->endpoint, 0, 0);
 
-    card->status = make_label(card->root, "CHECKING...", 146, 88, 220);
+    card->status = make_label(card->root, "CHECKING...", 146, 88, ui_theme_is_studio()?310:220);
     ui_apply_text_body_large(card->status);
     ui_apply_label_dim(card->status);
     ui_text_fit_single_line(card->status, UI_FONT_BODY_LARGE);
@@ -234,7 +234,7 @@ static void create_card(int index, int x, int y)
     lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
     card->hint = hint;
 
-    card->active = make_label(card->root, "ACTIVE", 284, 148, 82);
+    card->active = make_label(card->root, "ACTIVE", ui_theme_is_studio()?374:284, 148, 82);
     ui_apply_text_caption(card->active);
     ui_apply_label_success(card->active);
     lv_label_set_long_mode(card->active, LV_LABEL_LONG_CLIP);
@@ -503,10 +503,16 @@ void ui_printer_chooser_show(
         }
     }
 
-    create_card(0, 20, 84);
-    create_card(1, 424, 84);
-    create_card(2, 20, 282);
-    create_card(3, 424, 282);
+    if(ui_theme_is_studio()) {
+        lv_obj_set_pos(title,0,0);lv_obj_set_width(title,640);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
+        lv_obj_add_flag(subtitle,LV_OBJ_FLAG_HIDDEN);
+        if(manage){lv_obj_set_size(manage,280,44);lv_obj_set_pos(manage,696,0);}
+        create_card(0,0,60);create_card(1,496,60);
+        create_card(2,0,248);create_card(3,496,248);
+    } else {
+        create_card(0,20,84);create_card(1,424,84);
+        create_card(2,20,282);create_card(3,424,282);
+    }
 
     refresh_cards();
 

@@ -53,13 +53,25 @@ ui_dashboard_page_t ui_dashboard_page_create(
 
     ui_apply_root_style(page.root);
 
+    if (ui_theme_is_studio()) {
+        lv_obj_clear_flag(page.root, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_pad_all(page.root,0,0);
+    }
+
     const ui_dashboard_layout_profile_t *layout =
         ui_dashboard_layout_profile_current();
 
-    ui_page_title_create(
+    if (!ui_theme_is_studio()) ui_page_title_create(
         page.root,
         LV_SYMBOL_HOME " DASHBOARD",
         layout->subtitle);
+
+
+    page.active_print_host =
+        ui_active_print_create_profile(
+            page.root,
+            &layout->active_print,
+            &layout->active_content);
 
     page.banner_host =
         ui_status_banner_create(
@@ -68,12 +80,6 @@ ui_dashboard_page_t ui_dashboard_page_create(
             layout->banner.y,
             layout->banner.width,
             layout->banner.height);
-
-    page.active_print_host =
-        ui_active_print_create_profile(
-            page.root,
-            &layout->active_print,
-            &layout->active_content);
 
     page.machine_status_host =
         ui_machine_status_create_profile(

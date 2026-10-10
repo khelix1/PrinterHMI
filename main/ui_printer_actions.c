@@ -1,4 +1,5 @@
 #include "ui_printer_actions.h"
+#include "ui_studio_layout.h"
 
 #include "ui_button.h"
 #include "ui_theme.h"
@@ -78,6 +79,16 @@ void ui_printer_actions_create(
     lv_event_cb_t motion_cb)
 {
     if (!parent || !actions) {
+        return;
+    }
+
+    if(ui_theme_is_studio()) {
+        actions->motion=studio_action(parent,"Toolhead Control",0,0,220,52,motion_cb,"MOTION");
+        actions->home=studio_action(parent,"Home",232,0,128,52,command_cb,"HOME_ALL");
+        actions->pause=studio_action(parent,"Pause",372,0,128,52,command_cb,"PAUSE");
+        actions->resume=studio_action(parent,"Resume",512,0,128,52,command_cb,"RESUME");
+        actions->object=studio_action(parent,"Object",652,0,128,52,command_cb,"CANCEL_OBJECT");
+        actions->cancel=studio_action(parent,"Stop",792,0,184,52,command_cb,"CANCEL_PRINT");
         return;
     }
 

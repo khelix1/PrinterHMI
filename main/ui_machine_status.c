@@ -2,6 +2,8 @@
 #include "ui_text.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_text_fit.h"
+#include "ui_studio_layout.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +19,8 @@ typedef struct {
     lv_obj_t *speed;
     lv_obj_t *flow;
     lv_obj_t *fan;
+    lv_obj_t *nozzle_target;
+    lv_obj_t *bed_target;
 } machine_status_ctx_t;
 
 static lv_obj_t **machine_status_value_slot(
@@ -126,6 +130,54 @@ lv_obj_t *ui_machine_status_create(
 }
 
 
+static lv_obj_t *studio_label(lv_obj_t *p,const char *t,int x,int y,int w,const lv_font_t *f,lv_color_t c)
+{
+    lv_obj_t *o=lv_label_create(p); lv_label_set_text(o,t);
+    lv_obj_set_pos(o,x,y); lv_obj_set_width(o,w);
+    lv_label_set_long_mode(o,LV_LABEL_LONG_MODE_DOTS);
+    ui_apply_custom_label_style(o,f,c);
+    ui_text_fit_single_line(o,f); return o;
+}
+static void studio_temperature(lv_obj_t *value,lv_obj_t *target,const char *text)
+{
+    float current=0,goal=0;
+    if(text && sscanf(text,"%f / %f",&current,&goal)==2) {
+        char reading[32],setting[40];
+        snprintf(reading,sizeof(reading),"%.0f°",(double)current);
+        snprintf(setting,sizeof(setting),"Target %.0f°",(double)goal);
+        lv_label_set_text(value,reading); lv_label_set_text(target,setting);
+    } else {
+        lv_label_set_text(value,text && !strcmp(text,"N/A") ? "N/A" : "--°");
+        lv_label_set_text(target,text && !strcmp(text,"N/A") ? "Not available" : "Target --°");
+    }
+}
+static lv_obj_t *studio_machine_create(lv_obj_t *parent,const ui_dashboard_rect_t *rect,machine_status_ctx_t *ctx)
+{
+    lv_obj_t *host=studio_plane(parent,rect->x,rect->y,rect->width,rect->height);
+    studio_rule(host,736,0,1,330);
+    ctx->nozzle_name=studio_label(host,"Nozzle",756,4,220,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    ctx->nozzle=studio_label(host,"--°",756,34,220,&ui_studio_font_48,UI_OK_BRIGHT);
+    ctx->nozzle_target=studio_label(host,"Target --°",756,94,220,UI_FONT_BODY,UI_TEXT_DIM);
+    studio_rule(host,756,134,220,1);
+    studio_label(host,"Bed",756,154,220,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    ctx->bed=studio_label(host,"--°",756,184,220,&ui_studio_font_48,UI_OK_BRIGHT);
+    ctx->bed_target=studio_label(host,"Target --°",756,244,220,UI_FONT_BODY,UI_TEXT_DIM);
+    ctx->live=studio_label(host,"OFFLINE",756,298,96,UI_FONT_CAPTION,UI_DANGER_BRIGHT);
+    ctx->filament=studio_label(host,"--",856,298,120,UI_FONT_CAPTION,UI_TEXT_DIM);
+    studio_rule(host,0,346,976,1);
+    const char *names[]={"Speed","Flow","Fan","Drybox air","Humidity"};
+    lv_obj_t **values[]={&ctx->speed,&ctx->flow,&ctx->fan,&ctx->air,&ctx->humidity};
+    for(int i=0;i<5;i++) {
+        int x=i*196;
+        studio_label(host,names[i],x,356,184,UI_FONT_CAPTION,UI_TEXT_DIM);
+        *values[i]=studio_label(host,"--",x,386,184,UI_FONT_BODY_LARGE,UI_TEXT);
+        if(i)studio_rule(host,x-10,356,1,60);
+    }
+    lv_obj_set_user_data(host,ctx);
+    lv_obj_add_event_cb(host,machine_status_delete_cb,LV_EVENT_DELETE,ctx);
+    return host;
+}
+
 lv_obj_t *ui_machine_status_create_profile(
     lv_obj_t *parent,
     const ui_dashboard_rect_t *rect,
@@ -159,6 +211,8 @@ lv_obj_t *ui_machine_status_create_profile(
         lv_malloc(sizeof(machine_status_ctx_t));
     if (!ctx) return NULL;
     memset(ctx, 0, sizeof(*ctx));
+
+    if (ui_theme_is_studio()) return studio_machine_create(parent,rect,ctx);
 
     lv_obj_t *host = NULL;
 
@@ -470,6 +524,10 @@ void ui_machine_status_set_active_hotend(
     }
 
     if (ctx->nozzle) {
+        if (ctx->nozzle_target) {
+            studio_temperature(ctx->nozzle,ctx->nozzle_target,value);
+            return;
+        }
         lv_label_set_text(
             ctx->nozzle,
             value && value[0] ? value : ui_text("-- / -- C"));
@@ -492,11 +550,22 @@ void ui_machine_status_set(
     machine_status_ctx_t *ctx = (machine_status_ctx_t *)lv_obj_get_user_data(panel);
     if (!ctx) return;
 
-    lv_label_set_text(ctx->nozzle, nozzle ? nozzle : ui_text("-- / -- C"));
-    lv_label_set_text(ctx->bed, bed ? bed : ui_text("-- / -- C"));
+    if (ctx->nozzle_target) {
+        studio_temperature(ctx->nozzle,ctx->nozzle_target,nozzle);
+        studio_temperature(ctx->bed,ctx->bed_target,bed);
+    } else {
+        lv_label_set_text(ctx->nozzle, nozzle ? nozzle : ui_text("-- / -- C"));
+        lv_label_set_text(ctx->bed, bed ? bed : ui_text("-- / -- C"));
+    }
     lv_label_set_text(ctx->air, chamber ? chamber : ui_text("-- C"));
     lv_label_set_text(ctx->humidity, humidity ? humidity : "-- %RH");
     lv_label_set_text(ctx->speed, speed ? speed : "100%");
     lv_label_set_text(ctx->flow, flow ? flow : "100%");
     lv_label_set_text(ctx->fan, fan ? fan : "--%");
+    if (ctx->nozzle_target) {
+        ui_text_fit_single_line(ctx->speed,UI_FONT_BODY_LARGE);
+        ui_text_fit_single_line(ctx->flow,UI_FONT_BODY_LARGE);
+        ui_text_fit_single_line(ctx->air,UI_FONT_VALUE);
+        ui_text_fit_single_line(ctx->humidity,UI_FONT_VALUE);
+    }
 }

@@ -195,3 +195,12 @@ are not architecture modules and must not be tracked as production source.
 | `tools/audit/motion_layout_test.py`, `tools/audit/chooser_refresh_test.py` | Motion/Calibration geometry and stable chooser refresh |
 | `tools/audit/profiles_layout_test.py` | Main profile manager/editor/remove geometry, validation and cleanup |
 | `docs/SETTINGS_LAYOUT_VALIDATION.md` | Source closeout and pending hardware/follow-up work |
+
+## STUDIO Dark
+
+- `main/ui_theme_studio.c` / `.h`: independent dark-theme recipes and page frame.
+- `main/ui_studio_icons.c` / `.h`: native line icons for the bottom dock.
+- `main/assets/fonts/studio/`: Inter glyph assets, original font and license.
+- `tools/regenerate_studio_fonts.py`: optional font regeneration.
+- `tools/audit/studio_layout_test.py` / `.c`: native layout, pointer and lifecycle validation.
+- `docs/STUDIO_DARK_TRIAL.md`: theme composition and validation status.

@@ -2,6 +2,7 @@
 #include "ui_text.h"
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "ui_theme.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -101,6 +102,11 @@ void ui_global_estop_show_restart_confirmation(void)
     ui_popup_add_footer_action(s_estop->popup, UI_POPUP_ACTION_DANGER, restart_label, 300, UI_POPUP_FOOTER_RIGHT, firmware_restart_cb, NULL, NULL);
 }
 
+static void estop_button_deleted(lv_event_t *event)
+{
+    if (s_estop && lv_event_get_target(event) == s_estop->button) s_estop->button = NULL;
+}
+
 void ui_global_estop_create(lv_obj_t *parent)
 {
     if (!parent || !s_estop || s_estop->button) return;
@@ -108,8 +114,9 @@ void ui_global_estop_create(lv_obj_t *parent)
     s_estop->button = ui_button_create_empty(parent, UI_BUTTON_DANGER);
     if (!s_estop->button) return;
 
+    lv_obj_add_event_cb(s_estop->button,estop_button_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_size(s_estop->button, 140, 52);
-    lv_obj_set_pos(s_estop->button, 690, 10);
+    lv_obj_set_pos(s_estop->button, ui_theme_is_studio() ? 852 : 690, 10);
     lv_obj_clear_flag(s_estop->button, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *label = ui_button_create_label(

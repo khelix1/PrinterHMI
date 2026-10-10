@@ -11,6 +11,8 @@ typedef struct {
     lv_obj_t *elapsed;
     lv_obj_t *remaining;
     lv_obj_t *eta;
+    lv_obj_t *nozzle_target;
+    lv_obj_t *bed_target;
 } ui_printer_info_cards_t;
 
 void ui_printer_info_cards_create(lv_obj_t *parent,

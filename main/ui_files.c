@@ -1103,6 +1103,12 @@ static void detail_cancel_event_cb(lv_event_t *e)
     }
 }
 
+void ui_files_print_feedback(const char *message)
+{
+    if(s_print_confirm_popup) ui_popup_feedback(lv_obj_get_child(s_print_confirm_popup,1), UI_STATUS_WARNING, "PRINT NOT STARTED", message);
+    else if(s_detail_info_label) lv_label_set_text(s_detail_info_label,message);
+}
+
 static void print_confirm_accept(lv_event_t *event)
 {
     (void)event;
@@ -1111,14 +1117,12 @@ static void print_confirm_accept(lv_event_t *event)
         !lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED);
     bool same_printer=s_print_confirm_profile==moonraker_config_active_profile_index() &&
         s_print_confirm_generation==moonraker_config_generation();
-    print_confirm_cancel(NULL);
     if(!same_printer) {
-        ui_toast_show(UI_STATUS_WARNING,"PRINTER CHANGED","Select the file again before starting a print.");
-        detail_cancel_event_cb(NULL);
+        ui_files_print_feedback("Printer changed. Cancel and select the file again before starting a print.");
         return;
     }
     if(!ready) {
-        ui_toast_show(UI_STATUS_WARNING,"PRINT NOT READY","Wait for the file details, then try again.");
+        ui_files_print_feedback("Print not ready. Wait for the file details, then try again.");
         return;
     }
     s_detail_start_cb();

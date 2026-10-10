@@ -10,6 +10,7 @@
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_value_update.h"
+#include "ui_text_fit.h"
 
 typedef enum { VIEW_LIMITS, VIEW_DISTANCE, VIEW_DRIVERS } motion_view_t;
 typedef struct {
@@ -82,7 +83,7 @@ static void calculate_cb(lv_event_t *event)
 {
     (void)event;
     if (!owns_printer()) {
-        ui_toast_show(UI_STATUS_INFO, "PRINTER CHANGED", "Close and reopen the calculator.");
+        ui_toast_show(UI_STATUS_WARNING, "PRINTER CHANGED", "Close and reopen the calculator.");
         return;
     }
     double result;
@@ -138,7 +139,8 @@ static lv_obj_t *layout_body(lv_obj_t *popup, const char *title)
     lv_obj_t *label = lv_label_create(popup);
     lv_label_set_text(label, title);
     ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
-    lv_obj_set_width(label, LV_PCT(100));
+    lv_obj_set_size(label, LV_PCT(100), UI_FONT_TITLE->line_height);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_t *body = lv_obj_create(popup);
     lv_obj_remove_style_all(body);
     lv_obj_set_size(body, LV_PCT(100), 0);
@@ -195,6 +197,8 @@ static void field_cb(lv_event_t *event)
     s->editor_value = ui_popup_add_textarea(body, 584, 56, LV_ALIGN_TOP_MID,
         0, 0, true, false, 18, "", lv_textarea_get_text(s->editor_target), "0123456789.");
     lv_obj_set_width(s->editor_value, LV_PCT(100));
+    lv_obj_set_style_text_font(s->editor_value, UI_FONT_BODY, 0);
+    lv_obj_set_height(s->editor_value, 56);
     lv_obj_t *keyboard = ui_popup_add_keyboard(body, s->editor_value, 584, 182,
         LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_NUMBER);
     lv_obj_set_width(keyboard, LV_PCT(100));
@@ -221,6 +225,11 @@ static void set_driver_options(const char *options)
         lv_dropdown_set_options(s->driver_selector, options);
 }
 
+static void limit_fit(lv_event_t *event)
+{
+    ui_text_fit_single_line(lv_event_get_target_obj(event), UI_FONT_BODY);
+}
+
 static void render_limits(bool live, const char *status_override)
 {
     static const char *units[] = {"mm/s", "mm/s^2", "mm/s", "%"};
@@ -229,6 +238,7 @@ static void render_limits(bool live, const char *status_override)
         format_value(value, sizeof(value), live && s->snapshot.limit_valid[i],
             s->snapshot.limits[i] * (i == 3 ? 100 : 1), units[i]);
         label_text(s->limits[i], value);
+        ui_text_fit_single_line(s->limits[i], UI_FONT_BODY);
     }
     label_text(s->status, status_override ? status_override : live ? "CURRENT RUNTIME LIMITS" : "LIVE LIMITS UNAVAILABLE");
     if (live) ui_value_set_color(s->status, UI_TEXT_BRIGHT, 0); else ui_value_set_color(s->status, UI_TEXT_DIM, 0);
@@ -355,12 +365,14 @@ static void show_view(motion_view_t view)
             lv_obj_t *name = layout_label(pair, labels[i], false);
             s->limits[i] = layout_label(pair, "Not reported", false);
             layout_cell(name, 0); layout_cell(s->limits[i], 1);
+            lv_obj_add_event_cb(s->limits[i], limit_fit, LV_EVENT_SIZE_CHANGED, NULL);
         }
         layout_label(body, "Live limits may differ from printer.cfg during a print.", false);
     } else if (view == VIEW_DRIVERS) {
         s->driver_selector = lv_dropdown_create(body);
         lv_obj_set_size(s->driver_selector, LV_PCT(100), 54);
-        lv_obj_set_style_text_font(s->driver_selector, UI_FONT_BODY, 0);
+        ui_apply_surface_role(s->driver_selector, UI_SURFACE_TEXT_INPUT);
+        lv_obj_set_style_text_font(s->driver_selector, ui_font_with_fallback(UI_FONT_BODY), 0);
         lv_dropdown_set_options(s->driver_selector, "Waiting for drivers...");
         lv_obj_add_event_cb(s->driver_selector, driver_selected_cb, LV_EVENT_VALUE_CHANGED, NULL);
         s->status = layout_label(body, "WAITING FOR DRIVER STATUS", true);
@@ -369,7 +381,8 @@ static void show_view(motion_view_t view)
         layout_label(body, "Calculate from belt/pulley or leadscrew geometry.\nRetain gear_ratio for geared axes.", false);
         s->mode = lv_dropdown_create(body);
         lv_obj_set_size(s->mode, LV_PCT(100), 54);
-        lv_obj_set_style_text_font(s->mode, UI_FONT_BODY, 0);
+        ui_apply_surface_role(s->mode, UI_SURFACE_TEXT_INPUT);
+        lv_obj_set_style_text_font(s->mode, ui_font_with_fallback(UI_FONT_BODY), 0);
         lv_dropdown_set_options(s->mode, "Belt and pulley\nLeadscrew");
         lv_obj_add_event_cb(s->mode, mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_t *pair = layout_pair(body);

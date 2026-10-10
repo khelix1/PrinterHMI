@@ -5,6 +5,7 @@
 #include "console_controller.h"
 #include "moonraker.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
 static ui_calibration_geometry_context_t *s_geometry;
@@ -41,45 +42,21 @@ static void show_screws_results_popup(void)
     close_screws_popup();
 
     *s_geometry->screws_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            660,
-            430,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 660, 430, UI_POPUP_STANDARD);
 
     if (!*s_geometry->screws_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_geometry->screws_popup,
-        ui_text("SCREWS TILT RESULTS"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_geometry->screws_popup,
-        48);
+    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("SCREWS TILT RESULTS"));
+
 
     *s_geometry->screws_results_label =
-        ui_popup_add_body(
-            *s_geometry->screws_popup,
-            "Waiting for Klipper adjustment results...",
-            30,
-            76,
-            600);
+        ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), "Waiting for Klipper adjustment results...");
 
-    ui_popup_add_standard_footer_divider(
-        *s_geometry->screws_popup);
 
-    ui_popup_add_footer_action(
-        *s_geometry->screws_popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        close_screws_popup_cb,
-        NULL,
-        NULL);
+
+    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_screws_popup_cb, NULL, NULL);
 }
 
 
@@ -198,7 +175,7 @@ static void screws_tilt_button_cb(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -207,7 +184,7 @@ static void screws_tilt_button_cb(
 
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Screws Tilt cannot run during a print.");
@@ -216,7 +193,7 @@ static void screws_tilt_button_cb(
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Clear the printer error before calibration.");
@@ -231,24 +208,14 @@ static void screws_tilt_button_cb(
     close_screws_popup();
 
     *s_geometry->screws_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            600,
-            360,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 600, 360, UI_POPUP_STANDARD);
 
     if (!*s_geometry->screws_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_geometry->screws_popup,
-        ui_text("RUN SCREWS TILT?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_geometry->screws_popup,
-        48);
+    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("RUN SCREWS TILT?"));
+
 
     char body[420];
     lv_snprintf(
@@ -261,35 +228,13 @@ static void screws_tilt_button_cb(
             ? " XYZ is not homed, so all axes will home first."
             : "");
 
-    ui_popup_add_body(
-        *s_geometry->screws_popup,
-        body,
-        28,
-        76,
-        544);
+    ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), body);
 
-    ui_popup_add_standard_footer_divider(
-        *s_geometry->screws_popup);
 
-    ui_popup_add_footer_action(
-        *s_geometry->screws_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_screws_popup_cb,
-        NULL,
-        NULL);
 
-    ui_popup_add_footer_action(
-        *s_geometry->screws_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " RUN",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        run_screws_tilt_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_screws_popup_cb, NULL, NULL);
+
+    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_screws_tilt_cb, NULL, NULL);
 }
 
 
@@ -351,21 +296,19 @@ static void run_gantry_level_cb(
         s_geometry->send_gcode &&
         s_geometry->send_gcode(command);
 
-    close_gantry_level_popup();
-
     if (!sent) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION FAILED",
             "Moonraker did not accept the gantry-level command.");
         return;
     }
 
-    ui_toast_show(
-        UI_STATUS_OK,
+    ui_cal_dialog_notice(
+        UI_STATUS_INFO,
         *s_geometry->gantry_use_qgl
-            ? "QGL STARTED"
-            : "Z TILT STARTED",
+            ? "QGL REQUEST SENT"
+            : "Z TILT REQUEST SENT",
         "Klipper is running the leveling workflow. Results remain available in Console.");
 }
 
@@ -393,7 +336,7 @@ static void gantry_level_button_cb(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -402,7 +345,7 @@ static void gantry_level_button_cb(
 
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Gantry leveling cannot run during a print.");
@@ -411,7 +354,7 @@ static void gantry_level_button_cb(
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Clear the printer error before calibration.");
@@ -428,26 +371,16 @@ static void gantry_level_button_cb(
     close_gantry_level_popup();
 
     *s_geometry->gantry_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            620,
-            370,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 620, 370, UI_POPUP_STANDARD);
 
     if (!*s_geometry->gantry_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_geometry->gantry_popup,
-        *s_geometry->gantry_use_qgl
+    ui_cal_dialog_title(*s_geometry->gantry_popup, *s_geometry->gantry_use_qgl
             ? ui_text("RUN QUAD GANTRY LEVEL?")
-            : ui_text("RUN Z TILT?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_geometry->gantry_popup,
-        48);
+            : ui_text("RUN Z TILT?"));
+
 
     char body[430];
     lv_snprintf(
@@ -460,35 +393,13 @@ static void gantry_level_button_cb(
             ? " XYZ is not homed, so all axes will home first."
             : "");
 
-    ui_popup_add_body(
-        *s_geometry->gantry_popup,
-        body,
-        28,
-        76,
-        564);
+    ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->gantry_popup), body);
 
-    ui_popup_add_standard_footer_divider(
-        *s_geometry->gantry_popup);
 
-    ui_popup_add_footer_action(
-        *s_geometry->gantry_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_gantry_level_popup_cb,
-        NULL,
-        NULL);
 
-    ui_popup_add_footer_action(
-        *s_geometry->gantry_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " RUN",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        run_gantry_level_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_gantry_level_popup_cb, NULL, NULL);
+
+    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_gantry_level_cb, NULL, NULL);
 }
 
 

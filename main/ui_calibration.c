@@ -29,6 +29,7 @@
 #include "ui_button.h"
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_widgets.h"
@@ -586,7 +587,7 @@ static bool calibration_action_ready(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION UNAVAILABLE",
             "The active printer is offline or not ready.");
@@ -601,7 +602,7 @@ static bool calibration_action_ready(
             sizeof(detail),
             "%s cannot run during a print.",
             workflow ? workflow : "Calibration");
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             detail);
@@ -610,7 +611,7 @@ static bool calibration_action_ready(
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "CALIBRATION BLOCKED",
             "Clear the printer error before calibration.");
@@ -666,7 +667,7 @@ static void send_probe_step_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the TESTZ command.");
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "PROBE MOVE FAILED",
             "Moonraker did not accept the TESTZ command.");
@@ -692,9 +693,9 @@ static void abort_probe_calibration_cb(
     ui_calibration_results_close();
     calibration_session_controller_reset();
 
-    ui_toast_show(
-        sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
-        sent ? "PROBE CALIBRATION ABORTED" : "ABORT FAILED",
+    ui_cal_dialog_notice(
+        sent ? UI_STATUS_OK : UI_STATUS_DANGER,
+        sent ? "PROBE ABORT REQUESTED" : "ABORT FAILED",
         sent
             ? "No calibration values were saved."
             : "Moonraker did not accept ABORT.");
@@ -727,7 +728,7 @@ static void accept_probe_calibration_cb(
 
     ui_calibration_results_show(
         "PROBE / Z RESULTS",
-        "Waiting for Klipper to accept the measured Z offset.\\n\\n"
+        "Waiting for Klipper to accept the measured Z offset.\n\n"
         "Apply & Restart will appear only if Klipper reports SAVE_CONFIG.");
     ui_calibration_results_refresh();
 }
@@ -814,61 +815,29 @@ static void probe_z_button_cb(
 
     close_probe_popup();
     s_calibration->probe_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            630,
-            390,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 630, 390, UI_POPUP_STANDARD);
 
     if (!s_calibration->probe_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_calibration->probe_popup,
-        ui_text("START PROBE / Z CALIBRATION?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->probe_popup,
-        48);
+    ui_cal_dialog_title(s_calibration->probe_popup, ui_text("START PROBE / Z CALIBRATION?"));
+
 
     char body[440];
     lv_snprintf(
         body,
         sizeof(body),
-        "The toolhead will move to the configured probe position.%s\\n\\n"
-        "Clear the bed and prepare a paper gauge. You will manually adjust TESTZ before accepting.\\n\\n"
+        "The toolhead will move to the configured probe position.%s\n\n"
+        "Clear the bed and prepare a paper gauge. You will manually adjust TESTZ before accepting.\n\n"
         "Nothing is saved until Apply & Restart is confirmed.",
         s_calibration->probe_home_required
             ? " XYZ is not homed, so the printer's homing workflow will run first."
             : "");
-    ui_popup_add_body(
-        s_calibration->probe_popup,
-        body,
-        28,
-        76,
-        574);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->probe_popup);
-    ui_popup_add_footer_action(
-        s_calibration->probe_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_probe_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->probe_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " START",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        run_probe_calibration_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_text(ui_cal_dialog_body(s_calibration->probe_popup), body);
+
+    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_probe_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " START", run_probe_calibration_cb, NULL, NULL);
 }
 
 
@@ -919,7 +888,7 @@ static void send_axis_twist_step_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the Axis Twist TESTZ command.");
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "AXIS TWIST MOVE FAILED",
             "Moonraker did not accept the TESTZ command.");
@@ -946,9 +915,9 @@ static void abort_axis_twist_calibration_cb(
     ui_calibration_results_close();
     calibration_session_controller_reset();
 
-    ui_toast_show(
-        sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
-        sent ? "AXIS TWIST ABORTED" : "ABORT FAILED",
+    ui_cal_dialog_notice(
+        sent ? UI_STATUS_OK : UI_STATUS_DANGER,
+        sent ? "AXIS TWIST ABORT REQUESTED" : "ABORT FAILED",
         sent
             ? "No Axis Twist values were saved."
             : "Moonraker did not accept ABORT.");
@@ -1066,24 +1035,14 @@ static void axis_twist_button_cb(
 
     close_axis_twist_popup();
     s_calibration->axis_twist_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            630,
-            400,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 630, 400, UI_POPUP_STANDARD);
 
     if (!s_calibration->axis_twist_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_calibration->axis_twist_popup,
-        ui_text("START AXIS TWIST CALIBRATION?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->axis_twist_popup,
-        48);
+    ui_cal_dialog_title(s_calibration->axis_twist_popup, ui_text("START AXIS TWIST CALIBRATION?"));
+
 
     char body[440];
     lv_snprintf(
@@ -1094,32 +1053,10 @@ static void axis_twist_button_cb(
         s_calibration->axis_twist_home_required
             ? " XYZ is not homed, so homing will run first."
             : "");
-    ui_popup_add_body(
-        s_calibration->axis_twist_popup,
-        body,
-        28,
-        76,
-        574);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->axis_twist_popup);
-    ui_popup_add_footer_action(
-        s_calibration->axis_twist_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_axis_twist_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->axis_twist_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " START",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        run_axis_twist_calibration_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_text(ui_cal_dialog_body(s_calibration->axis_twist_popup), body);
+
+    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_axis_twist_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " START", run_axis_twist_calibration_cb, NULL, NULL);
 }
 
 

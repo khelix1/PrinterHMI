@@ -52,3 +52,5 @@ bool ui_files_detail_is_open(void);
 bool ui_files_can_refresh_rows(void);
 void ui_files_update_detail_metadata(const char *metadata_text,
                                          bool ready);
+
+void ui_files_print_feedback(const char *message);

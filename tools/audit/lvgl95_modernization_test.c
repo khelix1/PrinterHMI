@@ -29,6 +29,7 @@ void console_controller_add_command(const char *c){(void)c;}
 void console_controller_add(console_entry_type_t t,const char *f,...){(void)t;(void)f;}
 #if defined(TEST_CONSOLE)
 #include "ui_console.c"
+const char *moonraker_config_active_profile_name(void){return "Workshop printer";}
 static void run(void){
  ui_console_show(NULL);lv_obj_update_layout(s_root);
  lv_obj_t *first=s_rows->rows[0],*last=s_rows->rows[63];assert(first && last);
@@ -36,7 +37,7 @@ static void run(void){
  rebuild_output();assert(lv_obj_get_scroll_y(s_output)==scroll);
  assert(first==s_rows->rows[0] && last==s_rows->rows[63]);
  s_filter=CONSOLE_FILTER_ERRORS;rebuild_output();
- for(int i=0;i<64;i++){assert(lv_obj_has_flag(s_rows->rows[i],LV_OBJ_FLAG_HIDDEN)==(i>=32));if(i<32)assert(lv_obj_get_y(s_rows->rows[i])==10+i*38);}
+ for(int i=0;i<64;i++){assert(lv_obj_has_flag(s_rows->rows[i],LV_OBJ_FLAG_HIDDEN)==(i>=32));if(i<32)assert(lv_label_get_long_mode(s_rows->rows[i])==LV_LABEL_LONG_WRAP);}
  s_filter=CONSOLE_FILTER_ALL;entries=0;rebuild_output();assert(s_rows->empty && !lv_obj_has_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN));
  lv_obj_t *empty=s_rows->empty;entries=64;rebuild_output();assert(s_rows->rows[0]==first && lv_obj_has_flag(empty,LV_OBJ_FLAG_HIDDEN));
  assert(lv_obj_get_child_count(s_output)==65);

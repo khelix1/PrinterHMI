@@ -16,6 +16,7 @@
 #include "theme_manager.h"
 #include "timezone_config.h"
 #include "ui_settings.h"
+#include "ui_toast.h"
 
 #define SETTINGS_BACKUP_SCHEMA 1
 #define SETTINGS_BACKUP_PRODUCT "PrinterHMI"
@@ -43,6 +44,7 @@ typedef struct {
     ui_accent_id_t accent;
     ui_density_id_t density;
     ui_accessibility_t accessibility;
+    bool optional_confirmations;
 
     size_t timezone_index;
     int brightness;
@@ -191,6 +193,8 @@ static void capture_current(
     snapshot->accessibility =
         theme_manager_accessibility();
 
+    snapshot->optional_confirmations = ui_toast_confirmations_enabled();
+
     snapshot->timezone_index =
         timezone_config_selected_index();
 
@@ -320,6 +324,8 @@ static cJSON *snapshot_to_json(
         "density",
         snapshot->density);
 
+    cJSON_AddBoolToObject(appearance, "optional_confirmations", snapshot->optional_confirmations);
+
     cJSON *accessibility =
         cJSON_AddObjectToObject(
             appearance,
@@ -368,6 +374,18 @@ static cJSON *snapshot_to_json(
     return root;
 }
 
+
+static bool parse_notification_preference(const cJSON *appearance, bool *enabled,
+    char *status, size_t status_size)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(appearance, "optional_confirmations");
+    if (item && !cJSON_IsBool(item)) {
+        set_status(status, status_size, "Backup notification preference is invalid.");
+        return false;
+    }
+    *enabled = item && cJSON_IsTrue(item); /* Older backups default to quiet. */
+    return true;
+}
 
 static bool parse_snapshot(
     const cJSON *root,
@@ -558,7 +576,7 @@ static bool parse_snapshot(
             appearance,
             "theme",
             UI_THEME_CLASSIC,
-            UI_THEME_GLASS,
+            UI_THEME_STUDIO_DARK,
             &theme) ||
         !json_integer(
             appearance,
@@ -595,6 +613,8 @@ static bool parse_snapshot(
             "Backup appearance settings are invalid.");
         return false;
     }
+
+    if (!parse_notification_preference(appearance, &snapshot->optional_confirmations, status, status_size)) return false;
 
     snapshot->theme = (ui_theme_id_t)theme;
     snapshot->accent = (ui_accent_id_t)accent;
@@ -682,6 +702,7 @@ static bool apply_snapshot(
 
     return
         theme_applied &&
+        ui_toast_set_confirmations(snapshot->optional_confirmations) &&
         theme_manager_select_accent(snapshot->accent) &&
         theme_manager_select_density(snapshot->density) &&
         theme_manager_set_accessibility(

@@ -49,3 +49,10 @@ Current control-dialog closeout: [Nightly validation and pending printing checks
 Settings and large-text source closeout: [validation and pending follow-ups](SETTINGS_LAYOUT_VALIDATION.md).
 
 - [STUDIO Dark](STUDIO_DARK_TRIAL.md): independent dark theme, native LVGL Dashboard and panel validation.
+
+- [Telemetry views, graph controls and validation](TELEMETRY.md)
+
+- [Motion and calibration dialog layouts and validation](MOTION_CALIBRATION.md)
+
+- [Console layouts, command feedback and pressed button frames](CONSOLE.md)
+- [Notification policy and remaining migration](NOTIFICATIONS.md)

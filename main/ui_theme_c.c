@@ -1,3 +1,4 @@
+#include "ui_button_press.h"
 /*
  * Theme C: Dark Glass
  *
@@ -78,7 +79,7 @@ static void glass_button(lv_obj_t *obj,
     lv_obj_set_style_shadow_spread(obj, 0, 0);
     lv_obj_set_style_shadow_opa(obj, LV_OPA_30, 0);
     lv_obj_set_style_shadow_offset_y(obj, 4, 0);
-    lv_obj_set_style_translate_y(obj, 1, LV_STATE_PRESSED);
+    ui_button_stable_press(obj);
     lv_obj_set_style_border_color(obj, UI_TEXT_BRIGHT, LV_STATE_FOCUSED);
     lv_obj_set_style_outline_width(obj, 0, 0);
 }

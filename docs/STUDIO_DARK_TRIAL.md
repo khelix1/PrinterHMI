@@ -207,3 +207,7 @@ The File details Close button is compact and right-aligned rather than stretched
 ## Visible Devices actions
 
 Tools > Devices now shows GRAPHS and ENDSTOPS in the upper-right header. Graphs opens existing temperature/humidity telemetry; Endstops opens existing live limit-switch status. The header anchor fix retains the earlier catalog layout. Panel validation remains pending.
+
+## Modern telemetry page
+
+Tools > Devices > Graphs opens the native telemetry instruments. Heat, Motion and Environment controls share the range/hold toolbar; Heat adds the hotend and target/detail choices. Graph cards show live values, scale/extrema and current-sample dots; scroll for additional channels. Holding freezes graphs while values stay live. Studio fills its 976 x 424 stage, and the same responsive layout serves the other themes. Pending panel checks are listed in [Telemetry](TELEMETRY.md).

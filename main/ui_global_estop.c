@@ -17,6 +17,7 @@ typedef struct {
     ui_global_estop_send_gcode_cb_t send_gcode;
     lv_obj_t *button;
     lv_obj_t *popup;
+    lv_obj_t *message, *title;
     char printer_name[64];
 } ui_global_estop_state_t;
 
@@ -24,7 +25,7 @@ static ui_global_estop_state_t *s_estop;
 
 static void estop_popup_deleted(lv_event_t *event)
 {
-    (void)event;if(s_estop)s_estop->popup=NULL;
+    (void)event;if(s_estop)s_estop->popup=s_estop->message=s_estop->title=NULL;
 }
 
 bool ui_global_estop_init(ui_global_estop_send_gcode_cb_t send_gcode)
@@ -69,8 +70,11 @@ static void firmware_restart_cb(lv_event_t *event)
 {
     (void)event;
     if(!s_estop || !s_estop->send_gcode)return;
-    if(s_estop->send_gcode("FIRMWARE_RESTART"))close_popup_cb(NULL);
-    else ui_toast_show(UI_STATUS_DANGER,"RESTART NOT SENT","Could not send firmware restart. Check the printer connection.");
+    bool sent=s_estop->send_gcode("FIRMWARE_RESTART");
+    lv_label_set_text(s_estop->message, sent
+        ? "Restart requested. Wait for the printer to reconnect before continuing."
+        : "RESTART NOT SENT. Check the printer connection and try again.");
+    if(sent)lv_obj_add_state(lv_event_get_target_obj(event),LV_STATE_DISABLED);
 }
 
 /* Native modal layout: text scrolls independently from the pinned actions. */
@@ -88,7 +92,7 @@ static void estop_show_dialog(bool restart_only)
     lv_obj_set_flex_flow(popup,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(popup,16,0);
     lv_obj_set_style_pad_row(popup,12,0);
-    lv_obj_t *title=lv_label_create(popup);
+    lv_obj_t *title=lv_label_create(popup);s_estop->title=title;
     lv_label_set_text(title,ui_text(restart_only?"RESTART KLIPPER?":"STOP REQUEST SENT"));
     ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_DANGER_BRIGHT);
     lv_obj_set_width(title,LV_PCT(100));
@@ -107,7 +111,7 @@ static void estop_show_dialog(bool restart_only)
     lv_label_set_text(name,s_estop->printer_name[0]?s_estop->printer_name:"ACTIVE PRINTER");
     ui_apply_custom_label_style(name,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
     lv_obj_set_width(name,LV_PCT(100));lv_label_set_long_mode(name,LV_LABEL_LONG_WRAP);
-    lv_obj_t *message=lv_label_create(body);
+    lv_obj_t *message=lv_label_create(body);s_estop->message=message;
     lv_label_set_text(message,ui_text(restart_only?
         "Restart Klipper on this printer? This interrupts any operation in progress.":
         "Emergency stop requested. Verify this printer has halted before recovery. Restart Klipper only when you are ready to recover."));
@@ -142,11 +146,12 @@ static void estop_show_dialog(bool restart_only)
 static void estop_event_cb(lv_event_t *event)
 {
     if(lv_event_get_code(event)!=LV_EVENT_CLICKED || !s_estop || !s_estop->send_gcode)return;
-    if(!s_estop->send_gcode("M112")) {
-        ui_toast_show(UI_STATUS_DANGER,"STOP NOT CONFIRMED","Stop request could not be sent. Use the printer power switch if needed.");
-        return;
-    }
+    bool sent=s_estop->send_gcode("M112");
     estop_show_dialog(false);
+    if(!sent && s_estop->popup) {
+        lv_label_set_text(s_estop->title,"STOP NOT CONFIRMED");
+        lv_label_set_text(s_estop->message,"Stop request could not be sent. Use the printer power switch if needed. Verify the printer has halted before recovery.");
+    }
 }
 
 void ui_global_estop_show_restart_confirmation(void)

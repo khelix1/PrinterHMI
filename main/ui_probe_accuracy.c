@@ -8,18 +8,23 @@
 #include "ui_button.h"
 #include "ui_calibration_results.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
+#include "ui_value_update.h"
 
-static lv_obj_t *s_button, *s_popup, *s_samples;
+static lv_obj_t *s_button, *s_popup, *s_samples, *s_status, *s_run;
+static lv_timer_t *s_status_timer;
 static ui_probe_accuracy_send_cb_t s_send;
 static ui_probe_accuracy_ready_cb_t s_ready;
 static uint32_t s_owner;
 
 static void close_popup(void)
 {
+    if (s_status_timer) lv_timer_delete(s_status_timer);
+    s_status_timer = NULL;
     if (s_popup) lv_obj_delete(s_popup);
-    s_popup = s_samples = NULL;
+    s_popup = s_samples = s_status = s_run = NULL;
 }
 static void close_cb(lv_event_t *event) { (void)event; close_popup(); }
 
@@ -38,7 +43,7 @@ static void run_cb(lv_event_t *event)
         return;
     }
     static const unsigned samples[] = {5, 10, 20};
-    unsigned selected = lv_roller_get_selected(s_samples);
+    unsigned selected = lv_dropdown_get_selected(s_samples);
     if (selected >= 3) return;
     char command[48];
     snprintf(command, sizeof(command), "PROBE_ACCURACY SAMPLES=%u", samples[selected]);
@@ -52,33 +57,54 @@ static void run_cb(lv_event_t *event)
     ui_calibration_results_refresh();
 }
 
+static void refresh_status(lv_timer_t *timer)
+{
+    (void)timer;
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    bool same = s_owner == moonraker_config_generation();
+    bool live = state.moonraker_ok && state.live_data_ok;
+    bool idle = strcmp(state.printer_state, "printing") && strcmp(state.printer_state, "paused") &&
+        strcmp(state.printer_state, "error") && strcmp(state.printer_state, "shutdown");
+    bool homed = strchr(state.homed_axes, 'x') && strchr(state.homed_axes, 'y') && strchr(state.homed_axes, 'z');
+    const char *text = !same ? "Printer changed. Close and reopen the probe check." :
+        !live ? "Printer offline. Homing status unavailable." :
+        !idle ? "Probe checks require an idle, ready printer." :
+        !homed ? "Home XYZ first, then position the probe over a clear bed area." :
+        "XYZ homed. Verify the CURRENT probe position is over a clear bed area.";
+    ui_value_set_text(s_status, text);
+    if (same && live && idle && homed) lv_obj_remove_state(s_run, LV_STATE_DISABLED);
+    else lv_obj_add_state(s_run, LV_STATE_DISABLED);
+}
+
 static void open_cb(lv_event_t *event)
 {
     (void)event;
     if (!s_ready || !s_ready("Probe accuracy")) return;
     close_popup();
     s_owner = moonraker_config_generation();
-    s_popup = ui_popup_create(lv_layer_top(), 660, 430, UI_POPUP_STANDARD);
+    s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 430, UI_POPUP_STANDARD);
     if (!s_popup) return;
-    ui_popup_add_title(s_popup, "CHECK PROBE ACCURACY?", false, 4);
-    ui_popup_add_header_divider(s_popup, 48);
-    ui_popup_add_body(s_popup,
-        "Runs at the CURRENT probe position.\n"
+    ui_cal_dialog_title(s_popup, "CHECK PROBE ACCURACY?");
+
+    ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Runs at the CURRENT probe position.\n"
         "Home XYZ and position the probe over a clear bed area first.\n"
-        "The probe will repeat and retract. Nothing is saved.", 28, 68, 604);
-    ui_popup_add_body(s_popup, "SAMPLES", 28, 238, 160);
-    s_samples = lv_roller_create(s_popup);
-    lv_roller_set_options(s_samples, "5\n10\n20", LV_ROLLER_MODE_NORMAL);
-    lv_roller_set_visible_row_count(s_samples, 3);
-    lv_roller_set_selected(s_samples, 1, LV_ANIM_OFF);
-    lv_obj_set_size(s_samples, 120, 100);
-    lv_obj_set_pos(s_samples, 220, 236);
-    ui_apply_surface_role(s_samples, UI_SURFACE_SECTION);
-    ui_popup_add_standard_footer_divider(s_popup);
-    ui_popup_add_footer_action(s_popup, UI_POPUP_ACTION_CANCEL, "BACK", 170,
-        UI_POPUP_FOOTER_LEFT, close_cb, NULL, NULL);
-    ui_popup_add_footer_action(s_popup, UI_POPUP_ACTION_CONFIRM, "RUN CHECK", 180,
-        UI_POPUP_FOOTER_RIGHT, run_cb, NULL, NULL);
+        "The probe will repeat and retract. Nothing is saved.");
+    ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "SAMPLES");
+    s_samples = lv_dropdown_create(ui_cal_dialog_body(s_popup));
+    lv_dropdown_set_options(s_samples, "5\n10\n20");
+    lv_dropdown_set_selected(s_samples, 1);
+    lv_obj_set_size(s_samples, LV_PCT(100), 54);
+    ui_apply_surface_role(s_samples, UI_SURFACE_TEXT_INPUT);
+    lv_obj_set_style_text_font(s_samples, ui_font_with_fallback(UI_FONT_BODY), 0);
+    lv_obj_t *sample_list = lv_dropdown_get_list(s_samples);
+    ui_apply_surface_role(sample_list, UI_SURFACE_SECTION);
+    lv_obj_set_style_text_font(sample_list, ui_font_with_fallback(UI_FONT_BODY), 0);
+    s_status = ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Waiting for homing status...");
+    ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CANCEL, "BACK", close_cb, NULL, NULL);
+    s_run = ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CONFIRM, "RUN CHECK", run_cb, NULL, NULL);
+    s_status_timer = lv_timer_create(refresh_status, 500, NULL);
+    refresh_status(NULL);
 }
 
 void ui_probe_accuracy_create(lv_obj_t *card, ui_probe_accuracy_send_cb_t send,

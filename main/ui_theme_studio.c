@@ -1,3 +1,4 @@
+#include "ui_button_press.h"
 /* STUDIO Dark: independently authored opaque studio-console styles.
  * Shared UI/data contracts are reused; no other theme recipe is invoked. */
 #include "ui_theme_studio.h"
@@ -31,7 +32,8 @@ static void button(lv_obj_t *obj, lv_color_t bg, lv_color_t edge)
     if (!obj) return;
     lv_obj_set_style_border_color(obj, edge, 0);
     lv_obj_set_style_bg_color(obj, UI_CONTROL, LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(obj, UI_ACCENT_BRIGHT, LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(obj, edge, LV_STATE_PRESSED);
+    ui_button_stable_press(obj);
     lv_obj_set_style_outline_color(obj, UI_ACCENT_BRIGHT, LV_STATE_FOCUS_KEY);
     lv_obj_set_style_outline_width(obj, 2, LV_STATE_FOCUS_KEY);
     lv_obj_set_style_outline_pad(obj, 2, LV_STATE_FOCUS_KEY);

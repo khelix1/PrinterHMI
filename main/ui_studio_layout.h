@@ -1,5 +1,6 @@
 #pragma once
 #include "ui_theme.h"
+#include "ui_button_press.h"
 #include "ui_font_fallback.h"
 #include "ui_text_fit.h"
 
@@ -45,6 +46,7 @@ static inline lv_obj_t *studio_action(lv_obj_t *parent,const char *text,int x,in
 {
     lv_obj_t *o=lv_button_create(parent);
     lv_obj_remove_style_all(o);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);
+    ui_button_stable_press(o);
     lv_obj_set_style_bg_color(o,UI_CONTROL,LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(o,LV_OPA_COVER,LV_STATE_PRESSED);
     lv_obj_set_style_radius(o,h/2,0);

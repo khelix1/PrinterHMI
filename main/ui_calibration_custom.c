@@ -5,6 +5,7 @@
 #include "calibration_session_controller.h"
 #include "console_controller.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
 static ui_calibration_custom_context_t *s_custom;
@@ -103,7 +104,7 @@ static void run_custom_macro_cb(
     s_custom->show_results(
         "CUSTOM CALIBRATION",
         sent
-            ? "The selected printer macro is running. Monitor Console for its printer-specific instructions.\\n\\n"
+            ? "The selected printer macro is running. Monitor Console for its printer-specific instructions.\n\n"
               "Apply & Restart will appear only if Klipper reports SAVE_CONFIG."
             : "The selected custom calibration macro could not be started.");
     s_custom->refresh_results();
@@ -127,59 +128,27 @@ static void custom_macro_selected_cb(
     *s_custom->selected = index;
     close_custom_popup();
     *s_custom->popup =
-        ui_popup_create(
-            lv_layer_top(),
-            620,
-            370,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 620, 370, UI_POPUP_STANDARD);
 
     if (!*s_custom->popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_custom->popup,
-        ui_text("RUN CUSTOM CALIBRATION?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_custom->popup,
-        48);
+    ui_cal_dialog_title(*s_custom->popup, ui_text("RUN CUSTOM CALIBRATION?"));
+
 
     char body[400];
     lv_snprintf(
         body,
         sizeof(body),
-        "Macro: %s\\n\\n"
-        "This is printer-defined behavior. It may move hardware or heat components. Keep the machine attended.\\n\\n"
+        "Macro: %s\n\n"
+        "This is printer-defined behavior. It may move hardware or heat components. Keep the machine attended.\n\n"
         "PrinterHMI will not save automatically.",
         s_custom->names[index]);
-    ui_popup_add_body(
-        *s_custom->popup,
-        body,
-        28,
-        76,
-        564);
-    ui_popup_add_standard_footer_divider(
-        *s_custom->popup);
-    ui_popup_add_footer_action(
-        *s_custom->popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_custom_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        *s_custom->popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " RUN",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        run_custom_macro_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_text(ui_cal_dialog_body(*s_custom->popup), body);
+
+    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_custom_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_custom_macro_cb, NULL, NULL);
 }
 
 
@@ -219,14 +188,14 @@ static void custom_calibration_button_cb(
 
         lv_snprintf(
             s_custom->names[
-                *s_custom->count++],
+                (*s_custom->count)++],
             MACRO_CONTROLLER_NAME_MAX,
             "%s",
             name);
     }
 
     if (*s_custom->count == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_WARNING,
             "NO CUSTOM CALIBRATIONS",
             "No matching public calibration macros are available.");
@@ -235,59 +204,27 @@ static void custom_calibration_button_cb(
 
     close_custom_popup();
     *s_custom->popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            450,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 450, UI_POPUP_STANDARD);
 
     if (!*s_custom->popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_custom->popup,
-        ui_text("CUSTOM CALIBRATION MACROS"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_custom->popup,
-        48);
+    ui_cal_dialog_title(*s_custom->popup, ui_text("CUSTOM CALIBRATION MACROS"));
+
     lv_obj_t *list =
-        ui_popup_add_list(
-            *s_custom->popup,
-            28,
-            68,
-            594,
-            302);
+        ui_cal_dialog_body(*s_custom->popup);
 
     if (list) {
         for (size_t index = 0;
              index < *s_custom->count;
              ++index) {
-            ui_popup_add_selectable_row(
-                list,
-                s_custom->names[index],
-                8,
-                8 + (int)index * 54,
-                558,
-                46,
-                custom_macro_selected_cb,
-                (void *)(uintptr_t)index);
+            ui_cal_dialog_select(list, s_custom->names[index], custom_macro_selected_cb, (void *)(uintptr_t)index);
         }
     }
 
-    ui_popup_add_standard_footer_divider(
-        *s_custom->popup);
-    ui_popup_add_footer_action(
-        *s_custom->popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        close_custom_popup_cb,
-        NULL,
-        NULL);
+
+    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_custom_popup_cb, NULL, NULL);
 }
 
 

@@ -6,6 +6,7 @@
 #include "console_controller.h"
 #include "moonraker.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_toast.h"
 
 static ui_calibration_results_context_t *s_context;
@@ -21,19 +22,19 @@ static bool results_printer_ready(void)
     moonraker_state_snapshot(&state);
 
     if (!state.moonraker_ok || !state.live_data_ok) {
-        ui_toast_show(UI_STATUS_DANGER, "CALIBRATION UNAVAILABLE",
+        ui_cal_dialog_notice(UI_STATUS_DANGER, "CALIBRATION UNAVAILABLE",
                       "The active printer is offline or not ready.");
         return false;
     }
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_show(UI_STATUS_DANGER, "CALIBRATION BLOCKED",
+        ui_cal_dialog_notice(UI_STATUS_DANGER, "CALIBRATION BLOCKED",
                       "Configuration cannot be saved during a print.");
         return false;
     }
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(UI_STATUS_DANGER, "CALIBRATION BLOCKED",
+        ui_cal_dialog_notice(UI_STATUS_DANGER, "CALIBRATION BLOCKED",
                       "Clear the printer error before saving calibration.");
         return false;
     }
@@ -106,8 +107,7 @@ static void run_save_config_cb(
     if (!snapshot.completed ||
         !snapshot.save_available ||
         snapshot.status != CALIBRATION_SESSION_RESULTS) {
-        close_save_confirm_popup();
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_WARNING,
             "SAVE NOT AVAILABLE",
             "Klipper has not reported a completed save-worthy calibration.");
@@ -121,20 +121,28 @@ static void run_save_config_cb(
         s_context->send_gcode &&
         s_context->send_gcode(command);
 
-    ui_calibration_results_close();
-
     if (!sent) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "SAVE FAILED",
             "Moonraker did not accept SAVE_CONFIG.");
         return;
     }
 
+    if (*s_context->save_confirm_popup) {
+        lv_obj_t *footer = lv_obj_get_child(*s_context->save_confirm_popup, 2);
+        for (uint32_t i = 0; i < lv_obj_get_child_count(footer); ++i) {
+            lv_obj_add_state(lv_obj_get_child(footer, i), LV_STATE_DISABLED);
+            lv_obj_add_flag(lv_obj_get_child(footer, i), LV_OBJ_FLAG_HIDDEN);
+        }
+        ui_cal_dialog_action(*s_context->save_confirm_popup, UI_POPUP_ACTION_CLOSE,
+                             "CLOSE", close_save_confirm_popup_cb, NULL, NULL);
+    }
+    if (*s_context->apply_restart_button) lv_obj_add_flag(*s_context->apply_restart_button, LV_OBJ_FLAG_HIDDEN);
     calibration_session_controller_reset();
-    ui_toast_show(
-        UI_STATUS_OK,
-        "APPLYING CONFIGURATION",
+    ui_cal_dialog_notice(
+        UI_STATUS_INFO,
+        "CONFIGURATION SAVE REQUESTED",
         "Klipper is saving the calibration and restarting. The printer will reconnect automatically.");
 }
 
@@ -160,51 +168,19 @@ static void apply_restart_button_cb(
     close_save_confirm_popup();
 
     *s_context->save_confirm_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            620,
-            370,
-            UI_POPUP_DANGER);
+        ui_cal_dialog_create(lv_layer_top(), 620, 370, UI_POPUP_DANGER);
 
     if (!*s_context->save_confirm_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_context->save_confirm_popup,
-        ui_text("APPLY CALIBRATION & RESTART?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_context->save_confirm_popup,
-        48);
-    ui_popup_add_body(
-        *s_context->save_confirm_popup,
-        "PrinterHMI will run SAVE_CONFIG. Klipper will write the reported calibration values and restart.\\n\\n"
-        "The printer will disconnect temporarily. Do not start a print until it reconnects as Ready.",
-        28,
-        76,
-        564);
-    ui_popup_add_standard_footer_divider(
-        *s_context->save_confirm_popup);
-    ui_popup_add_footer_action(
-        *s_context->save_confirm_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_save_confirm_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        *s_context->save_confirm_popup,
-        UI_POPUP_ACTION_DANGER,
-        "APPLY & RESTART",
-        210,
-        UI_POPUP_FOOTER_RIGHT,
-        run_save_config_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_title(*s_context->save_confirm_popup, ui_text("APPLY CALIBRATION & RESTART?"));
+
+    ui_cal_dialog_text(ui_cal_dialog_body(*s_context->save_confirm_popup), "PrinterHMI will run SAVE_CONFIG. Klipper will write the reported calibration values and restart.\n\n"
+        "The printer will disconnect temporarily. Do not start a print until it reconnects as Ready.");
+
+    ui_cal_dialog_action(*s_context->save_confirm_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_save_confirm_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->save_confirm_popup, UI_POPUP_ACTION_DANGER, "APPLY & RESTART", run_save_config_cb, NULL, NULL);
 }
 
 
@@ -219,52 +195,20 @@ void ui_calibration_results_show(
     ui_calibration_results_close();
 
     *s_context->results_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            680,
-            460,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 680, 460, UI_POPUP_STANDARD);
 
     if (!*s_context->results_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_context->results_popup,
-        title ? title : ui_text("CALIBRATION RESULTS"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_context->results_popup,
-        48);
+    ui_cal_dialog_title(*s_context->results_popup, title ? title : ui_text("CALIBRATION RESULTS"));
+
     *s_context->results_label =
-        ui_popup_add_body(
-            *s_context->results_popup,
-            waiting_text ? waiting_text : "Waiting for Klipper...",
-            28,
-            72,
-            624);
-    ui_popup_add_standard_footer_divider(
-        *s_context->results_popup);
-    ui_popup_add_footer_action(
-        *s_context->results_popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        150,
-        UI_POPUP_FOOTER_LEFT,
-        close_calibration_results_popup_cb,
-        NULL,
-        NULL);
+        ui_cal_dialog_text(ui_cal_dialog_body(*s_context->results_popup), waiting_text ? waiting_text : "Waiting for Klipper...");
+
+    ui_cal_dialog_action(*s_context->results_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_calibration_results_popup_cb, NULL, NULL);
     *s_context->apply_restart_button =
-        ui_popup_add_footer_action(
-            *s_context->results_popup,
-            UI_POPUP_ACTION_DANGER,
-            "APPLY & RESTART",
-            210,
-            UI_POPUP_FOOTER_RIGHT,
-            apply_restart_button_cb,
-            NULL,
-            NULL);
+        ui_cal_dialog_action(*s_context->results_popup, UI_POPUP_ACTION_DANGER, "APPLY & RESTART", apply_restart_button_cb, NULL, NULL);
 
     if (*s_context->apply_restart_button) {
         lv_obj_add_flag(
@@ -300,7 +244,7 @@ void ui_calibration_results_refresh(void)
         lv_snprintf(
             s_context->display,
             s_context->display_size,
-            "Calibration failed:\\n\\n%s",
+            "Calibration failed:\n\n%s",
             snapshot->results[0]
                 ? snapshot->results
                 : "Unknown Klipper error.");
@@ -316,7 +260,7 @@ void ui_calibration_results_refresh(void)
             "%s%s",
             snapshot->results,
             snapshot->save_available
-                ? "\\n\\nCalibration complete. Review the result, then Apply & Restart to save it."
+                ? "\n\nCalibration complete. Review the result, then Apply & Restart to save it."
                 : "");
         lv_label_set_text(
             *s_context->results_label,

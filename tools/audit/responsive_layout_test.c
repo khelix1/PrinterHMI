@@ -58,7 +58,8 @@ const char *moonraker_config_active_profile_name(void){return "Workshop printer"
 void ui_preview_lightbox_show_file_object(lv_obj_t *i,const char *f){(void)i;(void)f;}
 static unsigned starts,cancels,refreshes;
 static void refresh_files(void){refreshes++;}
-static void start_job(void){starts++;}
+static bool print_accept=true;
+static void start_job(void){if(print_accept){starts++;print_confirm_cancel(NULL);}else ui_files_print_feedback("Moonraker rejected the start request. Check connection and retry.");}
 static void cancel_job(void){cancels++;ui_files_close_detail_popup();}
 static void run(int width){
  ui_files_show();lv_obj_set_width(s_printer_file_popup,width);ui_files_set_search_text("very long query");ui_files_set_sort_text("NEWEST");lv_obj_update_layout(s_printer_file_popup);
@@ -81,7 +82,8 @@ static void run(int width){
  for(uint32_t i=0;i<lv_obj_get_child_count(confirm);i++)inside(lv_obj_get_child(confirm,i),confirm);
  cards(lv_obj_get_child(confirm,-1));snapshot(confirm);
  print_confirm_cancel(NULL);assert(!s_print_confirm_popup && ui_files_detail_is_open() && starts==prior);
- detail_start_event_cb(NULL);print_confirm_accept(NULL);assert(!s_print_confirm_popup && starts==prior+1);
+ detail_start_event_cb(NULL);print_accept=false;print_confirm_accept(NULL);assert(s_print_confirm_popup&&starts==prior);
+ print_accept=true;print_confirm_accept(NULL);assert(!s_print_confirm_popup && starts==prior+1);
  print_confirm_accept(NULL);assert(starts==prior+1);
  if(ui_theme_is_studio()) {
   assert(ui_files_can_refresh_rows());
@@ -128,7 +130,8 @@ static void run(int width){
  prior=cancels;detail_cancel_event_cb(NULL);assert(cancels==prior+1 && !s_file_detail_popup && !s_detail_start_button && !s_print_confirm_popup);
  ui_files_show_detail_popup("Another_file.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
  detail_start_event_cb(NULL);assert(s_print_confirm_popup);prior=starts;config_generation++;
- print_confirm_accept(NULL);assert(starts==prior && !s_print_confirm_popup && !s_file_detail_popup);
+ print_confirm_accept(NULL);assert(starts==prior && s_print_confirm_popup && s_file_detail_popup);
+ ui_files_close_detail_popup();
  ui_files_show_detail_popup("Final_file.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
  detail_start_event_cb(NULL);assert(s_print_confirm_popup);ui_files_close_detail_popup();assert(!s_print_confirm_popup && !s_detail_filename);
 
@@ -171,6 +174,9 @@ static void run(int width){
 
 #else
 static uint32_t gen=1;static bool fav[64];static char selected[64];
+static unsigned macro_sends;
+static char sent_macro[MACRO_COMMAND_MAX];
+static bool send_macro(const char *command){macro_sends++;snprintf(sent_macro,sizeof(sent_macro),"%s",command);return true;}
 void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=true;s->count=s->total_count=64;s->generation=gen;}
 bool macro_controller_get(size_t i,char *o,size_t n){if(i>=64)return false;snprintf(o,n,"MACRO_%02u_WITH_A_VERY_LONG_OPERATOR_ACTION_NAME",(unsigned)i);return true;}
 bool macro_controller_is_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);return i<64 && fav[i];}
@@ -178,11 +184,56 @@ bool macro_controller_toggle_favorite(const char *n){unsigned i=0;sscanf(n,"MACR
 bool macro_controller_parameters(const char *n,macro_parameter_catalog_t *p){snprintf(selected,sizeof(selected),"%s",n);memset(p,0,sizeof(*p));p->count=8;for(int i=0;i<8;i++)snprintf(p->names[i],sizeof(p->names[i]),"PARAM_%d",i);return true;}
 
 #include "ui_macros.c"
+static void macro_popup_bounds(lv_obj_t *popup, int width)
+{
+ lv_obj_set_width(popup,width<800?width:800);lv_obj_update_layout(popup);
+ inside(popup,lv_screen_active());
+ for(uint32_t i=0;i<lv_obj_get_child_count(popup);i++)inside(lv_obj_get_child(popup,i),popup);
+ cards(lv_obj_get_child(popup,-1));
+ lv_obj_t *body=lv_obj_get_child(popup,1),*footer=lv_obj_get_child(popup,-1);
+ lv_area_t before,after;lv_obj_get_coords(footer,&before);
+ lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);
+ lv_obj_update_layout(popup);lv_obj_get_coords(footer,&after);
+ assert(!memcmp(&before,&after,sizeof(before)));
+ assert(lv_obj_get_scroll_bottom(body)<=1);
+ lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);
+}
 static void run(int width){
- ui_macros_show(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);cards(s_list);inside(s_list,s_root);assert(lv_obj_get_height(s_list)>100 && s_macros->rows[63]);if(ui_theme_is_studio()){assert(lv_obj_get_height(s_list)>=340);lv_obj_t *header=lv_obj_get_child(s_root,0);for(uint32_t i=0;i<lv_obj_get_child_count(header);i++){lv_obj_t *child=lv_obj_get_child(header,i);if(!lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))inside(child,header);}cards(header);}
+ ui_macros_show(send_macro);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);cards(s_list);inside(s_list,s_root);assert(lv_obj_get_height(s_list)>100 && s_macros->rows[63]);if(ui_theme_is_studio()){assert(lv_obj_get_height(s_list)>=340);lv_obj_t *header=lv_obj_get_child(s_root,0);for(uint32_t i=0;i<lv_obj_get_child_count(header);i++){lv_obj_t *child=lv_obj_get_child(header,i);if(!lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))inside(child,header);}cards(header);}
  lv_obj_t *first=s_macros->rows[0];fav[63]=true;gen++;rebuild_macro_list();lv_obj_update_layout(s_root);cards(s_list);assert(first==s_macros->rows[0]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();lv_obj_update_layout(s_root);assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));inside(s_macros->empty,s_list);
- s_macros->query[0]=0;rebuild_macro_list();lv_obj_update_layout(s_root);snapshot(s_root);ui_macros_hide();
+ clear_search_cb(NULL);lv_obj_update_layout(s_root);
+ lv_obj_t *header=lv_obj_get_child(s_root,0);
+ lv_obj_t *actions=ui_theme_is_studio()?header:lv_obj_get_child(header,3);
+ cards(actions);
+ for(uint32_t i=0;i<lv_obj_get_child_count(actions);i++){
+  lv_obj_t *button=lv_obj_get_child(actions,i);if(!lv_obj_check_type(button,&lv_button_class))continue;
+  lv_obj_t *label=lv_obj_get_child(button,0);
+  assert(lv_obj_get_height(label)<=lv_obj_get_style_text_font(label,0)->line_height);
+ }
+ search_cb(NULL);macro_popup_bounds(s_macros->editor,width);snapshot(s_macros->editor);
+ lv_textarea_set_text(s_macros->editor_value,"MACRO_00");editor_done_cb(NULL);
+ assert(!s_macros->editor && !strcmp(s_macros->query,"MACRO_00"));
+ assert(!lv_obj_has_flag(s_macros->rows[0],LV_OBJ_FLAG_HIDDEN));
+ clear_search_cb(NULL);lv_obj_update_layout(s_root);
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);
+ macro_popup_bounds(s_confirm,width);
+ for(size_t i=0;i<MACRO_PARAMETER_MAX+MACRO_PARAMETER_EXTRA;i++)assert(lv_obj_get_height(s_macros->parameter_fields[i])>=48);
+ assert(lv_obj_get_height(lv_obj_get_child(s_confirm,0))==UI_FONT_TITLE->line_height);
+ snapshot(s_confirm);
+ lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);
+ assert(s_macros->editor);macro_popup_bounds(s_macros->editor,width);
+ assert(lv_obj_get_height(s_macros->editor_value)>=48);
+ lv_textarea_set_text(s_macros->editor_value,"205");editor_done_cb(NULL);
+ assert(!strcmp(lv_textarea_get_text(s_macros->parameter_fields[0]),"205"));
+ review_macro_cb(NULL);assert(s_confirm && strstr(s_macros->pending_command,"PARAM_0=205"));
+ macro_popup_bounds(s_confirm,width);
+ unsigned before=macro_sends;config_generation++;run_macro_cb(NULL);
+ assert(macro_sends==before && s_confirm);close_confirm();
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);
+ lv_textarea_set_text(s_macros->parameter_fields[0],"205");review_macro_cb(NULL);
+ run_macro_cb(NULL);assert(macro_sends==before+1 && !s_confirm && strstr(sent_macro,"PARAM_0=205"));
+ snapshot(s_root);ui_macros_hide();assert(!s_macros->editor && !s_confirm);
 }
 #endif
 static uint16_t raster[1024*600];
@@ -198,7 +249,7 @@ static void snapshot(lv_obj_t *root){
 #elif defined(TEST_NETWORK)
  const char *page="network";
 #else
- const char *page="macros";
+ const char *page=root==s_macros->editor?"macros-search":root==s_confirm?"macros-parameters":"macros";
 #endif
  snprintf(path,sizeof(path),"%s/%s-theme%u.ppm",folder,page,theme_case);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",a.x2-a.x1+1,a.y2-a.y1+1);for(int y=a.y1;y<=a.y2;y++)for(int x=a.x1;x<=a.x2;x++){uint16_t v=raster[y*1024+x];unsigned char c[3]={(unsigned char)(((v>>11)&31)*255/31),(unsigned char)(((v>>5)&63)*255/63),(unsigned char)((v&31)*255/31)};fwrite(c,1,3,f);}fclose(f);
 }

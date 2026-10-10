@@ -314,3 +314,7 @@ confirmation captures its own name and rechecks exclusion state.
 editor teardown. Transport and physical recovery remain owned by Moonraker and
 printer macros. See [Nightly validation](NIGHTLY_VALIDATION.md) for pending
 printing checks.
+
+## Telemetry view and history ownership
+
+`telemetry_history` owns the bounded PSRAM-first timestamped ring, named hotend snapshots, capability normalization and reset generation. `ui_telemetry` owns view/range/tool/hold controls, live status and the page lifecycle. `ui_telemetry_charts` binds four reusable instruments to the selected view and projects samples into fixed-time bins; it owns actual/target series, scales/extrema and newest-sample markers. `ui_telemetry_components` owns native instrument label/card construction. Existing main refresh and active-printer reset adapters remain unchanged; telemetry adds no network or worker tasks. See [Telemetry](TELEMETRY.md).

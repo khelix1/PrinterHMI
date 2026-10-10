@@ -24,3 +24,5 @@ void ui_ota_progress_pump(const char *status_text,
                           int bytes_read,
                           int content_length,
                           bool cancel_enabled);
+
+void ui_ota_start_failure(const char *message);

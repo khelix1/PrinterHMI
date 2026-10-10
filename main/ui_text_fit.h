@@ -25,5 +25,6 @@ static inline void ui_text_fit_single_line(lv_obj_t *label, const lv_font_t *pre
     const lv_font_t *font = ui_font_with_fallback(selected);
     if (lv_obj_get_style_text_font(label, 0) != font)
         lv_obj_set_style_text_font(label, font, 0);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    if (lv_label_get_long_mode(label) != LV_LABEL_LONG_SCROLL_CIRCULAR)
+        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
 }

@@ -1,3 +1,4 @@
+#include "ui_button_press.h"
 #include "ui_theme_preview.h"
 #include "ui_text.h"
 
@@ -340,6 +341,8 @@ lv_obj_t *ui_theme_preview_create(
     lv_obj_set_style_radius(button, palette.radius, 0);
     lv_obj_set_style_shadow_width(button, 0, 0);
     lv_obj_set_style_outline_width(button, 0, 0);
+    ui_button_stable_press(button);
+    lv_obj_set_style_outline_color(button,lv_color_hex(palette.accent),LV_STATE_FOCUS_KEY);
 
     lv_obj_set_height(button, LV_SIZE_CONTENT);
     lv_obj_set_style_min_height(button, height, 0);

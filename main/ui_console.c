@@ -15,8 +15,9 @@
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
-#include "ui_studio_layout.h"
-#include "ui_toast.h"
+#include "ui_text_fit.h"
+#include "ui_value_update.h"
+#include "moonraker_config_controller.h"
 
 static lv_obj_t *s_root = NULL;
 static lv_obj_t *s_output = NULL;
@@ -43,10 +44,12 @@ static bool console_rows_init(void)
     return s_rows != NULL;
 }
 static bool s_follow = true;
-static size_t s_studio_page_offset;
-static console_filter_kind_t s_studio_last_filter;
-static bool s_studio_last_hide;
-static char s_studio_last_query[64];
+static lv_obj_t *s_header, *s_filters, *s_footer, *s_command_button;
+static lv_obj_t *s_command_feedback;
+static lv_obj_t *s_command_send, *s_command_keyboard, *s_command_actions;
+static uint32_t s_command_owner;
+static bool s_programmatic_scroll;
+static uint32_t s_row_sequence[CONSOLE_LOG_CAPACITY];
 static console_filter_kind_t s_filter = CONSOLE_FILTER_ALL;
 static bool s_hide_temperatures;
 static char s_query[64];
@@ -135,147 +138,76 @@ static void format_entry_time(
 
 static void rebuild_output(void)
 {
-    if (!s_output) {
-        return;
+    if (!s_output) return;
+    int32_t scroll_y = lv_obj_get_scroll_y(s_output), anchor_y = 0;
+    uint32_t anchor = 0;
+    lv_area_t viewport; lv_obj_get_coords(s_output, &viewport);
+    if (!s_follow) for (size_t i=0;i<s_rendered_count && i<CONSOLE_LOG_CAPACITY;i++) {
+        lv_obj_t *row=s_rows->rows[i]; if(!row || lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN)) continue;
+        lv_area_t area;lv_obj_get_coords(row,&area);
+        if(area.y2>=viewport.y1){anchor=s_row_sequence[i];anchor_y=area.y1;break;}
     }
-
-    if(ui_theme_is_studio() && (s_follow || s_studio_last_filter!=s_filter || s_studio_last_hide!=s_hide_temperatures || strcmp(s_studio_last_query,s_query)))s_studio_page_offset=0;
-    s_studio_last_filter=s_filter;s_studio_last_hide=s_hide_temperatures;
-    snprintf(s_studio_last_query,sizeof(s_studio_last_query),"%s",s_query);
-    int32_t scroll_y = lv_obj_get_scroll_y(s_output);
-    /* Rows retain their LVGL identity across new messages and filter changes. */
-
-    size_t count = console_controller_count();
-    s_rendered_count = count;
-    s_rendered_sequence =
-        console_controller_latest_sequence();
-
-    lv_obj_t *last = NULL;
-    size_t visible = 0;
-    size_t matched = 0;
-
-    for (size_t row = 0; row < count; ++row) {
-        size_t newest_index = count - 1 - row;
+    size_t count=console_controller_count(), visible=0;
+    s_rendered_count=count; s_rendered_sequence=console_controller_latest_sequence();
+    for(size_t i=0;i<count;i++) {
         console_entry_t entry;
-
-        if (!console_controller_get(
-                newest_index,
-                &entry)) {
-            continue;
-        }
-
-        if (!console_filter_matches(&entry, s_filter, s_query, s_hide_temperatures)) continue;
-        if(ui_theme_is_studio()) {
-            size_t position=matched++;
-            if(position<s_studio_page_offset || visible>=6)continue;
-        }
-
-
-        char time_text[24] = "";
-        char line[256];
-        format_entry_time(
-            &entry,
-            time_text,
-            sizeof(time_text));
-
-        snprintf(
-            line,
-            sizeof(line),
-            "%s  %-2s  %s",
-            time_text,
-            entry_prefix(entry.type),
-            entry.message);
-
-        lv_obj_t *label = s_rows->rows[visible];
-        if (!label) {
-            label = lv_label_create(s_output);
-            s_rows->rows[visible] = label;
-        }
-        if (strcmp(lv_label_get_text(label), line)) lv_label_set_text(label, line);
-        lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_long_mode(
-            label,
-            LV_LABEL_LONG_DOT);
-        lv_obj_set_size(label, ui_theme_is_studio()?952:760, 34);
-        lv_obj_set_pos(
-            label,
-            ui_theme_is_studio()?0:16,
-            10 + (int32_t)visible * 38);
-
-        ui_apply_custom_label_style(
-            label,
-            UI_FONT_CAPTION,
-            entry_color(entry.type));
-        last = label;
-        ++visible;
+        if(!console_controller_get(count-1-i,&entry) || !console_filter_matches(&entry,s_filter,s_query,s_hide_temperatures))continue;
+        char stamp[24],line[256];format_entry_time(&entry,stamp,sizeof(stamp));
+        snprintf(line,sizeof(line),"%s  %s  %s",stamp,entry_prefix(entry.type),entry.message);
+        lv_obj_t *label=s_rows->rows[visible];
+        if(!label){label=lv_label_create(s_output);
+    s_rows->rows[visible]=label;lv_obj_set_width(label,LV_PCT(100));
+    lv_obj_set_height(label,LV_SIZE_CONTENT);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);}
+        ui_value_set_text(label,line);
+    lv_obj_remove_flag(label,LV_OBJ_FLAG_HIDDEN);
+        ui_apply_custom_label_style(label,UI_FONT_CAPTION,entry_color(entry.type));
+        s_row_sequence[visible++]=entry.sequence;
     }
-
-    if(ui_theme_is_studio() && s_studio_page_offset>=matched && s_studio_page_offset) {
-        s_studio_page_offset=matched?((matched-1)/6)*6:0;
-        rebuild_output();return;
-    }
-    char count_text[32];
-    snprintf(count_text, sizeof(count_text), "%u / %u", (unsigned)visible, (unsigned)count);
-    lv_label_set_text(s_filter_count, count_text);
-    for (size_t i = visible; i < CONSOLE_LOG_CAPACITY; ++i)
-        if (s_rows->rows[i]) lv_obj_add_flag(s_rows->rows[i], LV_OBJ_FLAG_HIDDEN);
-    if (!visible) {
-        if (!s_rows->empty) s_rows->empty = lv_label_create(s_output);
-        lv_obj_t *empty = s_rows->empty;
-        lv_obj_remove_flag(empty, LV_OBJ_FLAG_HIDDEN);
-        const char *message = count ? ui_text("No entries match these filters.") : ui_text("Console history is empty.");
-        if (strcmp(lv_label_get_text(empty), message)) lv_label_set_text(empty, message);
-        lv_obj_set_pos(empty, 18, 18);
-        ui_apply_custom_label_style(empty, UI_FONT_BODY, UI_TEXT_DIM);
-    } else if (s_rows->empty) {
-        lv_obj_add_flag(s_rows->empty, LV_OBJ_FLAG_HIDDEN);
-    }
+    char count_text[40];snprintf(count_text,sizeof(count_text),"%u / %u",(unsigned)visible,(unsigned)count);
+    ui_value_set_text(s_filter_count,count_text);
+    for(size_t i=visible;i<CONSOLE_LOG_CAPACITY;i++)if(s_rows->rows[i])lv_obj_add_flag(s_rows->rows[i],LV_OBJ_FLAG_HIDDEN);
+    if(!visible){
+        if(!s_rows->empty){s_rows->empty=lv_label_create(s_output);
+    lv_obj_set_width(s_rows->empty,LV_PCT(100));
+    lv_label_set_long_mode(s_rows->empty,LV_LABEL_LONG_WRAP);
+    ui_apply_custom_label_style(s_rows->empty,UI_FONT_BODY,UI_TEXT_DIM);}
+        lv_obj_remove_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN);
+        ui_value_set_text(s_rows->empty,count?"No entries match these filters.":"Console history is empty.");
+    }else if(s_rows->empty)lv_obj_add_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN);
     lv_obj_update_layout(s_output);
-    if (s_follow && last && !ui_theme_is_studio()) {
-        lv_obj_scroll_to_view(last, LV_ANIM_OFF);
-    } else if (!s_follow) {
-        lv_obj_scroll_to_y(s_output, scroll_y, LV_ANIM_OFF);
+    s_programmatic_scroll=true;
+    if(s_follow)lv_obj_scroll_to_y(s_output,lv_obj_get_scroll_y(s_output)+lv_obj_get_scroll_bottom(s_output),LV_ANIM_OFF);
+    else {
+        bool found=false;
+        if(anchor)for(size_t i=0;i<visible;i++)if(s_row_sequence[i]==anchor){lv_area_t area;lv_obj_get_coords(s_rows->rows[i],&area);scroll_y=lv_obj_get_scroll_y(s_output)+area.y1-anchor_y;found=true;break;}
+        if(anchor&&!found)scroll_y=0; /* Oldest retained row if the ring evicted the anchor. */
+        lv_obj_scroll_to_y(s_output,scroll_y,LV_ANIM_OFF);
     }
-}
-
-
-static void studio_history_page_cb(lv_event_t *event)
-{
-    intptr_t direction=(intptr_t)lv_event_get_user_data(event);
-    s_follow=false;
-    if(direction>0)s_studio_page_offset+=6;
-    else s_studio_page_offset=s_studio_page_offset>=6?s_studio_page_offset-6:0;
-    rebuild_output();
+    s_programmatic_scroll=false;
 }
 
 static void update_connection(void)
 {
-    if (!s_connection) {
-        return;
+    if(!s_connection)return;
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    bool live=state.moonraker_ok;
+    const char *name=moonraker_config_active_profile_name();
+    char caption[192];snprintf(caption,sizeof(caption),"%s | %s",name&&name[0]?name:"Active printer",live?"LINKED":"OFFLINE");
+    if(ui_value_set_text(s_connection,caption)){ui_text_fit_single_line(s_connection,UI_FONT_CAPTION);
+    lv_label_set_long_mode(s_connection,LV_LABEL_LONG_CLIP);}
+    ui_value_set_color(s_connection,live?UI_OK_BRIGHT:UI_DANGER_BRIGHT,0);
+    bool owner_ok=!s_command_popup || s_command_owner==moonraker_config_generation();
+    bool ready=live && owner_ok;
+    if(s_command_feedback) {
+        if(!owner_ok)ui_value_set_text(s_command_feedback,"Printer changed. Close and reopen this editor.");
+        else if(!live)ui_value_set_text(s_command_feedback,"Printer offline. Reconnect before sending.");
+        else if(!strcmp(lv_label_get_text(s_command_feedback),"Printer offline. Reconnect before sending."))ui_value_set_text(s_command_feedback,"Commands run immediately on this printer.");
+        ui_value_set_color(s_command_feedback,ready&&!strcmp(lv_label_get_text(s_command_feedback),"Commands run immediately on this printer.")?UI_TEXT_DIM:UI_WARN,0);
     }
-
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
-
-    if (state.moonraker_ok) {
-        lv_label_set_text(
-            s_connection,
-            ui_text("MOONRAKER LINKED"));
-        ui_apply_custom_label_style(
-            s_connection,
-            UI_FONT_CAPTION,
-            UI_OK_BRIGHT);
-    } else {
-        lv_label_set_text(
-            s_connection,
-            ui_text("MOONRAKER OFFLINE"));
-        ui_apply_custom_label_style(
-            s_connection,
-            UI_FONT_CAPTION,
-            UI_DANGER_BRIGHT);
-    }
+    if(s_command_button && lv_obj_has_state(s_command_button,LV_STATE_DISABLED)==live){if(live)lv_obj_remove_state(s_command_button,LV_STATE_DISABLED);else lv_obj_add_state(s_command_button,LV_STATE_DISABLED);}
+    if(s_command_send && lv_obj_has_state(s_command_send,LV_STATE_DISABLED)==ready){if(ready)lv_obj_remove_state(s_command_send,LV_STATE_DISABLED);else lv_obj_add_state(s_command_send,LV_STATE_DISABLED);}
 }
-
 
 static void refresh_timer_cb(lv_timer_t *timer)
 {
@@ -308,6 +240,8 @@ static void update_follow_button(void)
                 : ui_text("FOLLOW OFF"));
     }
 
+    if (s_follow_label) { ui_text_fit_single_line(s_follow_label,UI_FONT_BODY_LARGE);
+    lv_label_set_long_mode(s_follow_label,LV_LABEL_LONG_CLIP); }
     if (s_follow_button) {
         ui_button_apply_kind(
             s_follow_button,
@@ -349,6 +283,8 @@ static void search_done_cb(lv_event_t *event)
     snprintf(s_query, sizeof(s_query), "%s", lv_textarea_get_text(s_search_input));
     close_search_popup();
     lv_label_set_text(s_search_label, s_query[0] ? "SEARCH*" : "SEARCH");
+    ui_text_fit_single_line(s_search_label,UI_FONT_BODY_LARGE);
+    lv_label_set_long_mode(s_search_label,LV_LABEL_LONG_CLIP);
     rebuild_output();
 }
 
@@ -358,25 +294,83 @@ static void search_keyboard_cb(lv_event_t *event)
     else if (lv_event_get_code(event) == LV_EVENT_CANCEL) search_cancel_cb(event);
 }
 
+static lv_obj_t *plain(lv_obj_t *parent, lv_flex_flow_t flow)
+{
+    lv_obj_t *obj=lv_obj_create(parent);
+    lv_obj_remove_style_all(obj);
+    lv_obj_set_width(obj,LV_PCT(100));
+    lv_obj_set_height(obj,LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(obj,flow);
+    lv_obj_set_style_pad_row(obj,8,0);
+    lv_obj_set_style_pad_column(obj,8,0);
+    lv_obj_remove_flag(obj,LV_OBJ_FLAG_SCROLLABLE);
+    return obj;
+}
+static lv_obj_t *console_action(lv_obj_t *parent,const char *text,ui_button_kind_t kind,int width,lv_event_cb_t cb)
+{
+    lv_obj_t *button=ui_button_create(parent,kind,text);
+    lv_obj_set_size(button,width,48);
+    lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,NULL);
+    lv_obj_t *label=lv_obj_get_child(button,0);
+    ui_text_fit_single_line(label,UI_FONT_BODY_LARGE);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+    return button;
+}
+static lv_obj_t *editor_popup(const char *title)
+{
+    int w=lv_display_get_horizontal_resolution(NULL)-32,h=lv_display_get_vertical_resolution(NULL)-32;
+    if(w>820)w=820;
+    if(h>520)h=520;
+    lv_obj_t *popup=ui_popup_create(lv_layer_top(),w,h,UI_POPUP_STANDARD);if(!popup)return NULL;
+    lv_obj_set_flex_flow(popup,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(popup,12,0);
+    lv_obj_set_style_pad_row(popup,8,0);
+    lv_obj_remove_flag(popup,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *heading=lv_label_create(popup);
+    lv_obj_set_width(heading,LV_PCT(100));
+    lv_label_set_text(heading,title);
+    ui_apply_text_title(heading);
+    ui_value_set_color(heading,UI_TEXT,0);
+    ui_text_fit_single_line(heading,UI_FONT_TITLE);
+    lv_label_set_long_mode(heading,LV_LABEL_LONG_CLIP);
+    return popup;
+}
+static lv_obj_t *editor_input(lv_obj_t *popup,int max,const char *placeholder,const char *text)
+{
+    lv_obj_t *input=lv_textarea_create(popup);
+    lv_obj_set_width(input,LV_PCT(100));
+    lv_textarea_set_one_line(input,true);
+    lv_obj_set_height(input,56);
+    lv_textarea_set_max_length(input,max);
+    lv_textarea_set_placeholder_text(input,placeholder);
+    lv_textarea_set_text(input,text);
+    ui_apply_surface_role(input,UI_SURFACE_TEXT_INPUT);
+    lv_obj_set_style_text_font(input,UI_FONT_BODY,0);
+    return input;
+}
+static lv_obj_t *editor_keyboard(lv_obj_t *popup,lv_obj_t *input,lv_event_cb_t cb)
+{
+    lv_obj_t *keyboard=lv_keyboard_create(popup);
+    ui_apply_surface_role(keyboard,UI_SURFACE_KEYBOARD);
+    lv_obj_set_width(keyboard,LV_PCT(100));
+    lv_obj_set_height(keyboard,0);
+    lv_obj_set_flex_grow(keyboard,1);
+    lv_keyboard_set_mode(keyboard,LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_keyboard_set_textarea(keyboard,input);
+    lv_obj_add_event_cb(keyboard,cb,LV_EVENT_ALL,NULL);
+    return keyboard;
+}
+static void search_deleted(lv_event_t *e){(void)e;s_search_popup=s_search_input=NULL;}
 static void search_cb(lv_event_t *event)
 {
-    (void)event;
-    if (s_search_popup) { lv_obj_move_foreground(s_search_popup); return; }
-    s_search_popup = ui_popup_create(lv_layer_top(), 760, 440, UI_POPUP_STANDARD);
-    if (!s_search_popup) return;
-    ui_popup_add_title(s_search_popup, ui_text("FILTER CONSOLE TEXT"), false, 4);
-    ui_popup_add_header_divider(s_search_popup, 48);
-    s_search_input = ui_popup_add_textarea(s_search_popup, 704, 48,
-        LV_ALIGN_TOP_MID, 0, 62, true, false, sizeof(s_query) - 1,
-        ui_text("Match message text (case-insensitive)"), s_query, NULL);
-    lv_obj_t *keyboard = ui_popup_add_keyboard(s_search_popup, s_search_input, 704, 224,
-        LV_ALIGN_TOP_MID, 0, 124, LV_KEYBOARD_MODE_TEXT_LOWER);
-    if (keyboard) lv_obj_add_event_cb(keyboard, search_keyboard_cb, LV_EVENT_ALL, NULL);
-    ui_popup_add_standard_footer_divider(s_search_popup);
-    ui_popup_add_footer_action(s_search_popup, UI_POPUP_ACTION_CANCEL, ui_text("CANCEL"), 160,
-        UI_POPUP_FOOTER_LEFT, search_cancel_cb, NULL, NULL);
-    ui_popup_add_footer_action(s_search_popup, UI_POPUP_ACTION_CONFIRM, ui_text("APPLY"), 160,
-        UI_POPUP_FOOTER_RIGHT, search_done_cb, NULL, NULL);
+    (void)event;if(s_search_popup){lv_obj_move_foreground(s_search_popup);
+    return;}
+    s_search_popup=editor_popup("FILTER CONSOLE TEXT");if(!s_search_popup)return;
+    lv_obj_add_event_cb(s_search_popup,search_deleted,LV_EVENT_DELETE,NULL);
+    s_search_input=editor_input(s_search_popup,sizeof(s_query)-1,"Match message text",s_query);
+    lv_obj_t *actions=plain(s_search_popup,LV_FLEX_FLOW_ROW_WRAP);
+    console_action(actions,"CANCEL",UI_BUTTON_CANCEL,128,search_cancel_cb);console_action(actions,"APPLY",UI_BUTTON_PRIMARY,128,search_done_cb);
+    editor_keyboard(s_search_popup,s_search_input,search_keyboard_cb);
 }
 
 static void filter_cb(lv_event_t *event)
@@ -390,6 +384,8 @@ static void update_temperature_button(void)
 {
     lv_label_set_text(s_temperature_label, s_hide_temperatures ? "TEMPS OFF" : "TEMPS ON");
     ui_button_apply_kind(s_temperature_button, s_hide_temperatures ? UI_BUTTON_SECONDARY : UI_BUTTON_OUTLINED);
+    ui_text_fit_single_line(s_temperature_label,UI_FONT_BODY_LARGE);
+    lv_label_set_long_mode(s_temperature_label,LV_LABEL_LONG_CLIP);
 }
 static void temperature_cb(lv_event_t *event)
 {
@@ -412,37 +408,19 @@ static void reset_filters_cb(lv_event_t *event)
 
 static void create_filters(void)
 {
-    s_filter_dropdown = lv_dropdown_create(s_root);
-    lv_obj_set_pos(s_filter_dropdown, 20, 82);
-    lv_obj_set_size(s_filter_dropdown, 244, 40);
-    ui_apply_card_style(s_filter_dropdown);
-    lv_obj_set_style_pad_top(s_filter_dropdown, 8, 0);
-    lv_obj_set_style_pad_bottom(s_filter_dropdown, 8, 0);
-    lv_obj_set_style_text_font(s_filter_dropdown, UI_FONT_CAPTION, 0);
-    lv_dropdown_set_options(s_filter_dropdown,
-        "All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
-    lv_dropdown_set_selected(s_filter_dropdown, (uint32_t)s_filter);
-    lv_obj_add_event_cb(s_filter_dropdown, filter_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    s_temperature_button = ui_button_create(s_root, UI_BUTTON_OUTLINED, "TEMPS ON");
-    lv_obj_set_pos(s_temperature_button, 270, 82);
-    lv_obj_set_size(s_temperature_button, 156, 40);
-    s_temperature_label = lv_obj_get_child(s_temperature_button, 0);
-    lv_obj_add_event_cb(s_temperature_button, temperature_cb, LV_EVENT_CLICKED, NULL);
-    update_temperature_button();
-    lv_obj_t *search = ui_button_create(s_root, UI_BUTTON_OUTLINED, s_query[0] ? "SEARCH*" : "SEARCH");
-    lv_obj_set_pos(search, 438, 82);
-    lv_obj_set_size(search, 124, 40);
-    s_search_label = lv_obj_get_child(search, 0);
-    lv_obj_add_event_cb(search, search_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *reset = ui_button_create(s_root, UI_BUTTON_SECONDARY, "RESET");
-    lv_obj_set_pos(reset, 574, 82);
-    lv_obj_set_size(reset, 100, 40);
-    lv_obj_add_event_cb(reset, reset_filters_cb, LV_EVENT_CLICKED, NULL);
-    s_filter_count = lv_label_create(s_root);
-    lv_obj_set_pos(s_filter_count, 692, 93);
-    lv_obj_set_width(s_filter_count, 142);
-    lv_obj_set_style_text_align(s_filter_count, LV_TEXT_ALIGN_RIGHT, 0);
-    ui_apply_custom_label_style(s_filter_count, UI_FONT_CAPTION, UI_TEXT_DIM);
+    s_filters=plain(s_root,LV_FLEX_FLOW_ROW_WRAP);
+    s_filter_dropdown=lv_dropdown_create(s_filters);
+    lv_obj_set_size(s_filter_dropdown,184,48);
+    ui_apply_surface_role(s_filter_dropdown,UI_SURFACE_TEXT_INPUT);
+    lv_obj_set_style_text_font(s_filter_dropdown,UI_FONT_CAPTION,0);
+    lv_dropdown_set_options(s_filter_dropdown,"All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
+    lv_dropdown_set_selected(s_filter_dropdown,(uint32_t)s_filter);
+    lv_obj_add_event_cb(s_filter_dropdown,filter_cb,LV_EVENT_VALUE_CHANGED,NULL);
+    s_temperature_button=console_action(s_filters,"TEMPS ON",UI_BUTTON_OUTLINED,116,temperature_cb);
+    s_temperature_label=lv_obj_get_child(s_temperature_button,0);update_temperature_button();
+    lv_obj_t *search=console_action(s_filters,s_query[0]?"SEARCH*":"SEARCH",UI_BUTTON_OUTLINED,104,search_cb);
+    s_search_label=lv_obj_get_child(search,0);
+    console_action(s_filters,"RESET",UI_BUTTON_SECONDARY,96,reset_filters_cb);
 }
 
 static void close_command_popup(void)
@@ -537,6 +515,11 @@ static void send_command_cb(lv_event_t *event)
         return;
     }
 
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    if(s_command_owner!=moonraker_config_generation() || !state.moonraker_ok){
+        update_connection();
+    return;
+    }
     const char *input =
         lv_textarea_get_text(s_command_input);
 
@@ -545,10 +528,8 @@ static void send_command_cb(lv_event_t *event)
     }
 
     if (!input || !input[0]) {
-        ui_toast_show(
-            UI_STATUS_WARNING,
-            "EMPTY COMMAND",
-            "Enter a Klipper G-code command first.");
+        ui_value_set_text(s_command_feedback,"Enter a command before sending.");
+        ui_value_set_color(s_command_feedback,UI_WARN,0);
         return;
     }
 
@@ -585,7 +566,11 @@ static void send_command_cb(lv_event_t *event)
             "Command was not accepted by Moonraker.");
     }
 
-    close_command_popup();
+    if(sent)close_command_popup();
+    else {
+        ui_value_set_text(s_command_feedback,"Send failed. Input preserved; check the connection.");
+        ui_value_set_color(s_command_feedback,UI_WARN,0);
+    }
     rebuild_output();
 }
 
@@ -603,284 +588,96 @@ static void keyboard_event_cb(lv_event_t *event)
 }
 
 
+static void command_deleted(lv_event_t *e)
+{
+    (void)e;s_command_popup=s_command_input=s_command_send=s_command_keyboard=s_command_actions=s_command_feedback=NULL;s_history_cursor=SIZE_MAX;
+}
 static void open_command_cb(lv_event_t *event)
 {
-    (void)event;
-
-    if (s_command_popup) {
-        lv_obj_move_foreground(s_command_popup);
-        return;
-    }
-
-    s_command_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            820,
-            520,
-            UI_POPUP_STANDARD);
-
-    if (!s_command_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_command_popup,
-        ui_text("SEND KLIPPER COMMAND"),
-        false,
-        0);
-    ui_popup_add_header_divider(
-        s_command_popup,
-        44);
-
-    s_command_input =
-        ui_popup_add_textarea(
-            s_command_popup,
-            772,
-            54,
-            LV_ALIGN_TOP_MID,
-            0,
-            58,
-            true,
-            false,
-            CONSOLE_COMMAND_MAX,
-            ui_text("G-code or macro, for example: STATUS"),
-            ui_text(""),
-            NULL);
-
-    lv_obj_t *keyboard =
-        ui_popup_add_keyboard(
-            s_command_popup,
-            s_command_input,
-            772,
-            292,
-            LV_ALIGN_TOP_MID,
-            0,
-            122,
-            LV_KEYBOARD_MODE_TEXT_LOWER);
-
-    if (keyboard) {
-        lv_obj_add_event_cb(
-            keyboard,
-            keyboard_event_cb,
-            LV_EVENT_ALL,
-            NULL);
-    }
-
-    ui_popup_add_standard_footer_divider(
-        s_command_popup);
-
-    ui_popup_add_action_at(
-        s_command_popup,
-        UI_POPUP_ACTION_CLOSE,
-        ui_text(LV_SYMBOL_CLOSE " CLOSE"),
-        24,
-        452,
-        140,
-        44,
-        close_command_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_action_at(
-        s_command_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        ui_text(LV_SYMBOL_UP " PREV"),
-        184,
-        452,
-        112,
-        44,
-        history_prev_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_action_at(
-        s_command_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        ui_text(LV_SYMBOL_DOWN " NEXT"),
-        306,
-        452,
-        112,
-        44,
-        history_next_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_action_at(
-        s_command_popup,
-        UI_POPUP_ACTION_PRIMARY,
-        ui_text(LV_SYMBOL_PLAY " SEND"),
-        650,
-        452,
-        146,
-        44,
-        send_command_cb,
-        NULL,
-        NULL);
-
-    if (s_command_input) {
-        lv_obj_add_state(
-            s_command_input,
-            LV_STATE_FOCUSED);
-    }
+    (void)event;if(s_command_popup){lv_obj_move_foreground(s_command_popup);
+    return;}
+    moonraker_state_t state;moonraker_state_snapshot(&state);if(!state.moonraker_ok){update_connection();
+    return;}
+    s_command_owner=moonraker_config_generation();
+    s_history_cursor=SIZE_MAX;
+    s_command_popup=editor_popup("SEND KLIPPER COMMAND");if(!s_command_popup)return;
+    lv_obj_add_event_cb(s_command_popup,command_deleted,LV_EVENT_DELETE,NULL);
+    s_command_input=editor_input(s_command_popup,CONSOLE_COMMAND_MAX,"G-code or macro, for example: STATUS","");
+    s_command_actions=plain(s_command_popup,LV_FLEX_FLOW_ROW_WRAP);
+    console_action(s_command_actions,"CLOSE",UI_BUTTON_CLOSE,96,close_command_cb);
+    console_action(s_command_actions,"PREV",UI_BUTTON_SECONDARY,96,history_prev_cb);
+    console_action(s_command_actions,"NEXT",UI_BUTTON_SECONDARY,96,history_next_cb);
+    s_command_send=console_action(s_command_actions,"SEND",UI_BUTTON_PRIMARY,96,send_command_cb);
+    s_command_feedback=lv_label_create(s_command_popup);
+    lv_obj_set_width(s_command_feedback,LV_PCT(100));
+    lv_obj_set_height(s_command_feedback,2*UI_FONT_CAPTION->line_height);
+    lv_label_set_long_mode(s_command_feedback,LV_LABEL_LONG_WRAP);
+    ui_apply_custom_label_style(s_command_feedback,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_label_set_text(s_command_feedback,"Commands run immediately on this printer.");
+    s_command_keyboard=editor_keyboard(s_command_popup,s_command_input,keyboard_event_cb);
+    update_connection();
 }
-
-
-static lv_obj_t *page_button(
-    const char *text,
-    ui_button_kind_t kind,
-    int32_t x,
-    int32_t width,
-    lv_event_cb_t callback,
-    lv_obj_t **label_out)
+static void history_scroll(lv_event_t *e)
 {
-    lv_obj_t *button =
-        ui_button_create(
-            s_root,
-            kind,
-            text);
-
-    if (!button) {
-        return NULL;
-    }
-
-    lv_obj_set_size(button, width, 46);
-    lv_obj_set_pos(button, x, 16);
-    lv_obj_add_event_cb(
-        button,
-        callback,
-        LV_EVENT_CLICKED,
-        NULL);
-
-    if (label_out) {
-        *label_out = lv_obj_get_child(button, 0);
-    }
-
-    return button;
+    if(!s_programmatic_scroll && s_follow && lv_event_get_code(e)==LV_EVENT_SCROLL_BEGIN){s_follow=false;update_follow_button();}
 }
-
-
-void ui_console_show(
-    ui_console_command_cb_t command_callback)
+void ui_console_show(ui_console_command_cb_t command_callback)
 {
-    if (!console_rows_init()) return;
-    s_command_callback = command_callback;
-
-    if (s_root) {
-        rebuild_output();
-        update_connection();
-        lv_obj_move_foreground(s_root);
-        return;
-    }
-
-    s_root = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(
-        s_root,
-        UI_PAGE_ROOT_WIDTH,
-        UI_PAGE_ROOT_HEIGHT);
-    lv_obj_set_pos(
-        s_root,
-        UI_PAGE_ROOT_X,
-        UI_PAGE_ROOT_Y);
-    lv_obj_clear_flag(
-        s_root,
-        LV_OBJ_FLAG_SCROLLABLE);
+    if(!console_rows_init())return;
+    s_command_callback=command_callback;
+    if(s_root){rebuild_output();
+    update_connection();
+    lv_obj_move_foreground(s_root);
+    return;}
+    s_root=lv_obj_create(lv_screen_active());
     ui_apply_root_style(s_root);
-
-    if(ui_theme_is_studio()) {
-        studio_text(s_root,"Console",0,0,236,&ui_studio_font_48,UI_TEXT);
-        create_filters();
-        lv_obj_set_pos(s_filter_dropdown,246,8);lv_obj_set_size(s_filter_dropdown,186,44);
-        lv_obj_set_style_bg_opa(s_filter_dropdown,LV_OPA_TRANSP,0);
-        lv_obj_set_style_radius(s_filter_dropdown,22,0);
-        lv_obj_set_pos(s_temperature_button,444,8);lv_obj_set_size(s_temperature_button,148,44);
-        lv_obj_t *search=lv_obj_get_parent(s_search_label);lv_obj_set_pos(search,604,8);lv_obj_set_size(search,124,44);
-        lv_obj_t *reset=lv_obj_get_child(s_root,lv_obj_get_index(s_filter_count)-1);
-        lv_obj_set_pos(reset,740,8);lv_obj_set_size(reset,106,44);
-        lv_obj_set_pos(s_filter_count,856,22);lv_obj_set_width(s_filter_count,120);
-        s_connection=studio_text(s_root,"Connecting",0,62,976,UI_FONT_CAPTION,UI_TEXT_DIM);
-        studio_rule(s_root,0,88,976,1);
-        s_output=studio_plane(s_root,0,94,976,250);
-        studio_rule(s_root,0,354,976,1);
-        studio_action(s_root,"Enter G-code",0,372,436,52,open_command_cb,NULL);
-        s_follow_button=studio_action(s_root,"Follow",448,372,156,52,follow_cb,NULL);
-        s_follow_label=lv_obj_get_child(s_follow_button,0);
-        studio_action(s_root,"Clear",616,372,100,52,clear_cb,NULL);
-        studio_action(s_root,"Older",728,372,118,52,studio_history_page_cb,(void*)1);
-        studio_action(s_root,"Newer",858,372,118,52,studio_history_page_cb,(void*)-1);
-        s_studio_page_offset=0;
-        goto console_page_ready;
-    }
-
-    lv_obj_t *title = lv_label_create(s_root);
-    lv_label_set_text(title, ui_text("CONSOLE"));
-    lv_obj_set_pos(title, UI_PAGE_RAIL_X, 18);
+    int sw=lv_display_get_horizontal_resolution(NULL),sh=lv_display_get_vertical_resolution(NULL);
+    int x=ui_theme_is_studio()?24:UI_PAGE_ROOT_X,y=ui_theme_is_studio()?80:UI_PAGE_ROOT_Y;
+    if(sw<1024)x=16;
+    int w=ui_theme_is_studio()?976:UI_PAGE_ROOT_WIDTH,h=ui_theme_is_studio()?424:UI_PAGE_ROOT_HEIGHT;
+    if(w>sw-x-16)w=sw-x-16;
+    if(h>sh-y-8)h=sh-y-8;
+    lv_obj_set_pos(s_root,x,y);
+    lv_obj_set_size(s_root,w,h);
+    lv_obj_set_flex_flow(s_root,LV_FLEX_FLOW_COLUMN);
+    lv_obj_remove_flag(s_root,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(s_root,ui_theme_is_studio()?0:12,0);
+    lv_obj_set_style_pad_row(s_root,8,0);
+    s_header=plain(s_root,LV_FLEX_FLOW_ROW);
+    lv_obj_t *title=lv_label_create(s_header);
+    lv_label_set_text(title,"CONSOLE");
     ui_apply_text_title(title);
-    ui_apply_label_bright(title);
-
-    lv_obj_t *subtitle = lv_label_create(s_root);
-    lv_label_set_text(
-        subtitle,
-        ui_text("LIVE KLIPPER RESPONSES AND DIRECT G-CODE"));
-    lv_obj_set_pos(subtitle, UI_PAGE_RAIL_X, 50);
-    ui_apply_text_caption(subtitle);
-    ui_apply_label_dim(subtitle);
-
-    s_connection = lv_label_create(s_root);
-    lv_obj_set_width(s_connection, 220);
-    lv_label_set_long_mode(s_connection, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_align(
-        s_connection,
-        LV_TEXT_ALIGN_RIGHT,
-        0);
-    lv_obj_set_pos(s_connection, 264, 24);
-
-    page_button(
-        "COMMAND",
-        UI_BUTTON_PRIMARY,
-        500,
-        120,
-        open_command_cb,
-        NULL);
-
-    s_follow_button =
-        page_button(
-            "FOLLOW ON",
-            UI_BUTTON_SUCCESS,
-            630,
-            110,
-            follow_cb,
-            &s_follow_label);
-
-    page_button(
-        "CLEAR",
-        UI_BUTTON_DANGER,
-        750,
-        84,
-        clear_cb,
-        NULL);
-
+    ui_value_set_color(title,UI_TEXT,0);
+    lv_obj_set_flex_grow(title,1);
+    s_filter_count=lv_label_create(s_header);
+    lv_obj_set_width(s_filter_count,100);
+    ui_apply_custom_label_style(s_filter_count,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_style_text_align(s_filter_count,LV_TEXT_ALIGN_RIGHT,0);
+    s_connection=lv_label_create(s_root);
+    lv_obj_set_width(s_connection,LV_PCT(100));
+    lv_label_set_long_mode(s_connection,LV_LABEL_LONG_CLIP);
+    ui_apply_custom_label_style(s_connection,UI_FONT_CAPTION,UI_TEXT_DIM);
     create_filters();
-
-    s_output = lv_obj_create(s_root);
-    lv_obj_set_size(s_output, 814, 374);
-    lv_obj_set_pos(s_output, 20, 134);
+    s_output=lv_obj_create(s_root);
     ui_apply_card_style(s_output);
-    lv_obj_set_style_pad_all(s_output, 0, 0);
-    lv_obj_set_scroll_dir(s_output, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(
-        s_output,
-        LV_SCROLLBAR_MODE_AUTO);
-
-console_page_ready:
+    lv_obj_set_width(s_output,LV_PCT(100));
+    lv_obj_set_height(s_output,0);
+    lv_obj_set_flex_grow(s_output,1);
+    lv_obj_set_flex_flow(s_output,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_output,10,0);
+    lv_obj_set_style_pad_row(s_output,8,0);
+    lv_obj_set_scroll_dir(s_output,LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_output,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_add_event_cb(s_output,history_scroll,LV_EVENT_SCROLL_BEGIN,NULL);
+    s_footer=plain(s_root,LV_FLEX_FLOW_ROW_WRAP);
+    s_command_button=console_action(s_footer,"COMMAND",UI_BUTTON_PRIMARY,136,open_command_cb);
+    s_follow_button=console_action(s_footer,s_follow?"FOLLOW ON":"FOLLOW OFF",UI_BUTTON_SUCCESS,136,follow_cb);
+    s_follow_label=lv_obj_get_child(s_follow_button,0);
+    console_action(s_footer,"CLEAR",UI_BUTTON_DANGER,96,clear_cb);
     update_follow_button();
     rebuild_output();
     update_connection();
-
-    s_refresh_timer =
-        lv_timer_create(
-            refresh_timer_cb,
-            250,
-            NULL);
+    s_refresh_timer=lv_timer_create(refresh_timer_cb,250,NULL);
 }
 
 
@@ -906,6 +703,8 @@ void ui_console_hide(void)
     s_follow_label = NULL;
     s_filter_dropdown = s_temperature_button = s_temperature_label = NULL;
     s_search_label = s_filter_count = NULL;
+    s_header=s_filters=s_footer=s_command_button=NULL;
+    memset(s_row_sequence,0,sizeof(s_row_sequence));
     s_command_callback = NULL;
     s_rendered_sequence = 0;
     s_rendered_count = 0;

@@ -15,15 +15,18 @@ static const char *TAG = "PrinterHMI";
 
 static bool ota_ui_controller_start_url(const char *url, bool save_custom_url)
 {
-    if (!url || !url[0]) return false;
+    if (!url || !url[0]) {
+        ui_ota_start_failure("No firmware URL. Close and select a release or enter a URL.");
+        return false;
+    }
     if (ota_manager_is_running()) {
         ESP_LOGW(TAG, "OTA: update already running");
+        /* The running update owns its existing progress and cancellation UI. */
         return false;
     }
     if (!ota_manager_start(url)) {
         ESP_LOGE(TAG, "OTA: unable to start update");
-        ui_toast_show(UI_STATUS_DANGER, "OTA NOT STARTED",
-                      "Another network operation is active. Try again.");
+        ui_ota_start_failure("Another network operation is active. Close and try again.");
         return false;
     }
     if (save_custom_url) ota_manager_set_url(url);

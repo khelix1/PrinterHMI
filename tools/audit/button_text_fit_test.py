@@ -60,6 +60,9 @@ for p in sorted((root/'main').glob('*.c')):
      variable=match[1]
      for _,_,z in calls(s[end:end+1800],'lv_obj_set_size'):
       if len(z)==3 and z[0]==variable:geom=z[1:];break
+   # Macro actions depend on native sizing and Studio's final font fitting.
+   # Exercise the real owner in responsive_layout_test instead of isolated geometry.
+   if p.name=='ui_macros.c' and name=='ui_button_create' and text in ('"SEARCH"','"CLEAR SEARCH"'):continue
    if geom and all(size(z) for z in geom) and not (geom[0]=='1'):
     for t in texts(text):
      if icon and not re.fullmatch(r'LV_SYMBOL_\w+|"(?:\\.|[^"\\])*"',icon):continue

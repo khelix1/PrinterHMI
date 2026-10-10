@@ -7,6 +7,7 @@
 #include "moonraker_config_controller.h"
 #include "moonraker_live_websocket.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_value_update.h"
 
 static lv_obj_t *s_popup, *s_body;
@@ -87,15 +88,14 @@ void ui_endstop_status_show(void)
     s_owner = moonraker_config_generation();
     s_next_query = 0;
     endstop_status_controller_reset();
-    s_popup = ui_popup_create(lv_layer_top(), 660, 460, UI_POPUP_STANDARD);
+    s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 460, UI_POPUP_STANDARD);
     if (!s_popup) return;
-    ui_popup_add_title(s_popup, "LIVE ENDSTOPS", false, 4);
-    ui_popup_add_header_divider(s_popup, 48);
-    lv_obj_t *list = ui_popup_add_list(s_popup, 24, 68, 612, 300);
-    s_body = ui_popup_add_body(list, "Waiting for the first live sample...", 12, 12, 580);
-    ui_popup_add_standard_footer_divider(s_popup);
-    ui_popup_add_footer_action(s_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", 170,
-        UI_POPUP_FOOTER_RIGHT, close_cb, NULL, NULL);
+    ui_cal_dialog_title(s_popup, "LIVE ENDSTOPS");
+
+    lv_obj_t *list = ui_cal_dialog_body(s_popup);
+    s_body = ui_cal_dialog_text(list, "Waiting for the first live sample...");
+
+    ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_cb, NULL, NULL);
     s_timer = lv_timer_create(refresh, 250, NULL);
     refresh(NULL);
 }

@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ui_telemetry_charts.c"
-#include "ui_telemetry.c"
+#include "ui_value_update.h"
+#include "telemetry_history.h"
 #include "ui_dashboard_status.c"
 #include "ui_printer_info_cards.c"
 
@@ -18,19 +18,6 @@ static unsigned invalidations;
 static void invalidated(lv_event_t *e) { (void)e; ++invalidations; }
 static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *p)
 { (void)a; (void)p; lv_display_flush_ready(d); }
-static telemetry_chart_t fixture(lv_obj_t *parent, lv_obj_t *shared, lv_chart_axis_t axis)
-{
-    telemetry_chart_t c={0};
-    c.chart=shared ? shared : lv_chart_create(parent);
-    lv_obj_set_size(c.chart,600,80);
-    lv_chart_set_point_count(c.chart,TELEMETRY_HISTORY_CAPACITY);
-    lv_chart_set_update_mode(c.chart,LV_CHART_UPDATE_MODE_SHIFT);
-    c.axis=axis;
-    c.actual_series=lv_chart_add_series(c.chart,lv_color_hex(0x00ffff),axis);
-    c.stats_label=lv_label_create(parent); c.target_label=lv_label_create(parent);
-    c.minimum_span_c=10; c.fallback_max_c=100;
-    return c;
-}
 int main(void)
 {
     lv_init(); lv_display_t *d=lv_display_create(1024,600);
@@ -79,6 +66,8 @@ int main(void)
         .nozzle=lv_label_create(parent),.bed=lv_label_create(parent),
         .part_fan=lv_label_create(parent),.elapsed=lv_label_create(parent),
         .remaining=lv_label_create(parent),.eta=lv_label_create(parent)};
+    lv_obj_t *card_labels[]={cards.progress,cards.nozzle,cards.bed,cards.part_fan,cards.elapsed,cards.remaining,cards.eta};
+    for(unsigned i=0;i<7;i++)lv_obj_set_width(card_labels[i],220);
     ui_printer_info_cards_refresh(parent,&cards,.72,205,205,60,60,50,9000,"00:58",true);
     lv_refr_now(d);invalidations=0;
     for(int i=0;i<10;i++)ui_printer_info_cards_refresh(parent,&cards,.72,205,205,60,60,50,9000,"00:58",true);
@@ -102,43 +91,17 @@ int main(void)
         assert(!memcmp(lv_chart_get_series_y_array(batched,bs),lv_chart_get_series_y_array(reference,rs),300*sizeof(int32_t)));
     }
 
-    s_panel=parent;
-    s_nozzle_value=lv_label_create(parent);s_bed_value=lv_label_create(parent);
-    s_air_value=lv_label_create(parent);s_humidity_value=lv_label_create(parent);
-    s_nozzle_chart=fixture(parent,NULL,LV_CHART_AXIS_PRIMARY_Y);
-    s_bed_chart=fixture(parent,s_nozzle_chart.chart,LV_CHART_AXIS_SECONDARY_Y);
-    s_chamber_chart=fixture(parent,NULL,LV_CHART_AXIS_PRIMARY_Y);
-    s_humidity_chart=fixture(parent,s_chamber_chart.chart,LV_CHART_AXIS_SECONDARY_Y);
-    moonraker_state_t state={.live_data_ok=true,.nozzle_temp=205,.nozzle_target=205,
-        .bed_temp=60,.bed_target=60,.air_temp=30,.humidity=45};
-    telemetry_history_reset();ui_telemetry_refresh(&state,1000000);
-    assert(telemetry_history_count()==1);
-    uint32_t first=lv_chart_get_x_start_point(s_nozzle_chart.chart,s_nozzle_chart.actual_series);
-    lv_refr_now(d);invalidations=0;
-    for(int i=0;i<10;i++)ui_telemetry_refresh(&state,1100000+i*100000);
-    assert(telemetry_history_count()==1 && invalidations==0);
-    ui_telemetry_refresh(&state,3000000);
-    assert(telemetry_history_count()==2);
-    assert(lv_chart_get_x_start_point(s_nozzle_chart.chart,s_nozzle_chart.actual_series)==first+1);
-    state.capabilities.discovered=true;
-    ui_telemetry_refresh(&state,3100000);
-    assert(!strcmp(lv_label_get_text(s_bed_value),"N/A"));
-    assert(!strcmp(lv_label_get_text(s_humidity_value),"N/A"));
-    state.capabilities.has_heated_bed=true;state.capabilities.has_drybox_environment_sensor=true;
-    ui_telemetry_refresh(&state,3200000);assert(!strcmp(lv_label_get_text(s_bed_value),"60.0 C"));
-    for(int i=0;i<310;i++) {
-        state.nozzle_temp=i==5?260:205;ui_telemetry_refresh(&state,5000000LL+i*2000000LL);
-    }
+    telemetry_history_reset();
+    moonraker_state_t state={.live_data_ok=true,.nozzle_temp=205,.nozzle_target=205,.bed_temp=60,.bed_target=60,.air_temp=30,.humidity=45};
+    assert(telemetry_history_sample(&state,1000000));
+    for(int i=0;i<9;i++)assert(!telemetry_history_sample(&state,1100000+i*100000));
+    assert(telemetry_history_sample(&state,2000000));
+    assert(!telemetry_history_sample(&state,3000000));
+    for(int i=0;i<310;i++)assert(telemetry_history_sample(&state,5000000LL+i*2000000LL));
     assert(telemetry_history_count()==300);
-    assert(strstr(lv_label_get_text(s_nozzle_chart.stats_label),"MAX 205.0"));
-    lv_refr_now(d);invalidations=0;ui_telemetry_charts_load_history();
-    assert(invalidations<30);
-    assert(lv_chart_get_x_start_point(s_nozzle_chart.chart,s_nozzle_chart.actual_series)==0);
-    assert(lv_chart_get_x_start_point(s_bed_chart.chart,s_bed_chart.actual_series)==0);
-    for(int i=0;i<300;i++)assert(lv_chart_get_series_y_array(s_nozzle_chart.chart,s_nozzle_chart.actual_series)[i]==2050);
-    telemetry_history_reset();ui_telemetry_charts_load_history();
-    assert(strstr(lv_label_get_text(s_nozzle_chart.stats_label),"MIN --"));
-    ui_telemetry_hide();assert(!s_panel && !s_nozzle_chart.chart);
+    telemetry_sample_t last;assert(telemetry_history_get(299,&last));assert(last.time_us==623000000LL && last.nozzle_temp==205);
+    telemetry_history_reset();assert(!telemetry_history_count());
+    lv_obj_delete(parent);
     lv_display_delete(d);lv_deinit();
-    puts("PASS: Dashboard/Printer repeated refresh and live transitions, unchanged text/color produces no invalidation, inherited style safety, exact shift/wrap/gap equivalence, 2-second flat samples, capability transitions, expired extrema, bounded history reload and teardown");
+    puts("PASS: Dashboard/Printer repeated refresh and live transitions, unchanged text/color produces no invalidation, inherited style safety, exact shift/wrap/gap equivalence, 2-second flat samples, bounded timestamped history and teardown");
 }

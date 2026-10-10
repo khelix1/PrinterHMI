@@ -671,3 +671,21 @@ Graphs and Endstops explicitly reset to LV_ALIGN_TOP_LEFT before Studio position
 ## Source checkpoint before telemetry redesign
 
 The profile/setup, Network/Files, immediate E-stop routing, responsive recovery and Studio Devices action fixes are checkpointed on feature/profile-setup-dialogs. This checkpoint retains the feature branch and stable version 6.5.6 without merging or producing a nightly. The telemetry redesign has not begun: next work audits live data/history, modernizes graph layouts and controls across themes, and verifies missing/offline/printer-switch behavior.
+
+## Native telemetry instruments
+
+Telemetry now provides Heat, Motion and Environment views, named hotend selection, 2/5/10-minute windows, Targets on/Detail only and graph Hold/Resume. Current readings, historical targets, measured extrema, explicit scales and timestamp-based gap handling share reusable native instrument owners. Studio uses its full stage; all five themes use responsive scrolling graph content below pinned controls. The history ring records all supported hotends and capability-normalized channels while hidden. Reset generations retire held data on a printer change. Reapplying an unchanged label long mode is now avoided, preventing scroll-animation restarts during repeated fitted-value updates. See [Telemetry](TELEMETRY.md) for behavior, source limits and validation.
+
+## Native Macros dialogs and action validation
+
+Macros search, parameter editing and command review now use native popup columns with pinned Cancel/Done, Cancel/Review and Cancel/Run actions. The body scrolls independently; parameter fields use a single full-width column, 56 px touch targets and body fonts. Long macro headings remain one line with an ellipsis. Search and Clear Search remain single-line actions. No command is sent before the existing review and Run steps, and printer-generation/readiness guards remain in place.
+
+`responsive_layout_test.py` checks real Macros actions and dialogs in all five themes, normal/large text, three densities and narrowed widths. It exercises search, parameter edits, scrolling with stationary footers, edited command review, rejected stale-printer Run and one successful Run. The source-derived button audit now delegates the two adaptive Macros search actions to that real-owner test instead of reconstructing Studio geometry without its final font fitting. Both host suites pass. Target build and panel verification remain pending; physical printing/recovery tests remain pending. Stable remains 6.5.6 and the current feature branch stays open.
+
+## Motion and calibration native dialogs
+
+The calibration workflows now use shared native columns with scrolling content and pinned actions, plus compact standalone Close controls. Motion measurement input remains touch-sized and runtime limit readings stay on one line. Probe Accuracy displays live homing/readiness and gates Run; PID warning Back preserves the target. Custom macro discovery fixes the existing count-pointer increment. Dialog command choices reject stale printer generations. See [Motion and calibration](MOTION_CALIBRATION.md) for scope, command behavior and host/panel validation. All five themes and normal/large text are covered by the dedicated host suites; target build, panel calibration and existing printing tests remain pending. Stable remains 6.5.6; the feature branch remains open.
+
+## Console and pressed button frames
+
+Console now uses native wrapped history, responsive filters, pinned page actions and command/search columns with the input and actions above the keyboard. Printer-generation/connection guards and persistent inline send feedback preserve rejected input. The appliance-wide Notifications setting defaults optional confirmations OFF and keeps important notices persistent; it is saved in NVS and backups. Shared button presses retain their geometry and semantic stroke; keyboard-only focus remains visible. See [Console](CONSOLE.md) and [Notification policy](NOTIFICATIONS.md) for behavior, audit findings and remaining notification migration. Dedicated host, source-derived frame/text and current owner checks pass; target/panel and physical printing tests remain pending. Stable remains 6.5.6 and the feature branch stays open. Drybox retains its prior layout.

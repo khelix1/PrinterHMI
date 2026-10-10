@@ -1,3 +1,4 @@
+#include "ui_button_press.h"
 /*
  * Theme A: Foundry
  *
@@ -51,7 +52,7 @@ static void ui_apply_button_base(lv_obj_t *obj,
     lv_obj_set_style_shadow_width(obj, 8, 0);
     lv_obj_set_style_shadow_opa(obj, LV_OPA_30, 0);
     lv_obj_set_style_shadow_offset_y(obj, 3, 0);
-    lv_obj_set_style_translate_y(obj, 1, LV_STATE_PRESSED);
+    ui_button_stable_press(obj);
     lv_obj_set_style_border_color(obj, UI_BORDER_BRIGHT, LV_STATE_FOCUSED);
     lv_obj_set_style_outline_width(obj, 0, 0);
 }

@@ -9,6 +9,7 @@
 
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
 
@@ -73,24 +74,14 @@ static void show_armed_popup(
 {
     close_popup();
     s_pa.popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            410,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!s_pa.popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_pa.popup,
-        ui_text("PRESSURE ADVANCE TOWER ARMED"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_pa.popup,
-        48);
+    ui_cal_dialog_title(s_pa.popup, ui_text("PRESSURE ADVANCE TOWER ARMED"));
+
 
     char body[500];
     lv_snprintf(
@@ -100,23 +91,9 @@ static void show_armed_popup(
         "Start the prepared hollow-square calibration print next. After printing, measure the best corner height with calipers.\n\n"
         "No value has been saved. RESTART clears the temporary tuning state and restores configured motion limits.",
         factor ? factor : "--");
-    ui_popup_add_body(
-        s_pa.popup,
-        body,
-        28,
-        70,
-        594);
-    ui_popup_add_standard_footer_divider(
-        s_pa.popup);
-    ui_popup_add_footer_action(
-        s_pa.popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        close_popup_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
+
+    ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_popup_cb, NULL, NULL);
 }
 
 
@@ -157,7 +134,7 @@ static void arm_tower_cb(
     close_popup();
 
     if (!sent) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
             "PA SETUP FAILED",
             "Moonraker did not accept the Pressure Advance tower setup.");
@@ -187,24 +164,14 @@ static void button_cb(
 
     close_popup();
     s_pa.popup =
-        ui_popup_create(
-            lv_layer_top(),
-            680,
-            450,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 680, 450, UI_POPUP_STANDARD);
 
     if (!s_pa.popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_pa.popup,
-        ui_text("SET UP PRESSURE ADVANCE TOWER"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_pa.popup,
-        48);
+    ui_cal_dialog_title(s_pa.popup, ui_text("SET UP PRESSURE ADVANCE TOWER"));
+
 
     char body[520];
     lv_snprintf(
@@ -216,47 +183,13 @@ static void button_cb(
         state.active_hotend[0]
             ? state.active_hotend
             : "extruder");
-    ui_popup_add_body(
-        s_pa.popup,
-        body,
-        28,
-        68,
-        624);
+    ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
 
-    ui_popup_add_action_at(
-        s_pa.popup,
-        UI_POPUP_ACTION_CONFIRM,
-        ui_text("DIRECT DRIVE"),
-        54,
-        286,
-        260,
-        48,
-        arm_tower_cb,
-        (void *)ui_text(".005"),
-        NULL);
-    ui_popup_add_action_at(
-        s_pa.popup,
-        UI_POPUP_ACTION_CONFIRM,
-        ui_text("LONG BOWDEN"),
-        366,
-        286,
-        260,
-        48,
-        arm_tower_cb,
-        (void *)ui_text(".020"),
-        NULL);
+    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("DIRECT DRIVE"), 260, arm_tower_cb, (void *)ui_text(".005"), NULL);
+    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("LONG BOWDEN"), 260, arm_tower_cb, (void *)ui_text(".020"), NULL);
 
-    ui_popup_add_standard_footer_divider(
-        s_pa.popup);
-    ui_popup_add_footer_action(
-        s_pa.popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        close_popup_cb,
-        NULL,
-        NULL);
+
+    ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_popup_cb, NULL, NULL);
 }
 
 

@@ -932,3 +932,70 @@ lv_obj_t *ui_popup_add_button_aligned(lv_obj_t *popup,
 
     return button;
 }
+
+/* A bounded stack keeps nested calibration dialogs associated with their
+ * workflow. Delete callbacks remove owners before any later feedback. */
+#include "ui_calibration_dialog.h"
+#include "ui_value_update.h"
+static char s_feedback_tag;
+static lv_obj_t *s_cal_owners[8];
+static unsigned s_cal_owner_count;
+
+lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind,
+                          const char *title, const char *detail)
+{
+    if (!body) return NULL;
+    lv_obj_t *label = NULL;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(body); ++i) {
+        lv_obj_t *child = lv_obj_get_child(body, i);
+        if (lv_obj_get_user_data(child) == &s_feedback_tag) { label = child; break; }
+    }
+    if (!label) {
+        label = lv_label_create(body);
+        lv_obj_set_user_data(label, &s_feedback_tag);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+        ui_apply_custom_label_style(label, UI_FONT_BODY, ui_status_color(kind));
+    }
+    char message[512];
+    lv_snprintf(message, sizeof(message), "%s%s%s", title ? title : "",
+                detail && detail[0] ? "\n" : "", detail ? detail : "");
+    bool changed = ui_value_set_text(label, message);
+    ui_value_set_color(label, ui_status_color(kind), 0);
+    if (changed) lv_obj_scroll_to_view(label, LV_ANIM_OFF);
+    return label;
+}
+static void cal_owner_deleted(lv_event_t *event)
+{
+    lv_obj_t *owner = lv_event_get_target_obj(event);
+    for (unsigned i = 0; i < s_cal_owner_count; ++i) {
+        if (s_cal_owners[i] != owner) continue;
+        for (unsigned j = i + 1; j < s_cal_owner_count; ++j) s_cal_owners[j - 1] = s_cal_owners[j];
+        --s_cal_owner_count; break;
+    }
+}
+void ui_cal_dialog_register(lv_obj_t *popup)
+{
+    if (s_cal_owner_count == 8) {
+        for (unsigned i = 1; i < 8; ++i) s_cal_owners[i - 1] = s_cal_owners[i];
+        --s_cal_owner_count;
+    }
+    s_cal_owners[s_cal_owner_count++] = popup;
+    lv_obj_add_event_cb(popup, cal_owner_deleted, LV_EVENT_DELETE, NULL);
+}
+static void cal_notice_close(lv_event_t *event)
+{
+    lv_obj_t *popup = ui_popup_find_owner(lv_event_get_target_obj(event));
+    if (popup) lv_obj_delete(popup);
+}
+void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *detail)
+{
+    lv_obj_t *popup = s_cal_owner_count ? s_cal_owners[s_cal_owner_count - 1] : NULL;
+    if (!popup) {
+        popup = ui_cal_dialog_create(lv_layer_top(), 650, 360, UI_POPUP_STANDARD);
+        if (!popup) return;
+        ui_cal_dialog_title(popup, "CALIBRATION STATUS");
+        ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "CLOSE", cal_notice_close, NULL, NULL);
+    }
+    ui_popup_feedback(ui_cal_dialog_body(popup), kind, title, detail);
+}

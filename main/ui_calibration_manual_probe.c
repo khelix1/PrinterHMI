@@ -2,6 +2,7 @@
 #include "ui_text.h"
 
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 
 typedef struct {
     lv_obj_t *popup;
@@ -39,33 +40,18 @@ bool ui_calibration_manual_probe_show(
     ui_calibration_manual_probe_hide();
 
     s_probe.popup =
-        ui_popup_create(
-            lv_layer_top(),
-            700,
-            480,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 700, 480, UI_POPUP_STANDARD);
 
     if (!s_probe.popup) {
         return false;
     }
 
-    ui_popup_add_title(
-        s_probe.popup,
-        title ? title : ui_text("MANUAL PROBE"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_probe.popup,
-        48);
+    ui_cal_dialog_title(s_probe.popup, title ? title : ui_text("MANUAL PROBE"));
+
     s_probe.status_label =
-        ui_popup_add_body(
-            s_probe.popup,
-            instructions
+        ui_cal_dialog_text(ui_cal_dialog_body(s_probe.popup), instructions
                 ? instructions
-                : "Adjust the nozzle height, then accept the point.",
-            28,
-            68,
-            644);
+                : "Adjust the nozzle height, then accept the point.");
 
     /* Shared by Probe/Z and Axis Twist: coarse travel first, then
      * 0.01 mm or 0.005 mm TESTZ steps for the final paper-contact pass. */
@@ -89,41 +75,12 @@ bool ui_calibration_manual_probe_show(
     for (size_t index = 0;
          index < sizeof(labels) / sizeof(labels[0]);
          ++index) {
-        int row = (int)(index / 5);
-        int column = (int)(index % 5);
-        ui_popup_add_action_at(
-            s_probe.popup,
-            UI_POPUP_ACTION_CHOICE,
-            labels[index],
-            30 + column * 128,
-            188 + row * 56,
-            120,
-            48,
-            step_cb,
-            (void *)commands[index],
-            NULL);
+        ui_cal_dialog_choice(s_probe.popup, UI_POPUP_ACTION_CHOICE, labels[index], 120, step_cb, (void *)commands[index], NULL);
     }
 
-    ui_popup_add_standard_footer_divider(
-        s_probe.popup);
-    ui_popup_add_footer_action(
-        s_probe.popup,
-        UI_POPUP_ACTION_DANGER,
-        "ABORT",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        abort_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_probe.popup,
-        UI_POPUP_ACTION_CONFIRM,
-        accept_label ? accept_label : "ACCEPT",
-        190,
-        UI_POPUP_FOOTER_RIGHT,
-        accept_cb,
-        NULL,
-        NULL);
+
+    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "ABORT", abort_cb, NULL, NULL);
+    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "ACCEPT", accept_cb, NULL, NULL);
 
     return true;
 }

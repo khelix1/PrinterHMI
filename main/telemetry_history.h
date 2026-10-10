@@ -8,7 +8,16 @@
 #define TELEMETRY_HISTORY_CAPACITY 300
 #define TELEMETRY_HISTORY_SAMPLE_INTERVAL_US 2000000LL
 
+enum {TELEMETRY_NO_BED=1u<<0,TELEMETRY_NO_CENTER=1u<<1,TELEMETRY_NO_ENV=1u<<2,
+    TELEMETRY_NO_PART_FAN=1u<<3,TELEMETRY_NO_DRYBOX_FAN=1u<<4};
+
 typedef struct {
+    int64_t time_us;
+    uint32_t unavailable;
+    size_t hotend_count;
+    moonraker_hotend_t hotends[MOONRAKER_MAX_HOTENDS];
+    char active_hotend[MOONRAKER_HOTEND_NAME_MAX];
+    double heater_target;
     double nozzle_temp;
     double nozzle_target;
     double bed_temp;
@@ -36,7 +45,8 @@ bool telemetry_history_init(void);
 void telemetry_history_reset(void);
 
 /*
- * Records at most one sample every two seconds.
+ * Records at most one live sample per wall-clock two-second bin.
+ * Actual timestamps are retained; missed/offline bins are never backfilled.
  *
  * Returns true only when a new valid sample was committed.
  */
@@ -49,3 +59,7 @@ size_t telemetry_history_count(void);
 bool telemetry_history_get(
     size_t logical_index,
     telemetry_sample_t *out);
+
+/* Capability-aware conversion; missing/unsupported values become NAN. */
+void telemetry_history_from_state(const moonraker_state_t *state, int64_t now_us, telemetry_sample_t *out);
+uint32_t telemetry_history_generation(void);

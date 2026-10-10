@@ -341,6 +341,11 @@ static void deferred_start_cb(void *user_data)
 static void start_cb(lv_event_t *e)
 {
     (void)e;
+    if(s_ota_url_ta && !lv_textarea_get_text(s_ota_url_ta)[0]) {
+        lv_textarea_set_placeholder_text(s_ota_url_ta,"Firmware URL required.");
+        lv_obj_set_style_border_color(s_ota_url_ta,UI_DANGER_BRIGHT,0);
+        return;
+    }
 
     /*
      * Preserve everything needed by the deferred callback before releasing
@@ -515,4 +520,34 @@ void ui_ota_popup_show(const char *current_url,
         start_cb,
         NULL,
         NULL);
+}
+
+static lv_obj_t *s_start_failure;
+static void start_failure_deleted(lv_event_t *event)
+{
+    (void)event; s_start_failure = NULL; ota_resume_camera();
+}
+static void start_failure_close(lv_event_t *event)
+{
+    (void)event; if (s_start_failure) lv_obj_delete(s_start_failure);
+}
+void ui_ota_start_failure(const char *message)
+{
+    if (s_start_failure) lv_obj_delete(s_start_failure);
+    int width = lv_display_get_horizontal_resolution(NULL) - 32;
+    int height = lv_display_get_vertical_resolution(NULL) - 32;
+    if (width > 650) width = 650;
+    if (height > 340) height = 340;
+    s_start_failure = ui_popup_create(lv_layer_top(), width, height, UI_POPUP_STANDARD);
+    if (!s_start_failure) { ota_resume_camera(); return; }
+    lv_obj_add_event_cb(s_start_failure,start_failure_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_set_flex_flow(s_start_failure,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_start_failure,16,0);
+    lv_obj_set_style_pad_row(s_start_failure,12,0);
+    lv_obj_t *body=lv_obj_create(s_start_failure);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body,LV_PCT(100),0);lv_obj_set_flex_grow(body,1);
+    lv_obj_set_flex_flow(body,LV_FLEX_FLOW_COLUMN);lv_obj_set_scroll_dir(body,LV_DIR_VER);
+    ui_popup_feedback(body,UI_STATUS_DANGER,"UPDATE NOT STARTED",message);
+    ui_popup_add_action_at(s_start_failure,UI_POPUP_ACTION_CLOSE,"CLOSE",0,0,128,48,start_failure_close,NULL,NULL);
 }

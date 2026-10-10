@@ -1197,16 +1197,16 @@ static void moonraker_live_poll_tasklet(void)
     }
 }
 
-static bool moonraker_send_gcode_http(const char *cmd)
+static bool moonraker_send_gcode_http(const char *cmd, bool notify_failure)
 {
     if (!s_got_ip || !cmd || !cmd[0]) {
         safe_copy(moonraker_status,
                   sizeof(moonraker_status),
                   "Moonraker: no WiFi for command");
-        ui_toast_show(
+        if (notify_failure) ui_toast_show_link(
             UI_STATUS_DANGER,
             "COMMAND NOT SENT",
-            "Moonraker is offline.");
+            "Moonraker is offline.", UI_SHELL_PAGE_CONSOLE);
         return false;
     }
 
@@ -1253,10 +1253,10 @@ static bool moonraker_send_gcode_http(const char *cmd)
              "HTTP %d  %.110s",
              http_code,
              cmd);
-    ui_toast_show(
+    if (notify_failure) ui_toast_show_link(
         UI_STATUS_DANGER,
         "COMMAND FAILED",
-        toast_detail);
+        toast_detail, UI_SHELL_PAGE_CONSOLE);
 
     return false;
 }
@@ -1274,14 +1274,23 @@ static bool moonraker_send_gcode_raw(
         return true;
     }
 
-    return moonraker_send_gcode_http(command);
+    return moonraker_send_gcode_http(command, true);
 }
 
 
-static bool moonraker_send_gcode(
-    const char *requested)
+/* Console owns persistent editor feedback; preserve literal dispatch and the
+ * same WebSocket/HTTP fallback without a duplicate transient error toast. */
+static bool console_send_gcode(const char *command)
 {
-    if(moonraker_command_admin_method(requested))return moonraker_send_gcode_raw(requested);
+    if (!command || !command[0]) return false;
+    if (moonraker_live_websocket_send_gcode(command)) return true;
+    return moonraker_send_gcode_http(command, false);
+}
+
+static bool moonraker_send_gcode_impl(
+    const char *requested, bool notify_failure)
+{
+    if(moonraker_command_admin_method(requested))return notify_failure ? moonraker_send_gcode_raw(requested) : console_send_gcode(requested);
     printer_action_resolution_t resolution;
 
     if (!printer_action_resolver_resolve(
@@ -1304,8 +1313,15 @@ static bool moonraker_send_gcode(
             resolution.command);
     }
 
-    return moonraker_send_gcode_raw(
-        resolution.command);
+    return notify_failure ? moonraker_send_gcode_raw(resolution.command) : console_send_gcode(resolution.command);
+}
+static bool moonraker_send_gcode(const char *requested)
+{
+    return moonraker_send_gcode_impl(requested, true);
+}
+static bool action_send_gcode_inline(const char *requested)
+{
+    return moonraker_send_gcode_impl(requested, false);
 }
 
 void ui_printer_create(void);
@@ -1521,7 +1537,7 @@ void ui_command_bar_action(const char *action)
     if (!action) return;
 
     if (strcmp(action, "RESUME") == 0) {
-        ui_filament_recovery_show(moonraker_send_gcode);
+        ui_filament_recovery_show(action_send_gcode_inline);
         return;
     }
 
@@ -1745,7 +1761,7 @@ void ui_shell_page_action(ui_shell_page_t page)
     case UI_SHELL_PAGE_CALIBRATION:
         ui_calibration_show(
             calibration_open_bed_mesh_bridge,
-            moonraker_send_gcode);
+            action_send_gcode_inline);
         return;
 
     case UI_SHELL_PAGE_DEVICES:
@@ -1758,8 +1774,7 @@ void ui_shell_page_action(ui_shell_page_t page)
          * The operator explicitly selected this detected macro. Preserve its
          * exact catalog name instead of resolving it as another action.
          */
-        ui_macros_show(
-            moonraker_send_gcode_raw);
+        ui_macros_show(console_send_gcode);
         return;
 
     case UI_SHELL_PAGE_CONSOLE:
@@ -1768,7 +1783,7 @@ void ui_shell_page_action(ui_shell_page_t page)
          * WebSocket dispatch, but never rewrites operator-entered G-code.
          */
         ui_console_show(
-            moonraker_send_gcode_raw);
+            console_send_gcode);
         return;
 
     case UI_SHELL_PAGE_DRYBOX:
@@ -1977,7 +1992,7 @@ static void filament_sensor_banner_event_cb(lv_event_t *e)
     moonraker_state_t printer;
     moonraker_state_snapshot(&printer);
     if (printer_controller_is_paused(printer.printer_state)) {
-        ui_filament_recovery_show(moonraker_send_gcode);
+        ui_filament_recovery_show(action_send_gcode_inline);
         return;
     }
 
@@ -2634,7 +2649,7 @@ static void printer_file_detail_start_bridge(void)
         sizeof(moonraker_status),
         close_printer_file_detail_popup);
     if(!started) {
-        ui_toast_show(UI_STATUS_WARNING,"PRINT NOT STARTED",moonraker_status);
+        ui_files_print_feedback(moonraker_status);
     }
 }
 
@@ -3441,7 +3456,7 @@ static void build_drybox_dashboard(void)
     lv_obj_set_style_text_color(scr, UI_TEXT, 0);
 
     /* Top bar now belongs to ui_shell. */
-    if (!ui_global_estop_init(moonraker_send_gcode)) {
+    if (!ui_global_estop_init(action_send_gcode_inline)) {
         ESP_LOGE(TAG, "Global E-stop unavailable");
     }
     ui_shell_create();
@@ -3901,6 +3916,7 @@ void app_main(void)
         (int)esp_reset_reason());
 
     theme_manager_init();
+    ui_toast_init();
     onboarding_controller_init();
 
     /* Apply the saved local timezone before any clock or SNTP path starts. */

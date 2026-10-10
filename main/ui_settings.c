@@ -1,5 +1,6 @@
 #include "ui_settings.h"
 #include "ui_text.h"
+#include "ui_toast.h"
 #include "ui_global_estop.h"
 #include "ui_page_layout_profile.h"
 #include "ui_settings_popups.h"
@@ -45,6 +46,7 @@ static lv_obj_t *s_sleep_wake_overlay = NULL;
 static bool s_display_sleeping = false;
 static lv_obj_t *s_timezone_label = NULL;
 static lv_obj_t *s_theme_label = NULL;
+static lv_obj_t *s_notifications_label;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
 
 static void settings_timezone_changed(void)
@@ -104,6 +106,15 @@ static void settings_accessibility_card_cb(lv_event_t *event)
 {
     (void)event;
     ui_appearance_popups_show_accessibility(settings_appearance_changed);
+}
+
+static void settings_notifications_changed(void)
+{
+    if (s_notifications_label) lv_label_set_text(s_notifications_label,ui_toast_preference_label());
+}
+static void settings_notifications_cb(lv_event_t *event)
+{
+    (void)event; ui_toast_preferences_show(settings_notifications_changed);
 }
 
 static void settings_event_history_cb(lv_event_t *event)
@@ -997,7 +1008,8 @@ void ui_settings_show_page(
     const int display_row_3 = display_row_2 + row_height + 1;
     const int display_row_4 = display_row_3 + row_height + 1;
     const int display_row_5 = display_row_4 + row_height + 1;
-    const int display_height = display_row_5 + row_height + 6;
+    const int display_row_6 = display_row_5 + row_height + 1;
+    const int display_height = display_row_6 + row_height + 6;
     lv_obj_t *display = ui_settings_section_create(
         content,
         "DISPLAY",
@@ -1066,6 +1078,11 @@ void ui_settings_show_page(
         theme_manager_accessibility_label(),
         display_row_5,
         settings_accessibility_card_cb);
+
+    ui_settings_section_add_divider(display, display_row_5 + row_height);
+    s_notifications_label = ui_settings_section_add_row(display,
+        "Notifications", "Optional confirmations; errors remain visible",
+        ui_toast_preference_label(), display_row_6, settings_notifications_cb);
 
     section_y += display_height + section_gap;
 
@@ -1203,6 +1220,8 @@ void hide_settings_tab(void)
         settings_sleep_label = NULL;
         s_timezone_label = NULL;
         s_theme_label = NULL;
+        s_notifications_label = NULL;
+        ui_toast_preferences_close();
         s_theme_rebuild_cb = NULL;
         settings_system_info_unbind();
         ui_appearance_popups_close_all();

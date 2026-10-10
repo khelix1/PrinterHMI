@@ -17,7 +17,8 @@ bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(voi
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
 void moonraker_state_snapshot(moonraker_state_t *s){memset(s,0,sizeof(*s));s->moonraker_ok=s->live_data_ok=true;}
-uint32_t moonraker_config_generation(void){return 1;}
+static uint32_t config_generation=1;
+uint32_t moonraker_config_generation(void){return config_generation;}
 void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void)t;(void)d;}
 static size_t entries=64;
 size_t console_controller_count(void){return entries;}
@@ -52,7 +53,13 @@ static void run(int width){ui_tools_show();lv_obj_set_width(s_root,width);lv_obj
 #include "ui_page_state.c"
 #include "ui_files.c"
 char *thumbnail_session_selected_file(void){return "fixture.gcode";}
+int moonraker_config_active_profile_index(void){return 0;}
+const char *moonraker_config_active_profile_name(void){return "Workshop printer";}
 void ui_preview_lightbox_show_file_object(lv_obj_t *i,const char *f){(void)i;(void)f;}
+static unsigned starts,cancels,refreshes;
+static void refresh_files(void){refreshes++;}
+static void start_job(void){starts++;}
+static void cancel_job(void){cancels++;ui_files_close_detail_popup();}
 static void run(int width){
  ui_files_show();lv_obj_set_width(s_printer_file_popup,width);ui_files_set_search_text("very long query");ui_files_set_sort_text("NEWEST");lv_obj_update_layout(s_printer_file_popup);
  if(!ui_theme_is_studio()){lv_obj_t *toolbar=lv_obj_get_child(s_printer_file_popup,1);cards(toolbar);assert(lv_obj_get_child_count(toolbar)==4);inside(toolbar,s_printer_file_popup);}inside(s_breadcrumb_label,s_printer_file_popup);
@@ -61,17 +68,107 @@ static void run(int width){
  ui_files_add_folder_button("Long folder title for row checks","folder",590);lv_obj_update_layout(s_printer_file_popup);cards(s_printer_file_list);
  ui_files_set_status("Moonraker offline. Check the active printer.");lv_obj_update_layout(s_printer_file_popup);inside(s_files_state->root,viewport);inside(s_files_state->title,s_files_state->root);inside(s_files_state->detail,s_files_state->root);
  lv_area_t title,description;lv_obj_get_coords(s_files_state->title,&title);lv_obj_get_coords(s_files_state->detail,&description);assert(title.y2<description.y1);
+ ui_thumbnail_t *view=NULL;lv_obj_t *box=NULL;
+ ui_files_show_detail_popup("Long_operator_job_name_for_the_inspector_and_ready_to_print_dialog.gcode","Loading metadata",&box,&view,cancel_job,start_job);
+ assert(view && box && ui_files_detail_is_open() && lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
+ unsigned prior=starts;detail_start_event_cb(NULL);assert(starts==prior);
+ ui_files_update_detail_metadata("Estimated time: 02:40\nMaterial: PLA\nLayers: 336\nFilament: 19.8 m\nSize: 4.2 MB\nThumbnail: metadata found\nthumbs/very_long_preview_filename_for_the_selected_object.png\n\nConfirm to start this print.",true);
+ assert(!lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));detail_start_event_cb(NULL);assert(starts==prior && s_print_confirm_popup);
+ assert(!ui_files_can_refresh_rows());
+ lv_obj_t *confirm=s_print_confirm_popup;detail_start_event_cb(NULL);assert(confirm==s_print_confirm_popup);
+ lv_obj_set_width(confirm,width<640?width:640);
+ lv_obj_update_layout(confirm);inside(confirm,lv_screen_active());
+ for(uint32_t i=0;i<lv_obj_get_child_count(confirm);i++)inside(lv_obj_get_child(confirm,i),confirm);
+ cards(lv_obj_get_child(confirm,-1));snapshot(confirm);
+ print_confirm_cancel(NULL);assert(!s_print_confirm_popup && ui_files_detail_is_open() && starts==prior);
+ detail_start_event_cb(NULL);print_confirm_accept(NULL);assert(!s_print_confirm_popup && starts==prior+1);
+ print_confirm_accept(NULL);assert(starts==prior+1);
  if(ui_theme_is_studio()) {
-  ui_thumbnail_t *view=NULL;lv_obj_t *box=NULL;
-  ui_files_show_detail_popup("Long_operator_job_name_for_the_inspector.gcode","Loading metadata",&box,&view,NULL,NULL);
-  assert(view && box && ui_files_detail_is_open() && lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
-  ui_files_update_detail_metadata("Estimated time: 02:40\nMaterial: PLA\nLayers: 336\nFilament: 19.8 m\nSize: 4.2 MB",true);
-  assert(!lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));lv_obj_update_layout(s_file_detail_popup);
-  for(uint32_t i=0;i<lv_obj_get_child_count(s_file_detail_popup);i++)inside(lv_obj_get_child(s_file_detail_popup,i),s_file_detail_popup);
-  studio_metadata_open(NULL);assert(s_studio_metadata_popup && s_studio_metadata_label);ui_files_update_detail_metadata("Updated metadata",true);assert(!strcmp(lv_label_get_text(s_studio_metadata_label),"Updated metadata"));studio_metadata_close(NULL);assert(!s_studio_metadata_popup && !s_studio_metadata_label);
+  assert(ui_files_can_refresh_rows());
+  lv_obj_t *owner=s_printer_file_popup,*detail=s_file_detail_popup;
+  unsigned before_refresh=refreshes;ui_files_set_callbacks(refresh_files,NULL,NULL);ui_files_refresh();
+  assert(refreshes==before_refresh+1 && owner==s_printer_file_popup && detail==s_file_detail_popup);
  }
+ if(!ui_theme_is_studio())lv_obj_set_width(s_file_detail_popup,width<760?width:760);
+ lv_obj_update_layout(s_file_detail_popup);
+ for(uint32_t i=0;i<lv_obj_get_child_count(s_file_detail_popup);i++)inside(lv_obj_get_child(s_file_detail_popup,i),s_file_detail_popup);
+ lv_obj_t *metadata=lv_obj_get_parent(s_detail_info_label);
+ assert(lv_obj_has_flag(metadata,LV_OBJ_FLAG_SCROLLABLE));
+ lv_area_t action_before,action_after;lv_obj_get_coords(s_detail_start_button,&action_before);
+ int bottom=lv_obj_get_scroll_bottom(metadata);
+ if(bottom>0)lv_obj_scroll_to_y(metadata,lv_obj_get_scroll_y(metadata)+bottom,LV_ANIM_OFF);
+ lv_obj_update_layout(s_file_detail_popup);
+ assert(lv_obj_get_scroll_bottom(metadata)<=1);
+ lv_area_t text_area,view_area;lv_obj_get_coords(s_detail_info_label,&text_area);lv_obj_get_coords(metadata,&view_area);assert(text_area.y2<=view_area.y2);
+ lv_obj_get_coords(s_detail_start_button,&action_after);assert(!memcmp(&action_before,&action_after,sizeof(action_before)));
+ assert(strstr(lv_label_get_text(s_detail_info_label),"Confirm to start this print."));
+ if(ui_theme_is_studio()) {
+  assert(lv_obj_get_height(s_detail_info_label)>lv_obj_get_height(metadata));
+  assert(lv_obj_get_width(box)==352 && lv_obj_get_height(box)==228);
+  studio_metadata_open(NULL);assert(!ui_files_can_refresh_rows());assert(s_studio_metadata_popup && s_studio_metadata_label);
+  lv_obj_update_layout(s_studio_metadata_popup);
+  for(uint32_t i=0;i<lv_obj_get_child_count(s_studio_metadata_popup);i++)inside(lv_obj_get_child(s_studio_metadata_popup,i),s_studio_metadata_popup);
+  lv_obj_t *footer=lv_obj_get_child(s_studio_metadata_popup,-1);
+  lv_obj_t *close=lv_obj_get_child(footer,0);
+  assert(lv_obj_get_width(close)==128 && lv_obj_get_height(close)==48);inside(close,footer);
+  lv_area_t ca,fa;lv_obj_get_coords(close,&ca);lv_obj_get_coords(footer,&fa);assert(ca.x2==fa.x2);
+  lv_obj_t *close_label=lv_obj_get_child(close,0);
+  assert(!strcmp(lv_label_get_text(close_label),"Close"));
+  assert(lv_obj_get_width(close_label)>0 && lv_obj_get_width(close_label)<lv_obj_get_width(close));
+  inside(close_label,close);
+  ui_files_update_detail_metadata("Updated metadata",true);assert(!strcmp(lv_label_get_text(s_studio_metadata_label),"Updated metadata"));
+  studio_metadata_close(NULL);assert(!s_studio_metadata_popup && !s_studio_metadata_label);
+ } else {
+  lv_obj_t *footer=lv_obj_get_parent(s_detail_start_button);cards(footer);inside(footer,s_file_detail_popup);
+  assert(lv_label_get_long_mode(lv_obj_get_child(s_file_detail_popup,1))==LV_LABEL_LONG_SCROLL_CIRCULAR);
+ }
+ ui_files_update_detail_metadata("Metadata unavailable",false);assert(lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
+ detail_start_event_cb(NULL);assert(starts==prior+1);
+ snapshot(s_file_detail_popup);
+ prior=cancels;detail_cancel_event_cb(NULL);assert(cancels==prior+1 && !s_file_detail_popup && !s_detail_start_button && !s_print_confirm_popup);
+ ui_files_show_detail_popup("Another_file.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
+ detail_start_event_cb(NULL);assert(s_print_confirm_popup);prior=starts;config_generation++;
+ print_confirm_accept(NULL);assert(starts==prior && !s_print_confirm_popup && !s_file_detail_popup);
+ ui_files_show_detail_popup("Final_file.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
+ detail_start_event_cb(NULL);assert(s_print_confirm_popup);ui_files_close_detail_popup();assert(!s_print_confirm_popup && !s_detail_filename);
+
  snapshot(s_printer_file_popup);ui_files_hide();assert(!s_file_detail_popup && !s_studio_metadata_popup);assert(!s_printer_file_popup);
 }
+#elif defined(TEST_NETWORK)
+#include "ui_network.c"
+void ui_network_create(void){}
+void ui_network_destroy(void){ui_network_destroy_objects(NULL,NULL,NULL);}
+static unsigned scans,profiles;
+static char picked[40];
+static void scan_cb(lv_event_t *e){(void)e;scans++;}
+static void profiles_cb(lv_event_t *e){(void)e;profiles++;}
+static void selected_cb(lv_event_t *e){snprintf(picked,sizeof(picked),"%s",(char *)lv_event_get_user_data(e));}
+static void run(int width){
+ if(width!=854 && width!=976)return; /* Legacy themes retain their fixed page geometry. */
+ ui_network_create_objects("Network connected",7125,NULL,scan_cb,profiles_cb,NULL);
+ ui_network_refresh_objects("Printer connected","A_very_long_network_name_12345678","192.168.100.123",true,"very-long-printer-hostname.example.local",200,"Ready to scan");
+ ui_network_set_port(7130);assert(!strcmp(lv_label_get_text(s_network.moonraker_port),"7130"));
+ lv_obj_update_layout(s_network.root);
+ if(ui_theme_is_studio()) {
+  assert(lv_obj_get_x(s_network.root)==24 && lv_obj_get_y(s_network.root)==80);
+  assert(lv_obj_get_width(s_network.root)==976 && lv_obj_get_height(s_network.root)==424);
+  for(uint32_t i=0;i<lv_obj_get_child_count(s_network.root);i++)inside(lv_obj_get_child(s_network.root,i),s_network.root);
+  lv_obj_t *panels[]={s_network.wifi_card,s_network.moonraker_card,s_network.actions_card,s_network.banner};
+  for(unsigned p=0;p<4;p++)for(uint32_t i=0;i<lv_obj_get_child_count(panels[p]);i++)inside(lv_obj_get_child(panels[p],i),panels[p]);
+  cards(s_network.actions_card);
+ }
+ unsigned prior=scans;lv_obj_send_event(lv_obj_get_child(s_network.actions_card,ui_theme_is_studio()?0:1),LV_EVENT_CLICKED,NULL);assert(scans==prior+1);
+ prior=profiles;lv_obj_send_event(lv_obj_get_child(s_network.actions_card,ui_theme_is_studio()?1:2),LV_EVENT_CLICKED,NULL);assert(profiles==prior+1);
+ wifi_ap_record_t aps[6]={0};for(unsigned i=0;i<6;i++){snprintf((char *)aps[i].ssid,sizeof(aps[i].ssid),"A_long_access_point_name_%u",i);aps[i].rssi=-57-(int)i;}
+ ui_network_render_scan_results(aps,6,8,selected_cb);lv_obj_update_layout(s_network.root);
+ assert(lv_obj_get_child_count(s_network.networks_list)==6);
+ if(ui_theme_is_studio())cards(s_network.networks_list);
+ lv_obj_send_event(lv_obj_get_child(s_network.networks_list,0),LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,(char *)aps[0].ssid));
+ snapshot(s_network.root);
+ ui_network_render_scan_results(NULL,0,0,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==0);
+ ui_network_hide();assert(!s_network.root && !s_network.networks_list);
+}
+
 #else
 static uint32_t gen=1;static bool fav[64];static char selected[64];
 void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=true;s->count=s->total_count=64;s->generation=gen;}
@@ -97,7 +194,9 @@ static void snapshot(lv_obj_t *root){
 #if defined(TEST_TOOLS)
  const char *page="tools";
 #elif defined(TEST_FILES)
- const char *page="files";
+ const char *page=root==s_print_confirm_popup?"files-confirm":root==s_file_detail_popup?"files-ready":"files";
+#elif defined(TEST_NETWORK)
+ const char *page="network";
 #else
  const char *page="macros";
 #endif

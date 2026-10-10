@@ -637,3 +637,37 @@ Run `python3 tools/audit/profiles_layout_test.py` (optionally `--lvgl-dir /path/
 ## Settings and large-text source closeout
 
 Accepted Settings, theme, chooser, profile and large-text fit changes are merged without a nightly. Stable remains 6.5.6; printing tests remain pending. See [Settings validation](SETTINGS_LAYOUT_VALIDATION.md).
+
+### Nested printer setup dialogs
+
+Authentication, connection security, the SD-card certificate picker, camera setup and camera removal now use scrolling native forms with pinned actions. Studio retains its full-width popup policy; the same helpers serve the other four themes. Camera slots retain their numbered routing and use full stored names on a single scrolling line. Tapping a name, host, port, API key or camera URL opens one shared value editor; Done applies the value and Cancel discards it. Port entry uses a numeric keyboard and digit/length restrictions. API-key entry remains password-masked and each editor inherits its field's maximum length. Closing a field owner discards its open keyboard and clears camera/test timers and setup state. Security has a separate Cancel action that preserves the selected mode. Existing camera catalog, certificate import and profile save behavior remains authoritative.
+
+`profiles_layout_test.py` covers five themes, three densities, both text sizes, three widths and a 400 px short viewport. The test uses typed network/storage stubs and a fake directory for six PEM choices and a missing SD-card directory, without opening network connections or writing certificates. It checks footer bounds and scroll reach, keyboard Done/Cancel/external deletion, numeric/password/length limits, API-key staging, security cancellation/import failure/success, camera slot/default/removal routing, and owner teardown. Build/OTA/touch validation and printing-dependent tests remain pending. No commit, push or nightly is part of this layout patch. Stable version remains 6.5.6.
+
+## Network and ready-to-print layout follow-up
+
+Studio Network fills the shell stage while legacy themes retain their existing page geometry and transport bridges. Scan rows preserve SSID callback ownership and deletion. Files retains the shared thumbnail/fullscreen pipeline. The non-Studio ready-to-print modal uses native flex rows, a scrolling metadata area and a pinned wrapping action footer; Studio uses its embedded inspector with a scrolling details popup. Metadata readiness now both enables and disables Print, and the start callback rejects clicks while disabled.
+
+## Setup Center native-layout follow-up
+
+The wizard replaces fixed coordinates with a native flex shell, step navigation, independently scrolling content and pinned action rows. Review cards report Wi-Fi/printer readiness and optional camera configuration without changing the existing completion criteria. The duplicate legacy printer form is replaced by the shared profile editor; its discovery callback and completion refresh remain wired. Closing or externally deleting the center clears widget references and polling timers. Wi-Fi scans share one outstanding scan task; repeated Scan does not spawn another worker.
+
+## Files action ownership
+
+The print confirmation owns its modal independently from the selected-file inspector. It captures the active profile index/configuration generation, rechecks metadata readiness, and closes without issuing a start if the printer changed. Detail teardown closes confirmation and frees the copied full filename. File refresh keeps the page/inspector owners intact; the asynchronous controller distinguishes an embedded Studio inspector from blocking modals through `ui_files_can_refresh_rows()`. Existing HTTP worker, request/profile/page fencing and pending-job coalescing remain in use.
+
+## Immediate emergency-stop routing
+
+M112 is routed through printer.emergency_stop rather than the queued printer.gcode.script API, including Console input. Standalone FIRMWARE_RESTART uses printer.firmware_restart. Both WebSocket and HTTP retain the selected host, port, TLS and API-key handling. Emergency HTTP requests use a private client even when the ordinary background HTTP slot is busy; recovery and ordinary commands retain that slot policy. The popup reports a request sent, not confirmed shutdown, and transport failures show a toast. See the [Moonraker printer API](https://moonraker.readthedocs.io/en/latest/external_api/printer/).
+
+## Compact Details action and responsive recovery dialogs
+
+Studio File details retains its scrolling metadata body and a pinned, right-aligned 128 x 48 Close action. Fullscreen images retain tap-to-close. E-stop request and Restart Klipper dialogs use a native column layout, wrapping printer-name/message in a scrolling body, and intrinsic-width actions in a pinned wrapping footer. RESTART KLIPPER keeps the action concise; the target printer is shown in the body. Popups cap to the viewport. Changing the active printer dismisses any recovery modal naming the former target; external deletion clears the owner. Immediate emergency transport is unchanged.
+
+## Studio Devices header actions
+
+Graphs and Endstops explicitly reset to LV_ALIGN_TOP_LEFT before Studio positions them. Legacy bottom-right alignment had made the Studio coordinates offsets from the right edge, placing both controls outside the visible header. Studio labels the existing telemetry route GRAPHS; other themes retain TELEMETRY. Catalog, history and endstop query behavior are unchanged.
+
+## Source checkpoint before telemetry redesign
+
+The profile/setup, Network/Files, immediate E-stop routing, responsive recovery and Studio Devices action fixes are checkpointed on feature/profile-setup-dialogs. This checkpoint retains the feature branch and stable version 6.5.6 without merging or producing a nightly. The telemetry redesign has not begun: next work audits live data/history, modernizes graph layouts and controls across themes, and verifies missing/offline/printer-switch behavior.

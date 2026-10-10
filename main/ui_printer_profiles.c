@@ -79,6 +79,9 @@ static void editor_auth_open_cb(lv_event_t *event);
 static void editor_camera_open_cb(lv_event_t *event);
 static void editor_camera_discover_cb(lv_event_t *event);
 static void editor_camera_close(void);
+static void editor_auth_close(void);
+static void profiles_dialog_deleted(lv_event_t *event);
+static void editor_keyboard_discard(void);
 
 static int32_t profiles_width(int32_t preferred)
 {
@@ -131,11 +134,11 @@ static lv_obj_t *profiles_footer(lv_obj_t *popup)
     lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
     return footer;
 }
-static lv_obj_t *profiles_action(lv_obj_t *parent, ui_popup_action_t kind,
-                                 const char *text, lv_event_cb_t callback)
+static lv_obj_t *profiles_action_data(lv_obj_t *parent, ui_popup_action_t kind,
+                                 const char *text, lv_event_cb_t callback, void *user)
 {
     lv_obj_t *button = ui_popup_add_action_at(parent, kind, text, 0, 0,
-        LV_SIZE_CONTENT, 48, callback, NULL, NULL);
+        LV_SIZE_CONTENT, 48, callback, user, NULL);
     if (button) {
         lv_obj_set_style_pad_hor(button, 12, 0);
         if (lv_obj_get_style_flex_flow(parent, 0) == LV_FLEX_FLOW_ROW_WRAP)
@@ -147,6 +150,11 @@ static lv_obj_t *profiles_action(lv_obj_t *parent, ui_popup_action_t kind,
         lv_obj_set_style_min_width(button, size.x + 28, 0);
     }
     return button;
+}
+static lv_obj_t *profiles_action(lv_obj_t *parent, ui_popup_action_t kind,
+                                 const char *text, lv_event_cb_t callback)
+{
+    return profiles_action_data(parent, kind, text, callback, NULL);
 }
 static lv_obj_t *profiles_field(lv_obj_t *parent, const char *caption,
                                 const char *value, uint32_t max, const char *accepted)
@@ -163,8 +171,7 @@ static lv_obj_t *profiles_field(lv_obj_t *parent, const char *caption,
 
 static void editor_close(void)
 {
-    if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
-    s_editor_keyboard_popup = NULL;
+    editor_keyboard_discard();
     if (s_editor_popup) lv_obj_delete(s_editor_popup);
     s_editor_popup = NULL;
     s_editor_name = NULL;
@@ -211,6 +218,22 @@ static void profiles_dialog_deleted(lv_event_t *event)
         s_editor_popup = NULL;
         editor_close();
     } else if (popup == s_delete_popup) s_delete_popup = NULL;
+    else if (popup == s_editor_keyboard_popup) {
+        s_editor_keyboard_popup = NULL;
+        s_editor_keyboard = NULL;
+        s_editor_keyboard_value = NULL;
+        s_editor_keyboard_target = NULL;
+    } else if (popup == s_editor_auth_popup) {
+        s_editor_auth_popup = NULL;
+        editor_auth_close();
+    } else if (popup == s_editor_camera_popup) {
+        s_editor_camera_popup = NULL;
+        editor_camera_close();
+    } else if (popup == s_editor_security_popup) {
+        s_editor_security_popup = NULL;
+        editor_security_close();
+    } else if (popup == s_editor_pem_picker) s_editor_pem_picker = NULL;
+    else if (popup == s_editor_camera_remove_popup) s_editor_camera_remove_popup = NULL;
 }
 
 static void manager_close_cb(lv_event_t *event)
@@ -278,45 +301,52 @@ static void editor_security_pem_picker_open_cb(lv_event_t *event)
 {
     (void)event;
     if (s_editor_pem_picker) { lv_obj_move_foreground(s_editor_pem_picker); return; }
-    s_editor_pem_picker = ui_popup_create(lv_layer_top(), 700, 500, UI_POPUP_STANDARD);
+    s_editor_pem_picker = ui_popup_create(lv_layer_top(), profiles_width(700), profiles_height(500), UI_POPUP_STANDARD);
     if (!s_editor_pem_picker) return;
-    ui_popup_add_title(s_editor_pem_picker, ui_text("SELECT CA CERTIFICATE"), false, 4);
-    ui_popup_add_header_divider(s_editor_pem_picker, 48);
-    ui_popup_add_body(s_editor_pem_picker, "SD-card root .pem files only", 28, 70, 644);
+    lv_obj_add_event_cb(s_editor_pem_picker, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_editor_pem_picker, "SELECT CA CERTIFICATE");
+    profiles_label(body, "SD-card root .pem files only", false);
     DIR *directory = opendir("/sdcard");
     size_t count = 0;
     struct dirent *entry;
     while (directory && count < EDITOR_PEM_MAX_FILES && (entry = readdir(directory))) {
         if (!editor_pem_name(entry->d_name)) continue;
         snprintf(s_editor_pem_paths[count], sizeof(s_editor_pem_paths[count]), "/sdcard/%s", entry->d_name);
-        ui_popup_add_action_at(s_editor_pem_picker, UI_POPUP_ACTION_SECONDARY,
-            entry->d_name, 28, 105 + (int)count * 48, 644, 42,
-            editor_security_pem_selected_cb, s_editor_pem_paths[count], NULL);
+        lv_obj_t *button = profiles_action_data(body, UI_POPUP_ACTION_SECONDARY,
+            entry->d_name, editor_security_pem_selected_cb, s_editor_pem_paths[count]);
+        lv_obj_set_width(button, LV_PCT(100));
+        lv_obj_set_style_min_width(button, 0, 0);
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
         ++count;
     }
     if (directory) closedir(directory);
-    if (count == 0) ui_popup_add_body(s_editor_pem_picker, "No .pem files found in SD-card root.", 28, 130, 644);
-    ui_popup_add_standard_footer_divider(s_editor_pem_picker);
-    ui_popup_add_footer_action(s_editor_pem_picker, UI_POPUP_ACTION_CANCEL,
-        "CLOSE", 230, UI_POPUP_FOOTER_RIGHT, editor_pem_picker_close_cb, NULL, NULL);
+    if (count == 0) profiles_label(body, "No .pem files found in SD-card root.", false);
+    profiles_action(profiles_footer(s_editor_pem_picker), UI_POPUP_ACTION_CLOSE,
+        "CLOSE", editor_pem_picker_close_cb);
+}
+
+static void editor_security_cancel_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_security_close();
 }
 
 static void editor_security_open_cb(lv_event_t *event)
 {
     (void)event;
     if (s_editor_security_popup) { lv_obj_move_foreground(s_editor_security_popup); return; }
-    s_editor_security_popup = ui_popup_create(lv_layer_top(), 700, 350, UI_POPUP_STANDARD);
+    s_editor_security_popup = ui_popup_create(lv_layer_top(), profiles_width(700), profiles_height(400), UI_POPUP_STANDARD);
     if (!s_editor_security_popup) return;
-    ui_popup_add_title(s_editor_security_popup, ui_text("CONNECTION SECURITY"), false, 4);
-    ui_popup_add_header_divider(s_editor_security_popup, 48);
-    ui_popup_add_body(s_editor_security_popup,
-        "Standard keeps current HTTP behavior. Secure lets this printer profile use an approved SD-card PEM certificate.",
-        28, 76, 644);
-    ui_popup_add_standard_footer_divider(s_editor_security_popup);
-    ui_popup_add_footer_action(s_editor_security_popup, UI_POPUP_ACTION_SECONDARY,
-        "STANDARD HTTP", 230, UI_POPUP_FOOTER_LEFT, editor_security_standard_cb, NULL, NULL);
-    ui_popup_add_footer_action(s_editor_security_popup, UI_POPUP_ACTION_CONFIRM,
-        "SELECT .PEM", 270, UI_POPUP_FOOTER_RIGHT, editor_security_pem_picker_open_cb, NULL, NULL);
+    lv_obj_add_event_cb(s_editor_security_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_editor_security_popup, "CONNECTION SECURITY");
+    profiles_label(body,
+        "Standard keeps current HTTP behavior. Secure lets this printer profile use an approved SD-card PEM certificate.", false);
+    lv_obj_t *footer = profiles_footer(s_editor_security_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_security_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, "STANDARD HTTP", editor_security_standard_cb);
+    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, "SELECT .PEM", editor_security_pem_picker_open_cb);
 }
 
 static void editor_discover_cb(lv_event_t *event)
@@ -630,66 +660,63 @@ static void manager_select_cb(
 }
 
 
-static void editor_keyboard_popup_close(void)
+static void editor_keyboard_discard(void)
 {
-    if (s_editor_keyboard_target && s_editor_keyboard_value) {
-        lv_textarea_set_text(
-            s_editor_keyboard_target,
-            lv_textarea_get_text(s_editor_keyboard_value));
-    }
-    if (s_editor_keyboard_popup) lv_obj_delete(s_editor_keyboard_popup);
+    lv_obj_t *popup = s_editor_keyboard_popup;
     s_editor_keyboard_popup = NULL;
     s_editor_keyboard = NULL;
     s_editor_keyboard_value = NULL;
     s_editor_keyboard_target = NULL;
+    if (popup) lv_obj_delete(popup);
 }
-
-
 
 static void editor_keyboard_popup_done_cb(lv_event_t *event)
 {
     (void)event;
-    editor_keyboard_popup_close();
+    if (s_editor_keyboard_target && s_editor_keyboard_value)
+        lv_textarea_set_text(s_editor_keyboard_target, lv_textarea_get_text(s_editor_keyboard_value));
+    editor_keyboard_discard();
 }
 
+static void editor_keyboard_cancel_cb(lv_event_t *event)
+{
+    (void)event;
+    editor_keyboard_discard();
+}
 
 static void editor_field_focused_cb(lv_event_t *event)
 {
-    lv_obj_t *field = lv_event_get_target(event);
+    lv_obj_t *field = lv_event_get_target_obj(event);
     if (!field) return;
-    if (s_editor_keyboard_popup && s_editor_keyboard && s_editor_keyboard_value) {
-        s_editor_keyboard_target = field;
-        lv_textarea_set_text(s_editor_keyboard_value, lv_textarea_get_text(field));
-        lv_keyboard_set_textarea(s_editor_keyboard, s_editor_keyboard_value);
-        lv_obj_move_foreground(s_editor_keyboard_popup);
-        return;
-    }
-
+    editor_keyboard_discard();
     s_editor_keyboard_target = field;
-    s_editor_keyboard_popup = ui_popup_create(
-        lv_screen_active(), 800, 350, UI_POPUP_STANDARD);
-    if (!s_editor_keyboard_popup) {
-        s_editor_keyboard_target = NULL;
-        return;
-    }
-    ui_popup_add_title(s_editor_keyboard_popup, ui_text("EDIT VALUE"), false, 0);
-    ui_popup_add_header_divider(s_editor_keyboard_popup, 44);
-    s_editor_keyboard_value = ui_popup_add_textarea(
-        s_editor_keyboard_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 56,
-        true, false, 127, ui_text(""), lv_textarea_get_text(field), NULL);
-    s_editor_keyboard = ui_popup_add_keyboard(
-        s_editor_keyboard_popup, s_editor_keyboard_value, 720, 178,
-        LV_ALIGN_TOP_MID, 0, 112, LV_KEYBOARD_MODE_TEXT_LOWER);
-    ui_popup_add_standard_footer_divider(s_editor_keyboard_popup);
-    ui_popup_add_action_at(
-        s_editor_keyboard_popup, UI_POPUP_ACTION_CONFIRM,
-        ui_text(LV_SYMBOL_OK " DONE"), 508, 296, 260, 44,
-        editor_keyboard_popup_done_cb, NULL, NULL);
+    s_editor_keyboard_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
+    if (!s_editor_keyboard_popup) { s_editor_keyboard_target = NULL; return; }
+    lv_obj_add_event_cb(s_editor_keyboard_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    const char *title = field == s_editor_port ? "EDIT PORT" :
+        field == s_editor_host ? "EDIT HOST / IP" :
+        field == s_editor_auth_key ? "EDIT API KEY" :
+        field == s_editor_camera_stream ? "EDIT CAMERA URL" : "EDIT NAME";
+    lv_obj_t *body = profiles_body(s_editor_keyboard_popup, title);
+    s_editor_keyboard_value = ui_popup_add_textarea(body, 1, 56, LV_ALIGN_TOP_LEFT, 0, 0,
+        true, lv_textarea_get_password_mode(field), lv_textarea_get_max_length(field),
+        "", lv_textarea_get_text(field), lv_textarea_get_accepted_chars(field));
+    lv_obj_set_width(s_editor_keyboard_value, LV_PCT(100));
+    lv_obj_set_style_min_height(s_editor_keyboard_value, 56, 0);
+    lv_obj_set_style_text_font(s_editor_keyboard_value, UI_FONT_BODY_LARGE, 0);
+    s_editor_keyboard = ui_popup_add_keyboard(body, s_editor_keyboard_value,
+        1, 1, LV_ALIGN_TOP_LEFT, 0, 0,
+        field == s_editor_port ? LV_KEYBOARD_MODE_NUMBER : LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_set_size(s_editor_keyboard, LV_PCT(100), 0);
+    lv_obj_set_flex_grow(s_editor_keyboard, 1);
+    lv_obj_set_style_min_height(s_editor_keyboard, 140, 0);
+    lv_obj_add_event_cb(s_editor_keyboard, editor_keyboard_popup_done_cb, LV_EVENT_READY, NULL);
+    lv_obj_add_event_cb(s_editor_keyboard, editor_keyboard_cancel_cb, LV_EVENT_CANCEL, NULL);
+    lv_obj_t *footer = profiles_footer(s_editor_keyboard_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_keyboard_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " DONE", editor_keyboard_popup_done_cb);
     lv_obj_move_foreground(s_editor_keyboard_popup);
 }
-
-
-
 
 static void editor_apply_identity_suggestion(
     const char *identity)
@@ -759,6 +786,7 @@ static void editor_test_poll_cb(lv_timer_t *timer)
 
 static void editor_auth_close(void)
 {
+    editor_keyboard_discard();
     if (s_editor_auth_popup) {
         lv_obj_delete(s_editor_auth_popup);
     }
@@ -797,41 +825,19 @@ static void editor_auth_save_cb(lv_event_t *event)
 static void editor_auth_open_cb(lv_event_t *event)
 {
     (void)event;
-    if (s_editor_auth_popup) {
-        lv_obj_move_foreground(s_editor_auth_popup);
-        return;
-    }
-
-    s_editor_auth_popup = ui_popup_create(
-        lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
-    if (!s_editor_auth_popup) {
-        return;
-    }
-
-    ui_popup_add_title(s_editor_auth_popup, ui_text("MOONRAKER AUTHENTICATION"), false, 0);
-    ui_popup_add_header_divider(s_editor_auth_popup, 44);
-    ui_popup_add_caption(s_editor_auth_popup, ui_text("API KEY (OPTIONAL)"), 28, 70, 220);
-    ui_popup_add_status_label(
-        s_editor_auth_popup,
-        ui_text("Stored only on this panel; it is never shown in backups or logs."),
-        28, 112, 720);
-
-    s_editor_auth_key = ui_popup_add_textarea(
-        s_editor_auth_popup, 720, 48, LV_ALIGN_TOP_MID, 0, 145,
-        true, true, MOONRAKER_CONFIG_API_KEY_LENGTH - 1,
-        ui_text("Leave blank for trusted Moonraker clients"), s_editor_api_key, NULL);
-
-    s_editor_auth_keyboard = ui_popup_add_keyboard(
-        s_editor_auth_popup, s_editor_auth_key, 720, 230,
-        LV_ALIGN_TOP_MID, 0, 210, LV_KEYBOARD_MODE_TEXT_LOWER);
-
-    ui_popup_add_standard_footer_divider(s_editor_auth_popup);
-    ui_popup_add_action_at(
-        s_editor_auth_popup, UI_POPUP_ACTION_CANCEL, ui_text(LV_SYMBOL_CLOSE " CANCEL"),
-        32, 500, 260, 48, editor_auth_cancel_cb, NULL, NULL);
-    ui_popup_add_action_at(
-        s_editor_auth_popup, UI_POPUP_ACTION_CONFIRM, ui_text(LV_SYMBOL_SAVE " USE KEY"),
-        508, 500, 260, 48, editor_auth_save_cb, NULL, NULL);
+    if (s_editor_auth_popup) { lv_obj_move_foreground(s_editor_auth_popup); return; }
+    s_editor_auth_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(380), UI_POPUP_STANDARD);
+    if (!s_editor_auth_popup) return;
+    lv_obj_add_event_cb(s_editor_auth_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_editor_auth_popup, "MOONRAKER AUTHENTICATION");
+    profiles_label(body, "Stored only on this panel; it is never shown in backups or logs.", false);
+    s_editor_auth_key = profiles_field(body, "API KEY (OPTIONAL)", s_editor_api_key, MOONRAKER_CONFIG_API_KEY_LENGTH - 1, NULL);
+    lv_textarea_set_password_mode(s_editor_auth_key, true);
+    lv_textarea_set_placeholder_text(s_editor_auth_key, "Leave blank for trusted clients");
+    lv_obj_add_event_cb(s_editor_auth_key, editor_field_focused_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *footer = profiles_footer(s_editor_auth_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_auth_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " USE KEY", editor_auth_save_cb);
     lv_obj_move_foreground(s_editor_auth_popup);
 }
 
@@ -880,6 +886,7 @@ static void editor_test_cb(lv_event_t *event)
 
 static void editor_camera_close(void)
 {
+    editor_keyboard_discard();
     if (s_editor_camera_remove_popup) {
         lv_obj_delete(s_editor_camera_remove_popup);
         s_editor_camera_remove_popup = NULL;
@@ -930,7 +937,7 @@ static void editor_camera_update_slot_buttons(void)
             : (entry.name[0] ? entry.name : "");
         char label[56];
         if (configured) {
-            snprintf(label, sizeof(label), "%u: %.16s%s",
+            snprintf(label, sizeof(label), "%u: %.31s%s",
                      (unsigned)(index + 1),
                      name[0] ? name : "Camera",
                      default_slot == index ? "  DEFAULT" : "");
@@ -1083,23 +1090,15 @@ static void editor_camera_remove_cb(lv_event_t *event)
              name);
 
     s_editor_camera_remove_popup = ui_popup_create(
-        lv_screen_active(), 620, 260, UI_POPUP_STANDARD);
+        lv_screen_active(), profiles_width(620), profiles_height(340), UI_POPUP_STANDARD);
     if (!s_editor_camera_remove_popup) return;
-    ui_popup_add_title(s_editor_camera_remove_popup, ui_text("REMOVE CAMERA?"), false, 0);
-    ui_popup_add_header_divider(s_editor_camera_remove_popup, 44);
-    ui_popup_add_status_label(s_editor_camera_remove_popup, prompt, 28, 78, 564);
-    ui_popup_add_status_label(s_editor_camera_remove_popup,
-                              ui_text("This cannot be undone from the panel."),
-                              28, 126, 564);
-    ui_popup_add_standard_footer_divider(s_editor_camera_remove_popup);
-    ui_popup_add_action_at(s_editor_camera_remove_popup, UI_POPUP_ACTION_CANCEL,
-                           ui_text(LV_SYMBOL_CLOSE " KEEP CAMERA"),
-                           28, 200, 270, 44,
-                           editor_camera_remove_cancel_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_camera_remove_popup, UI_POPUP_ACTION_DANGER,
-                           ui_text(LV_SYMBOL_TRASH " REMOVE"),
-                           322, 200, 270, 44,
-                           editor_camera_remove_apply_cb, NULL, NULL);
+    lv_obj_add_event_cb(s_editor_camera_remove_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = profiles_body(s_editor_camera_remove_popup, "REMOVE CAMERA?");
+    profiles_label(body, prompt, false);
+    profiles_label(body, "This cannot be undone from the panel.", false);
+    lv_obj_t *footer = profiles_footer(s_editor_camera_remove_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " KEEP CAMERA", editor_camera_remove_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE", editor_camera_remove_apply_cb);
     lv_obj_move_foreground(s_editor_camera_remove_popup);
 }
 
@@ -1272,56 +1271,43 @@ static void editor_camera_discover_cb(lv_event_t *event)
 
 static void editor_camera_field_focused_cb(lv_event_t *event)
 {
-    if (!s_editor_camera_keyboard) {
-        return;
-    }
-
-    lv_obj_t *field = lv_event_get_target(event);
-    if (field) {
-        lv_keyboard_set_textarea(s_editor_camera_keyboard, field);
-        lv_keyboard_set_mode(
-            s_editor_camera_keyboard,
-            LV_KEYBOARD_MODE_TEXT_LOWER);
-    }
+    editor_field_focused_cb(event);
 }
 
 static void editor_camera_open_cb(lv_event_t *event)
 {
     (void)event;
     if (s_editor_camera_popup) { lv_obj_move_foreground(s_editor_camera_popup); return; }
-    s_editor_camera_popup = ui_popup_create(lv_screen_active(), 800, 560, UI_POPUP_STANDARD);
+    s_editor_camera_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
     if (!s_editor_camera_popup) return;
-    /* The live page runs a persistent MJPEG request.  Pause it before input
-     * and TEST take the same network path. */
+    lv_obj_add_event_cb(s_editor_camera_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
     ui_camera_set_setup_active(true);
-    ui_popup_add_title(s_editor_camera_popup, ui_text("CAMERA SETUP"), false, 0);
-    ui_popup_add_header_divider(s_editor_camera_popup, 44);
-
+    lv_obj_t *body = profiles_body(s_editor_camera_popup, "CAMERA SETUP");
+    lv_obj_t *slots = profiles_footer(body);
     for (size_t index = 0; index < CAMERA_CATALOG_MAX_CAMERAS; ++index) {
-        s_editor_camera_slot_buttons[index] = ui_popup_add_action_at(
-            s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, ui_text("+ CAMERA"),
-            28 + (int)index * 180, 54, 170, 32,
-            editor_camera_select_slot_cb, (void *)(uintptr_t)index, NULL);
-        if (s_editor_camera_slot_buttons[index]) {
-            lv_obj_add_flag(s_editor_camera_slot_buttons[index], LV_OBJ_FLAG_CHECKABLE);
-        }
+        lv_obj_t *button = profiles_action_data(slots, UI_POPUP_ACTION_SECONDARY, "+ CAMERA",
+            editor_camera_select_slot_cb, (void *)(uintptr_t)index);
+        s_editor_camera_slot_buttons[index] = button;
+        lv_obj_set_width(button, LV_PCT(48));
+        lv_obj_set_style_min_width(button, 0, 0);
+        lv_obj_add_flag(button, LV_OBJ_FLAG_CHECKABLE);
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
     }
-
-    ui_popup_add_caption(s_editor_camera_popup, ui_text("CAMERA NAME"), 28, 94, 220);
-    s_editor_camera_name = ui_popup_add_textarea(s_editor_camera_popup, 720, 38, LV_ALIGN_TOP_MID, 0, 108, true, false, CAMERA_CATALOG_NAME_LENGTH - 1, ui_text("Camera name"), ui_text(""), NULL);
-    ui_popup_add_caption(s_editor_camera_popup, ui_text("MJPEG / HTTP STREAM URL (OPTIONAL)"), 28, 154, 420);
-    s_editor_camera_stream = ui_popup_add_textarea(s_editor_camera_popup, 720, 40, LV_ALIGN_TOP_MID, 0, 168, true, false, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, ui_text("http://..."), s_editor_camera_url, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, ui_text(LV_SYMBOL_REFRESH " FIND"), 28, 218, 170, 38, editor_camera_discover_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, ui_text(LV_SYMBOL_PLAY " TEST"), 208, 218, 170, 38, editor_camera_test_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_SECONDARY, ui_text(LV_SYMBOL_OK " DEFAULT"), 388, 218, 170, 38, editor_camera_make_default_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_DANGER, ui_text(LV_SYMBOL_TRASH " REMOVE"), 568, 218, 180, 38, editor_camera_remove_cb, NULL, NULL);
-    s_editor_camera_status = ui_popup_add_status_label(s_editor_camera_popup, ui_text("Select a camera slot, then name, find, or edit its stream."), 28, 266, 720);
-    s_editor_camera_keyboard = ui_popup_add_keyboard(s_editor_camera_popup, s_editor_camera_stream, 720, 164, LV_ALIGN_TOP_MID, 0, 286, LV_KEYBOARD_MODE_TEXT_LOWER);
-    if (s_editor_camera_name) lv_obj_add_event_cb(s_editor_camera_name, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
-    if (s_editor_camera_stream) lv_obj_add_event_cb(s_editor_camera_stream, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
-    ui_popup_add_standard_footer_divider(s_editor_camera_popup);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_CANCEL, ui_text(LV_SYMBOL_CLOSE " CANCEL"), 32, 500, 260, 48, editor_camera_cancel_cb, NULL, NULL);
-    ui_popup_add_action_at(s_editor_camera_popup, UI_POPUP_ACTION_CONFIRM, ui_text(LV_SYMBOL_SAVE " USE CAMERA"), 508, 500, 260, 48, editor_camera_save_cb, NULL, NULL);
+    s_editor_camera_name = profiles_field(body, "CAMERA NAME", "", CAMERA_CATALOG_NAME_LENGTH - 1, NULL);
+    s_editor_camera_stream = profiles_field(body, "MJPEG / HTTP STREAM URL (OPTIONAL)", s_editor_camera_url, MOONRAKER_CONFIG_CAMERA_URL_LENGTH - 1, NULL);
+    lv_obj_add_event_cb(s_editor_camera_name, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_editor_camera_stream, editor_camera_field_focused_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *actions = profiles_footer(body);
+    profiles_action(actions, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " FIND", editor_camera_discover_cb);
+    profiles_action(actions, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_PLAY " TEST", editor_camera_test_cb);
+    profiles_action(actions, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_OK " DEFAULT", editor_camera_make_default_cb);
+    profiles_action(actions, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE", editor_camera_remove_cb);
+    s_editor_camera_status = profiles_label(body, "Select a camera slot, then name, find, or edit its stream.", false);
+    lv_obj_t *footer = profiles_footer(s_editor_camera_popup);
+    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_camera_cancel_cb);
+    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " USE CAMERA", editor_camera_save_cb);
     editor_camera_load_slot();
     lv_obj_move_foreground(s_editor_camera_popup);
 }

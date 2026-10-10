@@ -1,4 +1,5 @@
 #include "moonraker.h"
+#include "moonraker_command_route.h"
 #include "moonraker_transport_security_controller.h"
 #include "network_activity_controller.h"
 #include <string.h>
@@ -1714,10 +1715,14 @@ bool moonraker_send_gcode_script(const char *host,
         return false;
     }
 
+    const char *admin_method=moonraker_command_admin_method(cmd);
+    const char *path=admin_method && strcmp(admin_method,"printer.emergency_stop")==0
+        ? "/printer/emergency_stop" : admin_method?"/printer/firmware_restart":"/printer/gcode/script";
+    bool emergency=admin_method && strcmp(admin_method,"printer.emergency_stop")==0;
     char url[256];
     const char *ca_pem = NULL;
     int url_len = moonraker_transport_security_build_http_url_for_endpoint(
-        host, port, "/printer/gcode/script", url, sizeof(url), &ca_pem)
+        host, port, path, url, sizeof(url), &ca_pem)
         ? (int)strlen(url) : -1;
 
     if (url_len < 0 || (size_t)url_len >= sizeof(url)) {
@@ -1730,6 +1735,9 @@ bool moonraker_send_gcode_script(const char *host,
      * the command directly into the request body.
      */
     char body[640];
+    if(admin_method) {
+        memcpy(body,"{}",3);
+    } else {
     size_t used = 0;
     const char *prefix = "{\"script\":\"";
     const char *suffix = "\"}";
@@ -1790,13 +1798,14 @@ bool moonraker_send_gcode_script(const char *host,
     memcpy(body + used, suffix, suffix_length);
     used += suffix_length;
     body[used] = '\0';
-    int body_len = (int)used;
+    }
+    int body_len = (int)strlen(body);
 
     esp_http_client_config_t config = {
         .url = url,
         .cert_pem = ca_pem,
         .method = HTTP_METHOD_POST,
-        .timeout_ms = 3000,
+        .timeout_ms = emergency?1500:3000,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -1818,14 +1827,17 @@ bool moonraker_send_gcode_script(const char *host,
                                    body,
                                    body_len);
 
-    if (!network_activity_controller_try_begin_shared()) {
+    bool shared_owner=network_activity_controller_try_begin_shared();
+    /* A stop gets a private client even when background HTTP owns the normal
+     * request slot. Do not defer the only stop path behind a download/scan. */
+    if (!shared_owner && !emergency) {
         esp_http_client_cleanup(client);
         if (err_out) *err_out = ESP_ERR_INVALID_STATE;
         return false;
     }
 
     esp_err_t err = esp_http_client_perform(client);
-    network_activity_controller_end_shared();
+    if(shared_owner)network_activity_controller_end_shared();
     int code = esp_http_client_get_status_code(client);
 
     esp_http_client_cleanup(client);

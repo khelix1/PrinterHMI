@@ -48,5 +48,7 @@ void ui_files_show_detail_popup(const char *filename_text,
                                     ui_files_detail_cb_t start_cb);
 void ui_files_close_detail_popup(void);
 bool ui_files_detail_is_open(void);
+/* Embedded Studio previews allow row updates; modal dialogs defer them. */
+bool ui_files_can_refresh_rows(void);
 void ui_files_update_detail_metadata(const char *metadata_text,
                                          bool ready);

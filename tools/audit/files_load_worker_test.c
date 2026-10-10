@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "files_page_controller.c"
-static bool in_worker,success=true,detail,task_fail,body_fail;
+static bool in_worker,success=true,detail,embedded,task_fail,body_fail;
 static unsigned allocations,frees,http_calls,delays,rendered,preview_begin;
 static uint32_t generation=1;
 static lv_obj_t *page=(void*)1;
@@ -26,7 +26,7 @@ void vTaskDelay(unsigned ticks){assert(in_worker);delays+=ticks;}
 bool moonraker_fetch_file_list(const char *h,int port,const char *key,char *body,size_t n,int *code,esp_err_t *e){assert(in_worker && port==7125 && strcmp(key,"key")==0);http_calls++;*code=success?200:0;*e=success?ESP_OK:ESP_FAIL;snprintf(body,n,"%s",h);return success;}
 void ui_files_set_status(const char *s){assert(!in_worker);snprintf(status,sizeof(status),"%s",s);}
 lv_obj_t *ui_files_get_popup(void){assert(!in_worker);return page;}
-bool ui_files_detail_is_open(void){assert(!in_worker);return detail;}
+bool ui_files_can_refresh_rows(void){assert(!in_worker);return !detail||embedded;}
 void ui_files_set_browser_callbacks(ui_files_search_cb_t a,ui_files_action_cb_t b,ui_files_folder_cb_t c,ui_files_action_cb_t d){(void)a;(void)b;(void)c;(void)d;assert(!in_worker);}
 void ui_files_set_file_thumbnail(const char *p,const lv_image_dsc_t *i){(void)p;(void)i;assert(!in_worker);}
 void ui_files_clear_rows(void){assert(!in_worker);rendered++;}
@@ -47,7 +47,8 @@ int main(void){
  success=true;load("hidden");run_worker();page=NULL;poll();assert(!rendered && !preview_begin);page=(void*)2;
  load("old");generation=2;load("new");load("newest");assert(s_pending_load && s_load_busy);unsigned before=http_calls;run_worker();assert(http_calls==before);poll();assert(worker_arg && rendered==0);run_worker();poll();assert(rendered==1 && preview_begin==1 && strcmp(last_path,"newest.gcode")==0);
  load("detail");run_worker();detail=true;poll();assert(result && rendered==1);detail=false;poll();assert(!result && rendered==2);
- load("stale");run_worker();files_page_controller_reload(true,false,true,"offline",7125,"key");poll();assert(rendered==2 && strstr(status,"offline"));
+ detail=embedded=true;load("inspector");run_worker();poll();assert(!result && rendered==3);detail=embedded=false;
+ load("stale");run_worker();files_page_controller_reload(true,false,true,"offline",7125,"key");poll();assert(rendered==3 && strstr(status,"offline"));
  task_fail=true;load("failed");assert(!s_load_busy && strstr(status,"worker"));poll();task_fail=false;
  body_fail=true;load("no_memory");run_worker();poll();assert(strstr(status,"allocate"));body_fail=false;
  heap_caps_free(s_entries);s_entries=NULL;assert(allocations==frees && !s_pending_load && !s_load_busy && !s_load_timer);lv_deinit();puts("PASS: file-list HTTP/retries run outside LVGL, one worker/coalesced latest job, profile/page/serial fencing, deferred detail publication and allocation/task-failure cleanup");

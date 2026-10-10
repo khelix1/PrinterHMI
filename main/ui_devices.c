@@ -202,8 +202,10 @@ void ui_devices_show(
         lv_obj_t *title=lv_obj_get_child(banner,0);lv_obj_set_pos(title,0,0);lv_obj_set_width(title,420);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
         lv_obj_add_flag(lv_obj_get_child(banner,1),LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(s_devices->banner_status,448,8);lv_obj_set_size(s_devices->banner_status,170,32);lv_label_set_long_mode(s_devices->banner_status,LV_LABEL_LONG_DOT);
-        if(telemetry){lv_obj_set_size(telemetry,160,44);lv_obj_set_pos(telemetry,636,0);}
-        if(endstops){lv_obj_set_size(endstops,164,44);lv_obj_set_pos(endstops,812,0);}
+        /* set_pos is an offset from the current alignment; retire the legacy
+         * bottom-right anchor before applying Studio's top-left geometry. */
+        if(telemetry){lv_obj_set_align(telemetry,LV_ALIGN_TOP_LEFT);lv_obj_set_size(telemetry,160,44);lv_obj_set_pos(telemetry,636,0);lv_label_set_text(lv_obj_get_child(telemetry,0),"GRAPHS");}
+        if(endstops){lv_obj_set_align(endstops,LV_ALIGN_TOP_LEFT);lv_obj_set_size(endstops,164,44);lv_obj_set_pos(endstops,812,0);}
     }
 
     ui_devices_catalog_view_create(

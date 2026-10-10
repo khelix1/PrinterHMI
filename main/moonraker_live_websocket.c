@@ -1,3 +1,4 @@
+#include "moonraker_command_route.h"
 #include "moonraker_live_websocket.h"
 #include "moonraker_config_controller.h"
 #include "moonraker_transport_security_controller.h"
@@ -593,7 +594,12 @@ bool moonraker_live_websocket_send_gcode(
     size_t used = 0;
     s_command_buffer[0] = '\0';
 
-    if (!append_command_text(
+    const char *admin_method=moonraker_command_admin_method(script);
+    if(admin_method) {
+        if(!append_command_text(&used,"{\"jsonrpc\":\"2.0\",\"method\":\"") ||
+           !append_command_text(&used,admin_method) ||
+           !append_command_text(&used,"\""))return false;
+    } else if (!append_command_text(
             &used,
             "{\"jsonrpc\":\"2.0\","
             "\"method\":\"printer.gcode.script\","
@@ -609,7 +615,7 @@ bool moonraker_live_websocket_send_gcode(
     int suffix_length = snprintf(
         suffix,
         sizeof(suffix),
-        "\"},\"id\":%u}",
+        admin_method?",\"id\":%u}":"\"},\"id\":%u}",
         (unsigned)request_id);
 
     if (suffix_length <= 0 ||

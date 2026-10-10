@@ -59,6 +59,7 @@ bool ui_printer_layout_create(
     if(ui_theme_is_studio()) {
         layout->active_panel=studio_plane(page,0,0,620,354);
         layout->status_panel=studio_plane(page,640,0,336,354);
+        studio_rule(page,630,8,1,338);
         layout->action_panel=studio_plane(page,0,370,976,54);
         return true;
     }

@@ -345,8 +345,9 @@ static void files_load_publish(files_load_job_t *job)
 
 static void files_load_poll(lv_timer_t *timer)
 {
-    /* Keep the bounded result queued while a file confirmation is open. */
-    if (ui_files_get_popup() && ui_files_detail_is_open()) return;
+    /* Embedded previews own their widgets independently from file rows.
+     * Actual confirmation/details modals still defer list publication. */
+    if(ui_files_get_popup() && !ui_files_can_refresh_rows())return;
     files_load_job_t *job = NULL;
     if (xQueueReceive(s_load_results, &job, 0) == pdPASS) {
         s_load_busy = false;
@@ -433,9 +434,10 @@ void files_page_controller_process_live_notification(void)
         return;
     }
 
-    if (ui_files_detail_is_open()) {
+    if (!ui_files_can_refresh_rows()) {
         /*
-         * Preserve the confirmation/detail popup. The pending notification is
+         * Preserve modal confirmation/details. Embedded previews can refresh.
+         * The pending notification is
          * consumed by a later refresh cycle after the popup closes.
          */
         return;

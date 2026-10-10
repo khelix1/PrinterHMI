@@ -4,6 +4,8 @@
 #include <string.h>
 #include "custom_theme.h"
 #include "moonraker.h"
+#include "ui_devices.h"
+#include "ui_endstop_status.h"
 #include "ui_devices_catalog_view.c"
 static device_descriptor_t entries[96];static device_catalog_status_t status;
 static moonraker_state_t state;
@@ -23,7 +25,16 @@ static void snapshot(int theme,const char *name){const char *folder=getenv("MOTI
 static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 
 static void single(lv_obj_t*l,bool require_fit){lv_obj_update_layout(l);const lv_font_t*f=lv_obj_get_style_text_font(l,0);assert(lv_obj_get_height(l)==f->line_height);if(require_fit){lv_point_t n;lv_text_get_size(&n,lv_label_get_text(l),f,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(n.x<=lv_obj_get_width(l));}}
+static unsigned graph_calls,endstop_calls,endstop_closes;
+static void open_graphs(void){graph_calls++;}
+void ui_endstop_status_show(void){endstop_calls++;}
+void ui_endstop_status_close(void){endstop_closes++;}
+static lv_obj_t *find(lv_obj_t *o,const char *text){if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;for(uint32_t i=0;i<lv_obj_get_child_count(o);i++){lv_obj_t *found=find(lv_obj_get_child(o,i),text);if(found)return found;}return NULL;}
+static lv_point_t touch;static bool pressed;
+static void read_touch(lv_indev_t *i,lv_indev_data_t *d){(void)i;d->point=touch;d->state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;}
+static void tap(lv_indev_t *i,lv_obj_t *button){lv_area_t a;lv_obj_get_coords(button,&a);touch=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
+lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
 ui_devices_catalog_state_t storage={0};s_devices=&storage;
 for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
 ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});memset(&status,0,sizeof(status));status.discovered=true;status.stored_count=status.total_object_count=96;status.kind_count[DEVICE_KIND_THERMAL]=96;status.generation++;
@@ -34,5 +45,15 @@ for(int i=0;i<12;i++){lv_obj_t*card=s_devices->rows[i].card;assert(card);lv_obj_
 if(ui_theme_is_studio()){inside(s_devices->filter_strip,root);inside(s_devices->list,root);inside(s_devices->previous_button,root);inside(s_devices->next_button,root);assert(lv_obj_get_width(s_devices->list)==792 && lv_obj_get_height(s_devices->list)==304 && lv_obj_has_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE));assert(s_devices->page_count==8);
 lv_obj_scroll_to_y(s_devices->list,10000,LV_ANIM_OFF);lv_obj_update_layout(root);inside(s_devices->rows[11].card,s_devices->list);assert(lv_obj_get_scroll_y(s_devices->list)>0);
 lv_obj_send_event(s_devices->next_button,LV_EVENT_CLICKED,NULL);lv_obj_update_layout(root);assert(s_devices->page_index==1 && lv_obj_get_scroll_y(s_devices->list)==0);assert(strstr(lv_label_get_text(s_devices->rows[0].name),"sensor 12"));}
-if(density==1&&large){snapshot(theme,"devices");}status.stored_count=0;status.generation++;ui_devices_catalog_view_refresh();lv_obj_update_layout(root);assert(s_devices->empty);inside(s_devices->empty,s_devices->list);ui_devices_catalog_view_close();assert(!s_devices->refresh_timer&&!s_devices->root);lv_obj_delete(root);}
-s_devices=NULL;puts("PASS: Devices category counts, complete live readings, long names, card bounds, empty state and cleanup across all stock themes/densities/text sizes");return 0;}
+if(density==1&&large){snapshot(theme,"devices");}status.stored_count=0;status.generation++;ui_devices_catalog_view_refresh();lv_obj_update_layout(root);assert(s_devices->empty);inside(s_devices->empty,s_devices->list);ui_devices_catalog_view_close();assert(!s_devices->refresh_timer&&!s_devices->root);lv_obj_delete(root);
+ui_devices_show(open_graphs);root=s_devices->root;assert(root);lv_obj_update_layout(root);
+lv_obj_t *graph_label=find(root,ui_theme_is_studio()?"GRAPHS":"TELEMETRY");
+lv_obj_t *endstop_label=find(root,"ENDSTOPS");assert(graph_label && endstop_label);
+lv_obj_t *graphs=lv_obj_get_parent(graph_label),*endstops=lv_obj_get_parent(endstop_label);
+inside(graphs,lv_obj_get_parent(graphs));inside(endstops,lv_obj_get_parent(endstops));inside(graphs,root);inside(endstops,root);
+if(ui_theme_is_studio()){inside(graph_label,graphs);inside(endstop_label,endstops);single(graph_label,true);single(endstop_label,true);}
+unsigned before=graph_calls;tap(pointer,graphs);assert(graph_calls==before+1);before=endstop_calls;tap(pointer,endstops);assert(endstop_calls==before+1);
+if(density==1&&large)snapshot(theme,"devices-header");
+ui_devices_show(open_graphs);assert(root==s_devices->root);before=endstop_closes;ui_devices_hide();assert(!s_devices->root && !s_devices->refresh_timer && endstop_closes==before+1);
+}
+s_devices=NULL;puts("PASS: Devices category counts, complete live readings, card bounds, actual header pointer routes for Graphs/Endstops, empty state and cleanup across all five themes/densities/text sizes");return 0;}

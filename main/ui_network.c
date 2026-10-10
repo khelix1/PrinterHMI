@@ -12,6 +12,7 @@
 #include "ui_widgets.h"
 #include "ui_status_banner.h"
 #include "ui_page_geometry.h"
+#include "ui_studio_layout.h"
 
 /*
  * Temporary application bridges retained in main.c.
@@ -26,6 +27,8 @@ typedef struct {
     lv_obj_t *root;
 
     lv_obj_t *banner;
+    lv_obj_t *banner_state;
+    lv_obj_t *banner_message;
 
     lv_obj_t *wifi_card;
     lv_obj_t *wifi_name;
@@ -147,6 +150,65 @@ void ui_network_refresh(void)
 {
 }
 
+static lv_obj_t *network_studio_row(lv_obj_t *parent, const char *name,
+                                      const char *value, int y, int width)
+{
+    studio_text(parent, name, 0, y, width, UI_FONT_CAPTION, UI_TEXT_DIM);
+    lv_obj_t *label = studio_text(parent, value, 0, y + 26, width,
+        UI_FONT_BODY_LARGE, UI_TEXT);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    return label;
+}
+
+static void network_studio_create(const char *banner_text, int port,
+                                  lv_event_cb_t wifi_cb, lv_event_cb_t profiles_cb)
+{
+    s_network.root = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(s_network.root, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
+    ui_apply_root_style(s_network.root);
+    studio_text(s_network.root, "Network", 0, 0, 530, &ui_studio_font_48, UI_TEXT);
+    s_network.actions_card = studio_plane(s_network.root, 568, 4, 408, 48);
+    studio_action(s_network.actions_card, "Scan networks", 0, 0, 196, 48, wifi_cb, NULL);
+    studio_action(s_network.actions_card, "Manage printers", 208, 0, 200, 48, profiles_cb, NULL);
+    s_network.banner = studio_plane(s_network.root, 0, 72, 976, 52);
+    lv_obj_set_style_border_width(s_network.banner, 1, 0);
+    lv_obj_set_style_border_color(s_network.banner, UI_BORDER, 0);
+    lv_obj_set_style_radius(s_network.banner, 12, 0);
+    s_network.banner_state = studio_text(s_network.banner, "OFFLINE", 16, 0, 180, UI_FONT_BODY_LARGE, UI_TEXT_DIM);
+    lv_obj_align(s_network.banner_state, LV_ALIGN_LEFT_MID, 16, 0);
+    s_network.banner_message = studio_text(s_network.banner, banner_text ? banner_text : "NETWORK OFFLINE", 212, 0, 748, UI_FONT_BODY, UI_TEXT);
+    lv_label_set_long_mode(s_network.banner_message, LV_LABEL_LONG_DOT);
+    lv_obj_align(s_network.banner_message, LV_ALIGN_LEFT_MID, 212, 0);
+    s_network.wifi_card = studio_plane(s_network.root, 0, 140, 270, 284);
+    studio_text(s_network.wifi_card, "Wi-Fi", 0, 0, 270, &ui_studio_font_32, UI_TEXT);
+    s_network.wifi_name = network_studio_row(s_network.wifi_card, "SSID", "--", 52, 270);
+    s_network.wifi_state = network_studio_row(s_network.wifi_card, "Connection", "OFFLINE", 128, 270);
+    s_network.wifi_ip = network_studio_row(s_network.wifi_card, "IP address", "--", 204, 270);
+    studio_rule(s_network.root, 282, 140, 1, 284);
+    s_network.moonraker_card = studio_plane(s_network.root, 294, 140, 302, 284);
+    studio_text(s_network.moonraker_card, "Moonraker", 0, 0, 302, &ui_studio_font_32, UI_TEXT);
+    s_network.moonraker_host = network_studio_row(s_network.moonraker_card, "Host", "--", 48, 302);
+    char value[16];snprintf(value, sizeof(value), "%d", port);
+    s_network.moonraker_port = network_studio_row(s_network.moonraker_card, "Port", value, 108, 302);
+    s_network.moonraker_state = network_studio_row(s_network.moonraker_card, "Connection", "DISCONNECTED", 168, 302);
+    s_network.moonraker_http = network_studio_row(s_network.moonraker_card, "Last HTTP", "--", 228, 302);
+    studio_rule(s_network.root, 608, 140, 1, 284);
+    s_network.networks_card = studio_plane(s_network.root, 620, 140, 356, 284);
+    studio_text(s_network.networks_card, "Available networks", 0, 0, 356, UI_FONT_BODY_LARGE, UI_TEXT);
+    s_network.networks_status = studio_text(s_network.networks_card, "READY TO SCAN", 0, 36, 356, UI_FONT_CAPTION, UI_TEXT_DIM);
+    lv_label_set_long_mode(s_network.networks_status, LV_LABEL_LONG_DOT);
+    lv_obj_set_height(s_network.networks_status, 48);
+    s_network.networks_list = studio_plane(s_network.networks_card, 0, 96, 356, 188);
+    lv_obj_set_flex_flow(s_network.networks_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_network.networks_list, UI_GAP_ROW, 0);
+    lv_obj_add_flag(s_network.networks_list, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(s_network.networks_list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_network.networks_list, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_bg_color(s_network.networks_list, UI_TEXT_MUTED, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(s_network.networks_list, LV_OPA_70, LV_PART_SCROLLBAR);
+    lv_obj_set_style_width(s_network.networks_list, 4, LV_PART_SCROLLBAR);
+}
+
 void ui_network_create_objects(
     const char *banner_text,
     int moonraker_port,
@@ -166,6 +228,11 @@ void ui_network_create_objects(
 
     if (s_network.root) {
         lv_obj_move_foreground(s_network.root);
+        return;
+    }
+
+    if (ui_theme_is_studio()) {
+        network_studio_create(banner_text, moonraker_port, wifi_clicked_cb, host_clicked_cb);
         return;
     }
 
@@ -403,7 +470,7 @@ void ui_network_create_objects(
 
             lv_label_set_long_mode(
                 s_network.networks_status,
-                LV_LABEL_LONG_DOT);
+                ui_theme_is_studio() ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_DOT);
 
             ui_apply_text_caption(
                 s_network.networks_status);
@@ -581,7 +648,12 @@ void ui_network_refresh_objects(
         ip_text[0] &&
         ip_text[0] != '-';
 
-    if (s_network.banner) {
+    if (s_network.banner_state) {
+        lv_label_set_text(s_network.banner_state, moonraker_connected
+            ? "CONNECTED" : (wifi_connected ? "WIFI" : "OFFLINE"));
+        lv_obj_set_style_text_color(s_network.banner_state, moonraker_connected ? UI_OK : UI_TEXT_DIM, 0);
+        lv_label_set_text(s_network.banner_message, banner_text ? banner_text : "NETWORK OFFLINE");
+    } else if (s_network.banner) {
         ui_status_banner_set_simple(
             s_network.banner,
             moonraker_connected
@@ -742,8 +814,8 @@ void ui_network_render_scan_results(
             continue;
         }
 
-        lv_obj_set_width(button, 418);
-        lv_obj_set_height(button, 40);
+        lv_obj_set_width(button, ui_theme_is_studio() ? LV_PCT(100) : 418);
+        lv_obj_set_height(button, ui_theme_is_studio() ? 48 : 40);
 
         lv_obj_set_flex_grow(button, 0);
 
@@ -781,11 +853,12 @@ void ui_network_render_scan_results(
 
         if (name) {
             lv_label_set_text(name, ssid);
-            lv_obj_set_width(name, 286);
+            lv_obj_set_width(name, ui_theme_is_studio()
+                ? lv_obj_get_content_width(s_network.networks_list) - 88 - 2 * UI_PAD_CARD - 12 : 286);
 
             lv_label_set_long_mode(
                 name,
-                LV_LABEL_LONG_DOT);
+                ui_theme_is_studio() ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_DOT);
 
             ui_apply_text_body(name);
 

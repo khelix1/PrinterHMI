@@ -163,3 +163,47 @@ Closeout removes the trial display labels, builds the accepted sources, merges
 the feature branch into main and runs the existing end-of-night checkpoint.
 Stable identity stays 6.5.6. Printing, runout recovery and extended hardware
 soak checks remain pending; acceptance does not substitute for those checks.
+
+## CI whitespace cleanup
+
+Commit `9b92f796ecfa` (October 9, 2026 in America/Chicago) removes trailing spaces from the Studio font license and layout audit, and extra blank lines at EOF from the generated Inter font C files. This is a formatting change; font data, license wording and runtime behavior are unchanged. It addresses the CI whitespace-check failure. No new nightly is needed for this cleanup.
+
+## Printer setup dialog follow-up
+
+The nested authentication, certificate, camera and shared value-entry dialogs now use the responsive profile helpers. See [LVGL modernization](LVGL_MODERNIZATION.md) and [Testing](TESTING.md) for the scope and pending panel validation.
+
+## Printer preview separator
+
+The Studio Printer page places a 1 px theme-border divider in the 20 px gap between the preview/telemetry area and thermal column, inset 8 px at the top and bottom. The divider is non-interactive and does not change either content area or preview geometry.
+
+## Network stage and Files inspector follow-up
+
+Network now uses the full 976 × 424 Studio stage: Wi-Fi and Moonraker status columns, separators, a 188 px tall scrolling network list, and Scan networks / Manage printers actions. Connection and scan status messages stay stationary with ellipsis for overflow; the scan status area allows two lines for “Connecting to:” and the SSID. Long Wi-Fi/Moonraker values and SSIDs in scan rows scroll on one line. The Files inspector keeps its existing 352 × 228 preview; its filename scrolls on one line and Print / Details / Cancel share the action row. File details uses a scrolling body with a pinned Close action.
+
+## Modern Setup Center
+
+Setup Center now uses a responsive modal shell with Studio typography, pill navigation, active-step borders, readiness indicators and connection review cards. Wi-Fi scan results and password entry use a scrolling stage with pinned actions. The printer step opens the shared profile editor for discovery, security, authentication, cameras, testing and saving. Camera discovery/test/save and final completion use the same layout language.
+
+## Optional camera continuation
+
+Camera discovery and verification keep a pinned Skip camera action. An empty result, unavailable printer, discovery failure or camera-test failure can continue to Review without a camera. A verified camera offers Use camera and Skip camera; selecting another camera resets the save action until verification succeeds.
+
+## Files Details button-label correction
+
+Studio actions now refit and center their labels when the button width changes. Temporary widths cannot produce negative label widths. This corrects the blank Close label in the Files Details popup and keeps Studio action text stationary on one line. The Files inspector metadata now scrolls within its own viewport, preserving the 352 × 228 preview and pinned actions. Details and the other themes’ metadata panes show a scrollbar when content overflows.
+
+## Files print confirmation and refresh
+
+Print opens a themed confirmation showing the filename and active printer. Cancel returns to the preview; Start print alone calls the existing print-start bridge. A failed start now shows a visible toast. Studio file rows refresh in place while the embedded inspector remains open. Actual Details/confirmation modals defer row publication until closed.
+
+## E-stop follow-up
+
+The global E-stop now uses the immediate Moonraker emergency endpoint. Stop and recovery failures show visible feedback; successful transmission is labeled STOP REQUEST SENT. Real LVGL pointer checks pass across all built-in themes. Verify shutdown on the selected printer before attempting recovery.
+
+## Details Close sizing and recovery layouts
+
+The File details Close button is compact and right-aligned rather than stretched across the modal. E-stop and restart dialogs keep their actions visible independently of scrolling text, show the printer name separately, and adapt to large text. Panel validation remains pending.
+
+## Visible Devices actions
+
+Tools > Devices now shows GRAPHS and ENDSTOPS in the upper-right header. Graphs opens existing temperature/humidity telemetry; Endstops opens existing live limit-switch status. The header anchor fix retains the earlier catalog layout. Panel validation remains pending.

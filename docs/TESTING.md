@@ -728,3 +728,45 @@ Run `python3 tools/audit/profiles_layout_test.py` (optionally `--lvgl-dir /path/
 ## Settings and large-text source closeout
 
 See [Settings validation](SETTINGS_LAYOUT_VALIDATION.md) for the accepted layout scope, host checks and pending hardware tests. No nightly or new stable release is created.
+
+### Nested printer setup dialogs
+
+Authentication, connection security, the SD-card certificate picker, camera setup and camera removal now use scrolling native forms with pinned actions. Studio retains its full-width popup policy; the same helpers serve the other four themes. Camera slots retain their numbered routing and use full stored names on a single scrolling line. Tapping a name, host, port, API key or camera URL opens one shared value editor; Done applies the value and Cancel discards it. Port entry uses a numeric keyboard and digit/length restrictions. API-key entry remains password-masked and each editor inherits its field's maximum length. Closing a field owner discards its open keyboard and clears camera/test timers and setup state. Security has a separate Cancel action that preserves the selected mode. Existing camera catalog, certificate import and profile save behavior remains authoritative.
+
+`profiles_layout_test.py` covers five themes, three densities, both text sizes, three widths and a 400 px short viewport. The test uses typed network/storage stubs and a fake directory for six PEM choices and a missing SD-card directory, without opening network connections or writing certificates. It checks footer bounds and scroll reach, keyboard Done/Cancel/external deletion, numeric/password/length limits, API-key staging, security cancellation/import failure/success, camera slot/default/removal routing, and owner teardown. Build/OTA/touch validation and printing-dependent tests remain pending. No commit, push or nightly is part of this layout patch. Stable version remains 6.5.6.
+
+## Network and ready-to-print follow-up checks
+
+Run `python3 tools/audit/responsive_layout_test.py` with optional `--lvgl-dir` / `--lvgl-lib` host paths. Real LVGL checks cover five themes, three densities, both text sizes, Files modal widths of 760/640/480 px, inspector/details bounds, readiness transitions, action routing and teardown. Network checks use each theme at its native page width; Studio checks cover the full 976 × 424 stage, status/action bounds, six scrollable scan results, SSID selection, empty results and cleanup. Wi-Fi transport is stubbed. Target build, OTA and touch/scroll verification remain pending; earlier printing tests remain pending.
+
+## Setup Center checks
+
+Run `python3 tools/audit/setup_center_layout_test.py`, with optional `--lvgl-dir` and `--lvgl-lib` host paths. Real LVGL checks cover five themes, three densities, both text sizes and 1024/640/480 px displays. Fixtures verify navigation, pinned-action bounds, repeated open/scan, scan selection, password masking/length, Wi-Fi connect/verify, shared profile routing, camera discovery/test/save, missing prerequisites, completion storage failure/success, close/reopen and external deletion. Wi-Fi transport, camera transport and persistence use typed stubs. Target build, OTA and panel checks remain pending; prior printing tests remain pending. Stable version remains 6.5.6.
+
+## Empty-camera regression
+
+`setup_center_layout_test.py` now checks an empty discovery result, Skip camera navigation to Review, and successful completion with Wi-Fi/printer configured and no camera. Existing all-theme/density/text/width checks cover the two-button camera footer. Panel validation remains pending.
+
+## Files Details label regression
+
+The real-LVGL responsive fixture now checks the Files Details Close label text, positive width smaller than its button, and containment after flex layout. It reproduces the old temporary-width failure and passes after the Studio action sizing fix. The fixture also scrolls the full metadata to its final confirmation line, checks that Size/Thumbnail remain in the text, and verifies preview geometry and action positions remain unchanged. Run `tools/audit/responsive_layout_test.py` with the documented host options. Panel validation remains pending.
+
+## Files confirmation and preview-refresh regression
+
+`responsive_layout_test.py` checks all themes/densities/text sizes, confirmation widths, no start before acceptance, cancel, single acceptance, printer-generation changes and detail teardown. Studio refresh keeps the page and selected inspector identities. `files_load_worker_test.py` checks publication while an embedded inspector is open, deferral for a modal, and existing stale-result/worker/cleanup guards. Printer transport is stubbed in host checks. Target build, OTA, confirmation touch checks, visible HTTP failure feedback and physical printing remain pending.
+
+## Emergency-stop regression
+
+Run `python3 tools/audit/estop_transport_test.py` for the actual extracted WebSocket/HTTP adapters: dedicated stop/recovery methods, console token boundaries, ordinary scripts, TLS/API-key/port preservation, busy-slot emergency delivery, and transport/error cleanup. `studio_layout_test.py` exercises pointer hit-testing for E-stop in all five themes and recovery failure/success. Services are stubbed; these tests do not verify physical shutdown. Build/OTA and cold-idle panel checks remain pending: stop the selected printer, verify its Klipper shutdown, and explicitly restart it. Previous physical printing tests remain pending.
+
+## Recovery dialog layout follow-up
+
+`studio_layout_test.py` checks actual E-stop touches in all five themes, stop/restart failures, recovery actions, all densities/text sizes and 1024/640/480 widths with 400 px short viewports. It checks pinned footer labels, message scroll reach, long target names, target-change dismissal and external-deletion/reopen cleanup. `responsive_layout_test.py` measures the File details Close button width, right alignment and label fit. Services remain stubbed. Target build/OTA, panel dialog/touch checks and physical printing tests remain pending. Apply this patch after the immediate E-stop routing patch. Stable remains 6.5.6.
+
+## Devices header reachability regression
+
+`devices_text_layout_test.py` now links the real Devices page as well as the catalog. The fixture reproduces the old Studio off-screen action coordinates, then checks both buttons inside the header/page and real LVGL pointer taps routing to telemetry/endstop callbacks across all five themes, three densities and both text sizes. Header label fit is checked in Studio; page reuse/cleanup and the existing 96-device catalog checks remain. Network and endstop dialog services are stubbed. Build/OTA and panel taps through Tools > Devices > Graphs/Endstops remain pending. Stable version is 6.5.6.
+
+## Setup, Files and Devices source checkpoint
+
+Host LVGL checks cover profile/setup dialogs, responsive pages, compact Details Close, Files confirmation/refresh, recovery actions, and real Devices header touch routing across themes/text sizes. Actual command-adapter fixtures verify dedicated emergency/recovery endpoints and transport error handling. Version/architecture/documentation checks pass. Firmware build/OTA, physical emergency shutdown and printing-dependent recovery/control tests remain pending. A GitHub source checkpoint does not mark these physical checks complete. Telemetry redesign is deferred until after this source checkpoint.

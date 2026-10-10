@@ -1,3 +1,4 @@
+#include "moonraker_command_route.h"
 #include <stdio.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -1280,6 +1281,7 @@ static bool moonraker_send_gcode_raw(
 static bool moonraker_send_gcode(
     const char *requested)
 {
+    if(moonraker_command_admin_method(requested))return moonraker_send_gcode_raw(requested);
     printer_action_resolution_t resolution;
 
     if (!printer_action_resolver_resolve(
@@ -2623,7 +2625,7 @@ static void close_printer_file_detail_popup(void)
 
 static void printer_file_detail_start_bridge(void)
 {
-    (void)printer_file_controller_start_selected_file(
+    bool started=printer_file_controller_start_selected_file(
         s_got_ip,
         moonraker_config_host(),
         moonraker_config_port(),
@@ -2631,6 +2633,9 @@ static void printer_file_detail_start_bridge(void)
         moonraker_status,
         sizeof(moonraker_status),
         close_printer_file_detail_popup);
+    if(!started) {
+        ui_toast_show(UI_STATUS_WARNING,"PRINT NOT STARTED",moonraker_status);
+    }
 }
 
 

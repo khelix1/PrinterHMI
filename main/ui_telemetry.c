@@ -1,3 +1,4 @@
+#include "ui_selector_style.h"
 #include "ui_telemetry.h"
 #include "ui_telemetry_components.h"
 #include "ui_telemetry_charts.h"
@@ -85,26 +86,10 @@ static void scale_cb(lv_event_t *e)
 static lv_obj_t *selector(lv_obj_t *parent,const char *options,int width,lv_event_cb_t callback)
 {
     lv_obj_t *dropdown=lv_dropdown_create(parent);
-    /* A flat field, independent of the theme's card/pill widget defaults. */
-    lv_obj_remove_style_all(dropdown);
-    lv_obj_set_style_pad_hor(dropdown,12,0);
-    lv_obj_set_style_pad_ver(dropdown,8,0);
-    lv_obj_set_style_outline_width(dropdown,2,LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_outline_color(dropdown,UI_ACCENT_BRIGHT,LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_text_opa(dropdown,LV_OPA_50,LV_STATE_DISABLED);
-    lv_obj_set_size(dropdown,width,44);lv_dropdown_set_options(dropdown,options);
-    ui_apply_custom_label_style(dropdown,UI_FONT_BODY,UI_TEXT_BRIGHT);
-    lv_obj_set_style_bg_color(dropdown,UI_CONTROL,0);lv_obj_set_style_bg_opa(dropdown,LV_OPA_COVER,0);
-    lv_obj_set_style_border_color(dropdown,UI_BORDER_BRIGHT,0);lv_obj_set_style_border_width(dropdown,1,0);
-    lv_obj_set_style_radius(dropdown,6,0);
+    lv_obj_set_size(dropdown,width,44);
+    lv_dropdown_set_options(dropdown,options);
+    ui_selector_style(dropdown,UI_FONT_BODY);
     lv_obj_add_event_cb(dropdown,callback,LV_EVENT_VALUE_CHANGED,NULL);
-    lv_obj_t *list=lv_dropdown_get_list(dropdown);
-    ui_apply_popup_style(list);
-    lv_obj_set_style_radius(list,6,0);
-    lv_obj_set_style_shadow_width(list,0,0);
-    lv_obj_set_style_border_width(list,1,0);
-    lv_obj_set_style_pad_all(list,6,0);
-    ui_apply_custom_label_style(list,UI_FONT_BODY,UI_TEXT_BRIGHT);
     return dropdown;
 }
 
@@ -168,12 +153,18 @@ static void synchronize_hotends(void)
 {
     char options[sizeof(s_hotend_options)]="",first[MOONRAKER_HOTEND_NAME_MAX]="";
     unsigned selected=0,count=0,active_index=0;bool found=false,active_found=false;
+    size_t used=0;
     for(size_t i=0;i<s_latest.hotend_count && i<MOONRAKER_MAX_HOTENDS;i++) {
-        const char *name=s_latest.hotends[i].object_name;if(!name[0])continue;
+        const char *name=s_latest.hotends[i].object_name;
+        size_t length=0;
+        while(length<MOONRAKER_HOTEND_NAME_MAX && name[length])length++;
+        if(!length || length==MOONRAKER_HOTEND_NAME_MAX ||
+           used+length+(count?1:0)>=sizeof(options))continue;
         if(!count)snprintf(first,sizeof(first),"%s",name);
         if(!strcmp(name,s_hotend)){selected=count;found=true;}
         if(!strcmp(name,s_latest.active_hotend)){active_index=count;active_found=true;}
-        size_t used=strlen(options);snprintf(options+used,sizeof(options)-used,"%s%s",count?"\n":"",name);count++;
+        if(count)options[used++]='\n';
+        memcpy(options+used,name,length);used+=length;options[used]='\0';count++;
     }
     if(!count){snprintf(options,sizeof(options),"Nozzle");snprintf(s_hotend,sizeof(s_hotend),"%s",s_latest.active_hotend);}
     else if(!found) {
@@ -214,7 +205,7 @@ static void telemetry_render(bool force)
     ui_value_set_text(lv_obj_get_child(s_scale_button,0),s_include_targets?"Targets on":"Detail only");
     telemetry_sample_t sample;telemetry_history_from_state(&s_latest,s_now_us,&sample);
     bool live=s_latest.live_data_ok;
-    char status[96];
+    char status[160];
     if(!live)snprintf(status,sizeof(status),"%s%s",s_latest.moonraker_ok?"WAITING FOR KLIPPER":"OFFLINE",s_held?" | GRAPH HELD":"");
     else if(s_held)snprintf(status,sizeof(status),"GRAPH HELD | VALUES LIVE");
     else snprintf(status,sizeof(status),"LIVE | %s",s_latest.printer_state[0]?s_latest.printer_state:"connected");
@@ -229,7 +220,9 @@ static void telemetry_render(bool force)
     else if(count && telemetry_history_get(count-1,&last)) {
         long long age=s_now_us>=last.time_us?(s_now_us-last.time_us)/1000000:0;
         snprintf(status,sizeof(status),"2 s sampling | Last sample %lld s ago | %u / 300 samples | Scroll for more%s",age,(unsigned)count,s_held?" | held":"");
-    } else snprintf(status,sizeof(status),"2 s sampling | Waiting for this printer's first live sample");
+    } else if (!live) snprintf(status,sizeof(status),"No live history yet | %s",
+        s_latest.moonraker_ok ? "Waiting for Klipper to become ready" : "Reconnect the active printer to begin sampling");
+    else snprintf(status,sizeof(status),"2 s sampling | Waiting for this printer's first live sample");
     ui_value_set_text(s_history_status,status);
 }
 

@@ -238,6 +238,8 @@ lv_obj_t *ui_popup_add_form_cell(lv_obj_t *form, unsigned index);
 
 /* Find the modal owner through layout containers. */
 lv_obj_t *ui_popup_find_owner(lv_obj_t *object);
+/* Keep modal rendering above its blocker while tying cleanup to a page owner. */
+void ui_popup_set_owner(lv_obj_t *popup, lv_obj_t *owner);
 
 /* Reusable wrapped feedback, owned and deleted by its native body. */
 lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind, const char *title, const char *detail);

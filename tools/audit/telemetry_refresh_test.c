@@ -73,7 +73,9 @@ int main(void)
     for(int i=0;i<10;i++)ui_printer_info_cards_refresh(parent,&cards,.72,205,205,60,60,50,9000,"00:58",true);
     assert(!invalidations);
     ui_printer_info_cards_refresh(parent,&cards,.73,205.1,205,60,60,75,9060,NULL,false);
-    assert(invalidations && strstr(lv_label_get_text(cards.nozzle),"205.1"));
+    assert(invalidations && strstr(lv_label_get_text(cards.nozzle),"--"));
+    assert(strstr(lv_label_get_text(cards.bed),"--"));
+    assert(!strstr(lv_label_get_text(cards.progress),"73"));
     assert(strstr(lv_label_get_text(cards.eta),"OFFLINE"));
 
     lv_obj_t *batched=lv_chart_create(parent),*reference=lv_chart_create(parent);

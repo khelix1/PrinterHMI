@@ -1,7 +1,9 @@
 #include "printer_ui_controller.h"
+#include "printer_connection_policy.h"
 #include "ui_filament_recovery.h"
 
 #include <string.h>
+#include <stdio.h>
 
 #include "printer_controller.h"
 #include "ui_printer_banner.h"
@@ -46,6 +48,14 @@ void printer_ui_controller_command_event_cb(lv_event_t *event)
         return;
     }
 
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    if(printer_connection_reason(&live)[0])return;
+    if(!strcmp(command,"HOME_ALL") && printer_idle_reason(&live)[0])return;
+    if(!strcmp(command,"PAUSE") && strcmp(live.printer_state,"printing"))return;
+    if(!strcmp(command,"RESUME") && strcmp(live.printer_state,"paused"))return;
+    if((!strcmp(command,"CANCEL_PRINT") || !strcmp(command,"CANCEL_OBJECT")) &&
+       strcmp(live.printer_state,"printing") && strcmp(live.printer_state,"paused"))return;
+
     if (strcmp(command, "RESUME") == 0) {
         ui_filament_recovery_show(s_send_gcode_cb);
         return;
@@ -79,6 +89,8 @@ void printer_ui_controller_motion_event_cb(lv_event_t *event)
         return;
     }
 
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    if(printer_connection_reason(&live)[0])return;
     if (s_show_motion_cb) {
         s_show_motion_cb();
     }
@@ -93,6 +105,9 @@ void printer_ui_controller_update_action_buttons(
     bool object_available,
     const char *printer_state)
 {
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    if(printer_connection_reason(&live)[0])printer_state="offline";
+    else if(printer_state && (!strcmp(printer_state,"complete") || !strcmp(printer_state,"cancelled")))printer_state="ready";
     printer_controller_update_action_buttons(
         home_button,
         pause_button,
@@ -151,12 +166,19 @@ void printer_ui_controller_refresh(
         return;
     }
 
+    moonraker_state_t readiness={.moonraker_ok=ctx->moonraker_ok,.live_data_ok=ctx->live_data_ok};
+    snprintf(readiness.printer_state,sizeof(readiness.printer_state),"%s",ctx->printer_state?ctx->printer_state:"");
+    const char *reason=printer_connection_reason(&readiness);
+    if(ctx->printer_panel && ctx->motion_button) {
+        if(reason[0])lv_obj_add_state(ctx->motion_button,LV_STATE_DISABLED);
+        else lv_obj_remove_state(ctx->motion_button,LV_STATE_DISABLED);
+    }
     ui_printer_banner_refresh(
         ctx->printer_panel,
         ctx->banner_label,
         ctx->state_label,
-        ctx->banner_text,
-        ctx->printer_state,
+        reason[0]?reason:ctx->banner_text,
+        !ctx->moonraker_ok?"offline":(!ctx->live_data_ok?"not ready":ctx->printer_state),
         ctx->printer_file);
 
     ui_printer_live_status_refresh(
@@ -198,7 +220,7 @@ void printer_ui_controller_refresh(
         ctx->bed_target,
         ctx->part_fan_speed,
         ctx->print_duration,
-        ctx->moonraker_ok,
+        ctx->moonraker_ok && ctx->live_data_ok,
         ctx->capabilities);
 
     if (ctx->printer_panel && ctx->file_label) {

@@ -13,15 +13,20 @@ void *heap_caps_malloc(size_t n,uint32_t caps){(void)caps;allocations++;return m
 void *heap_caps_calloc(size_t n,size_t size,uint32_t caps){void *p=heap_caps_malloc(n*size,caps);if(p)memset(p,0,n*size);return p;}
 void heap_caps_free(void *p){if(!p)return;assert(!s_image || lv_image_get_src(s_image)!=&s_frame_dsc || p!=s_frame);assert(!dash32_camera_image || lv_image_get_src(dash32_camera_image)!=&dash32_camera_dsc || p!=dash32_camera_frame);frees++;free(p);}
 static camera_catalog_entry_t entry;
+static uint32_t config_generation=1;
+uint32_t moonraker_config_generation(void){return config_generation;}
 int moonraker_config_active_profile_index(void){return 0;}
 bool camera_catalog_get(int p,size_t i,camera_catalog_entry_t *e){(void)p;(void)i;*e=entry;return entry.configured;}
 size_t camera_catalog_default(int p){(void)p;return 0;}
+bool camera_catalog_set_default(int p,size_t i){(void)p;(void)i;return true;}
+bool camera_catalog_set_view(int p,size_t i,unsigned rot,bool h,bool v){(void)p;(void)i;(void)rot;(void)h;(void)v;return true;}
+void ui_printer_profiles_open_camera_setup(int p,ui_printer_profiles_active_changed_cb_t a,ui_printer_profiles_discover_cb_t b){(void)p;(void)a;(void)b;}
 static bool pending,busy=true;
 static uint8_t *next_pixels;static int next_width,next_height;static size_t next_size;static bool next_ok;
 bool camera_stream_take_result(uint8_t **p,size_t *n,int *w,int *h,bool *ok){if(!pending)return false;pending=false;*p=next_pixels;*n=next_size;*w=next_width;*h=next_height;*ok=next_ok;return true;}
 bool camera_stream_busy(void){return busy;}
 bool camera_stream_start(const char *url){(void)url;busy=true;return true;}
-void camera_stream_request_stop(void){busy=false;}
+void camera_stream_request_stop(void){busy=false;if(pending){heap_caps_free(next_pixels);pending=false;next_pixels=NULL;}}
 void camera_stream_stop(void){camera_stream_request_stop();}
 void ui_shell_raise_topbar(void){}
 void ui_shell_raise_nav(void){}
@@ -30,6 +35,7 @@ static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){(void)a;(void)p
 static void offer(int w,int h,size_t size){next_pixels=heap_caps_malloc(size,MALLOC_CAP_SPIRAM);for(size_t i=0;i<size/2;i++)((uint16_t*)next_pixels)[i]=(uint16_t)(i+1);next_width=w;next_height=h;next_size=size;next_ok=true;pending=true;}
 static void fixture(void){
  s_root=lv_obj_create(lv_screen_active());s_card=lv_obj_create(s_root);s_image=lv_image_create(s_card);lv_obj_set_size(s_image,UI_PAGE_ROOT_WIDTH,UI_PAGE_ROOT_HEIGHT);
+ s_camera_generation=config_generation;s_retry_button=lv_button_create(s_root);lv_label_create(s_retry_button);
  s_status=lv_label_create(s_root);s_fullscreen_button=lv_button_create(s_root);lv_label_create(s_fullscreen_button);
  s_configure_button=lv_button_create(s_root);s_camera_selector=lv_button_create(s_root);lv_label_create(s_camera_selector);s_view_button=lv_button_create(s_root);
  s_view_width=UI_PAGE_ROOT_WIDTH;s_view_height=UI_PAGE_ROOT_HEIGHT;s_setup_active=false;s_fullscreen=false;entry.configured=true;busy=true;
@@ -51,8 +57,18 @@ int main(void){
   camera_set_viewport(false);assert(lv_image_get_scale(s_image)==((ui_theme_is_studio()?424:UI_PAGE_ROOT_HEIGHT)*256/480));
   offer(10,10,2);camera_poll_cb(NULL);assert(!s_frame && !lv_image_get_src(s_image));
   lv_refr_now(d);invalidations=0;for(int i=0;i<100;i++)camera_mark_unavailable();assert(!invalidations);
+  assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));camera_retry_cb(NULL);assert(lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN)&&busy);
+  offer(3,2,12);camera_poll_cb(NULL);assert(s_frame&&strstr(lv_label_get_text(s_status),"LIVE"));offer(3,2,12);config_generation++;camera_poll_cb(NULL);assert(!s_frame&&!pending&&s_camera_generation==config_generation);
   busy=true;offer(3,2,12);camera_poll_cb(NULL);assert(s_frame);ui_camera_hide();assert(!s_frame && !lv_image_get_src(s_image) && !s_refresh_timer && !busy);
   ui_camera_destroy();assert(!s_root && !s_image && !s_frame);
+  entry.configured=false;ui_camera_show();lv_obj_update_layout(s_root);
+  assert(strstr(lv_label_get_text(s_status),"No camera")&&lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
+  camera_mark_unavailable();lv_obj_update_layout(s_root);assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
+  lv_area_t button,root,label;lv_obj_get_coords(s_retry_button,&button);lv_obj_get_coords(s_root,&root);lv_obj_get_coords(s_status,&label);
+  assert(button.x1>=root.x1&&button.x2<=root.x2&&button.y1>=root.y1&&button.y2<=root.y2);
+  assert(label.x1>=root.x1&&label.x2<=root.x2&&label.y1>=root.y1&&label.y2<=root.y2);
+  lv_obj_t *retry_text=lv_obj_get_child(s_retry_button,0);assert(lv_obj_get_self_width(retry_text)<=lv_obj_get_content_width(s_retry_button));
+  entry.configured=true;lv_obj_send_event(s_retry_button,LV_EVENT_CLICKED,NULL);assert(busy&&lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));ui_camera_destroy();
  }
  dash32_camera_image=lv_image_create(lv_screen_active());dash32_camera_frame=heap_caps_malloc(12,0);
  dash32_camera_dsc.header.magic=LV_IMAGE_HEADER_MAGIC;dash32_camera_dsc.header.cf=LV_COLOR_FORMAT_RGB565;dash32_camera_dsc.header.w=3;dash32_camera_dsc.header.h=2;dash32_camera_dsc.header.stride=6;dash32_camera_dsc.data=dash32_camera_frame;dash32_camera_dsc.data_size=12;

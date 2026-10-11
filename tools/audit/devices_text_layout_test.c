@@ -52,7 +52,7 @@ lv_obj_t *endstop_label=find(root,"ENDSTOPS");assert(graph_label && endstop_labe
 lv_obj_t *graphs=lv_obj_get_parent(graph_label),*endstops=lv_obj_get_parent(endstop_label);
 inside(graphs,lv_obj_get_parent(graphs));inside(endstops,lv_obj_get_parent(endstops));inside(graphs,root);inside(endstops,root);
 if(ui_theme_is_studio()){inside(graph_label,graphs);inside(endstop_label,endstops);single(graph_label,true);single(endstop_label,true);}
-unsigned before=graph_calls;tap(pointer,graphs);assert(graph_calls==before+1);before=endstop_calls;tap(pointer,endstops);assert(endstop_calls==before+1);
+assert(lv_obj_get_height(graphs)>=44&&lv_obj_get_height(endstops)>=44);unsigned before=graph_calls;tap(pointer,graphs);assert(graph_calls==before+1);before=endstop_calls;tap(pointer,endstops);assert(endstop_calls==before+1);
 if(density==1&&large)snapshot(theme,"devices-header");
 ui_devices_show(open_graphs);assert(root==s_devices->root);before=endstop_closes;ui_devices_hide();assert(!s_devices->root && !s_devices->refresh_timer && endstop_closes==before+1);
 }

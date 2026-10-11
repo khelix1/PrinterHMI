@@ -19,6 +19,7 @@ void ui_ota_popup_resume_camera(void);
 
 void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb);
 void ui_ota_progress_close(void);
+void ui_ota_progress_set_transfer(const char *text);
 void ui_ota_progress_pump(const char *status_text,
                           int percent,
                           int bytes_read,

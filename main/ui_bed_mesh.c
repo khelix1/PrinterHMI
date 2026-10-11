@@ -1,4 +1,7 @@
 #include "ui_bed_mesh.h"
+#include "printer_connection_policy.h"
+#include "moonraker_config_controller.h"
+#include "ui_value_update.h"
 #include "ui_text.h"
 #include "esp_log.h"
 #include <stdio.h>
@@ -24,6 +27,9 @@ typedef struct {
     lv_obj_t *surface_grid_button;
     lv_obj_t *surface_grid_label;
     lv_obj_t *calibrate_confirm;
+    lv_obj_t *calibrate_button;
+    lv_timer_t *connection_timer;
+    uint32_t owner_generation;
     uint16_t *buf;
     float *values;
     bed_mesh_profile_name_t *profile_names;
@@ -73,7 +79,12 @@ static void render(void)
     ui_bed_mesh_renderer_render(&config);
 }
 
-static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,ui_text("No active bed mesh. Calibrate or load a profile."));return;}char b[256];snprintf(
+static const char *mesh_connection_reason(void){
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    return s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
+}
+static void stats(void){if(!s.stats)return;
+const char *reason=mesh_connection_reason();if(reason[0]){ui_value_set_text(s.stats,reason);return;}if(!s.mesh.valid){ui_value_set_text(s.stats,ui_text("No active bed mesh. Calibrate or load a profile."));return;}char b[256];snprintf(
         b,
         sizeof(b),
         "PROFILE %s   GRID %u x %u   Z %.0fx%s\n"
@@ -85,7 +96,13 @@ static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s
         s.mesh.truncated ? "   TRUNCATED" : "",
         s.mesh.minimum,
         s.mesh.maximum,
-        s.mesh.range);lv_label_set_text(s.stats,b);}
+        s.mesh.range);ui_value_set_text(s.stats,b);}
+static void mesh_connection_refresh(lv_timer_t *timer){
+    (void)timer;if(!s.popup)return;
+    if(s.calibrate_button){if(mesh_connection_reason()[0])lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
+    ui_bed_mesh_profiles_refresh_availability();
+    stats();
+}
 void ui_bed_mesh_refresh(void)
 {
     if (!s.popup) {
@@ -196,6 +213,7 @@ static void confirm_calibrate_cb(lv_event_t *e)
 {
     (void)e;
 
+    if(mesh_connection_reason()[0]){ui_cal_dialog_notice(UI_STATUS_WARNING,"BED MESH NOT READY",mesh_connection_reason());return;}
     /*
      * Preserve the command callback before closing the modal. The mesh
      * viewer remains open so its live snapshot can refresh after probing.
@@ -212,6 +230,7 @@ static void calibrate_cb(lv_event_t *e)
 {
     (void)e;
 
+    if(mesh_connection_reason()[0]){stats();return;}
     if (s.calibrate_confirm) {
         lv_obj_move_foreground(s.calibrate_confirm);
         return;
@@ -282,13 +301,15 @@ void ui_bed_mesh_close(void)
      * The shared confirmation is a top-layer sibling, not a child of the
      * mesh viewer. Close it first so no modal surface can outlive its owner.
      */
+    if(s.connection_timer)lv_timer_delete(s.connection_timer);
+    s.connection_timer=NULL;
     close_calibrate_confirm_cb(NULL);
     ui_bed_mesh_profiles_close();
 
     ui_bed_mesh_gestures_close();
 
     if (s.popup) {
-        lv_obj_delete(s.popup);
+        lv_obj_t *popup=s.popup;s.popup=NULL;lv_obj_delete(popup);
     }
     if (s.buf) {
         heap_caps_free(s.buf);
@@ -303,10 +324,16 @@ void ui_bed_mesh_close(void)
     memset(&s, 0, sizeof(s));
 }
 
+static void mesh_deleted(lv_event_t *event){
+    if(lv_event_get_target_obj(event)!=s.popup)return;
+    s.popup=NULL;ui_bed_mesh_close();
+}
+
 void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
 {
     ui_bed_mesh_close();
     s.command = command;
+    s.owner_generation=moonraker_config_generation();
     s.zscale = 20.0f;
     ui_bed_mesh_gestures_init(
         &s.view,
@@ -323,6 +350,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         return;
     }
 
+    lv_obj_add_event_cb(s.popup,mesh_deleted,LV_EVENT_DELETE,NULL);
     ui_bed_mesh_profiles_init(
         s.popup,
         s.command);
@@ -444,7 +472,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         minus_cb,
         NULL,
         NULL);
-    ui_popup_add_action_aligned(
+    s.calibrate_button=ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_PRIMARY,
         "CALIBRATE",
@@ -470,4 +498,5 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         NULL);
 
     ui_bed_mesh_refresh();
+    s.connection_timer=lv_timer_create(mesh_connection_refresh,250,NULL);mesh_connection_refresh(NULL);
 }

@@ -1,4 +1,5 @@
 #include "settings_system_info.h"
+#include "ui_value_update.h"
 
 #include "esp_heap_caps.h"
 #include "esp_idf_version.h"
@@ -129,6 +130,8 @@ void settings_system_info_bind_uptime_label(lv_obj_t *label)
 
 void settings_system_info_refresh(void)
 {
+    if (!s_idf_label && !s_heap_label && !s_psram_label && !s_uptime_label) return;
+
     char heap_buf[64];
     char psram_buf[64];
     char uptime_buf[48];
@@ -153,25 +156,25 @@ void settings_system_info_refresh(void)
         esp_timer_get_time() / 1000000LL);
 
     if (s_idf_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             s_idf_label,
             settings_system_info_idf_version());
     }
 
     if (s_heap_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             s_heap_label,
             heap_buf);
     }
 
     if (s_psram_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             s_psram_label,
             psram_buf);
     }
 
     if (s_uptime_label) {
-        lv_label_set_text(
+        ui_value_set_text(
             s_uptime_label,
             uptime_buf);
     }

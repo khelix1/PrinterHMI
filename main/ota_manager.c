@@ -12,6 +12,7 @@
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "nvs.h"
 
 #include "freertos/FreeRTOS.h"
@@ -24,11 +25,30 @@
 
 static const char *TAG = "ota_manager";
 
-static volatile int s_progress_pct = 0;
-static char s_progress_text[160] = "";
+/* The worker publishes a bounded snapshot. Formatting and LVGL updates stay
+ * on the UI thread; 64-bit clocks and strings cannot tear across the cores. */
+typedef struct {
+    int percent;
+    int bytes;
+    int total;
+    char text[160];
+    int64_t started_us;
+    int64_t download_us;
+    int64_t ended_us;
+    bool downloading;
+    bool ended;
+} ota_progress_snapshot_t;
+static ota_progress_snapshot_t s_progress;
+static portMUX_TYPE s_progress_lock = portMUX_INITIALIZER_UNLOCKED;
 
-static volatile int s_bytes_read = 0;
-static volatile int s_content_length = 0;
+static ota_progress_snapshot_t progress_snapshot(void)
+{
+    ota_progress_snapshot_t snapshot;
+    portENTER_CRITICAL(&s_progress_lock);
+    snapshot = s_progress;
+    portEXIT_CRITICAL(&s_progress_lock);
+    return snapshot;
+}
 
 static volatile bool s_task_running = false;
 static volatile bool s_cancel_requested = false;
@@ -159,72 +179,61 @@ void ota_manager_set_url(const char *url)
 
 static void set_state(const char *text, int percent)
 {
-    if (text) {
-        snprintf(s_progress_text,
-                 sizeof(s_progress_text),
-                 "%s",
-                 text);
-    }
-
+    char message[sizeof(s_progress.text)] = "";
+    if (text) snprintf(message, sizeof(message), "%s", text);
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
-
-    s_progress_pct = percent;
+    portENTER_CRITICAL(&s_progress_lock);
+    if (text) memcpy(s_progress.text, message, sizeof(message));
+    s_progress.percent = percent;
+    portEXIT_CRITICAL(&s_progress_lock);
 }
 
-static esp_err_t http_event_handler(
-    esp_http_client_event_t *event)
+static void transfer_end(void)
 {
-    if (!event) return ESP_OK;
-
-    if (event->event_id == HTTP_EVENT_ON_HEADER &&
-        event->header_key &&
-        event->header_value &&
-        strcasecmp(event->header_key,
-                   "Content-Length") == 0) {
-
-        s_content_length = atoi(event->header_value);
-
-        ESP_LOGI(TAG,
-                 "content length=%d",
-                 s_content_length);
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_progress_lock);
+    if (!s_progress.ended) {
+        s_progress.ended = true;
+        s_progress.ended_us = now;
     }
+    portEXIT_CRITICAL(&s_progress_lock);
+}
 
-    if (event->event_id == HTTP_EVENT_ON_DATA &&
-        event->data_len > 0) {
-
-        s_bytes_read += event->data_len;
-
-        if (s_content_length > 0) {
-            int percent =
-                (s_bytes_read * 100) / s_content_length;
-
-            if (percent > 99) percent = 99;
-
-            char message[160];
-
-            snprintf(message,
-                     sizeof(message),
-                     "Downloading firmware... %d%%\n"
-                     "%d / %d bytes",
-                     percent,
-                     s_bytes_read,
-                     s_content_length);
-
-            set_state(message, percent);
-        } else {
-            char message[160];
-
-            snprintf(message,
-                     sizeof(message),
-                     "Downloading firmware...\n%d bytes",
-                     s_bytes_read);
-
-            set_state(message, 35);
-        }
+static void transfer_record(esp_https_ota_handle_t handle)
+{
+    /* SDK image counters exclude HTTP redirect bodies and headers. */
+    int bytes = esp_https_ota_get_image_len_read(handle);
+    int total = esp_https_ota_get_image_size(handle);
+    portENTER_CRITICAL(&s_progress_lock);
+    if (bytes >= 0) s_progress.bytes = bytes;
+    if (total > 0) s_progress.total = total;
+    if (!s_cancel_requested) {
+        s_progress.percent = s_progress.total > 0
+            ? (int)((int64_t)s_progress.bytes * 100 / s_progress.total) : 35;
+        if (s_progress.percent > 99) s_progress.percent = 99;
+        memcpy(s_progress.text, "Downloading firmware...", sizeof("Downloading firmware..."));
     }
+    portEXIT_CRITICAL(&s_progress_lock);
+}
 
-    return ESP_OK;
+static void transfer_format(const ota_progress_snapshot_t *snapshot,
+                            int64_t now, char *out, size_t capacity)
+{
+    int64_t end = snapshot->ended ? snapshot->ended_us : now;
+    int64_t elapsed = end > snapshot->started_us ? end - snapshot->started_us : 0;
+    int64_t download = snapshot->downloading && end > snapshot->download_us
+        ? end - snapshot->download_us : 0;
+    if (download > 0 && snapshot->bytes > 0) {
+        unsigned long long tenths =
+            (unsigned long long)snapshot->bytes * 10000000ULL /
+            (unsigned long long)download / 1024ULL;
+        snprintf(out, capacity, "Average: %llu.%llu KiB/s | Elapsed: %lld s",
+                 tenths / 10, tenths % 10, (long long)(elapsed / 1000000));
+    } else {
+        snprintf(out, capacity, "Average: -- | Elapsed: %lld s",
+                 (long long)(elapsed / 1000000));
+    }
 }
 
 static void update_task(void *arg)
@@ -235,8 +244,6 @@ static void update_task(void *arg)
              "task starting from %s",
              s_task_url);
 
-    s_bytes_read = 0;
-    s_content_length = 0;
 
     esp_https_ota_handle_t ota_handle = NULL;
     esp_err_t result = ESP_FAIL;
@@ -310,7 +317,8 @@ static void update_task(void *arg)
         .url = s_task_url,
         .timeout_ms = 15000,
         .keep_alive_enable = true,
-        .event_handler = http_event_handler,
+        /* Larger reads reduce HTTP/flash loop overhead. Keep bounded memory. */
+        .buffer_size = 4096,
         .crt_bundle_attach = esp_crt_bundle_attach,
 
         /*
@@ -334,12 +342,19 @@ static void update_task(void *arg)
         goto failed;
     }
 
+    int64_t download_started = esp_timer_get_time();
+    portENTER_CRITICAL(&s_progress_lock);
+    s_progress.download_us = download_started;
+    s_progress.downloading = true;
+    portEXIT_CRITICAL(&s_progress_lock);
+
     while (true) {
         if (s_cancel_requested) {
             goto cancelled;
         }
 
         result = esp_https_ota_perform(ota_handle);
+        transfer_record(ota_handle);
 
         if (result == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
             continue;
@@ -366,6 +381,7 @@ static void update_task(void *arg)
      * and switch the boot partition, so the UI must no longer offer CANCEL.
      */
     s_cancel_allowed = false;
+    transfer_end();
     set_state("Validating Firmware...", 99);
 
     result = esp_https_ota_finish(ota_handle);
@@ -383,6 +399,7 @@ static void update_task(void *arg)
     }
 
 failed:
+    transfer_end();
     s_cancel_allowed = false;
 
     if (ota_handle) {
@@ -419,6 +436,7 @@ failed:
     return;
 
 cancelled:
+    transfer_end();
     s_cancel_allowed = false;
 
     if (ota_handle) {
@@ -460,6 +478,12 @@ bool ota_manager_start(const char *url)
              "%s",
              url);
 
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_progress_lock);
+    memset(&s_progress, 0, sizeof(s_progress));
+    s_progress.started_us = now;
+    portEXIT_CRITICAL(&s_progress_lock);
+
     s_cancel_requested = false;
     s_cancel_complete = false;
     s_cancel_allowed = true;
@@ -488,6 +512,7 @@ bool ota_manager_start(const char *url)
     if (result != pdPASS) {
         s_task_running = false;
         s_cancel_allowed = false;
+        transfer_end();
         set_state("Unable to start OTA task.", 0);
         ESP_LOGE(TAG, "failed to create OTA task");
         operator_event_log_add(
@@ -511,7 +536,7 @@ void ota_manager_cancel(void)
     }
 
     s_cancel_requested = true;
-    set_state("Cancelling OTA...", s_progress_pct);
+    set_state("Cancelling OTA...", progress_snapshot().percent);
 
     ESP_LOGI(TAG, "OTA cancellation requested");
 }
@@ -524,10 +549,10 @@ void ota_manager_pump_ui(void)
         return;
     }
 
-    ui_ota_progress_pump(
-        s_progress_text,
-        s_progress_pct,
-        s_bytes_read,
-        s_content_length,
-        s_cancel_allowed);
+    ota_progress_snapshot_t snapshot = progress_snapshot();
+    ui_ota_progress_pump(snapshot.text, snapshot.percent,
+                         snapshot.bytes, snapshot.total, s_cancel_allowed);
+    char transfer[112];
+    transfer_format(&snapshot, esp_timer_get_time(), transfer, sizeof(transfer));
+    ui_ota_progress_set_transfer(transfer);
 }

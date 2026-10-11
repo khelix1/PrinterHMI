@@ -51,6 +51,10 @@ bool camera_test_start(const char*u){(void)u;return true;}
 bool camera_test_busy(void){return false;}
 bool camera_test_take_result(bool*o,int*h,int*s,size_t*b){(void)o;(void)h;(void)s;(void)b;return false;}
 bool camera_discovery_start(const char*h,int p,const char*k){(void)h;(void)p;(void)k;return true;}
+static uint32_t config_generation=1;
+static int discovered_profile=-1;
+uint32_t moonraker_config_generation(void){return config_generation;}
+bool camera_discovery_start_for_profile(int i,const char*h,int p,const char*k){assert(i>=0&&i<MOONRAKER_CONFIG_MAX_PROFILES);discovered_profile=i;return camera_discovery_start(h,p,k);}
 bool camera_discovery_busy(void){return false;}
 bool camera_discovery_take_result(moonraker_webcam_t*c,bool*o,size_t*n){(void)c;(void)o;(void)n;return false;}
 bool moonraker_endpoint_test_start(const char*h,int p,const char*k){(void)h;(void)p;(void)k;return true;}
@@ -78,7 +82,7 @@ static void nested_checks(int theme,bool render)
     assert(lv_textarea_get_max_length(s_editor_keyboard_value)==5);
     assert(!strcmp(lv_textarea_get_accepted_chars(s_editor_keyboard_value),"0123456789"));
     keyboard_layout_check(s_editor_keyboard_popup,s_editor_keyboard,s_editor_keyboard_value);
-    lv_textarea_set_text(s_editor_keyboard_value,"0");lv_obj_send_event(s_editor_keyboard,LV_EVENT_READY,NULL);assert(s_editor_keyboard_popup&&!strcmp(lv_textarea_get_text(s_editor_keyboard_value),"0"));
+    lv_textarea_set_text(s_editor_keyboard_value,"0");lv_obj_t*keyboard_owner=s_editor_keyboard_popup;click(target);assert(s_editor_keyboard_popup==keyboard_owner&&!strcmp(lv_textarea_get_text(s_editor_keyboard_value),"0"));lv_obj_send_event(s_editor_keyboard,LV_EVENT_READY,NULL);assert(s_editor_keyboard_popup&&!strcmp(lv_textarea_get_text(s_editor_keyboard_value),"0"));
     lv_textarea_set_text(s_editor_keyboard_value,"65536");lv_obj_send_event(s_editor_keyboard,LV_EVENT_READY,NULL);assert(s_editor_keyboard_popup);
     lv_textarea_set_text(s_editor_keyboard_value,"7129");
     if(render)snapshot(theme,"keyboard");
@@ -131,7 +135,7 @@ static void nested_checks(int theme,bool render)
     editor_keyboard_cancel_cb(NULL);
     editor_camera_make_default_cb(NULL);assert(default_camera==2);
     editor_camera_test_cb(NULL);editor_camera_discover_cb(NULL);
-    assert(s_editor_camera_test_timer&&s_editor_camera_discovery_timer);
+    assert(s_editor_camera_test_timer&&s_editor_camera_discovery_timer&&discovered_profile==s_editor_profile);
     editor_camera_remove_cb(NULL);layout(s_editor_camera_remove_popup);
     if(render)snapshot(theme,"camera-remove");
     unsigned before=clears;editor_camera_remove_cancel_cb(NULL);assert(clears==before);
@@ -152,6 +156,6 @@ int old_discovered=discovered;editor_discover_cb(NULL);assert(discovered==old_di
 ui_printer_profiles_set_discovered_endpoint("discovered.local",7128,"Moonraker");assert(!strcmp(lv_textarea_get_text(s_editor_host),"discovered.local"));assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));editor_save_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1&&changed==old_changed+1);assert(!strcmp(profiles[0].host,"discovered.local")&&profiles[0].port==7128);
 manager_edit_cb(NULL);lv_textarea_set_text(s_editor_host,"cancelled.local");editor_cancel_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1);assert(strcmp(profiles[0].host,"cancelled.local"));
 manager_delete_cb(NULL);assert(s_delete_popup);layout(s_delete_popup);if(!size&&density==1&&large)snapshot(theme,"remove");delete_cancel_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes);manager_delete_cb(NULL);storage_ok=false;delete_confirm_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes);storage_ok=true;manager_delete_cb(NULL);delete_confirm_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes+1&&active==1&&changed==old_changed+2);manager_delete_cb(NULL);assert(!s_delete_popup);
-ui_printer_profiles_close_all();assert(!s_manager_popup&&!s_manager_list&&!s_editor_popup&&!s_active_changed_cb);reset();ui_printer_profiles_show_for_slot(2,active_changed,discover);assert(s_editor_popup&&s_editor_profile==2);layout(s_editor_popup);editor_test_cb(NULL);assert(!s_editor_test_timer);lv_textarea_set_text(s_editor_host,"test.local");editor_test_cb(NULL);assert(s_editor_test_timer);lv_obj_delete(s_editor_popup);assert(!s_editor_popup&&!s_editor_test_timer&&!s_editor_host);manager_edit_cb(NULL);lv_obj_delete(s_manager_popup);assert(!s_editor_popup&&!s_manager_popup&&!s_manager_list);
+ui_printer_profiles_close_all();assert(!s_manager_popup&&!s_manager_list&&!s_editor_popup&&!s_active_changed_cb);reset();ui_printer_profiles_show_for_slot(2,active_changed,discover);assert(s_editor_popup&&s_editor_profile==2);layout(s_editor_popup);editor_test_cb(NULL);assert(!s_editor_test_timer);lv_textarea_set_text(s_editor_host,"test.local");editor_test_cb(NULL);assert(s_editor_test_timer);editor_camera_open_cb(NULL);editor_camera_test_cb(NULL);editor_camera_discover_cb(NULL);assert(discovered_profile==2);config_generation++;editor_camera_test_poll_cb(s_editor_camera_test_timer);editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);assert(!s_editor_camera_test_timer&&!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"changed"));lv_obj_delete(s_editor_popup);assert(!s_editor_popup&&!s_editor_test_timer&&!s_editor_host);manager_edit_cb(NULL);lv_obj_delete(s_manager_popup);assert(!s_editor_popup&&!s_manager_popup&&!s_manager_list);
 }
 lv_display_delete(d);lv_deinit();puts("PASS: profile manager/editor/remove layouts in five themes, three densities, both text sizes and three viewports; pinned actions, scroll reach, large fields, selection, discovery, save validation/failure/cancel, remove guards, authentication/security/certificate/camera/keyboard layouts and behavior, numeric/password/length limits, camera slot routing/default/removal and teardown");}

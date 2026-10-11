@@ -30,7 +30,10 @@ void moonraker_discovery_show_in_parent(lv_obj_t*p,const char*t,moonraker_discov
 bool moonraker_discovery_start(const esp_ip4_addr_t *ip){(void)ip;return true;}
 esp_netif_t *esp_netif_get_handle_from_ifkey(const char*s){(void)s;return &profile;}
 esp_err_t esp_netif_get_ip_info(esp_netif_t*n,esp_netif_ip_info_t*i){(void)n;i->ip.addr=1;return ESP_OK;}
-esp_err_t esp_wifi_sta_get_ap_info(wifi_ap_record_t*i){memset(i,0,sizeof(*i));return wifi_ready?ESP_OK:ESP_FAIL;}
+static uint32_t config_generation=1;
+uint32_t moonraker_config_generation(void){return config_generation;}
+static bool wrong_ssid;
+esp_err_t esp_wifi_sta_get_ap_info(wifi_ap_record_t*i){memset(i,0,sizeof(*i));snprintf((char*)i->ssid,sizeof(i->ssid),"%s",wrong_ssid?"Previous network":"Workshop_long_network_name_0");return wifi_ready?ESP_OK:ESP_FAIL;}
 esp_err_t esp_wifi_scan_start(void*p,bool b){(void)p;(void)b;return ESP_OK;}
 esp_err_t esp_wifi_scan_get_ap_num(uint16_t*n){*n=8;return ESP_OK;}
 esp_err_t esp_wifi_scan_get_ap_records(uint16_t*n,wifi_ap_record_t*a){for(unsigned i=0;i<*n;i++){snprintf((char*)a[i].ssid,sizeof(a[i].ssid),"Workshop_long_network_name_%u",i);a[i].rssi=-57-(int)i;}return ESP_OK;}
@@ -41,7 +44,7 @@ bool camera_catalog_get(int p,size_t i,camera_catalog_entry_t*e){(void)p;*e=(cam
 bool camera_catalog_set_default(int p,size_t i){(void)p;assert(i<4);return true;}
 bool camera_discovery_start(const char*h,int p,const char*k){(void)h;(void)p;(void)k;return true;}
 bool camera_discovery_busy(void){return false;}
-bool camera_discovery_take_result(moonraker_webcam_t*w,bool*f,size_t*n){(void)w;*f=discovery_result;*n=discovery_result?4:0;return true;}
+bool camera_discovery_take_result(moonraker_webcam_t*w,bool*f,size_t*n){(void)w;*f=discovery_result;*n=discovery_result?4:0;if(discovery_result)config_generation++;return true;}
 bool camera_test_start(const char*u){assert(u[0]);return true;}
 bool camera_test_take_result(bool*o,int*w,int*h,size_t*b){*o=camera_result;*w=900;*h=520;*b=4096;return true;}
 static bool connect_wifi(const char*s,const char*p){assert(s[0]);assert(!strcmp(p,"test-password"));connections++;return true;}
@@ -58,12 +61,13 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  unsigned before=completions;finish_cb(NULL);assert(s_center&&completions==before);
  setup_select_printer_cb(NULL);before=editor_opened;center_printer_cb(NULL);assert(editor_opened==before+1);
  setup_select_wifi_cb(NULL);center_wifi_cb(NULL);assert(s_wifi_scan_busy&&scan_task);wifi_scan_open();scan_task(NULL);wifi_scan_ready(NULL);check();assert(lv_obj_get_child_count(s_wifi_list)==8);if(density==1&&large)snapshot(t,"networks");
- lv_obj_send_event(lv_obj_get_child(s_wifi_list,0),LV_EVENT_CLICKED,NULL);check();assert(s_password&&s_keyboard&&lv_textarea_get_password_mode(s_password));assert(lv_textarea_get_max_length(s_password)==63);lv_textarea_set_text(s_password,"test-password");before=connections;keyboard_layout_check(s_setup_content,s_keyboard,s_password);if(density==1&&large)snapshot(t,"password");lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1&&s_poll);lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1);wifi_ready=true;wifi_verify(NULL);assert(s_wifi_done);wifi_return_timer(s_poll);check();
+ lv_obj_send_event(lv_obj_get_child(s_wifi_list,0),LV_EVENT_CLICKED,NULL);check();assert(s_password&&s_keyboard&&lv_textarea_get_password_mode(s_password));assert(lv_textarea_get_max_length(s_password)==63);lv_textarea_set_text(s_password,"test-password");before=connections;keyboard_layout_check(s_setup_content,s_keyboard,s_password);if(density==1&&large)snapshot(t,"password");lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1&&s_poll);lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1);wifi_ready=true;wrong_ssid=true;wifi_verify(NULL);assert(!s_wifi_done&&s_poll);lv_tick_inc(30001);wifi_verify(NULL);assert(!s_wifi_done&&!s_poll&&s_password&&!strcmp(lv_textarea_get_text(s_password),"test-password")&&strstr(lv_label_get_text(s_status),"timed out"));wrong_ssid=false;wifi_save_cb(NULL);assert(s_poll);wifi_verify(NULL);assert(s_wifi_done);wifi_return_timer(s_poll);check();
  configured=true;setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=false;camera_discovery_poll(NULL);check();
  assert(!s_poll&&lv_obj_get_child_count(s_camera_list)==0&&lv_obj_get_child_count(s_actions)==2);
  lv_obj_send_event(lv_obj_get_child(s_actions,1),LV_EVENT_CLICKED,NULL);assert(s_setup_step==SETUP_STEP_COMPLETE&&!camera_ready);check();
  before=completions;finish_cb(NULL);assert(!s_center&&s_complete_popup&&completions==before+1);setup_completion_done_cb(NULL);
  ui_setup_wizard_show(connect_wifi);setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=true;camera_discovery_poll(NULL);check();assert(lv_obj_get_child_count(s_camera_list)==4);lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=false;camera_test_poll(NULL);assert(s_center);lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=true;camera_test_poll(NULL);check();camera_save_cb(NULL);assert(camera_ready);check();
+ setup_select_camera_cb(NULL);center_camera_cb(NULL);config_generation++;camera_discovery_poll(NULL);assert(!s_poll&&strstr(lv_label_get_text(s_status),"Printer changed")&&!lv_obj_get_child_count(s_camera_list));center_camera_cb(NULL);camera_discovery_poll(NULL);assert(lv_obj_get_child_count(s_camera_list)==4);
  setup_select_complete_cb(NULL);check();if(density==1&&large)snapshot(t,"review");storage_ok=false;finish_cb(NULL);assert(s_center);storage_ok=true;finish_cb(NULL);assert(!s_center&&!s_setup_content&&!s_status&&!s_poll&&s_complete_popup);lv_obj_update_layout(s_complete_popup);inside(s_complete_popup,lv_screen_active());setup_completion_done_cb(NULL);
  ui_setup_wizard_show(connect_wifi);lv_obj_delete(s_center);assert(!s_center&&!s_setup_content&&!s_status&&!s_keyboard);ui_setup_wizard_show(connect_wifi);later_cb(NULL);assert(!s_center);
  }

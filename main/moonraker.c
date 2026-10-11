@@ -21,6 +21,9 @@
 static moonraker_state_t g_moonraker_state;
 /* Preserve source priority across partial WebSocket frames. */
 static bool s_virtual_sd_progress_known = false;
+/* Klipper readiness survives partial status frames until explicit recovery. */
+static bool s_klipper_ready = false;
+static char s_klipper_state[32] = "--";
 static moonraker_exclude_state_t *g_moonraker_exclude_state = NULL;
 static moonraker_filament_state_t
     *g_moonraker_filament_state = NULL;
@@ -82,6 +85,21 @@ static void mr_safe_copy(char *dst, size_t dst_sz, const char *src)
     if (n >= dst_sz) n = dst_sz - 1;
     memcpy(dst, src, n);
     dst[n] = 0;
+}
+
+static void klipper_readiness_set(const char *state)
+{
+    s_klipper_ready = state && strcmp(state, "ready") == 0;
+    mr_safe_copy(s_klipper_state, sizeof(s_klipper_state), state ? state : "--");
+}
+
+static void klipper_readiness_apply(void)
+{
+    if (!s_klipper_ready) {
+        g_moonraker_state.live_data_ok = false;
+        mr_safe_copy(g_moonraker_state.printer_state,
+                     sizeof(g_moonraker_state.printer_state), s_klipper_state);
+    }
 }
 
 const moonraker_state_t *moonraker_state_get(void)
@@ -160,6 +178,7 @@ void moonraker_state_reset(void)
     motion_diagnostics_controller_reset();
     state_lock();
     memset(&g_moonraker_state, 0, sizeof(g_moonraker_state));
+    klipper_readiness_set("--");
     if (g_moonraker_exclude_state) {
         memset(g_moonraker_exclude_state, 0,
                sizeof(*g_moonraker_exclude_state));
@@ -454,6 +473,7 @@ void moonraker_state_publish_http_fallback(
     g_moonraker_state.print_duration = update->print_duration;
     g_moonraker_state.current_layer = update->current_layer;
     g_moonraker_state.total_layer = update->total_layer;
+    klipper_readiness_set(update->live_data_ok ? "ready" : update->printer_state);
     g_moonraker_state.live_data_ok = update->live_data_ok;
     g_moonraker_state.moonraker_ok = update->moonraker_ok;
 
@@ -743,6 +763,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         }
 
         if (lifecycle == MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_READY) {
+            klipper_readiness_set("ready");
             g_moonraker_state.live_data_ok = false;
             g_moonraker_state.moonraker_ok = true;
             mr_safe_copy(
@@ -751,13 +772,15 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
                 "--");
         } else if (lifecycle ==
                    MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_SHUTDOWN) {
+            klipper_readiness_set("shutdown");
             g_moonraker_state.live_data_ok = false;
             g_moonraker_state.moonraker_ok = true;
             mr_safe_copy(
                 g_moonraker_state.printer_state,
                 sizeof(g_moonraker_state.printer_state),
-                "error");
+                "shutdown");
         } else {
+            klipper_readiness_set("disconnected");
             g_moonraker_state.live_data_ok = false;
             g_moonraker_state.moonraker_ok = false;
             mr_safe_copy(
@@ -789,6 +812,13 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     double value = 0.0;
 
     state_lock();
+
+    cJSON *webhooks = cJSON_GetObjectItemCaseSensitive(status, "webhooks");
+    cJSON *klipper_state = cJSON_GetObjectItemCaseSensitive(webhooks, "state");
+    if (cJSON_IsString(klipper_state) && klipper_state->valuestring) {
+        klipper_readiness_set(klipper_state->valuestring);
+        ++updates;
+    }
 
     /*
      * Status updates can be partial.  When a new job enters PRINTING
@@ -1155,6 +1185,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         g_moonraker_state.moonraker_ok = true;
     }
 
+    klipper_readiness_apply();
     state_unlock();
     cJSON_Delete(root);
     return updates > 0

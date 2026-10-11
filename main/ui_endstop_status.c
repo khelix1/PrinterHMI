@@ -15,13 +15,22 @@ static lv_timer_t *s_timer;
 static uint32_t s_owner;
 static int64_t s_next_query;
 
-void ui_endstop_status_close(void)
+static void endstop_retire_popup(void)
 {
     if (s_timer) lv_timer_delete(s_timer);
     s_timer = NULL;
-    if (s_popup) lv_obj_delete(s_popup);
     s_popup = s_body = NULL;
     endstop_status_controller_reset();
+}
+static void endstop_popup_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_popup) endstop_retire_popup();
+}
+void ui_endstop_status_close(void)
+{
+    lv_obj_t *popup = s_popup;
+    endstop_retire_popup();
+    if (popup) lv_obj_delete(popup);
 }
 static void close_cb(lv_event_t *event) { (void)event; ui_endstop_status_close(); }
 
@@ -90,6 +99,7 @@ void ui_endstop_status_show(void)
     endstop_status_controller_reset();
     s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 460, UI_POPUP_STANDARD);
     if (!s_popup) return;
+    lv_obj_add_event_cb(s_popup, endstop_popup_deleted, LV_EVENT_DELETE, NULL);
     ui_cal_dialog_title(s_popup, "LIVE ENDSTOPS");
 
     lv_obj_t *list = ui_cal_dialog_body(s_popup);

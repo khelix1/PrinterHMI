@@ -10,6 +10,8 @@
 #include "ui_widgets.h"
 #include "ui_popup.h"
 #include "ui_settings_components.h"
+#include "firmware_identity.h"
+#include "ui_selector_style.h"
 #include "ui_printer_actions.h"
 #include "ui_command_bar.h"
 #include "ui_calibration_layout.h"
@@ -76,7 +78,96 @@ static void groups(void){
 lv_obj_t*p=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(p);lv_obj_set_size(p,ui_theme_is_studio()?976:810,54);ui_printer_actions_t a;ui_printer_actions_create(p,&a,NULL,NULL);lv_obj_update_layout(p);for(unsigned i=0;i<lv_obj_get_child_count(p);i++){lv_obj_t*b=lv_obj_get_child(p,i);fit(b,"printer actions");inside(b,p,"printer actions");for(unsigned j=i+1;j<lv_obj_get_child_count(p);j++)assert(!overlap(b,lv_obj_get_child(p,j)));}lv_obj_delete(p);
 p=ui_command_bar_create(lv_screen_active(),0,0,800,90);lv_obj_update_layout(p);for(unsigned i=0;i<lv_obj_get_child_count(p);i++){lv_obj_t*b=lv_obj_get_child(p,i);fit(b,"dashboard command");inside(b,p,"dashboard command");}lv_obj_delete(p);
 const char*icons[]={LV_SYMBOL_HOME,LV_SYMBOL_LIST,LV_SYMBOL_FILE,LV_SYMBOL_IMAGE,LV_SYMBOL_SETTINGS,LV_SYMBOL_EDIT,LV_SYMBOL_LOOP,LV_SYMBOL_SETTINGS};const char*nav[]={"Dashboard","Printer","Files","Camera","Tools","Console","Drybox","Settings"};p=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(p);lv_obj_set_size(p,170,528);for(int i=0;i<8;i++){lv_obj_t*b=ui_create_operator_nav_button(p,8,8+i*58,156,52,icons[i],nav[i]);fit(b,nav[i]);inside(b,p,nav[i]);lv_area_t surface,icon_area,text_area;lv_obj_get_coords(b,&surface);lv_obj_get_coords(lv_obj_get_child(b,0),&icon_area);lv_obj_get_coords(lv_obj_get_child(b,1),&text_area);assert(abs(surface.x1+surface.x2-icon_area.x1-text_area.x2)<=2);assert(lv_obj_get_style_text_align(lv_obj_get_child(b,1),0)==LV_TEXT_ALIGN_CENTER);}if(density==1&&large)snapshot("navigation");lv_obj_delete(p);bed();}
+/* Construct the actual Settings firmware block with every channel and a
+ * modified revision at the largest label lengths used by current builds. */
+const char *firmware_identity_channel_name(firmware_channel_t c)
+{
+    return c == FIRMWARE_CHANNEL_STABLE ? "Stable" :
+        c == FIRMWARE_CHANNEL_NIGHTLY ? "Nightly" : "Custom";
+}
+static void firmware_settings(void)
+{
+    for(int channel=0;channel<3;channel++) {
+        firmware_identity_t identity={.channel=(firmware_channel_t)channel};
+        const char *firmware_version="nightly-2026-10-11-abcdef123456";
+        const char *image_build="Oct 11 2026  13:30:51";
+        const char *source_revision="abcdef123456 (modified)";
+        const int first_row_y=48,row_height=UI_SETTINGS_ROW_HEIGHT;
+        const int action_height=UI_SETTINGS_ACTION_HEIGHT,section_y=0;
+        lv_event_cb_t ota_cb=NULL;
+        lv_obj_t *content=lv_obj_create(lv_screen_active());
+        lv_obj_remove_style_all(content);lv_obj_set_size(content,1024,240);
+#include "firmware_settings.inc"
+        lv_obj_update_layout(content);
+        assert(lv_obj_get_height(firmware)>=firmware_row_5+action_height);
+        for(unsigned i=0;i<lv_obj_get_child_count(firmware);i++) {
+            lv_obj_t *child=lv_obj_get_child(firmware,i);
+            if(lv_obj_get_child_count(child)<3)continue;
+            for(unsigned j=0;j<lv_obj_get_child_count(child);j++)
+                inside(lv_obj_get_child(child,j),child,"Firmware identity row");
+        }
+        assert(lv_obj_get_scroll_bottom(content)>0);
+        lv_obj_scroll_to_y(content,lv_obj_get_scroll_bottom(content),LV_ANIM_OFF);
+        lv_obj_update_layout(content);assert(lv_obj_get_scroll_bottom(content)<=1);
+        lv_obj_delete(content);
+    }
+}
 static void value_rows(void){lv_obj_t*s=ui_settings_section_create(lv_screen_active(),"DISPLAY",0,160);lv_obj_t*v=ui_settings_section_add_row(s,"Display Density","Choose compact, comfortable, or spacious type and spacing","COMFORTABLE",48,NULL);lv_obj_update_layout(s);lv_obj_t*r=lv_obj_get_parent(v);for(unsigned i=0;i<lv_obj_get_child_count(r);i++)inside(lv_obj_get_child(r,i),r,"Settings value row");assert(!overlap(lv_obj_get_child(r,1),v));lv_obj_delete(s);}
+static lv_point_t selector_touch;
+static bool selector_down;
+static unsigned selector_changes;
+static void selector_read(lv_indev_t *input,lv_indev_data_t *data)
+{
+    (void)input;data->point=selector_touch;
+    data->state=selector_down?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;
+}
+static void selector_changed(lv_event_t *event){(void)event;selector_changes++;}
+static void selector_tap(lv_indev_t *input,int x,int y)
+{
+    selector_touch=(lv_point_t){x,y};selector_down=true;lv_indev_read(input);
+    selector_down=false;lv_indev_read(input);
+}
+static void selector_controls(void)
+{
+    lv_indev_t *input=lv_indev_create();lv_indev_set_type(input,LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(input,selector_read);
+    lv_obj_t *field=lv_dropdown_create(lv_screen_active());
+    lv_obj_set_pos(field,80,70);lv_obj_set_size(field,260,48);
+    lv_dropdown_set_options(field,"All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
+    ui_selector_style(field,UI_FONT_CAPTION);
+    lv_obj_add_event_cb(field,selector_changed,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_obj_update_layout(field);assert(lv_obj_get_height(field)>=44);
+    assert(lv_obj_get_width(field)==260 && lv_obj_get_x(field)==80 && lv_obj_get_y(field)==70);
+    lv_area_t a,b;lv_obj_get_coords(field,&a);
+    lv_obj_add_state(field,LV_STATE_PRESSED|LV_STATE_FOCUSED);
+    lv_obj_update_layout(field);lv_obj_get_coords(field,&b);assert(!memcmp(&a,&b,sizeof(a)));
+    assert(!lv_obj_get_style_outline_width(field,0));
+    lv_obj_remove_state(field,LV_STATE_PRESSED|LV_STATE_FOCUSED);
+    lv_obj_add_state(field,LV_STATE_FOCUS_KEY);
+    assert(lv_obj_get_style_outline_width(field,0)==2);
+    lv_obj_remove_state(field,LV_STATE_FOCUS_KEY);
+    for(unsigned selected=0;selected<7;selected++) {
+        selector_tap(input,(a.x1+a.x2)/2,(a.y1+a.y2)/2);
+        assert(lv_dropdown_is_open(field));
+        lv_obj_t *list=lv_dropdown_get_list(field);lv_obj_update_layout(list);
+        inside(list,lv_screen_active(),"Opened selector");
+        const lv_font_t *font=lv_obj_get_style_text_font(list,0);
+        int pitch=font->line_height+lv_obj_get_style_text_line_space(list,0);
+        assert(pitch>=44 && lv_obj_get_style_text_font(list,LV_PART_SELECTED)==font);
+        assert(lv_obj_get_style_text_line_space(list,LV_PART_SELECTED)==pitch-font->line_height);
+        assert(lv_obj_get_style_radius(list,0)==6 && !lv_obj_get_style_shadow_width(list,0));
+        lv_obj_t *label=lv_obj_get_child(list,0);lv_area_t text;lv_obj_get_coords(label,&text);
+        if(selected==0 && density==1 && large)snapshot("selectors");
+        unsigned before=selector_changes;
+        selector_tap(input,text.x1+20,text.y1+(int)selected*pitch+font->line_height/2);
+        assert(!lv_dropdown_is_open(field) && lv_dropdown_get_selected(field)==selected);
+        assert(selector_changes==before+1);
+    }
+    lv_obj_add_state(field,LV_STATE_DISABLED);
+    selector_tap(input,(a.x1+a.x2)/2,(a.y1+a.y2)/2);
+    assert(!lv_dropdown_is_open(field));
+    lv_obj_delete(field);lv_indev_delete(input);
+}
 static void dynamic(void){lv_obj_t *reverse=ui_button_create_icon(lv_screen_active(),UI_BUTTON_OUTLINED,LV_SYMBOL_LEFT,"BACK",UI_TEXT,UI_BUTTON_ICON_HORIZONTAL_REVERSE);lv_obj_set_size(reverse,220,60);fit(reverse,"reverse icon action");lv_obj_delete(reverse);lv_obj_t*p=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(p);lv_obj_set_size(p,800,100);lv_obj_set_flex_flow(p,LV_FLEX_FLOW_ROW_WRAP);lv_obj_t*b=ui_button_create_icon(p,UI_BUTTON_OUTLINED,LV_SYMBOL_REFRESH,"REFRESH",UI_TEXT,UI_BUTTON_ICON_HORIZONTAL);lv_obj_set_size(b,LV_SIZE_CONTENT,LV_SIZE_CONTENT);lv_obj_set_style_min_height(b,44,0);fit(b,"intrinsic toolbar");lv_obj_set_size(b,220,60);fit(b,"bounded toolbar");lv_label_set_text(lv_obj_get_child(b,1),"REFRESH FILES");fit(b,"changed icon label");lv_label_set_text(lv_obj_get_child(b,1),"REFRESH");fit(b,"restored icon label");lv_obj_set_size(b,LV_SIZE_CONTENT,LV_SIZE_CONTENT);fit(b,"intrinsic again");lv_obj_delete(p);
 b=ui_button_create(lv_screen_active(),UI_BUTTON_OUTLINED,"TEMPS ON");lv_obj_set_size(b,156,40);fit(b,"TEMPS ON");lv_label_set_text(lv_obj_get_child(b,0),"TEMPS OFF");fit(b,"TEMPS OFF");lv_obj_delete(b);
 b=ui_button_create(lv_screen_active(),UI_BUTTON_OUTLINED,LV_SYMBOL_CLOSE " EXIT FULLSCREEN");lv_obj_set_size(b,280,48);fit(b,"EXIT FULLSCREEN");lv_obj_delete(b);}
@@ -100,4 +191,4 @@ const char*status[]={"MOONRAKER LINKED","MOONRAKER OFFLINE","WAITING FOR PRINTER
 
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buf[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buf,NULL,sizeof(buf),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);for(theme=0;theme<5;theme++)for(density=0;density<3;density++)for(large=0;large<2;large++){ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});lv_obj_t*b;
 #include "button_cases.inc"
-groups();dynamic();value_rows();atomic_readings();}printf("PASS: %u full-label, pressed-frame and atomic single-line checks, themes/densities/text sizes, source-derived actions, actual Settings/Printer/Dashboard rows, navigation, bed capability combinations, native footers and dynamic labels\n",checks);return 0;}
+groups();dynamic();value_rows();atomic_readings();firmware_settings();selector_controls();}printf("PASS: %u full-label, pressed-frame and atomic single-line checks, themes/densities/text sizes, source-derived actions, actual Settings/Printer/Dashboard rows, navigation, bed capability combinations, native footers and dynamic labels\n",checks);return 0;}

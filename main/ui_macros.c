@@ -20,6 +20,7 @@
 #include "ui_responsive_layout.h"
 #include "ui_text_fit.h"
 #include "ui_value_update.h"
+#include "printer_connection_policy.h"
 
 static const char TAG[] = "ui_macros";
 
@@ -28,6 +29,7 @@ typedef struct {
     lv_obj_t *list;
     lv_obj_t *status;
     lv_obj_t *confirm;
+    lv_obj_t *run_action;
     lv_obj_t *search_label, *editor, *editor_value, *editor_target;
     lv_obj_t *parameter_fields[MACRO_PARAMETER_MAX + MACRO_PARAMETER_EXTRA];
     lv_obj_t *parameter_names[MACRO_PARAMETER_EXTRA];
@@ -130,6 +132,7 @@ static void close_confirm(void)
         lv_obj_delete(popup);
     }
 
+    s_macros->run_action=NULL;
     s_pending_macro[0] = '\0';
 }
 
@@ -152,8 +155,7 @@ static void run_macro_cb(lv_event_t *event)
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
     if (s_macros->pending_owner != moonraker_config_generation() ||
-        !state.moonraker_ok || !state.live_data_ok ||
-        !strcmp(state.printer_state, "error") || !strcmp(state.printer_state, "shutdown")) {
+        printer_connection_reason(&state)[0]) {
         macro_feedback(UI_STATUS_DANGER, "MACRO NOT SENT", "Printer changed or is not ready. Reopen the macro.");
         return;
     }
@@ -249,7 +251,20 @@ static lv_obj_t *macro_dialog(const char *text, lv_obj_t **body)
     return popup;
 }
 
-static void macro_actions(lv_obj_t *popup, const char *text,
+static void macro_run_deleted(lv_event_t *event){
+    if(s_macros && s_macros->run_action==lv_event_get_target_obj(event))s_macros->run_action=NULL;
+}
+static void macro_run_availability(void){
+    if(!s_macros || !s_macros->run_action)return;
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    const char *reason=s_macros->pending_owner!=moonraker_config_generation()?
+        "Printer changed. Cancel and reopen the macro.":printer_connection_reason(&state);
+    bool was_disabled=lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED);
+    if(reason[0]){lv_obj_add_state(s_macros->run_action,LV_STATE_DISABLED);macro_feedback(UI_STATUS_WARNING,"MACRO NOT READY",reason);}
+    else {lv_obj_remove_state(s_macros->run_action,LV_STATE_DISABLED);if(was_disabled)macro_feedback(UI_STATUS_INFO,"MACRO READY","Review the command, then tap Run.");}
+}
+
+static lv_obj_t *macro_actions(lv_obj_t *popup, const char *text,
                           lv_event_cb_t cancel_cb, lv_event_cb_t accept_cb)
 {
     lv_obj_t *row = lv_obj_create(popup);
@@ -262,6 +277,7 @@ static void macro_actions(lv_obj_t *popup, const char *text,
     lv_obj_t *accept = ui_popup_add_action_at(row, UI_POPUP_ACTION_PRIMARY,
         text, 0, 0, LV_PCT(48), 48, accept_cb, NULL, NULL);
     lv_obj_set_flex_grow(accept, 1);
+    return accept;
 }
 
 static lv_obj_t *macro_body_text(lv_obj_t *body, const char *text)
@@ -276,6 +292,11 @@ static lv_obj_t *macro_body_text(lv_obj_t *body, const char *text)
 
 static void open_editor(lv_obj_t *target, bool search)
 {
+    if (s_macros->editor && s_macros->editor_target == target &&
+        s_macros->editing_search == search) {
+        lv_obj_move_foreground(s_macros->editor);
+        return;
+    }
     close_editor();
     s_macros->editing_search = search;
     s_macros->editor_target = target;
@@ -334,7 +355,9 @@ static void review_macro_cb(lv_event_t *event)
     if (!s_confirm) { s_pending_macro[0] = 0; return; }
     macro_body_text(body, "Review the command before running:");
     macro_body_text(body, s_macros->pending_command);
-    macro_actions(s_confirm, LV_SYMBOL_PLAY " RUN", close_confirm_cb, run_macro_cb);
+    s_macros->run_action=macro_actions(s_confirm, LV_SYMBOL_PLAY " RUN", close_confirm_cb, run_macro_cb);
+    lv_obj_add_event_cb(s_macros->run_action,macro_run_deleted,LV_EVENT_DELETE,NULL);
+    macro_run_availability();
 }
 
 static void macro_button_cb(lv_event_t *event)
@@ -517,14 +540,7 @@ static void refresh_timer_cb(lv_timer_t *timer)
     macro_controller_status_t status;
     macro_controller_status(&status);
 
-    if (s_confirm) {
-        moonraker_state_t state;
-        moonraker_state_snapshot(&state);
-        if (s_macros->pending_owner != moonraker_config_generation() ||
-            !state.moonraker_ok || !state.live_data_ok) {
-            macro_feedback(UI_STATUS_WARNING, "MACRO NOT READY", "Printer changed or disconnected. Cancel and reopen when ready.");
-        }
-    }
+    if(s_confirm)macro_run_availability();
     if (status.generation !=
         s_rendered_generation) {
         rebuild_macro_list();

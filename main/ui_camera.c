@@ -29,6 +29,9 @@ static lv_obj_t *s_fullscreen_button = NULL;
 static lv_obj_t *s_configure_button = NULL;
 static lv_obj_t *s_camera_selector = NULL;
 static lv_obj_t *s_view_button = NULL;
+static lv_obj_t *s_retry_button = NULL;
+static uint32_t s_camera_generation;
+static void camera_update_selector(void);
 static lv_obj_t *s_view_popup = NULL;
 static lv_obj_t *s_camera_picker_popup = NULL;
 
@@ -59,6 +62,11 @@ static unsigned s_camera_frame_count = 0;
 
 static void camera_set_status(const char *text)
 {
+    if (s_retry_button) {
+        bool retry = text && strstr(text, "UNAVAILABLE") && !s_fullscreen;
+        if (retry) lv_obj_remove_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
+    }
     if (s_status) {
         ui_value_set_text(s_status, text ? text : ui_text(""));
     }
@@ -81,6 +89,7 @@ static void camera_release_frame(void)
 static void camera_mark_unavailable(void)
 {
     camera_release_frame();
+    s_camera_last_frame_tick = 0;
     camera_set_status("CAMERA UNAVAILABLE | reconnecting");
 }
 
@@ -241,17 +250,21 @@ static void camera_set_viewport(bool fullscreen)
         lv_obj_set_pos(s_view_button, 226, ui_theme_is_studio() ? 358 : 464);
         lv_obj_set_pos(s_camera_selector, 356, ui_theme_is_studio() ? 358 : 464);
         lv_obj_set_pos(s_fullscreen_button, 624, ui_theme_is_studio() ? 358 : 464);
-        lv_obj_set_pos(s_status, 470, ui_theme_is_studio() ? 324 : 430);
-        lv_obj_set_width(s_status, 364);
+        lv_obj_set_pos(s_status, 20, 106);
+        lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 40);
         lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
         if(ui_theme_is_studio()) {
             lv_obj_set_style_pad_all(s_card,0,0);lv_obj_set_style_radius(s_card,0,0);lv_obj_set_style_border_width(s_card,0,0);
-            lv_obj_set_pos(s_status,16,16);lv_obj_set_width(s_status,560);
+            lv_obj_set_pos(s_status,16,16);lv_obj_set_width(s_status,944);
             lv_obj_set_style_bg_color(s_status,UI_BG,0);lv_obj_set_style_bg_opa(s_status,LV_OPA_80,0);lv_obj_set_style_pad_all(s_status,6,0);
             lv_obj_set_pos(s_configure_button,100,356);lv_obj_set_pos(s_view_button,308,356);
             lv_obj_set_pos(s_camera_selector,448,356);lv_obj_set_pos(s_fullscreen_button,718,356);
         }
         lv_obj_move_background(s_card);
+    }
+    if (s_retry_button) {
+        if (fullscreen) lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
+        else camera_set_status(lv_label_get_text(s_status));
     }
     camera_apply_view_transform();
 }
@@ -285,6 +298,17 @@ static void camera_poll_cb(lv_timer_t *timer)
     (void)timer;
     if (s_setup_active) return;
     uint32_t now = lv_tick_get();
+    if (s_camera_generation != moonraker_config_generation()) {
+        s_camera_generation = moonraker_config_generation();
+        camera_close_popups();
+        camera_stream_request_stop();
+        camera_release_frame();
+        s_camera_last_frame_tick = s_camera_stream_started_tick = 0;
+        s_camera_window_tick = 0; s_camera_frame_count = 0;
+        s_camera_index = camera_catalog_default(moonraker_config_active_profile_index());
+        camera_update_selector();
+        camera_set_status("CONNECTING | active printer changed");
+    }
 
     uint8_t *pixels = NULL;
     size_t pixel_size = 0;
@@ -318,6 +342,7 @@ static void camera_poll_cb(lv_timer_t *timer)
             camera_apply_pixel_mirror(&view);
             lv_image_set_src(s_image, &s_frame_dsc);
             camera_apply_view_transform();
+            if (!s_camera_last_frame_tick) camera_set_status("LIVE | receiving camera frames");
             s_camera_last_frame_tick = now;
             if (!s_camera_window_tick) s_camera_window_tick = now;
             ++s_camera_frame_count;
@@ -363,11 +388,23 @@ static void camera_poll_cb(lv_timer_t *timer)
 
 
 
+static void camera_retry_cb(lv_event_t *event)
+{
+    (void)event;
+    camera_stream_request_stop();
+    camera_release_frame();
+    s_camera_last_frame_tick = s_camera_stream_started_tick = 0;
+    s_camera_window_tick = 0; s_camera_frame_count = 0;
+    camera_set_status("CONNECTING | retry requested");
+    camera_poll_cb(NULL);
+}
+
 static void camera_start(void)
 {
     if (!s_root || !s_refresh_timer) {
         return;
     }
+    camera_set_status("CONNECTING | waiting for camera stream");
     camera_poll_cb(NULL);
 }
 
@@ -513,6 +550,7 @@ static void camera_select_next_cb(lv_event_t *event)
 void ui_camera_show(void)
 {
     if (s_root) {
+        s_camera_generation = moonraker_config_generation();
         lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(s_root);
         if (!s_refresh_timer) {
@@ -525,6 +563,7 @@ void ui_camera_show(void)
         return;
     }
 
+    s_camera_generation = moonraker_config_generation();
     /* Persisted default must be chosen before the first stream starts.
      * Otherwise a fresh boot would always open slot 1 when it is configured. */
     s_camera_index = camera_catalog_default(
@@ -588,12 +627,18 @@ void ui_camera_show(void)
     ui_button_expand_touch_target(s_fullscreen_button);
     lv_obj_add_event_cb(s_fullscreen_button, camera_fullscreen_cb, LV_EVENT_CLICKED, NULL);
 
+    s_retry_button = ui_button_create(s_root, UI_BUTTON_SECONDARY, "RETRY");
+    lv_obj_set_size(s_retry_button, 180, 44);
+    lv_obj_set_pos(s_retry_button, 20, ui_theme_is_studio() ? 74 : 410);
+    lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(s_retry_button, camera_retry_cb, LV_EVENT_CLICKED, NULL);
+
     s_status = lv_label_create(s_root);
     ui_apply_text_body(s_status);
     ui_apply_label_dim(s_status);
-    lv_obj_set_width(s_status, 364);
-    lv_obj_set_pos(s_status, 470, ui_theme_is_studio() ? 324 : 430);
-    lv_label_set_long_mode(s_status, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 40);
+    lv_obj_set_pos(s_status, 20, 106);
+    lv_label_set_long_mode(s_status, LV_LABEL_LONG_WRAP);
     lv_label_set_text(s_status, ui_text("Connecting to configured camera..."));
 
     if (ui_theme_is_studio()) camera_set_viewport(false);
@@ -634,6 +679,7 @@ void ui_camera_destroy(void)
     s_configure_button = NULL;
     s_camera_selector = NULL;
     s_view_button = NULL;
+    s_retry_button = NULL;
     s_fullscreen = false;
     s_camera_last_frame_tick = 0;
     s_camera_stream_started_tick = 0;

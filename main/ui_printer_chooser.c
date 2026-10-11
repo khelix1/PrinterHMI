@@ -13,6 +13,7 @@
 #include "moonraker_config_controller.h"
 #include "moonraker_probe.h"
 #include "printer_profile_health.h"
+#include "printer_connection_policy.h"
 #include "moonraker_live_websocket.h"
 #include "printer_preview_cache.h"
 #include "ui_button.h"
@@ -258,9 +259,10 @@ static void refresh_cards(void)
             configured &&
             printer_profile_health_get(index, &known);
 
-        if (configured && index == active && state && state->moonraker_ok) {
-            online = true;
-            known = true;
+        bool health_online = online;
+        if (configured && index == active) {
+            online = !printer_connection_reason(state)[0];
+            /* Transport readiness does not confirm an initial failed probe. */
         }
 
         if (!card->root) continue;
@@ -345,29 +347,28 @@ static void refresh_cards(void)
         bool active_live =
             index == active &&
             state &&
-            state->moonraker_ok;
+            !printer_connection_reason(state)[0];
         bool status_online = active_live;
         const char *status_text = NULL;
 
-        /* Both fallback buffers live through the final label write. */
         char inactive_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
-        bool active_state_fallback = false;
-        char active_health_state[PRINTER_PROFILE_HEALTH_STATE_LENGTH] = "";
         if (index == active) {
-            /* Keep the last confirmed state visible while the active transport
-             * reconnects; replace it only when fresh synchronized data arrives. */
+            /* Active transport readiness overrides cached background health. */
             if (active_live &&
                 state->printer_state[0] &&
                 strcmp(state->printer_state, "--") != 0) {
                 status_text = state->printer_state;
-            } else if (printer_profile_health_get_live_state(
-                           index,
-                           active_health_state,
-                           sizeof(active_health_state))) {
-                status_text = active_health_state;
-                active_state_fallback = true;
+            } else if (!state->moonraker_ok) {
+                bool initial_state = !state->printer_state[0] ||
+                    !strcmp(state->printer_state, "--");
+                status_text = !known ? "CHECKING..."
+                    : (health_online && initial_state ? "CONNECTING..."
+                       : "OFFLINE / RETRYING");
+            } else if (!strcmp(state->printer_state, "shutdown") ||
+                       !strcmp(state->printer_state, "error")) {
+                status_text = "KLIPPER SHUTDOWN";
             } else {
-                status_text = "OFFLINE / RETRYING";
+                status_text = "WAITING FOR KLIPPER";
             }
         } else {
             bool has_live_state =
@@ -397,11 +398,13 @@ static void refresh_cards(void)
         }
 
         set_status_text(card, status_text);
-        if ((index != active &&
+        if ((index == active && !state->moonraker_ok &&
+             (!known || (health_online && (!state->printer_state[0] ||
+              !strcmp(state->printer_state, "--"))))) ||
+            (index != active &&
              known &&
              online &&
-             !status_online) ||
-            (index == active && active_state_fallback)) {
+             !status_online)) {
             ui_value_set_color(card->status, UI_TEXT_DIM, 0);
         } else {
             apply_status_style(card->status, true, status_online);

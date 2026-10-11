@@ -63,6 +63,7 @@ static void inside(lv_obj_t *c,lv_obj_t *p){lv_area_t a,b;lv_obj_get_coords(c,&a
 static void buttons(lv_obj_t *row){for(uint32_t i=0;i<lv_obj_get_child_count(row);i++){lv_obj_t *b=lv_obj_get_child(row,i);if(lv_obj_has_flag(b,LV_OBJ_FLAG_HIDDEN))continue;if(lv_obj_check_type(b,&lv_button_class)){inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);lv_area_t a,r;lv_obj_get_coords(b,&a);lv_obj_get_coords(row,&r);assert(a.x1>=r.x1&&a.x2<=r.x2);}else buttons(b);}}
 static inline void layout(lv_obj_t *popup){assert(popup);lv_obj_update_layout(popup);inside(popup,lv_screen_active());for(unsigned i=0;i<3;i++)inside(lv_obj_get_child(popup,i),popup);lv_obj_t *body=ui_cal_dialog_body(popup),*footer=lv_obj_get_child(popup,2);buttons(body);buttons(footer);lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,lv_obj_get_scroll_y(body)+lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(popup);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);capture();}
 static inline void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
+static inline unsigned diagnostic_timers(void){unsigned n=0;lv_timer_t *t=NULL;while((t=lv_timer_get_next(t)))n++;return n;}
 static inline lv_obj_t *action(lv_obj_t *p,unsigned i){return lv_obj_get_child(lv_obj_get_child(p,2),i);}
 static inline lv_obj_t *choice(lv_obj_t *p,unsigned i){return lv_obj_get_child(lv_obj_get_user_data(ui_cal_dialog_body(p)),i);}
 #if defined(TEST_FEEDBACK)
@@ -110,8 +111,16 @@ static void run(void){
  assert(fallback);layout(fallback);click(action(fallback,0));
 }
 #elif defined(TEST_OTAFAILURE)
+#include "esp_app_desc.h"
+#include "esp_ota_ops.h"
 static bool running,update_accept;
 static unsigned update_starts;
+static esp_app_desc_t running_app={.version="6.5.6",.date="Oct 11 2026",.time="13:12:00"};
+const esp_app_desc_t *esp_app_get_description(void){return &running_app;}
+const esp_partition_t *esp_ota_get_running_partition(void){static esp_partition_t p={.label="ota_0"};return &p;}
+const char *ota_manager_get_url(void){return "https://fixture/custom.bin";}
+size_t ota_manager_url_capacity(void){return 192;}
+
 void ui_camera_set_setup_active(bool active){(void)active;}
 void ui_dashboard_set_camera_quiesced(bool active){(void)active;}
 bool camera_stream_busy(void){return false;}
@@ -119,17 +128,22 @@ void vTaskDelay(uint32_t ticks){(void)ticks;}
 bool ota_manager_is_running(void){return running;}
 bool ota_manager_start(const char *url){assert(url&&url[0]);update_starts++;return update_accept;}
 void ota_manager_set_url(const char *url){(void)url;}
+static bool async_rejected;
+static lv_result_t reserve_async(lv_async_cb_t cb,void *data){return async_rejected ? LV_RESULT_INVALID : lv_async_call(cb,data);}
+#define lv_async_call reserve_async
 #define close_cb ota_editor_close_cb
 #include "ui_ota_popup.c"
 #include "keyboard_layout_checks.h"
 #undef close_cb
 #include "ota_ui_controller.c"
 static ota_release_catalog_snapshot_t catalog;
-static unsigned catalog_fetches,chosen_updates,cancel_updates;
+static unsigned catalog_fetches,chosen_updates,cancel_updates,catalog_reads;
+static bool catalog_start_loading;
 static char chosen_url[256];
 void ota_release_catalog_snapshot(ota_release_catalog_snapshot_t *out){*out=catalog;}
-bool ota_release_catalog_start(void){catalog_fetches++;return true;}
+bool ota_release_catalog_start(void){catalog_fetches++;if(catalog_start_loading)catalog.state=OTA_RELEASE_CATALOG_LOADING;return true;}
 bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
+ catalog_reads++;
  if(index>=4)return false;
  memset(out,0,sizeof(*out));out->channel=index<2?OTA_RELEASE_CHANNEL_STABLE:OTA_RELEASE_CHANNEL_NIGHTLY;
  out->relation=index==1?OTA_RELEASE_OLDER:OTA_RELEASE_NEWER;
@@ -138,12 +152,13 @@ bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
  strcpy(out->published,"2026-10-10");snprintf(out->asset_url,sizeof(out->asset_url),"https://fixture/fw%u.bin",(unsigned)index);out->asset_size=2500000;return true;
 }
 #include "ui_ota_release_browser.c"
+#undef lv_async_call
 static void chosen_update(const char *url){chosen_updates++;snprintf(chosen_url,sizeof(chosen_url),"%s",url);}
 static void cancel_update(void){cancel_updates++;}
 static void run(void){
  running=false;update_accept=false;update_starts=0;
  s_ota_popup=ui_popup_create(lv_layer_top(),300,200,UI_POPUP_STANDARD);
- s_ota_url_ta=lv_textarea_create(s_ota_popup);lv_textarea_set_text(s_ota_url_ta,"");
+ s_ota_url_ta=lv_textarea_create(s_ota_popup);lv_textarea_set_text(s_ota_url_ta,"");s_start_cb=chosen_update;
  start_cb(NULL);assert(s_ota_popup&&s_ota_url_ta&&!update_starts&&!s_deferred_start_popup);
  assert(!strcmp(lv_textarea_get_placeholder_text(s_ota_url_ta),"Firmware URL required."));
  ui_ota_popup_close();
@@ -165,6 +180,8 @@ static void run(void){
  unsigned before_updates=chosen_updates;lv_obj_send_event(s_ota_kb,LV_EVENT_READY,NULL);assert(s_deferred_start_popup&&!s_ota_popup);
  lv_obj_delete(s_deferred_start_popup);deferred_start_cb(NULL);assert(chosen_updates==before_updates);
  running=true;ui_ota_progress_show(cancel_update);
+ ui_ota_progress_set_transfer("Average: 1234.5 KiB/s | Elapsed: 12345 s");
+ assert(strstr(lv_label_get_text(s_progress_transfer_label),"1234.5"));
  ui_ota_progress_pump("Downloading firmware\nKeep power connected",40,1000000,2500000,true);layout(s_progress_popup);
  assert(strstr(lv_label_get_text(s_progress_label),"Keep power connected"));
  unsigned cancelled=cancel_updates;click(s_progress_cancel_btn);assert(cancel_updates==cancelled+1&&lv_obj_has_state(s_progress_cancel_btn,LV_STATE_DISABLED));
@@ -172,13 +189,63 @@ static void run(void){
  running=false;ui_ota_progress_pump("Download failed. Check connection and retry.",40,1000000,2500000,false);
  assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_progress_cancel_btn,0)),"CLOSE"));click(s_progress_cancel_btn);assert(!s_progress_popup);
  catalog=(ota_release_catalog_snapshot_t){.state=OTA_RELEASE_CATALOG_READY,.count=4};
- ui_ota_release_browser_show(chosen_update,NULL);layout(s_popup);assert(lv_obj_get_child_count(s_list)==2);
- click(lv_obj_get_child(s_list,0));assert(s_confirm);layout(s_confirm);click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),0));assert(!s_confirm&&s_popup);
+ ui_ota_release_browser_show(chosen_update,NULL);layout(s_popup);assert(lv_obj_get_child_count(s_list)==4);
+ lv_obj_t *rows[4];for(unsigned i=0;i<4;i++)rows[i]=lv_obj_get_child(s_list,i);
+ unsigned reads=catalog_reads,tab_fetches=catalog_fetches;
+ lv_obj_scroll_to_y(s_list,lv_obj_get_scroll_bottom(s_list),LV_ANIM_OFF);
+ int32_t stable_scroll=lv_obj_get_scroll_y(s_list);
+ for(unsigned cycle=0;cycle<20;cycle++) {
+  click(s_nightly_tab);assert(lv_obj_has_flag(rows[0],LV_OBJ_FLAG_HIDDEN));
+  assert(!lv_obj_has_flag(rows[2],LV_OBJ_FLAG_HIDDEN));
+  click(s_stable_tab);assert(lv_obj_get_scroll_y(s_list)==stable_scroll);
+  assert(!lv_obj_has_flag(rows[0],LV_OBJ_FLAG_HIDDEN));
+  assert(lv_obj_has_flag(rows[2],LV_OBJ_FLAG_HIDDEN));
+  for(unsigned i=0;i<4;i++)assert(rows[i]==lv_obj_get_child(s_list,i));
+ }
+ assert(catalog_reads==reads && catalog_fetches==tab_fetches);
+ click(lv_obj_get_child(s_list,0));assert(s_confirm);
+ assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_confirm),0)),"Installed: Custom"));
+ assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_confirm),1)),"Selected: Stable"));
+ layout(s_confirm);click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),0));assert(!s_confirm&&s_popup);
  click(s_nightly_tab);assert(s_channel==OTA_RELEASE_CHANNEL_NIGHTLY);layout(s_popup);
- click(lv_obj_get_child(s_list,0));layout(s_confirm);before_updates=chosen_updates;click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),1));
+ click(lv_obj_get_child(s_list,2));layout(s_confirm);before_updates=chosen_updates;click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),1));
  assert(chosen_updates==before_updates+1&&!strcmp(chosen_url,"https://fixture/fw2.bin")&&!s_popup&&!s_confirm&&!s_timer);
  ui_ota_release_browser_show(chosen_update,NULL);lv_obj_delete(s_popup);assert(!s_popup&&!s_list&&!s_timer&&!s_selected);
- ui_ota_release_browser_show(chosen_update,NULL);catalog.state=OTA_RELEASE_CATALOG_ERROR;strcpy(catalog.error,"Could not retrieve releases. Check the network.");timer_cb(NULL);assert(strstr(lv_label_get_text(s_status),"network"));browser_close();
+ ui_ota_release_browser_show(chosen_update,NULL);catalog.state=OTA_RELEASE_CATALOG_ERROR;strcpy(catalog.error,"Could not retrieve releases. Check the network.");timer_cb(NULL);assert(strstr(lv_label_get_text(s_status),"network"));assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_refresh_button,0)),"RETRY"));
+ catalog_start_loading=true;unsigned fetches=catalog_fetches;click(s_refresh_button);assert(catalog_fetches==fetches+1&&lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&!lv_obj_get_child_count(s_list));refresh_cb(NULL);assert(catalog_fetches==fetches+1);
+ catalog.state=OTA_RELEASE_CATALOG_READY;catalog.count=0;timer_cb(NULL);assert(!lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&strstr(lv_label_get_text(s_status),"No compatible"));
+ catalog.state=OTA_RELEASE_CATALOG_IDLE;timer_cb(NULL);assert(strstr(lv_label_get_text(s_status),"idle"));browser_close();catalog_start_loading=false;
+ for(unsigned cycle=0;cycle<12;cycle++){
+  ui_ota_release_browser_show(chosen_update,ota_open_custom_url_bridge);
+  assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_popup),0)),"Installed: Custom"));
+  lv_obj_t *footer=lv_obj_get_child(s_popup,2),*custom_button=lv_obj_get_child(footer,0);
+  async_rejected=true;click(custom_button);assert(!s_custom_pending&&s_popup&&!s_ota_popup);
+  async_rejected=false;
+  click(custom_button);click(custom_button);assert(s_custom_pending&&s_popup&&!s_ota_popup);
+  lv_tick_inc(1);lv_timer_handler();assert(!s_popup&&!s_custom_pending&&s_ota_popup&&s_camera_quiesced);
+  layout(s_ota_popup);keyboard_layout_check(s_ota_popup,s_ota_kb,s_ota_url_ta);
+  assert(!strcmp(lv_textarea_get_text(s_ota_url_ta),"https://fixture/custom.bin"));
+  lv_obj_t *url_footer=lv_obj_get_child(s_ota_popup,-1);
+  lv_obj_t *url_button=lv_obj_get_child(url_footer,0),*child=lv_obj_get_child(url_button,0);
+  lv_obj_add_flag(child,LV_OBJ_FLAG_EVENT_BUBBLE);lv_obj_send_event(child,LV_EVENT_SIZE_CHANGED,NULL);
+  async_rejected=true;start_cb(NULL);assert(s_ota_popup&&!s_deferred_start_popup);
+  assert(!strcmp(lv_textarea_get_text(s_ota_url_ta),"https://fixture/custom.bin"));async_rejected=false;
+  if(cycle%3==0) {
+   remote_cb(NULL);assert(s_remote_pending&&s_ota_popup&&!s_popup);
+   lv_tick_inc(1);lv_timer_handler();assert(!s_ota_popup&&!s_remote_pending&&s_popup&&s_camera_quiesced);
+   browser_close();
+  } else if(cycle%2)lv_obj_delete(s_ota_popup);else ui_ota_popup_close();
+  assert(!s_ota_popup&&!s_ota_url_ta&&!s_ota_kb&&!s_camera_quiesced);
+ }
+ ui_ota_release_browser_show(chosen_update,ota_open_custom_url_bridge);
+ click(lv_obj_get_child(lv_obj_get_child(s_popup,2),0));assert(s_custom_pending);
+ lv_obj_delete(s_popup);lv_tick_inc(1);lv_timer_handler();assert(!s_popup&&!s_custom_pending&&!s_ota_popup);
+ ui_ota_popup_show("https://fixture/fw.bin","Update information",255,chosen_update,NULL);
+ before_updates=chosen_updates;start_cb(NULL);assert(s_deferred_start_popup);ui_ota_popup_close();
+ lv_tick_inc(1);lv_timer_handler();assert(!s_deferred_start_popup&&chosen_updates==before_updates);
+ assert(!strcmp(relation_text(&(ota_release_entry_t){.channel=OTA_RELEASE_CHANNEL_NIGHTLY,.relation=OTA_RELEASE_NEWER}),"UPDATE AVAILABLE"));
+ assert(!strcmp(relation_text(&(ota_release_entry_t){.channel=OTA_RELEASE_CHANNEL_STABLE,.relation=OTA_RELEASE_SWITCH_CHANNEL}),"SWITCH TO STABLE"));
+
 
 }
 #elif defined(TEST_PID)
@@ -197,12 +264,73 @@ static void run(void){lv_obj_t *card=lv_obj_create(lv_screen_active());lv_obj_se
  click(s_motion.input_shaper_button);layout(s_motion.input_shaper_popup);click(action(s_motion.input_shaper_popup,0));assert(!s_motion.input_shaper_popup&&!sends);click(s_motion.resonance_test_button);layout(s_motion.resonance_test_popup);click(choice(s_motion.resonance_test_popup,0));assert(sends==1&&!strcmp(command,"TEST_RESONANCES AXIS=X"));click(s_motion.accelerometer_check_button);layout(s_motion.accelerometer_check_popup);click(action(s_motion.accelerometer_check_popup,1));assert(sends==2&&!strcmp(command,"MEASURE_AXES_NOISE"));ui_calibration_motion_hide();lv_obj_delete(card);}
 #elif defined(TEST_PROBE)
 #include "ui_probe_accuracy.c"
-void ui_calibration_results_show(const char *t,const char *s){(void)t;(void)s;}
+static unsigned probe_results;
+static int probe_dispatch_mode;
+void ui_calibration_results_show(const char *t,const char *text){(void)t;(void)text;probe_results++;}
 void ui_calibration_results_refresh(void){}
-static void run(void){lv_obj_t *card=lv_obj_create(lv_screen_active());ui_probe_accuracy_create(card,send_command,ready);ui_probe_accuracy_refresh(true);click(s_button);layout(s_popup);assert(!lv_obj_has_state(s_run,LV_STATE_DISABLED));state.homed_axes[0]=0;refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(!sends);strcpy(state.homed_axes,"xyz");refresh_status(NULL);lv_dropdown_set_selected(s_samples,2);click(s_run);assert(sends==1&&!strcmp(command,"PROBE_ACCURACY SAMPLES=20")&&!s_popup&&!s_status_timer);ui_probe_accuracy_hide();lv_obj_delete(card);}
+static bool probe_send(const char *command_text)
+{
+ if(probe_dispatch_mode==1)run_cb(NULL);
+ else if(probe_dispatch_mode==2)lv_obj_delete(s_popup);
+ else if(probe_dispatch_mode==3)owner++;
+ return send_command(command_text);
+}
+static void run(void){
+ probe_results=0;probe_dispatch_mode=0;
+ lv_obj_t *card=lv_obj_create(lv_screen_active());
+ ui_probe_accuracy_create(card,probe_send,ready);ui_probe_accuracy_refresh(true);
+ unsigned baseline=diagnostic_timers();
+ click(s_button);layout(s_popup);lv_dropdown_set_selected(s_samples,2);
+ lv_obj_t *initial=s_popup;lv_timer_t *initial_timer=s_status_timer;
+ open_cb(NULL);assert(s_popup==initial && s_status_timer==initial_timer && lv_dropdown_get_selected(s_samples)==2);
+ lv_dropdown_open(s_samples);lv_obj_update_layout(s_popup);
+ /* Native list's bottom border can lie on the exclusive display edge. */
+ lv_area_t area;lv_obj_get_coords(lv_dropdown_get_list(s_samples),&area);
+ assert(area.x1>=0 && area.y1>=0 && area.x2<lv_display_get_horizontal_resolution(NULL) && area.y2<=lv_display_get_vertical_resolution(NULL));
+ assert(lv_obj_get_style_text_font(lv_dropdown_get_list(s_samples),0)==lv_obj_get_style_text_font(s_samples,0));
+ lv_dropdown_close(s_samples);assert(!lv_obj_has_state(s_run,LV_STATE_DISABLED));
+ state.homed_axes[0]=0;refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(!sends);
+ strcpy(state.homed_axes,"xyz");refresh_status(NULL);click(s_run);
+ assert(sends==1 && !strcmp(command,"PROBE_ACCURACY SAMPLES=20") && !s_popup && !s_status_timer && probe_results==1);
+ run_cb(NULL);refresh_status(NULL);assert(sends==1 && diagnostic_timers()==baseline);
+ click(s_button);lv_dropdown_set_selected(s_samples,0);send_accept=false;click(s_run);
+ assert(sends==2 && s_popup && s_status_timer && lv_dropdown_get_selected(s_samples)==0 && probe_results==1);
+ assert(strstr(lv_label_get_text(s_status),"not accepted") && session.status==CALIBRATION_SESSION_ERROR);
+ refresh_status(NULL);assert(strstr(lv_label_get_text(s_status),"retry"));
+ send_accept=true;click(s_run);assert(sends==3 && !s_popup && probe_results==2 && strstr(command,"SAMPLES=5"));
+ for(unsigned cycle=0;cycle<10;cycle++) {
+  open_cb(NULL);assert(s_popup && diagnostic_timers()==baseline+1);
+  lv_obj_delete(s_popup);assert(!s_popup && !s_status && !s_samples && !s_run && !s_status_timer);
+  assert(diagnostic_timers()==baseline);refresh_status(NULL);run_cb(NULL);assert(sends==3);
+ }
+ open_cb(NULL);owner++;refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(sends==3);close_popup();
+ probe_dispatch_mode=1;open_cb(NULL);click(s_run);assert(sends==4 && probe_results==3 && !s_popup);
+ probe_dispatch_mode=2;open_cb(NULL);click(s_run);assert(sends==5 && probe_results==3 && !s_popup && diagnostic_timers()==baseline);
+ probe_dispatch_mode=3;open_cb(NULL);click(s_run);assert(sends==6 && probe_results==3 && s_popup);refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));close_popup();
+ lv_obj_delete(card);assert(!s_button);ui_probe_accuracy_refresh(true);ui_probe_accuracy_hide();assert(diagnostic_timers()==baseline);
+}
 #elif defined(TEST_ENDSTOP)
 #include "ui_endstop_status.c"
-static void run(void){ui_endstop_status_show();layout(s_popup);assert(queries==1);endstops.waiting=false;endstops.valid=true;endstops.count=12;for(unsigned i=0;i<12;i++){snprintf(endstops.items[i].name,sizeof(endstops.items[i].name),"stepper_%u_long_endstop_name",i);endstops.items[i].triggered=i%2;}refresh(NULL);layout(s_popup);assert(strstr(lv_label_get_text(s_body),"TRIGGERED")&&strstr(lv_label_get_text(s_body),"OPEN"));strcpy(state.printer_state,"printing");refresh(NULL);assert(queries==1&&strstr(lv_label_get_text(s_body),"paused"));owner++;refresh(NULL);assert(strstr(lv_label_get_text(s_body),"changed"));click(action(s_popup,0));assert(!s_popup&&!s_timer);}
+static void run(void){
+ unsigned baseline=diagnostic_timers();
+ ui_endstop_status_show();layout(s_popup);assert(queries==1);
+ lv_obj_t *initial=s_popup;lv_timer_t *initial_timer=s_timer;
+ ui_endstop_status_show();assert(s_popup==initial && s_timer==initial_timer && queries==1);
+ endstops.waiting=false;endstops.valid=true;endstops.count=12;
+ for(unsigned i=0;i<12;i++){snprintf(endstops.items[i].name,sizeof(endstops.items[i].name),"stepper_%u_long_endstop_name",i);endstops.items[i].triggered=i%2;}
+ refresh(NULL);layout(s_popup);assert(strstr(lv_label_get_text(s_body),"TRIGGERED") && strstr(lv_label_get_text(s_body),"OPEN"));
+ strcpy(state.printer_state,"printing");refresh(NULL);assert(queries==1 && strstr(lv_label_get_text(s_body),"paused"));
+ owner++;refresh(NULL);assert(strstr(lv_label_get_text(s_body),"changed"));click(action(s_popup,0));assert(!s_popup && !s_timer && diagnostic_timers()==baseline);
+ strcpy(state.printer_state,"ready");
+ for(unsigned cycle=0;cycle<10;cycle++) {
+  unsigned before=queries;ui_endstop_status_show();assert(queries==before+1 && endstops.waiting && diagnostic_timers()==baseline+1);
+  lv_obj_delete(s_popup);assert(!s_popup && !s_body && !s_timer && !endstops.waiting && !endstops.valid);
+  assert(diagnostic_timers()==baseline);
+  /* Simulate a late response and timer invocation after the owner is gone. */
+  endstops.valid=true;endstops.count=1;refresh(NULL);assert(queries==before+1);
+  ui_endstop_status_close();assert(!endstops.valid && !endstops.count);
+ }
+}
 #elif defined(TEST_RESULTS)
 #include "ui_calibration_results.c"
 static void run(void){lv_obj_t *popup=NULL,*confirm=NULL,*label=NULL,*apply=NULL;calibration_session_snapshot_t snap;uint32_t gen=0;char display[1200];ui_calibration_results_context_t context={.results_popup=&popup,.save_confirm_popup=&confirm,.results_label=&label,.apply_restart_button=&apply,.session_snapshot=&snap,.session_generation=&gen,.display=display,.display_size=sizeof(display),.send_gcode=send_command};ui_calibration_results_init(&context);ui_calibration_results_show("CALIBRATION RESULTS","Waiting for Klipper...");layout(popup);assert(lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN));session.status=CALIBRATION_SESSION_RESULTS;session.save_available=session.completed=true;session.generation=2;strcpy(session.results,"Probe calibration complete.\nReview all measurements before saving.\n");for(int i=0;i<10;i++)strcat(session.results,"Repeated result line with printer-specific information.\n");ui_calibration_results_refresh();layout(popup);assert(!lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN));click(apply);layout(confirm);click(action(confirm,0));assert(!confirm&&popup&&!sends);click(apply);click(action(confirm,1));assert(sends==1&&!strcmp(command,"SAVE_CONFIG")&&popup&&confirm);

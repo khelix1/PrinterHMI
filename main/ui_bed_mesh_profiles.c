@@ -1,4 +1,7 @@
 #include "ui_bed_mesh_profiles.h"
+#include "printer_connection_policy.h"
+#include "moonraker_config_controller.h"
+#include "ui_value_update.h"
 #include "ui_text.h"
 
 #include <stdint.h>
@@ -11,6 +14,8 @@
 
 typedef struct {
     lv_obj_t *owner;
+    uint32_t owner_generation;
+    lv_obj_t *actions[4],*connection_label,*confirm_connection_label;
     lv_obj_t *profile_popup;
     lv_obj_t *profile_list;
     lv_obj_t *profile_editor;
@@ -23,6 +28,32 @@ typedef struct {
 } ui_bed_mesh_profiles_state_t;
 
 static ui_bed_mesh_profiles_state_t s;
+
+static void profile_ref_deleted(lv_event_t *event){
+    lv_obj_t *object=lv_event_get_target_obj(event);
+    for(unsigned i=0;i<4;i++)if(s.actions[i]==object)s.actions[i]=NULL;
+    if(s.connection_label==object)s.connection_label=NULL;
+    if(s.confirm_connection_label==object)s.confirm_connection_label=NULL;
+}
+static void watch_profile_ref(lv_obj_t *object){if(object)lv_obj_add_event_cb(object,profile_ref_deleted,LV_EVENT_DELETE,NULL);}
+void ui_bed_mesh_profiles_refresh_availability(void){
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    const char *reason=s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
+    for(unsigned i=0;i<4;i++)if(s.actions[i]) {
+        bool blocked=reason[0] || ((i==1 || i==2) && s.selected_profile<0);
+        if(blocked)lv_obj_add_state(s.actions[i],LV_STATE_DISABLED);else lv_obj_remove_state(s.actions[i],LV_STATE_DISABLED);
+    }
+    ui_value_set_text(s.connection_label,reason);ui_value_set_text(s.confirm_connection_label,reason);
+}
+
+static bool profile_command_ready(void)
+{
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    const char *reason=s.owner_generation!=moonraker_config_generation()?
+        "Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
+    if(!reason[0])return true;
+    ui_cal_dialog_notice(UI_STATUS_WARNING,"BED MESH NOT READY",reason);return false;
+}
 
 static void free_pending_profile_name(void)
 {
@@ -138,6 +169,13 @@ static void close_profile_popup_cb(lv_event_t *e)
     }
 }
 
+static void profile_popup_deleted(lv_event_t *event){
+    lv_obj_t *popup=lv_event_get_target_obj(event);
+    if(popup==s.profile_popup){s.profile_popup=NULL;close_profile_popup_cb(NULL);}
+    if(popup==s.profile_confirm){s.profile_confirm=NULL;free_pending_profile_name();}
+    if(popup==s.profile_editor){s.profile_editor=NULL;s.profile_name_input=NULL;}
+}
+
 static const char *selected_profile_name(void)
 {
     if (s.selected_profile < 0 ||
@@ -165,6 +203,7 @@ static void profile_row_cb(lv_event_t *e)
     }
 
     s.selected_profile = (int16_t)index;
+    ui_bed_mesh_profiles_refresh_availability();
 
     lv_obj_t *selected = lv_event_get_target(e);
 
@@ -187,6 +226,7 @@ static void load_selected_profile_cb(lv_event_t *e)
 {
     (void)e;
 
+    if(!profile_command_ready())return;
     const char *name = selected_profile_name();
 
     if (!name || !s.command) {
@@ -213,6 +253,7 @@ static void load_selected_profile_cb(lv_event_t *e)
 static void confirmed_profile_command(
     const char *operation)
 {
+    if(!profile_command_ready())return;
     if (!operation ||
         !s.pending_profile_name ||
         !s.command) {
@@ -297,6 +338,7 @@ static void show_profile_confirmation(
         return;
     }
 
+    lv_obj_add_event_cb(s.profile_confirm,profile_popup_deleted,LV_EVENT_DELETE,NULL);
     ui_popup_add_title(
         s.profile_confirm,
         removing
@@ -324,7 +366,7 @@ static void show_profile_confirmation(
         close_profile_confirm_cb,
         NULL,
         NULL);
-    ui_popup_add_footer_action(
+    s.actions[3]=ui_popup_add_footer_action(
         s.profile_confirm,
         removing
             ? UI_POPUP_ACTION_DANGER
@@ -339,6 +381,9 @@ static void show_profile_confirmation(
             : confirm_save_profile_cb,
         NULL,
         NULL);
+    watch_profile_ref(s.actions[3]);
+    s.confirm_connection_label=ui_popup_add_caption(s.profile_confirm,"",24,48,452);watch_profile_ref(s.confirm_connection_label);
+    ui_bed_mesh_profiles_refresh_availability();
 }
 
 static void save_name_continue_cb(lv_event_t *e)
@@ -381,6 +426,7 @@ static void save_as_profile_cb(lv_event_t *e)
     if (!s.profile_editor) {
         return;
     }
+    lv_obj_add_event_cb(s.profile_editor,profile_popup_deleted,LV_EVENT_DELETE,NULL);
 
     ui_popup_add_title(
         s.profile_editor,
@@ -476,6 +522,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
     if (!s.profile_popup) {
         return;
     }
+    lv_obj_add_event_cb(s.profile_popup,profile_popup_deleted,LV_EVENT_DELETE,NULL);
 
     s.selected_profile = -1;
 
@@ -488,13 +535,14 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
         s.profile_popup,
         44);
 
+    s.connection_label=ui_popup_add_caption(s.profile_popup,"",24,50,672);watch_profile_ref(s.connection_label);
     s.profile_list =
         ui_popup_add_list(
             s.profile_popup,
             24,
-            64,
+            88,
             672,
-            318);
+            294);
 
     if (s.profile_list) {
         if (s.mesh.profile_count == 0) {
@@ -557,7 +605,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
 
     ui_popup_add_standard_footer_divider(
         s.profile_popup);
-    ui_popup_add_action_aligned(
+    s.actions[0]=ui_popup_add_action_aligned(
         s.profile_popup,
         UI_POPUP_ACTION_SECONDARY,
         LV_SYMBOL_SAVE " SAVE AS",
@@ -569,7 +617,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
         save_as_profile_cb,
         NULL,
         NULL);
-    ui_popup_add_action_aligned(
+    s.actions[1]=ui_popup_add_action_aligned(
         s.profile_popup,
         UI_POPUP_ACTION_PRIMARY,
         LV_SYMBOL_PLAY " LOAD",
@@ -581,7 +629,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
         load_selected_profile_cb,
         NULL,
         NULL);
-    ui_popup_add_action_aligned(
+    s.actions[2]=ui_popup_add_action_aligned(
         s.profile_popup,
         UI_POPUP_ACTION_DANGER,
         LV_SYMBOL_TRASH " REMOVE",
@@ -602,6 +650,8 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *e)
         close_profile_popup_cb,
         NULL,
         NULL);
+    for(unsigned i=0;i<3;i++)watch_profile_ref(s.actions[i]);
+    ui_bed_mesh_profiles_refresh_availability();
 }
 
 
@@ -612,6 +662,7 @@ void ui_bed_mesh_profiles_init(
 {
     ui_bed_mesh_profiles_close();
     s.owner = owner;
+    s.owner_generation=moonraker_config_generation();
     s.command = command_cb;
     s.selected_profile = -1;
 }

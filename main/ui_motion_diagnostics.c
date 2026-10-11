@@ -1,3 +1,4 @@
+#include "ui_selector_style.h"
 #include "ui_motion_diagnostics.h"
 #include <stdio.h>
 #include <string.h>
@@ -384,8 +385,7 @@ static void show_view(motion_view_t view)
     } else if (view == VIEW_DRIVERS) {
         s->driver_selector = lv_dropdown_create(body);
         lv_obj_set_size(s->driver_selector, LV_PCT(100), 54);
-        ui_apply_surface_role(s->driver_selector, UI_SURFACE_TEXT_INPUT);
-        lv_obj_set_style_text_font(s->driver_selector, ui_font_with_fallback(UI_FONT_BODY), 0);
+        ui_selector_style(s->driver_selector, UI_FONT_BODY);
         lv_dropdown_set_options(s->driver_selector, "Waiting for drivers...");
         lv_obj_add_event_cb(s->driver_selector, driver_selected_cb, LV_EVENT_VALUE_CHANGED, NULL);
         s->status = layout_label(body, "WAITING FOR DRIVER STATUS", true);
@@ -394,8 +394,7 @@ static void show_view(motion_view_t view)
         layout_label(body, "Calculate from belt/pulley or leadscrew geometry.\nRetain gear_ratio for geared axes.", false);
         s->mode = lv_dropdown_create(body);
         lv_obj_set_size(s->mode, LV_PCT(100), 54);
-        ui_apply_surface_role(s->mode, UI_SURFACE_TEXT_INPUT);
-        lv_obj_set_style_text_font(s->mode, ui_font_with_fallback(UI_FONT_BODY), 0);
+        ui_selector_style(s->mode, UI_FONT_BODY);
         lv_dropdown_set_options(s->mode, "Belt and pulley\nLeadscrew");
         lv_obj_add_event_cb(s->mode, mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_t *pair = layout_pair(body);

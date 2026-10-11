@@ -177,27 +177,40 @@ void ui_telemetry_charts_refresh(int64_t end_us,bool held)
     /* One fixed-time bin per two seconds. Missing intervals stay empty and
      * named tool lookups prevent traces from mixing after active-tool changes. */
     int64_t end_tick=end_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
+    int32_t *actual_values[4],*target_values[4];
+    double minima[4]={NAN,NAN,NAN,NAN},maxima[4]={NAN,NAN,NAN,NAN};
+    unsigned counts[4]={0};
     for(unsigned n=0;n<4;n++) {
         telemetry_chart_t *c=&s_charts[n];
-        int32_t *actual=lv_chart_get_series_y_array(c->chart,c->actual);
-        int32_t *target=lv_chart_get_series_y_array(c->chart,c->reference);
-        for(unsigned i=0;i<s_points;i++)actual[i]=target[i]=LV_CHART_POINT_NONE;
-        double low=NAN,high=NAN,min=NAN,max=NAN;unsigned count=0;
-        size_t history_count=telemetry_history_count();
-        for(size_t i=0;i<history_count;i++) {
-            telemetry_sample_t sample;if(!telemetry_history_get(i,&sample))continue;
-            int64_t age=end_tick-sample.time_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
-            if(age<0 || age>=(int64_t)s_points)continue;
-            unsigned index=s_points-1-(unsigned)age;
-            double value=channel_value(&sample,c->channel,false),reference=channel_value(&sample,c->channel,true);
-            actual[index]=plot_value(value);
+        actual_values[n]=lv_chart_get_series_y_array(c->chart,c->actual);
+        target_values[n]=lv_chart_get_series_y_array(c->chart,c->reference);
+        for(unsigned i=0;i<s_points;i++)actual_values[n][i]=target_values[n][i]=LV_CHART_POINT_NONE;
+    }
+    /* Decode each history sample once for all visible channels. No extra
+     * history allocation or chart objects are needed while scrolling. */
+    size_t history_count=telemetry_history_count();
+    for(size_t i=0;i<history_count;i++) {
+        telemetry_sample_t sample;if(!telemetry_history_get(i,&sample))continue;
+        int64_t age=end_tick-sample.time_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
+        if(age<0 || age>=(int64_t)s_points)continue;
+        unsigned index=s_points-1-(unsigned)age;
+        for(unsigned n=0;n<4;n++) {
+            double value=channel_value(&sample,s_charts[n].channel,false);
+            double reference=channel_value(&sample,s_charts[n].channel,true);
+            actual_values[n][index]=plot_value(value);
             if(isfinite(value)) {
-                if(!isfinite(min) || value<min)min=value;
-                if(!isfinite(max) || value>max)max=value;
-                low=min;high=max;count++;
+                if(!isfinite(minima[n]) || value<minima[n])minima[n]=value;
+                if(!isfinite(maxima[n]) || value>maxima[n])maxima[n]=value;
+                counts[n]++;
             }
-            if(isfinite(reference) && reference>0)target[index]=plot_value(reference);
+            if(isfinite(reference) && reference>0)target_values[n][index]=plot_value(reference);
         }
+    }
+    for(unsigned n=0;n<4;n++) {
+        telemetry_chart_t *c=&s_charts[n];
+        int32_t *actual=actual_values[n],*target=target_values[n];
+        double min=minima[n],max=maxima[n],low=min,high=max;
+        unsigned count=counts[n];
         if(!isfinite(low)){low=0;high=100;}
         if(s_chart_include_targets)for(unsigned i=0;i<s_points;i++)if(target[i]!=LV_CHART_POINT_NONE) {
             double v=target[i]/10.0;if(v<low)low=v;if(v>high)high=v;

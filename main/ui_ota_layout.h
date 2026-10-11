@@ -44,7 +44,9 @@ static inline lv_obj_t *ui_ota_action(lv_obj_t *popup,ui_popup_action_t kind,con
 }
 static inline void ui_ota_fit_action(lv_event_t *event)
 {
-    lv_obj_t *label=lv_obj_get_child(lv_event_get_target_obj(event),0);
+    if (!event || lv_event_get_target_obj(event) != lv_event_get_current_target_obj(event)) return;
+    lv_obj_t *label=lv_obj_get_child(lv_event_get_current_target_obj(event),0);
+    if (!label || !lv_obj_check_type(label, &lv_label_class)) return;
     lv_obj_set_width(label,LV_PCT(100));
     ui_text_fit_single_line(label,UI_FONT_BODY);
 }

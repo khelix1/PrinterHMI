@@ -9,12 +9,21 @@
 typedef struct {
     lv_obj_t *blocker;
     lv_obj_t *popup;
+    lv_obj_t *owner;
     lv_obj_t *footer;
     lv_obj_t *footer_buttons[3];
     int32_t footer_widths[3];
     int32_t footer_columns[4];
     int32_t footer_rows[2];
 } ui_popup_modal_ctx_t;
+
+static void modal_owner_deleted_cb(lv_event_t *event)
+{
+    ui_popup_modal_ctx_t *ctx = lv_event_get_user_data(event);
+    if (!ctx) return;
+    ctx->owner = NULL;
+    if (ctx->popup) lv_obj_delete(ctx->popup);
+}
 
 static void modal_blocker_deleted_cb(lv_event_t *event)
 {
@@ -23,7 +32,9 @@ static void modal_blocker_deleted_cb(lv_event_t *event)
     if (!ctx) return;
 
     ctx->blocker = NULL;
-    if (!ctx->popup) free(ctx);
+    /* A modal without its blocker would expose the underlying page. */
+    if (ctx->popup) lv_obj_delete(ctx->popup);
+    else free(ctx);
 }
 
 static void modal_popup_deleted_cb(lv_event_t *event)
@@ -32,6 +43,10 @@ static void modal_popup_deleted_cb(lv_event_t *event)
         event ? lv_event_get_user_data(event) : NULL;
     if (!ctx) return;
 
+    if (ctx->owner) {
+        lv_obj_remove_event_cb_with_user_data(ctx->owner, modal_owner_deleted_cb, ctx);
+        ctx->owner = NULL;
+    }
     ctx->popup = NULL;
 
     if (ctx->blocker) {
@@ -661,6 +676,15 @@ static ui_popup_modal_ctx_t *modal_context(lv_obj_t *popup)
             return lv_event_dsc_get_user_data(dsc);
     }
     return NULL;
+}
+
+void ui_popup_set_owner(lv_obj_t *popup, lv_obj_t *owner)
+{
+    ui_popup_modal_ctx_t *ctx = modal_context(popup);
+    if (!ctx || owner == popup || ctx->owner == owner) return;
+    if (ctx->owner) lv_obj_remove_event_cb_with_user_data(ctx->owner, modal_owner_deleted_cb, ctx);
+    ctx->owner = owner;
+    if (owner) lv_obj_add_event_cb(owner, modal_owner_deleted_cb, LV_EVENT_DELETE, ctx);
 }
 
 lv_obj_t *ui_popup_find_owner(lv_obj_t *object)

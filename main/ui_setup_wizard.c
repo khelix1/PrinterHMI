@@ -56,6 +56,7 @@ static lv_obj_t *s_camera_list;
 static char s_selected_ssid[33];
 static int s_selected_camera = -1;
 static bool s_wifi_done, s_printer_done, s_camera_done;
+static uint32_t s_wifi_verify_tick, s_camera_owner;
 
 
 enum {
@@ -477,7 +478,14 @@ static void wifi_verify(lv_timer_t *timer)
 {
     (void)timer;
     wifi_ap_record_t info;
-    if (esp_wifi_sta_get_ap_info(&info) != ESP_OK) return;
+    if (esp_wifi_sta_get_ap_info(&info) != ESP_OK ||
+        strcmp((const char *)info.ssid, s_selected_ssid)) {
+        if (lv_tick_get() - s_wifi_verify_tick >= 30000) {
+            delete_poll();
+            set_status("Wi-Fi verification timed out. Check the password and tap Connect to retry.");
+        }
+        return;
+    }
     delete_poll();
     s_wifi_done = true;
     set_status("Wi-Fi verified. Returning to Setup Center…");
@@ -492,6 +500,7 @@ static void wifi_save_cb(lv_event_t *event)
     if (!s_wifi_connect || !s_wifi_connect(s_selected_ssid, password)) { set_status("Could not start the connection. Check the password and try again."); return; }
     set_status("Connecting and verifying Wi-Fi…");
     delete_poll();
+    s_wifi_verify_tick = lv_tick_get();
     s_poll = lv_timer_create(wifi_verify, 250, NULL);
 }
 
@@ -517,7 +526,10 @@ static void printer_editor_discover_cb(void)
 {
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_ip_info_t ip = {0};
-    if (!netif || esp_netif_get_ip_info(netif, &ip) != ESP_OK || ip.ip.addr == 0) return;
+    if (!netif || esp_netif_get_ip_info(netif, &ip) != ESP_OK || ip.ip.addr == 0) {
+        set_status("Connect to Wi-Fi before discovering printers.");
+        return;
+    }
     moonraker_discovery_show_in_parent(s_setup_content,
                                  "SETUP: searching for Moonraker printers...",
                              printer_editor_discover_closed,
@@ -533,9 +545,20 @@ static void printer_full_options_cb(lv_event_t *event)
                                       printer_editor_discover_cb);
 }
 
+static bool camera_owner_current(void)
+{
+    if (s_camera_owner == moonraker_config_generation()) return true;
+    delete_poll();
+    s_selected_camera = -1;
+    if (s_camera_list) lv_obj_clean(s_camera_list);
+    set_status("Printer changed. Discover cameras again for the active printer.");
+    return false;
+}
+
 static void camera_save_cb(lv_event_t *event)
 {
     (void)event;
+    if (!camera_owner_current()) return;
     const int profile = moonraker_config_active_profile_index();
     camera_catalog_entry_t entry;
     if (s_selected_camera < 0 || !camera_catalog_get(profile, s_selected_camera, &entry) || !entry.configured) {
@@ -563,6 +586,7 @@ static void camera_actions(bool verified)
 static void camera_test_poll(lv_timer_t *timer)
 {
     (void)timer;
+    if (!camera_owner_current()) return;
     bool ok = false;
     int width = 0;
     int height = 0;
@@ -581,6 +605,7 @@ static void camera_test_poll(lv_timer_t *timer)
 
 static void camera_selected_cb(lv_event_t *event)
 {
+    if (!camera_owner_current()) return;
     s_selected_camera = (int)(uintptr_t)lv_event_get_user_data(event);
     const int profile = moonraker_config_active_profile_index();
     camera_catalog_entry_t entry;
@@ -596,11 +621,14 @@ static void camera_selected_cb(lv_event_t *event)
 static void camera_discovery_poll(lv_timer_t *timer)
 {
     (void)timer;
+    if (!camera_owner_current()) return;
     if (camera_discovery_busy()) return;
     bool found = false;
     size_t count = 0;
     moonraker_webcam_t ignored;
     if (!camera_discovery_take_result(&ignored, &found, &count)) return;
+    /* Importing camera slot 1 advances our own active configuration. */
+    s_camera_owner = moonraker_config_generation();
     delete_poll();
     const int profile = moonraker_config_active_profile_index();
     if (!found || !count) {
@@ -622,6 +650,7 @@ static void camera_discovery_poll(lv_timer_t *timer)
 static void camera_open(void)
 {
     delete_poll();
+    s_camera_owner = moonraker_config_generation();
     s_selected_camera = -1;
     setup_clear_content();
     setup_begin_content("Printer cameras","Searching this printer for configured cameras...");

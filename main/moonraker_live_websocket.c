@@ -319,6 +319,7 @@ static bool build_subscription(
             "{\"jsonrpc\":\"2.0\","
             "\"method\":\"printer.objects.subscribe\","
             "\"params\":{\"objects\":{"
+            "\"webhooks\":[\"state\",\"state_message\"],"
             "\"print_stats\":null,"
             "\"motion_report\":null,"
             "\"display_status\":null,"

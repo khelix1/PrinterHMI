@@ -14,6 +14,16 @@ static uint8_t stored,staged;
 static bool has_saved,fail_write,legacy_saved;
 static uint8_t legacy_value;
 static char printer[80]="Printer A";
+static moonraker_profile_t profiles[MOONRAKER_CONFIG_MAX_PROFILES];
+static bool health_known[MOONRAKER_CONFIG_MAX_PROFILES],health_online[MOONRAKER_CONFIG_MAX_PROFILES],health_fresh[MOONRAKER_CONFIG_MAX_PROFILES];
+static int active_profile;
+static unsigned chooser_opens;
+static void open_chooser(void){chooser_opens++;}
+int moonraker_config_active_profile_index(void){return active_profile;}
+const moonraker_profile_t *moonraker_config_profile(int i){return i>=0&&i<MOONRAKER_CONFIG_MAX_PROFILES?&profiles[i]:NULL;}
+bool printer_profile_health_get(int i,bool*k){if(k)*k=health_known[i];return health_online[i];}
+bool printer_profile_health_live_state_fresh(int i,int64_t age){assert(age==5000000LL);return health_fresh[i];}
+
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
@@ -76,6 +86,43 @@ static void attention_checks(void) {
  ui_toast_close();
 }
 
+static void inactive_profile_checks(void){
+ ui_toast_close();assert(ui_toast_set_level(UI_NOTIFY_QUIET));
+ static unsigned run;run++;
+ memset(profiles,0,sizeof(profiles));memset(health_known,0,sizeof(health_known));memset(health_online,0,sizeof(health_online));memset(health_fresh,0,sizeof(health_fresh));
+ active_profile=0;
+ profiles[1]=(moonraker_profile_t){.configured=true,.port=7126};
+ snprintf(profiles[1].host,sizeof(profiles[1].host),"printer-b-%u.local",run);
+ snprintf(profiles[1].name,sizeof(profiles[1].name),"Printer B");
+ moonraker_state_t state={.moonraker_ok=true,.live_data_ok=true};
+ health_known[1]=true;ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_online[1]=health_fresh[1]=true;ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_known[1]=false;health_online[1]=false;ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_known[1]=true;ui_toast_observe_profiles(&state);
+ assert(s_notice_count==1&&s_notices[0].kind==UI_STATUS_WARNING&&s_notices[0].profile_index==1&&!strcmp(s_notices[0].printer,"Printer B"));bounds(s_toast);
+ unsigned logged=log_count;for(unsigned i=0;i<10;i++)ui_toast_observe_profiles(&state);assert(s_notice_count==1&&log_count==logged);
+ health_online[1]=true;health_fresh[1]=false;ui_toast_observe_profiles(&state);assert(!strcmp(s_notices[0].title,"PRINTER OFFLINE"));
+ health_fresh[1]=true;ui_toast_observe_profiles(&state);assert(s_notice_count==1&&s_notices[0].essential&&!strcmp(s_notices[0].title,"PRINTER RECONNECTED"));
+ ui_toast_set_printer_chooser_action(open_chooser);unsigned opened_before=chooser_opens;owner++;open_notice(NULL);assert(chooser_opens==opened_before+1&&active_profile==0&&!s_notice_count);
+ /* Equal display names must not merge independent printers' notices. */
+ profiles[2]=profiles[1];profiles[2].port=7127;
+ health_known[2]=health_online[2]=health_fresh[2]=true;
+ ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_online[1]=health_online[2]=false;ui_toast_observe_profiles(&state);assert(s_notice_count==2);
+ health_online[2]=true;ui_toast_observe_profiles(&state);assert(s_notice_count==2);
+ bool first_offline=false,second_recovered=false;
+ for(unsigned i=0;i<s_notice_count;i++){
+  if(s_notices[i].profile_index==1)first_offline=!strcmp(s_notices[i].title,"PRINTER OFFLINE");
+  if(s_notices[i].profile_index==2)second_recovered=!strcmp(s_notices[i].title,"PRINTER RECONNECTED");
+ }
+ assert(first_offline&&second_recovered);ui_toast_close();profiles[2].configured=false;
+ /* Edited endpoints and initial offline slots must establish a new baseline. */
+ profiles[1].port++;health_online[1]=false;ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_online[1]=true;ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_online[1]=false;ui_toast_observe_profiles(&state);assert(s_notice_count==1);
+ ui_toast_close();profiles[1].configured=false;ui_toast_observe_profiles(&state);assert(!s_notice_count);
+}
+
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned narrow=0;narrow<3;narrow++){
   lv_display_set_resolution(d,(int[]){1024,640,480}[narrow],narrow==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large,.reduced_motion=true});has_saved=false;legacy_saved=false;stored=0;fail_write=false;log_count=changes=0;ui_toast_init();assert(!ui_toast_confirmations_enabled());
@@ -120,6 +167,7 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   observed.live_data_ok=true;ui_toast_observe_printer(&observed);lv_tick_inc(3000);ui_toast_observe_printer(&observed);assert(!s_notice_count);
   assert(ui_toast_set_level(UI_NOTIFY_QUIET));strcpy(observed.printer_state,"complete");ui_toast_observe_printer(&observed);assert(!s_notice_count);
   attention_checks();
+  inactive_profile_checks();
   ui_toast_preferences_show(NULL);lv_obj_delete(s_preference_popup);assert(!s_preference_popup&&!s_preference_value);assert(!lv_obj_get_child_count(lv_layer_top()));strcpy(printer,"Printer A");
  }
  lv_display_delete(d);lv_deinit();puts("PASS: global quiet/confirmation policy, persistent faults, deduplication/priority/bounded queue, event history, profile identity, preference persistence/failure, layouts and lifecycle across all themes/densities/text sizes/viewports");return 0;}

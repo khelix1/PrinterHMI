@@ -1,4 +1,6 @@
 #include "ui_settings.h"
+#include "firmware_identity.h"
+#include "ui_scroll_anchor.h"
 #include "ui_text.h"
 #include "ui_toast.h"
 #include "ui_global_estop.h"
@@ -48,6 +50,14 @@ static lv_obj_t *s_timezone_label = NULL;
 static lv_obj_t *s_theme_label = NULL;
 static lv_obj_t *s_notifications_label;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
+static lv_obj_t *s_settings_content;
+static void settings_rebuild_preserving_scroll(void)
+{
+    if(!s_theme_rebuild_cb)return;
+    ui_scroll_anchor_t saved=ui_scroll_anchor_capture(s_settings_content);
+    s_theme_rebuild_cb();
+    ui_scroll_anchor_restore(s_settings_content,saved);
+}
 
 static void settings_timezone_changed(void)
 {
@@ -75,7 +85,7 @@ static void settings_theme_changed(void)
     }
 
     if (s_theme_rebuild_cb) {
-        s_theme_rebuild_cb();
+        settings_rebuild_preserving_scroll();
     }
 }
 
@@ -87,7 +97,7 @@ static void settings_theme_card_cb(lv_event_t *event)
 
 static void settings_appearance_changed(void)
 {
-    if (s_theme_rebuild_cb) s_theme_rebuild_cb();
+    settings_rebuild_preserving_scroll();
 }
 
 static void settings_accent_card_cb(lv_event_t *event)
@@ -582,6 +592,12 @@ void ui_settings_show_page(
             ? app->version
             : "--";
 
+    firmware_identity_t identity;
+    firmware_identity_get(&identity);
+    char source_revision[40];
+    snprintf(source_revision, sizeof(source_revision), "%s%s", identity.revision,
+             identity.modified ? " (modified)" : "");
+
     char image_build[48];
 
     if (app && app->date[0] && app->time[0]) {
@@ -663,6 +679,7 @@ void ui_settings_show_page(
      * Scrollable Settings body
      */
     lv_obj_t *content = lv_obj_create(settings_panel);
+    s_settings_content = content;
 
     lv_obj_set_size(
         content,
@@ -745,7 +762,9 @@ void ui_settings_show_page(
     const int firmware_row_1 = first_row_y;
     const int firmware_row_2 = firmware_row_1 + row_height + 1;
     const int firmware_row_3 = firmware_row_2 + row_height + 1;
-    const int firmware_height = firmware_row_3 + action_height + 6;
+    const int firmware_row_4 = firmware_row_3 + row_height + 1;
+    const int firmware_row_5 = firmware_row_4 + row_height + 1;
+    const int firmware_height = firmware_row_5 + action_height + 6;
     lv_obj_t *firmware = ui_settings_section_create(
         content,
         "FIRMWARE & UPDATES",
@@ -774,12 +793,21 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         firmware, firmware_row_2 + row_height);
 
+    ui_settings_section_add_row(
+        firmware, "Firmware Channel", "Build channel of the running image",
+        firmware_identity_channel_name(identity.channel), firmware_row_3, NULL);
+    ui_settings_section_add_divider(firmware, firmware_row_3 + row_height);
+    ui_settings_section_add_row(
+        firmware, "Source Revision", "Source commit used to build this image",
+        source_revision, firmware_row_4, NULL);
+    ui_settings_section_add_divider(firmware, firmware_row_4 + row_height);
+
     ui_settings_section_add_action_row(
         firmware,
         "Firmware Update",
         "Check for and install an OTA update",
         "OTA UPDATE",
-        firmware_row_3,
+        firmware_row_5,
         ota_cb,
         false);
 
@@ -1216,6 +1244,7 @@ void hide_settings_tab(void)
     if (settings_panel) {
         lv_obj_delete(settings_panel);
         settings_panel = NULL;
+        s_settings_content = NULL;
 
         settings_sleep_label = NULL;
         s_timezone_label = NULL;

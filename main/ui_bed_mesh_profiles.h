@@ -17,3 +17,5 @@ void ui_bed_mesh_profiles_show_cb(
     lv_event_t *event);
 
 void ui_bed_mesh_profiles_close(void);
+
+void ui_bed_mesh_profiles_refresh_availability(void);

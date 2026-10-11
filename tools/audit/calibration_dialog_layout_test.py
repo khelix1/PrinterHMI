@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"freertos/task.h").write_text("#pragma once\n#include <stdint.h>\nvoid vTaskDelay(uint32_t);\n")
     (tmp/"esp_app_desc.h").write_text("#pragma once\ntypedef struct { char version[32],date[16],time[16]; } esp_app_desc_t;\nconst esp_app_desc_t *esp_app_get_description(void);\n")
     (tmp/"esp_ota_ops.h").write_text("#pragma once\ntypedef struct { char label[32]; } esp_partition_t;\nconst esp_partition_t *esp_ota_get_running_partition(void);\n")
-    sources=["macro_parameter_utils.c","ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","ui_page_layout_profile.c"]
+    sources=["firmware_identity.c","macro_parameter_utils.c","ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","ui_page_layout_profile.c"]
     common=["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,"-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main")]
     def compile_ui(source):
         obj=tmp/(source.replace("/","_")+".o")
@@ -52,6 +52,6 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         subprocess.run([str(executable)],check=True)
     # Compile every changed calibration owner independently, including the
     # page's Probe/Z and Axis Twist confirmation constructors.
-    for source in ["ui_ota_popup.c","ui_ota_release_browser.c","ota_ui_controller.c","ui_calibration.c","ui_calibration_motion.c","ui_calibration_geometry.c","ui_calibration_pid.c","ui_calibration_pressure_advance.c","ui_calibration_manual_probe.c","ui_calibration_results.c","ui_calibration_custom.c","ui_probe_accuracy.c","ui_endstop_status.c","ui_motion_diagnostics.c"]:
+    for source in ["firmware_identity.c","ui_ota_popup.c","ui_ota_release_browser.c","ota_ui_controller.c","ui_calibration.c","ui_calibration_motion.c","ui_calibration_geometry.c","ui_calibration_pid.c","ui_calibration_pressure_advance.c","ui_calibration_manual_probe.c","ui_calibration_results.c","ui_calibration_custom.c","ui_probe_accuracy.c","ui_endstop_status.c","ui_motion_diagnostics.c"]:
         compile_ui(source)
     print("PASS: separate calibration translation units with warnings treated as errors")

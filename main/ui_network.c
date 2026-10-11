@@ -579,7 +579,7 @@ void ui_network_create_objects(
                 UI_BUTTON_ICON_HORIZONTAL);
 
         if (scan_button) {
-            lv_obj_set_size(scan_button, 294, 38);
+            lv_obj_set_size(scan_button, 294, 44);
             lv_obj_set_pos(scan_button, 18, 48);
 
             if (wifi_clicked_cb) {
@@ -611,7 +611,7 @@ void ui_network_create_objects(
             lv_obj_set_size(
                 profiles_button,
                 294,
-                38);
+                44);
 
             lv_obj_set_pos(
                 profiles_button,

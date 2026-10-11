@@ -1,4 +1,6 @@
 #include "ui_tools.h"
+#include "printer_connection_policy.h"
+#include "ui_value_update.h"
 
 #include <stdint.h>
 
@@ -13,7 +15,26 @@
 
 static lv_obj_t *s_root;
 static lv_obj_t *s_tiles;
+static lv_obj_t *s_body_labels[4];
+static lv_timer_t *s_connection_timer;
+static const char *const s_descriptions[]={"Tune and validate your printer.","Probe and visualize the bed surface.","Inspect devices and live readings.","Run available printer macros."};
+static void tools_connection_refresh(lv_timer_t *timer)
+{
+    (void)timer;if(!s_root)return;
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    for(unsigned i=0;i<4;i++) {
+        const char *reason=i<2?printer_idle_reason(&state):printer_connection_reason(&state);
+        ui_value_set_text(s_body_labels[i],reason[0]?reason:s_descriptions[i]);
+    }
+}
 static ui_tools_open_cb_t s_callbacks[4];
+
+static void tools_deleted(lv_event_t *event){
+    if(lv_event_get_target_obj(event)!=s_root)return;
+    if(s_connection_timer)lv_timer_delete(s_connection_timer);
+    s_connection_timer=NULL;s_root=NULL;s_tiles=NULL;
+    for(unsigned i=0;i<4;i++)s_body_labels[i]=NULL;
+}
 
 static void tile_cb(lv_event_t *event)
 {
@@ -61,6 +82,7 @@ static void add_tile(const char *icon, lv_color_t icon_color,
     lv_obj_set_grid_cell(title_label, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_START, 0, 1);
 
     lv_obj_t *body_label = lv_label_create(button);
+    s_body_labels[index]=body_label;
     lv_label_set_text(body_label, body);
     ui_apply_text_body(body_label);
 
@@ -113,11 +135,12 @@ void ui_tools_show(void)
     }
 
     s_root = lv_obj_create(lv_screen_active());
+    lv_obj_add_event_cb(s_root,tools_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_size(s_root, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
     lv_obj_set_pos(s_root, UI_PAGE_ROOT_X, UI_PAGE_ROOT_Y);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
-    if(ui_theme_is_studio()){studio_tools_create();return;}
+    if(ui_theme_is_studio()){studio_tools_create();s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);return;}
     ui_page_title_create(s_root, LV_SYMBOL_SETTINGS " TOOLS",
                          "Calibration and operator utilities");
 
@@ -143,10 +166,14 @@ void ui_tools_show(void)
     add_tile(LV_SYMBOL_PLAY, UI_OK_BRIGHT,
              "MACROS", "Run available printer macros.", 3);
     lv_obj_send_event(s_tiles, LV_EVENT_SIZE_CHANGED, NULL);
+    s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);
 }
 
 void ui_tools_hide(void)
 {
+    if(s_connection_timer)lv_timer_delete(s_connection_timer);
+    s_connection_timer=NULL;
+    for(unsigned i=0;i<4;i++)s_body_labels[i]=NULL;
     /* Reopen under the current theme/density, as Files and Macros do. */
     if (s_root) lv_obj_delete(s_root);
     s_root = NULL;

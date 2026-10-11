@@ -37,6 +37,8 @@ typedef enum {
 
 static printer_file_entry_t *s_entries;
 static size_t s_entry_count;
+static bool s_index_ready;
+static uint32_t s_index_generation;
 static char s_folder[PRINTER_FILES_MAX_PATH];
 static char s_search[64];
 static file_sort_mode_t s_sort_mode;
@@ -98,6 +100,8 @@ static int compare_folder_name(const void *left, const void *right)
 
 static void render_entries(void)
 {
+    /* Search/sort must not replace an in-flight/error state with cached rows. */
+    if (!s_index_ready || s_index_generation != moonraker_config_generation()) return;
     ui_files_clear_rows();
     ui_files_set_breadcrumb(s_folder);
     ui_files_set_search_text(s_search);
@@ -179,7 +183,8 @@ static void render_entries(void)
     if (folder_count == 0 && visible_count == 0) {
         ui_files_set_status(
             s_search[0] ? "No files match the current search."
-                        : "No files found in Moonraker gcodes root.");
+                        : (s_folder[0] ? "No files found in this folder."
+                                         : "No files found in Moonraker gcodes root."));
     } else {
         ui_files_set_status("");
     }
@@ -194,6 +199,7 @@ void files_page_controller_set_search(const char *query)
     while (length && isspace((unsigned char)start[length - 1])) length--;
     if (length >= sizeof(s_search)) length = sizeof(s_search) - 1;
 
+    if (strlen(s_search) == length && !strncmp(s_search, start, length)) return;
     memcpy(s_search, start, length);
     s_search[length] = '\0';
     render_entries();
@@ -207,12 +213,16 @@ void files_page_controller_cycle_sort(void)
 
 void files_page_controller_open_folder(const char *path)
 {
-    snprintf(s_folder, sizeof(s_folder), "%s", path ? path : "");
+    char next[sizeof(s_folder)];
+    snprintf(next, sizeof(next), "%s", path ? path : "");
+    if (!strcmp(s_folder, next)) return;
+    memcpy(s_folder, next, strlen(next) + 1);
     render_entries();
 }
 
 void files_page_controller_up_folder(void)
 {
+    if (!s_folder[0]) return;
     char *slash = strrchr(s_folder, '/');
     if (slash) *slash = '\0';
     else s_folder[0] = '\0';
@@ -277,7 +287,8 @@ static void files_load_worker(void *argument)
     job->error = ESP_FAIL;
     if (job->body) {
         for (int attempt = 0; attempt < 3 && !job->fetched; ++attempt) {
-            if (job->generation != moonraker_config_generation()) break;
+            if (job->generation != moonraker_config_generation() ||
+                job->request != __atomic_load_n(&s_load_request, __ATOMIC_RELAXED)) break;
             memset(job->body, 0, FILES_PAGE_LIST_CAPACITY);
             job->fetched = moonraker_fetch_file_list(
                 job->host, job->port, job->api_key, job->body,
@@ -334,13 +345,9 @@ static void files_load_publish(files_load_job_t *job)
         count = (int)fallback_count;
     }
     s_entry_count = count > 0 ? (size_t)count : 0;
-
-    if (count == 0) {
-        ui_files_set_status(
-            "No files found in Moonraker gcodes root.");
-    } else {
-        render_entries();
-    }
+    s_index_generation = job->generation;
+    s_index_ready = true;
+    render_entries();
 }
 
 static void files_load_poll(lv_timer_t *timer)
@@ -376,7 +383,15 @@ void files_page_controller_reload(
     bool wifi_connected, bool moonraker_connected, bool sd_available,
     const char *host, int port, const char *api_key)
 {
-    ++s_load_request;
+    (void)__atomic_add_fetch(&s_load_request, 1, __ATOMIC_RELAXED);
+    s_index_ready = false;
+    s_entry_count = 0;
+    ui_files_clear_rows();
+    if (s_index_generation != moonraker_config_generation()) {
+        s_folder[0] = s_search[0] = '\0';
+        ui_files_set_breadcrumb(s_folder);
+        ui_files_set_search_text(s_search);
+    }
     files_load_free(s_pending_load);
     s_pending_load = NULL;
     if (!wifi_connected) {

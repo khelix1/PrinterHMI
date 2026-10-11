@@ -2,6 +2,7 @@
 #include "ui_text.h"
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 
 #include "lvgl.h"
 #include "ui_theme.h"
@@ -31,7 +32,8 @@ static char s_status[512] = "Moonraker scan: not run";
 
 static volatile bool s_cancelled = false;
 static TaskHandle_t s_scan_task_handle = NULL;
-static esp_ip4_addr_t s_scan_ip;
+static esp_ip4_addr_t s_scan_ip, s_retry_ip;
+static bool s_has_scan_ip;
 
 static moonraker_discovery_close_cb_t s_close_cb = NULL;
 static moonraker_discovery_select_cb_t s_select_cb = NULL;
@@ -332,6 +334,30 @@ static void scan_task(void *arg)
     vTaskDelete(NULL);
 }
 
+static void discovery_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) != s_popup) return;
+    s_cancelled = true;
+    s_popup = s_status_label = s_results_list = NULL;
+    s_candidate_count = 0;
+}
+
+static void discovery_retry_cb(lv_event_t *event)
+{
+    (void)event;
+    if (!s_has_scan_ip) {
+        moonraker_discovery_set_status("Connect to Wi-Fi and reopen discovery to scan this network.");
+        return;
+    }
+    if (s_scan_task_handle) {
+        moonraker_discovery_set_status("Previous scan is still finishing. Tap Retry when it completes.");
+        return;
+    }
+    if (s_results_list) lv_obj_clean(s_results_list);
+    s_candidate_count = 0;
+    (void)moonraker_discovery_start(&s_retry_ip);
+}
+
 static void moonraker_discovery_show_internal(
     lv_obj_t *parent,
     int popup_width,
@@ -353,47 +379,33 @@ static void moonraker_discovery_show_internal(
         return;
     }
 
-    s_popup = ui_popup_create(parent, popup_width, popup_height, UI_POPUP_STANDARD);
-    if (!s_popup) return;
-
-    const int content_width = popup_width - 48;
-    const int list_height = popup_height - 216;
-    ui_popup_add_title(s_popup, ui_text(LV_SYMBOL_WIFI " DISCOVER MOONRAKER"), false, 8);
-    ui_popup_add_header_divider(s_popup, 48);
-    s_status_label = ui_popup_add_status_label(s_popup, s_status, 24, 58, content_width);
-    if (s_status_label) lv_obj_set_height(s_status_label, 44);
-    ui_popup_add_caption(
-        s_popup,
-        ui_text("SELECT A VERIFIED PRINTER. READY MEANS KLIPPER RESPONDED."),
-        24,
-        106,
-        content_width);
-    s_results_list = ui_popup_add_list(
-        s_popup,
-        24,
-        132,
-        content_width,
-        list_height);
-
-    if (!s_status_label || !s_results_list) {
-        lv_obj_delete(s_popup);
-        s_popup = NULL;
-        s_status_label = NULL;
-        s_results_list = NULL;
-        return;
+    lv_obj_update_layout(parent);
+    if (parent != lv_layer_top() && parent != lv_screen_active()) {
+        int available = lv_obj_get_width(parent) - 16;
+        if (available > 32 && popup_width > available) popup_width = available;
+        available = lv_obj_get_height(parent) - 16;
+        if (available > 32 && popup_height > available) popup_height = available;
     }
-
+    s_popup = ui_form_dialog("DISCOVER MOONRAKER", popup_width, popup_height, UI_POPUP_STANDARD);
+    if (!s_popup) return;
+    /* The popup must stay above its top-layer blocker to receive touches. */
+    ui_popup_set_owner(s_popup, parent);
+    lv_obj_center(s_popup);
+    lv_obj_add_event_cb(s_popup, discovery_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_t *body = ui_form_body(s_popup);
+    s_status_label = ui_form_text(body, s_status, UI_FONT_BODY, UI_TEXT);
+    ui_form_text(body, "Select a verified printer. READY means Klipper responded.", UI_FONT_CAPTION, UI_TEXT_DIM);
+    s_results_list = lv_obj_create(body);
+    lv_obj_remove_style_all(s_results_list);
+    lv_obj_set_size(s_results_list, LV_PCT(100), 160);
+    lv_obj_set_flex_flow(s_results_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_results_list, 8, 0);
+    lv_obj_set_scroll_dir(s_results_list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_results_list, LV_SCROLLBAR_MODE_AUTO);
     s_candidate_count = 0;
-    ui_popup_add_standard_footer_divider(s_popup);
-    ui_popup_add_footer_action(
-        s_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_CENTER,
-        close_event_cb,
-        NULL,
-        NULL);
+    ui_form_action(s_popup, UI_BUTTON_SECONDARY, "RETRY", discovery_retry_cb, NULL);
+    ui_form_action(s_popup, UI_BUTTON_OUTLINED, "CLOSE", close_event_cb, NULL);
+    ui_form_finish(s_popup);
 }
 
 void moonraker_discovery_show(
@@ -467,18 +479,18 @@ static bool moonraker_discovery_add_candidate(
         endpoint->port,
         endpoint->klippy_ready ? "READY" : "MOONRAKER");
 
-    int32_t row_width = lv_obj_get_width(s_results_list) - 16;
-    if (row_width <= 0) row_width = 780;
-
-    lv_obj_t *button = ui_popup_add_selectable_row(
-        s_results_list,
-        row,
-        8,
-        8 + (int32_t)s_candidate_count * 60,
-        row_width,
-        52,
-        candidate_event_cb,
-        endpoint);
+    lv_obj_t *button = ui_button_create(s_results_list, UI_BUTTON_OUTLINED, row);
+    if (button) {
+        lv_obj_set_size(button, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(button, 56, 0);
+        lv_obj_set_style_pad_all(button, 12, 0);
+        lv_obj_set_flex_flow(button, LV_FLEX_FLOW_COLUMN);
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+        ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT);
+        lv_obj_add_event_cb(button, candidate_event_cb, LV_EVENT_CLICKED, endpoint);
+    }
 
     if (!button) {
         free(endpoint);
@@ -497,14 +509,23 @@ static bool moonraker_discovery_add_candidate(
 
 bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
 {
-    if (!ip || s_scan_task_handle) return false;
+    s_has_scan_ip = ip != NULL;
+    if (ip) s_retry_ip = *ip;
+    if (!ip || s_scan_task_handle) {
+        moonraker_discovery_set_status(s_scan_task_handle
+            ? "A discovery scan is already running. Wait for it to finish."
+            : "No network address available. Connect Wi-Fi and reopen discovery.");
+        return false;
+    }
 
     s_scan_ip = *ip;
+    s_has_scan_ip = true;
     s_cancelled = false;
 
     if (xTaskCreate(scan_task, "moon_scan", 8192, NULL, 4,
                     &s_scan_task_handle) != pdPASS) {
         s_scan_task_handle = NULL;
+        moonraker_discovery_set_status("Could not start discovery. Tap Retry to try again.");
         return false;
     }
 

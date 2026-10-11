@@ -856,6 +856,36 @@ static bool moonraker_get_live_objects(void)
         return false;
     }
 
+    /* A reachable Moonraker may expose stale print/temperature objects while
+     * Klipper is shut down. Confirm webhooks readiness before publication. */
+    cJSON *ready_root = cJSON_Parse(s_moonraker_objects);
+    cJSON *ready_result = cJSON_GetObjectItemCaseSensitive(ready_root, "result");
+    cJSON *ready_status = cJSON_GetObjectItemCaseSensitive(ready_result, "status");
+    cJSON *ready_hooks = cJSON_GetObjectItemCaseSensitive(ready_status, "webhooks");
+    cJSON *ready_state = cJSON_GetObjectItemCaseSensitive(ready_hooks, "state");
+    bool klipper_ready = cJSON_IsString(ready_state) && ready_state->valuestring &&
+        strcmp(ready_state->valuestring, "ready") == 0;
+    if (!klipper_ready) {
+        safe_copy(printer_state, sizeof(s_app_buffers->printer_state),
+                  cJSON_IsString(ready_state) ? ready_state->valuestring : "--");
+        s_live_data_ok = false;
+        moonraker_state_publish_http_fallback(
+            &(moonraker_http_fallback_update_t){
+                .moonraker_ok = true, .live_data_ok = false,
+                .printer_state = printer_state, .printer_file = "No file",
+                .nozzle_temp = -999.0, .nozzle_target = -999.0,
+                .bed_temp = -999.0, .bed_target = -999.0,
+                .chamber_temp = -999.0, .air_temp = -999.0,
+                .humidity = -999.0, .heater_target = -999.0,
+                .drybox_fan_speed = -999.0, .part_fan_speed = -1.0,
+                .progress = -1.0, .current_gcode_z = -1.0,
+                .current_layer = -1, .total_layer = -1,
+            });
+        cJSON_Delete(ready_root);
+        return true; /* Transport succeeded; the printer remains unavailable. */
+    }
+    cJSON_Delete(ready_root);
+
     double val = 0.0;
 
     if (json_find_number_after(s_moonraker_objects, "\"temperature_sensor drybox_center\"", "temperature", &val)) {
@@ -1127,7 +1157,9 @@ static void moonraker_live_poll_tasklet(void)
         websocket_was_authoritative = true;
         s_moonraker_code = 200;
         s_moonraker_ok = true;
-        s_live_data_ok = true;
+        moonraker_state_t ws_state;
+        moonraker_state_snapshot(&ws_state);
+        s_live_data_ok = ws_state.live_data_ok;
         return;
     }
 
@@ -1845,6 +1877,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     moonraker_state_t telemetry_state;
     moonraker_state_snapshot(&telemetry_state);
     ui_toast_observe_printer(&telemetry_state);
+    ui_toast_observe_profiles(&telemetry_state);
 
     moonraker_filament_state_t filament_state;
     moonraker_filament_state_snapshot(
@@ -1878,6 +1911,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         .file_label = printer_file_label,
         .topbar_eta_label = topbar_eta_label,
 
+        .motion_button = printer_actions.motion,
         .home_button = printer_home_btn,
         .pause_button = printer_pause_btn,
         .resume_button = printer_resume_btn,
@@ -2098,6 +2132,8 @@ static void printer_ui_controller_show_object_bridge(void)
 /* BEGIN LEGACY PRINTER PAGE BLOCK */
 void ui_printer_destroy(void)
 {
+    /* Retire page-owned actions before LVGL releases their objects. */
+    memset(&printer_actions, 0, sizeof(printer_actions));
 
     if (printer_panel) {
         lv_obj_delete(printer_panel);
@@ -3925,6 +3961,7 @@ void app_main(void)
 
     theme_manager_init();
     ui_toast_init();
+    ui_toast_set_printer_chooser_action(printer_chooser_open_from_topbar);
     ui_printer_popups_set_control_sender(action_send_gcode_inline);
     onboarding_controller_init();
 

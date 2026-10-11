@@ -7,6 +7,7 @@
 #include "esp_ota_ops.h"
 
 #include "ota_manager.h"
+#include "firmware_identity.h"
 #include "ui_ota_popup.h"
 #include "ui_ota_release_browser.h"
 #include "ui_toast.h"
@@ -50,9 +51,11 @@ static void ota_open_custom_url_bridge(void)
     const esp_app_desc_t *app = esp_app_get_description();
     const esp_partition_t *running = esp_ota_get_running_partition();
     char ota_info[320];
+    char installed[160];
+    firmware_identity_format(installed, sizeof(installed));
     snprintf(ota_info, sizeof(ota_info),
-             "HTTPS verifies the server. Use HTTP only for a trusted local development server.  |  Current: %s  |  Built: %s %s  |  Slot: %s",
-             app ? app->version : "unknown", app ? app->date : __DATE__,
+             "%s | Built: %s %s | Slot: %s\nHTTPS verifies the server. HTTP is for a trusted local server.",
+             installed, app ? app->date : __DATE__,
              app ? app->time : __TIME__, running ? running->label : "unknown");
     ui_ota_popup_show(ota_manager_get_url(), ota_info,
                       ota_manager_url_capacity() - 1,

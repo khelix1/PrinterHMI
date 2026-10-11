@@ -8,8 +8,10 @@
 #include "ui_button.h"
 #include "ui_popup.h"
 #include "ui_text_fit.h"
+#include "printer_profile_health.h"
 
 #define NOTICE_CAPACITY 4
+#define NOTICE_OPEN_PRINTERS (-2)
 #define NOTICE_NVS "notifications"
 #define NOTICE_KEY "level"
 #define NOTICE_LEGACY_KEY "confirm"
@@ -17,6 +19,7 @@
 typedef struct {
     ui_status_kind_t kind;
     int destination;
+    int profile_index;
     uint32_t owner;
     bool essential;
     char title[80], detail[320], printer[80];
@@ -30,6 +33,8 @@ static lv_obj_t *s_level_buttons[3];
 static ui_notification_level_t s_pending_level;
 static void (*s_preference_changed)(void);
 static void render_notice(void);
+static void (*s_printer_chooser_action)(void);
+void ui_toast_set_printer_chooser_action(void (*action)(void)){s_printer_chooser_action=action;}
 
 static void surface_deleted(lv_event_t *event)
 {
@@ -115,6 +120,13 @@ static void open_notice(lv_event_t *event)
     (void)event;
     if(!s_notice_count)return;
     notice_t notice=s_notices[0];
+    if (notice.destination == NOTICE_OPEN_PRINTERS) {
+        if (s_printer_chooser_action) {
+            dismiss_notice(NULL);
+            s_printer_chooser_action();
+        }
+        return;
+    }
     if(notice.owner!=moonraker_config_generation() || notice.destination<0 || notice.destination>=UI_SHELL_PAGE_COUNT) {
         lv_obj_t *body=lv_obj_get_child(s_toast,0);
         ui_popup_feedback(body,UI_STATUS_WARNING,"PRINTER CHANGED","Printer context changed. Open Console from the sidebar for the printer named in this notice.");
@@ -171,8 +183,8 @@ static void render_notice(void)
     snprintf(count, sizeof(count), "%u notice%s", s_notice_count, s_notice_count == 1 ? "" : "s");
     lv_obj_t *label = text(footer, count, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(label, 0); lv_obj_set_flex_grow(label, 1);
-    if(notice->destination>=0) {
-        const char *name=notice->destination==UI_SHELL_PAGE_CONSOLE ? "OPEN CONSOLE" : notice->destination==UI_SHELL_PAGE_PRINTER ? "OPEN PRINTER" : "OPEN PAGE";
+    if(notice->destination>=0 || notice->destination==NOTICE_OPEN_PRINTERS) {
+        const char *name=notice->destination==NOTICE_OPEN_PRINTERS ? "OPEN PRINTERS" : notice->destination==UI_SHELL_PAGE_CONSOLE ? "OPEN CONSOLE" : notice->destination==UI_SHELL_PAGE_PRINTER ? "OPEN PRINTER" : "OPEN PAGE";
         lv_obj_t *open=ui_button_create(footer,UI_BUTTON_OUTLINED,name);
         lv_obj_set_size(open,144,48);
         ui_text_fit_single_line(lv_obj_get_child(open,0),UI_FONT_BODY);
@@ -192,9 +204,8 @@ static bool optional(ui_status_kind_t kind)
 {
     return kind == UI_STATUS_OK || kind == UI_STATUS_NEUTRAL;
 }
-static void toast_show(ui_status_kind_t kind, const char *title, const char *detail, int destination, bool essential)
+static void toast_show_named(ui_status_kind_t kind, const char *title, const char *detail, int destination, bool essential, const char *printer, int profile_index)
 {
-    const char *printer = moonraker_config_active_profile_name();
     if (!printer || !printer[0]) printer = "PrinterHMI";
     if (optional(kind)) {
         if (s_level!=UI_NOTIFY_DETAILED || s_notice_count) return;
@@ -216,12 +227,12 @@ static void toast_show(ui_status_kind_t kind, const char *title, const char *det
         if (s_timer) lv_timer_set_repeat_count(s_timer, 1);
         return;
     }
-    notice_t notice = {.kind = kind, .destination = destination, .owner = moonraker_config_generation(), .essential = essential};
+    notice_t notice = {.kind = kind, .profile_index = profile_index, .destination = destination, .owner = moonraker_config_generation(), .essential = essential};
     snprintf(notice.title, sizeof(notice.title), "%s", title ? title : "");
     snprintf(notice.detail, sizeof(notice.detail), "%s", detail ? detail : "");
     snprintf(notice.printer, sizeof(notice.printer), "%s", printer);
     for (unsigned i = 0; i < s_notice_count; ++i) {
-        if (s_notices[i].kind == kind && s_notices[i].destination==destination && s_notices[i].owner==notice.owner && !strcmp(s_notices[i].title, notice.title) &&
+        if (s_notices[i].kind == kind && s_notices[i].profile_index==profile_index && s_notices[i].destination==destination && s_notices[i].owner==notice.owner && !strcmp(s_notices[i].title, notice.title) &&
             !strcmp(s_notices[i].detail, notice.detail) && !strcmp(s_notices[i].printer, notice.printer)) {
             if (!s_toast) render_notice();
             return;
@@ -260,6 +271,12 @@ static void toast_show(ui_status_kind_t kind, const char *title, const char *det
     s_notices[position] = notice; ++s_notice_count;
     render_notice();
 }
+static void toast_show(ui_status_kind_t kind, const char *title, const char *detail, int destination, bool essential)
+{
+    toast_show_named(kind, title, detail, destination, essential,
+                     moonraker_config_active_profile_name(), moonraker_config_active_profile_index());
+}
+
 void ui_toast_show(ui_status_kind_t kind,const char *title,const char *detail)
 {
     toast_show(kind,title,detail,-1,false);
@@ -375,6 +392,7 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
             unsigned kept=0;
             for(unsigned i=0;i<s_notice_count;i++) {
                 bool connection=s_notices[i].owner==current &&
+                    s_notices[i].profile_index==moonraker_config_active_profile_index() &&
                     (!strcmp(s_notices[i].title,"PRINTER OFFLINE") ||
                      !strcmp(s_notices[i].title,"PRINTER RECONNECTED"));
                 if(!connection)s_notices[kept++]=s_notices[i];
@@ -412,4 +430,66 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
     last_sample_live=state->live_data_ok;
     /* Preserve last reported job state during a disconnect. */
     if(state->live_data_ok)snprintf(previous,sizeof(previous),"%s",state->printer_state);
+}
+
+void ui_toast_observe_profiles(const moonraker_state_t *active_state)
+{
+    typedef struct {
+        bool configured, armed, online;
+        int port;
+        char host[MOONRAKER_CONFIG_HOST_LENGTH];
+    } profile_observer_t;
+    static profile_observer_t observed[MOONRAKER_CONFIG_MAX_PROFILES];
+    int active = moonraker_config_active_profile_index();
+    for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index) {
+        profile_observer_t *last = &observed[index];
+        const moonraker_profile_t *profile = moonraker_config_profile(index);
+        if (!profile || !profile->configured) {
+            memset(last, 0, sizeof(*last));
+            continue;
+        }
+        if (!last->configured || last->port != profile->port ||
+            strcmp(last->host, profile->host)) {
+            memset(last, 0, sizeof(*last));
+            last->configured = true;
+            last->port = profile->port;
+            snprintf(last->host, sizeof(last->host), "%s", profile->host);
+        }
+        if (index == active) {
+            /* Active notifications already have their own debounce. Keep the
+             * confirmed baseline when that printer later becomes inactive. */
+            if (active_state && active_state->moonraker_ok && active_state->live_data_ok) {
+                last->armed = true;
+                last->online = true;
+            } else if (active_state && !active_state->live_data_ok) {
+                last->online = false;
+            }
+            continue;
+        }
+        bool known = false;
+        bool online = printer_profile_health_get(index, &known);
+        if (!known) continue; /* Verification is not confirmed loss. */
+        if (online && !printer_profile_health_live_state_fresh(index, 5000000LL)) continue;
+        if (!last->armed) {
+            if (online) last->armed = last->online = true;
+            continue; /* Initial discovery is not a disconnect/recovery event. */
+        }
+        if (last->online == online) continue;
+        last->online = online;
+        /* Retire this printer's previous connection card, including one
+         * captured before the operator selected another active profile. */
+        unsigned kept = 0;
+        for (unsigned i = 0; i < s_notice_count; ++i) {
+            bool connection = s_notices[i].profile_index == index &&
+                (!strcmp(s_notices[i].title, "PRINTER OFFLINE") ||
+                 !strcmp(s_notices[i].title, "PRINTER RECONNECTED"));
+            if (!connection) s_notices[kept++] = s_notices[i];
+        }
+        s_notice_count = kept;
+        toast_show_named(online ? UI_STATUS_INFO : UI_STATUS_WARNING,
+            online ? "PRINTER RECONNECTED" : "PRINTER OFFLINE",
+            online ? "Live status is available again. Open Printers to review this printer."
+                   : "This printer is unavailable. A print may still be running; check the printer and its connection.",
+            NOTICE_OPEN_PRINTERS, true, profile->name, index);
+    }
 }

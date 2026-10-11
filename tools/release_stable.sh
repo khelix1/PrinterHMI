@@ -105,7 +105,7 @@ if gh release view "$tag" --repo "$expected_origin_repo" >/dev/null 2>&1; then
 fi
 
 echo "Building complete PrinterHMI ${tag} stack from ${short_commit}..."
-"$repo_dir/tools/build_v6_stack.sh"
+PRINTERHMI_BUILD_CHANNEL=stable "$repo_dir/tools/build_v6_stack.sh"
 "$repo_dir/tools/audit/dependencies_lock_audit.sh"
 "$repo_dir/tools/audit/firmware_size_audit.sh"
 "$repo_dir/tools/audit/compiler_warning_audit.sh"

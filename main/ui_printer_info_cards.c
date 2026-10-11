@@ -317,6 +317,14 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 {
     if (!printer_panel || !cards) return;
 
+    if (!moonraker_ok) {
+        printer_progress = -1.0;
+        printer_nozzle_temp = printer_nozzle_target = -999.0;
+        printer_bed_temp = printer_bed_target = -999.0;
+        printer_part_fan_speed = printer_print_duration = -1.0;
+        printer_eta_text = NULL;
+    }
+
         if(cards->nozzle_target) {
         char t[64];
         snprintf(t,sizeof(t),moonraker_ok && printer_nozzle_temp>-100 ? "%.0f°" : "--°",printer_nozzle_temp);ui_value_set_text(cards->nozzle,t);

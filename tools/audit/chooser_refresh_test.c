@@ -55,9 +55,10 @@ int main(void){
  for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
   ui_theme_set_density((ui_density_id_t)density);
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
-  state=(moonraker_state_t){0};active=0;preview_ready=false;revision=1;
+  known[0]=online[0]=false;state=(moonraker_state_t){0};active=0;preview_ready=false;revision=1;
   unsigned events=lv_display_get_event_count(d);
   ui_printer_chooser_show(selected,managed);assert(s_root && s_timer);
+  assert(!strcmp(lv_label_get_text(s_cards[0].status),"CHECKING..."));
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"printing"));
   assert(!strcmp(lv_label_get_text(s_cards[2].status),"NOT CONFIGURED"));
   assert(!strcmp(lv_label_get_text(s_cards[2].hint),"TAP TO ADD"));
@@ -75,10 +76,23 @@ int main(void){
   settle(d);unsigned before=flushes;
   for(int i=0;i<6;i++){lv_tick_inc(500);lv_timer_handler();}
   assert(invalidations==0 && flushes==before && notifications==notified_before);
-  state.moonraker_ok=true;snprintf(state.printer_state,sizeof(state.printer_state),"paused");
+  known[0]=online[0]=true;ui_printer_chooser_refresh();
+  assert(!strcmp(lv_label_get_text(s_cards[0].status),"CONNECTING..."));
+  online[0]=false;ui_printer_chooser_refresh();
+  assert(!strcmp(lv_label_get_text(s_cards[0].status),"OFFLINE / RETRYING"));
+  notified_before=notifications;
+  state.moonraker_ok=state.live_data_ok=true;snprintf(state.printer_state,sizeof(state.printer_state),"paused");
   ui_printer_chooser_refresh();assert(invalidations>0);
   assert(!strcmp(lv_label_get_text(s_cards[0].status),"paused"));assert(notifications==notified_before+1);settle(d);
   ui_printer_chooser_refresh();assert(!invalidations);
+  state.live_data_ok=false;strcpy(state.printer_state,"shutdown");
+  strcpy(health[0],"printing");known[0]=online[0]=true;
+  ui_printer_chooser_refresh();assert(!strcmp(lv_label_get_text(s_cards[0].status),"KLIPPER SHUTDOWN"));
+  assert(!lv_color_eq(lv_obj_get_style_text_color(s_cards[0].status,0),UI_OK_BRIGHT));
+  state.moonraker_ok=false;strcpy(state.printer_state,"printing");
+  ui_printer_chooser_refresh();assert(!strcmp(lv_label_get_text(s_cards[0].status),"OFFLINE / RETRYING"));
+  state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"paused");
+  ui_printer_chooser_refresh();assert(!strcmp(lv_label_get_text(s_cards[0].status),"paused"));settle(d);
   preview_ready=true;ui_printer_chooser_refresh();
   assert(s_cards[0].preview_image && !lv_obj_has_flag(s_cards[0].preview_image,LV_OBJ_FLAG_HIDDEN));
   settle(d);before=flushes;

@@ -72,3 +72,21 @@ Printer connection and print-state events come from observed telemetry transitio
 ## Attention regression checks
 
 The real-owner suite exercises Offline/Recovery at all three levels, the full three-second debounce, repeated unacknowledged loss/recovery cycles, paused/error/shutdown attention, duplicate suppression after dismissal, full informational queues receiving warnings, fault priority, routine-card filtering on a switch to Quiet, and bootstrap fencing. These run across all five themes, densities, both text sizes and the existing viewport matrix. Existing NVS/backup preference behavior and navigation ownership remain covered. Host checks pass; firmware/panel connection-loss and physical recovery tests remain pending.
+
+## Inactive printer connection alerts
+
+The UI also observes confirmed health transitions for configured inactive
+printers. An established printer becoming unavailable generates a named,
+persistent warning at every notification level, including Quiet. Recovery
+replaces that printer's connection card with an essential recovery notice and
+records both events in Event History. Unknown/verifying health, stale online
+snapshots and initially offline profiles do not manufacture transition alerts.
+Existing inactive-worker health confirmation and retry timing apply; no extra
+network polling is introduced.
+
+These notices offer **Open Printers**, which opens the chooser without selecting
+another printer or sending it a command. This destination remains safe after the
+active printer changes. Active-printer command/page notices retain their existing
+configuration-owner checks. Connection cards are tracked by profile slot so equal
+display names do not merge alerts from different printers. Endpoint edits establish
+a fresh observation baseline.

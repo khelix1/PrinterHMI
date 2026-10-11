@@ -118,10 +118,13 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         if c['api']=='studio_action':make=f'studio_action(lv_screen_active(),{c["text"]},0,0,{c["w"]},{c["h"]},NULL,NULL)'
         if c['icon']:make=f'ui_button_create_icon(lv_screen_active(),UI_BUTTON_OUTLINED,{c["icon"]},{c["text"]},UI_TEXT,UI_BUTTON_ICON_HORIZONTAL)'
         where=json.dumps(c['file']+':'+str(c['line']))
-        code+=f'b={make};lv_obj_set_size(b,{c["w"]},{c["h"]});fit(b,{where});lv_obj_delete(b);\n'
+        code+=f'b={make};lv_obj_set_size(b,{c["w"]},{c["h"]});fit(b,{where});assert(lv_obj_get_height(b)>=44 && lv_obj_get_width(b)>=44);lv_obj_delete(b);\n'
     (tmp/"button_cases.inc").write_text(code)
     source=(root/"main/ui_settings.c").read_text()
     (tmp/"settings_cases.inc").write_text(''.join(f'row({",".join(a[1:4])});\n' for _,_,a in calls(source,'ui_settings_section_add_action_row')))
+    begin=source.index("    const int firmware_row_1 =")
+    finish=source.index("    section_y += firmware_height + section_gap;",begin)
+    (tmp/"firmware_settings.inc").write_text(source[begin:finish])
     source=(root/"main/ui_calibration.c").read_text()
     start=source.index('static void layout_bed_geometry_actions(')
     (tmp/"bed_actions.inc").write_text(source[start:source.index('static void refresh_capabilities',start)])

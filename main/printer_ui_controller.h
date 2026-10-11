@@ -24,6 +24,7 @@ typedef struct {
     lv_obj_t *file_label;
     lv_obj_t *topbar_eta_label;
 
+    lv_obj_t *motion_button;
     lv_obj_t *home_button;
     lv_obj_t *pause_button;
     lv_obj_t *resume_button;

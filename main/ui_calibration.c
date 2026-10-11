@@ -1,4 +1,6 @@
 #include "ui_calibration.h"
+#include "printer_connection_policy.h"
+#include "ui_value_update.h"
 #include "ui_studio_layout.h"
 #include "ui_text.h"
 
@@ -65,6 +67,7 @@ typedef struct {
     lv_timer_t *refresh_timer;
     ui_calibration_open_bed_mesh_cb_t open_bed_mesh;
     ui_calibration_send_gcode_cb_t send_gcode;
+    bool connection_blocked;
     bool screws_home_required;
     bool gantry_home_required;
     bool gantry_use_qgl;
@@ -1120,6 +1123,23 @@ static void calibration_refresh_timer_cb(
         refresh_capabilities();
     }
 
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    const char *reason=printer_idle_reason(&live);
+    if(!reason[0] && s_calibration->connection_blocked)refresh_capabilities();
+    s_calibration->connection_blocked=reason[0]!=0;
+    lv_obj_t *commands[]={s_calibration->screws_tilt_button,s_calibration->gantry_level_button,
+        s_calibration->axis_twist_button,s_calibration->pid_tune_button,s_calibration->probe_z_button,
+        s_calibration->custom_calibration_button};
+    for(unsigned i=0;i<sizeof(commands)/sizeof(commands[0]);i++)if(commands[i]) {
+        if(reason[0])lv_obj_add_state(commands[i],LV_STATE_DISABLED);
+        else lv_obj_remove_state(commands[i],LV_STATE_DISABLED);
+    }
+    if(reason[0]) {
+        const char *caption=!live.moonraker_ok?"Offline - reconnect":!live.live_data_ok?"Klipper not ready":
+            !strcmp(live.printer_state,"printing")?"Printing - wait":!strcmp(live.printer_state,"paused")?"Paused - resume/cancel":"Klipper not ready";
+        ui_value_set_text(s_calibration->banner_status,caption);
+        ui_value_set_color(s_calibration->banner_status,UI_WARN,0);
+    } else ui_value_set_color(s_calibration->banner_status,UI_ACCENT_BRIGHT,0);
     ui_calibration_geometry_refresh();
     refresh_axis_twist_session();
     ui_calibration_results_refresh();
@@ -1429,7 +1449,7 @@ void ui_calibration_show(
             lv_obj_set_size(
                 s_calibration->pid_tune_button,
                 150,
-                38);
+                44);
             lv_obj_align(
                 s_calibration->pid_tune_button,
                 LV_ALIGN_BOTTOM_RIGHT,
@@ -1526,6 +1546,7 @@ void ui_calibration_show(
         calibration_refresh_timer_cb,
         500,
         NULL);
+    calibration_refresh_timer_cb(NULL);
 }
 
 

@@ -26,6 +26,7 @@ static lv_obj_t *s_progress_bar = NULL;
 static lv_obj_t *s_progress_label = NULL;
 static lv_obj_t *s_progress_pct_label = NULL;
 static lv_obj_t *s_progress_bytes_label = NULL;
+static lv_obj_t *s_progress_transfer_label = NULL;
 static lv_obj_t *s_progress_cancel_btn = NULL;
 static ui_ota_cancel_cb_t s_progress_cancel_cb = NULL;
 static bool s_progress_visible = false;
@@ -74,6 +75,9 @@ static lv_obj_t *s_ota_url_ta = NULL;
 static lv_obj_t *s_ota_kb = NULL;
 static ui_ota_start_cb_t s_start_cb = NULL;
 static ui_ota_remote_cb_t s_remote_cb = NULL;
+static bool s_remote_pending, s_editor_transitioning;
+static lv_obj_t *s_remote_owner;
+static void remote_transition(void *data);
 
 /*
  * OTA startup is deferred until LVGL has processed the asynchronous popup
@@ -82,6 +86,7 @@ static ui_ota_remote_cb_t s_remote_cb = NULL;
 static char s_deferred_start_url[256] = "";
 static ui_ota_start_cb_t s_deferred_start_cb = NULL;
 static lv_obj_t *s_deferred_start_popup = NULL;
+static void deferred_start_cb(void *user_data);
 
 
 static void progress_cancel_cb(lv_event_t *e)
@@ -109,7 +114,7 @@ static void progress_cancel_cb(lv_event_t *e)
 
 static void progress_deleted(lv_event_t *event)
 {
-    (void)event;s_progress_popup=s_progress_bar=s_progress_label=s_progress_pct_label=s_progress_bytes_label=s_progress_cancel_btn=NULL;
+    (void)event;s_progress_popup=s_progress_bar=s_progress_label=s_progress_pct_label=s_progress_bytes_label=s_progress_transfer_label=s_progress_cancel_btn=NULL;
     s_progress_visible=false;s_progress_cancel_cb=NULL;
 }
 void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
@@ -126,8 +131,15 @@ void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
     lv_bar_set_range(s_progress_bar,0,100);lv_obj_set_style_anim_duration(s_progress_bar,250,0);
     s_progress_bytes_label=ui_ota_text(body,"0.00 MB",UI_FONT_BODY,UI_TEXT_DIM);
     ui_ota_text(body,"Keep the controller powered during installation. The controller restarts after a successful update.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    s_progress_transfer_label=ui_ota_text(body,"Average: -- | Elapsed: 0 s",UI_FONT_CAPTION,UI_TEXT_DIM);
     s_progress_cancel_btn=ui_ota_action(s_progress_popup,UI_POPUP_ACTION_CANCEL,"CANCEL",progress_cancel_cb,NULL);
     s_progress_visible=true;
+}
+
+void ui_ota_progress_set_transfer(const char *text)
+{
+    if(s_progress_transfer_label)
+        ui_value_set_text(s_progress_transfer_label,text ? text : "");
 }
 
 void ui_ota_progress_pump(const char *status_text,
@@ -191,6 +203,7 @@ void ui_ota_progress_close(void)
     s_progress_label = NULL;
     s_progress_pct_label = NULL;
     s_progress_bytes_label = NULL;
+    s_progress_transfer_label = NULL;
     s_progress_cancel_btn = NULL;
     s_progress_cancel_cb = NULL;
     s_progress_visible = false;
@@ -199,7 +212,18 @@ void ui_ota_progress_close(void)
 
 void ui_ota_popup_close(void)
 {
-    bool had_editor_popup = s_ota_popup != NULL;
+    if (s_remote_pending) lv_async_call_cancel(remote_transition, NULL);
+    s_remote_pending = false;
+    s_remote_owner = NULL;
+    bool had_editor_popup = s_ota_popup != NULL || s_deferred_start_popup != NULL;
+    if (s_deferred_start_popup) {
+        lv_async_call_cancel(deferred_start_cb, NULL);
+        lv_obj_t *pending = s_deferred_start_popup;
+        s_deferred_start_popup = NULL;
+        s_deferred_start_cb = NULL;
+        s_deferred_start_url[0] = '\0';
+        lv_obj_delete(pending);
+    }
     if (s_ota_popup) {
         lv_obj_delete(s_ota_popup);
         s_ota_popup = NULL;
@@ -208,7 +232,7 @@ void ui_ota_popup_close(void)
         s_start_cb = NULL;
         s_remote_cb = NULL;
     }
-    if (had_editor_popup) {
+    if (had_editor_popup && !s_editor_transitioning) {
         ota_resume_camera();
     }
 }
@@ -255,9 +279,21 @@ static void deferred_start_cb(void *user_data)
 static void start_cb(lv_event_t *e)
 {
     (void)e;
+    if (s_remote_pending || s_deferred_start_popup || !s_ota_popup || !s_start_cb || !s_ota_url_ta) return;
     if(s_ota_url_ta && !lv_textarea_get_text(s_ota_url_ta)[0]) {
         lv_textarea_set_placeholder_text(s_ota_url_ta,"Firmware URL required.");
         lv_obj_set_style_border_color(s_ota_url_ta,UI_DANGER_BRIGHT,0);
+        return;
+    }
+
+    if (strlen(lv_textarea_get_text(s_ota_url_ta)) >= sizeof(s_deferred_start_url)) {
+        lv_textarea_set_placeholder_text(s_ota_url_ta, "Firmware URL is too long.");
+        return;
+    }
+    /* Reserve the asynchronous callback before transferring any ownership. */
+    if (lv_async_call(deferred_start_cb, NULL) != LV_RESULT_OK) {
+        ui_popup_feedback(ui_ota_body(s_ota_popup), UI_STATUS_DANGER,
+                          "UPDATE NOT STARTED", "Could not queue update. Your URL is retained; try again.");
         return;
     }
 
@@ -292,7 +328,7 @@ static void start_cb(lv_event_t *e)
     s_remote_cb = NULL;
 
     if (s_deferred_start_cb && s_deferred_start_url[0]) {
-        lv_async_call(deferred_start_cb, NULL);
+        /* Already queued before ownership transfer. */
     } else {
         lv_obj_t *popup = s_deferred_start_popup;
 
@@ -306,12 +342,30 @@ static void start_cb(lv_event_t *e)
     }
 }
 
+static void remote_transition(void *data)
+{
+    (void)data;
+    if (!s_remote_pending || !s_remote_owner || s_remote_owner != s_ota_popup) return;
+    ui_ota_remote_cb_t remote_fn = s_remote_cb;
+    s_remote_pending = false;
+    s_remote_owner = NULL;
+    s_editor_transitioning = true;
+    ui_ota_popup_close();
+    s_editor_transitioning = false;
+    if (remote_fn) remote_fn();
+    else ota_resume_camera();
+}
 static void remote_cb(lv_event_t *e)
 {
     (void)e;
-    if (s_remote_cb) {
-        s_remote_cb();
+    if (s_remote_pending || s_deferred_start_popup || !s_remote_cb || !s_ota_popup) return;
+    if (lv_async_call(remote_transition, NULL) != LV_RESULT_OK) {
+        ui_popup_feedback(ui_ota_body(s_ota_popup), UI_STATUS_DANGER,
+                          "RELEASES NOT OPENED", "Could not queue dialog. Your URL is retained; try again.");
+        return;
     }
+    s_remote_pending = true;
+    s_remote_owner = s_ota_popup;
 }
 
 static void editor_deleted(lv_event_t *event)
@@ -319,19 +373,25 @@ static void editor_deleted(lv_event_t *event)
     lv_obj_t *deleted=lv_event_get_target_obj(event);
     if(deleted==s_ota_popup) {
         s_ota_popup=s_ota_url_ta=s_ota_kb=NULL;s_start_cb=NULL;s_remote_cb=NULL;
-        ota_resume_camera();
+        if (s_remote_pending) lv_async_call_cancel(remote_transition, NULL);
+        s_remote_pending = false;
+        s_remote_owner = NULL;
+        if (!s_editor_transitioning) ota_resume_camera();
     }
     if(deleted==s_deferred_start_popup) {
+        lv_async_call_cancel(deferred_start_cb, NULL);
         s_deferred_start_popup=NULL;s_deferred_start_cb=NULL;s_deferred_start_url[0]='\0';
+        ota_resume_camera();
     }
 }
 void ui_ota_popup_show(const char *current_url,const char *firmware_info,size_t max_url_len,
                        ui_ota_start_cb_t start_cb_fn,ui_ota_remote_cb_t remote_cb_fn)
 {
+    if(s_deferred_start_popup){lv_obj_move_foreground(s_deferred_start_popup);return;}
     if(s_ota_popup){lv_obj_move_foreground(s_ota_popup);return;}
     s_start_cb=start_cb_fn;s_remote_cb=remote_cb_fn;
     s_ota_popup=ui_ota_dialog("UPDATE FROM URL",960,540,UI_POPUP_STANDARD);
-    if(!s_ota_popup){s_start_cb=NULL;s_remote_cb=NULL;return;}
+    if(!s_ota_popup){s_start_cb=NULL;s_remote_cb=NULL;ota_resume_camera();return;}
     lv_obj_add_event_cb(s_ota_popup,editor_deleted,LV_EVENT_DELETE,NULL);
     ota_quiesce_camera();
     lv_obj_t *body=ui_ota_body(s_ota_popup);

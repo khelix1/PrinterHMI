@@ -52,6 +52,7 @@ static lv_obj_t *s_editor_camera_keyboard = NULL;
 static char s_editor_camera_url[MOONRAKER_CONFIG_CAMERA_URL_LENGTH];
 static lv_obj_t *s_editor_camera_status = NULL;
 static lv_timer_t *s_editor_camera_discovery_timer = NULL;
+static uint32_t s_editor_camera_discovery_generation, s_editor_camera_test_generation;
 static lv_timer_t *s_editor_camera_test_timer = NULL;
 static size_t s_editor_camera_slot = 0;
 static lv_obj_t *s_editor_camera_slot_buttons[CAMERA_CATALOG_MAX_CAMERAS];
@@ -697,6 +698,10 @@ static void editor_field_focused_cb(lv_event_t *event)
 {
     lv_obj_t *field = lv_event_get_target_obj(event);
     if (!field) return;
+    if (s_editor_keyboard_popup && s_editor_keyboard_target == field) {
+        lv_obj_move_foreground(s_editor_keyboard_popup);
+        return;
+    }
     editor_keyboard_discard();
     s_editor_keyboard_target = field;
     s_editor_keyboard_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
@@ -1152,6 +1157,12 @@ static void editor_camera_set_status(const char *text)
 
 static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
 {
+    if (s_editor_camera_discovery_generation != moonraker_config_generation()) {
+        if (timer) lv_timer_delete(timer);
+        s_editor_camera_discovery_timer = NULL;
+        editor_camera_set_status("Printer configuration changed. Search cameras again.");
+        return;
+    }
     moonraker_webcam_t webcam = {0};
     bool found = false;
     size_t s_discovered_camera_count = 0;
@@ -1179,7 +1190,7 @@ static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
         return;
     }
 
-    /* The worker has already imported every returned webcam into the
+    /* Result consumption has imported every returned webcam into the
      * numbered catalog slots.  Camera 1 also mirrors the legacy profile URL,
      * so keep its editor-local staged value synchronized before the eventual
      * profile SAVE can write it back. */
@@ -1206,6 +1217,12 @@ static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
 
 static void editor_camera_test_poll_cb(lv_timer_t *timer)
 {
+    if (s_editor_camera_test_generation != moonraker_config_generation()) {
+        if (timer) lv_timer_delete(timer);
+        s_editor_camera_test_timer = NULL;
+        editor_camera_set_status("Printer configuration changed. Test this camera again.");
+        return;
+    }
     bool ok = false;
     int width = 0, height = 0;
     size_t bytes = 0;
@@ -1238,6 +1255,7 @@ static void editor_camera_test_cb(lv_event_t *event)
             : "Unable to start camera test.");
         return;
     }
+    s_editor_camera_test_generation = moonraker_config_generation();
     editor_camera_set_status("Testing camera stream...");
     s_editor_camera_test_timer = lv_timer_create(editor_camera_test_poll_cb, 80, NULL);
     if (!s_editor_camera_test_timer) {
@@ -1262,7 +1280,7 @@ static void editor_camera_discover_cb(lv_event_t *event)
             "Enter a valid Moonraker host and port before searching.");
         return;
     }
-    if (!camera_discovery_start(host, (int)port, s_editor_api_key)) {
+    if (!camera_discovery_start_for_profile(s_editor_profile, host, (int)port, s_editor_api_key)) {
         editor_camera_set_status(
             camera_discovery_busy()
                 ? "Camera search is already running."
@@ -1270,6 +1288,7 @@ static void editor_camera_discover_cb(lv_event_t *event)
         return;
     }
 
+    s_editor_camera_discovery_generation = moonraker_config_generation();
     editor_camera_set_status("Searching Moonraker for configured cameras...");
     s_editor_camera_discovery_timer = lv_timer_create(
         editor_camera_discovery_poll_cb, 80, NULL);

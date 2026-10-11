@@ -25,3 +25,7 @@ void ui_toast_show_link(ui_status_kind_t kind, const char *title, const char *de
 
 #include "moonraker.h"
 void ui_toast_observe_printer(const moonraker_state_t *state);
+
+/* UI-thread observer for confirmed inactive-profile health transitions. */
+void ui_toast_observe_profiles(const moonraker_state_t *active_state);
+void ui_toast_set_printer_chooser_action(void (*action)(void));

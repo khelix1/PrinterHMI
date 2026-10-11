@@ -727,3 +727,146 @@ Real-LVGL owner checks cover all five themes, densities, text sizes and standard
 Native editors pin their keyboard outside scrolling content and reveal the focused field after layout. Shared textarea styling keeps body fonts and minimum field height. Keyboard completion/cancel now matches owner footer actions for Files, Macros, Network, Backup, OTA, motion measurement and Setup. Files search uses a native viewport-clamped form; Setup preserves the space for Connect. Profile ports and motion values validate before copying and retain rejected input. Temperature/fan controls receive checked dispatch results and keep their controls/values on offline, stale or send failure. Existing Console behavior and arbitrary macro parameter types remain intact. See [Input dialogs](INPUT_DIALOGS.md).
 
 Real-owner checks cover all five themes, densities/text sizes, keyboard actions, focus/scroll and footer bounds, validation/correction, rejected dispatch/retry, deletion and Setup deduplication. Console, hotend, notification and theme preview regressions pass. Host renders were inspected; target firmware, touch/network/temperature and previous printing/recovery tests remain pending. Stable stays 6.5.6; no commit, push or merge is included.
+
+## Loading, empty and error-state recovery
+
+Files retires obsolete indexes while a request is pending, preserves error/loading feedback during search/sort, and distinguishes empty folders from empty searches. Camera provides nonblocking inline Retry, wrapped status and first-frame feedback; configuration changes clear previous frames and refresh the camera selector. Moonraker discovery uses native scrolling content with pinned Retry/Close and cancels on external deletion. Camera discovery captures the edited profile, rejects stale configuration results and imports only during current-owner consumption. Setup verifies the requested Wi-Fi SSID with a bounded wait and retains failed input; its own camera import does not falsely invalidate its next step. OTA avoids duplicate catalog refresh, exposes Retry and retires refresh-time confirmations. Telemetry explains missing history according to transport readiness. See [Page states](PAGE_STATES.md) for behavior, ownership and validation limits.
+
+Real-owner and typed-worker checks pass across five themes and relevant density/text/viewport variants. Discovery renders were inspected; target/panel/network and prior physical printing/recovery tests remain pending. Stable stays 6.5.6; the feature branch remains open and this patch does not commit or push.
+
+## Touch and navigation consistency follow-up
+
+Modal discovery now stays above its blocker while page ownership handles teardown. Nested dialogs preserve their parent and drafts; repeated editor opens no longer discard input. Files preview taps open details while a thumbnail is pending and the lightbox once loaded. Devices, Network and PID actions use minimum 44-pixel heights; Drybox layout is preserved.
+
+Real LVGL pointer tests cover modal blocking, adjacent targets, disabled controls, scroll suppression, nested Back/Close and discovery actions across all themes and text sizes. See [Touch and navigation consistency](TOUCH_NAVIGATION.md). Target firmware and panel validation remain pending; stable version is 6.5.6.
+
+## Scrolling and refresh performance follow-up
+
+Telemetry reads history once for all four charts. Settings and Files skip unchanged dynamic label text; equivalent Files searches and unchanged folder actions preserve rows. Existing time progression, explicit refresh, Hold and stale-result protection are retained.
+
+Host checks exercise graph semantics, no-op redraws and repeated object/timer cleanup across all five themes. See [Scrolling and refresh performance](SCROLL_PERFORMANCE.md). Target frame rate, heap soak and panel tests remain pending; stable version remains 6.5.6.
+
+## Live appearance and scroll preservation follow-up
+
+Settings preserves the visible section across theme/appearance rebuilds, including Studio card reordering. Accent, density and accessibility dialogs refresh in place with current typography, colors and selected options; scroll position and pinned Close are preserved. Screen-local opaque scrolling prevents background composition. Deferred changes are deduplicated and guarded against save/queue failures and deleted owners.
+
+See [Live appearance changes](LIVE_APPEARANCE.md) for host coverage and pending panel checks. Existing theme chooser behavior remains intact; stable version remains 6.5.6.
+
+## Connection-aware controls follow-up
+
+Printer actions now combine live readiness with print state and recheck before dispatch. Files detail/confirmation, Macro Run, primary calibration and Bed Mesh commands disable while unavailable and restore for the same printer when ready. Inline reasons accompany unavailable workflows. Files metadata and Bed Mesh confirmations are fenced against configuration changes; added UI timers retire with their owners. Navigation, diagnostics, emergency/recovery endpoints and active-print temperature/fan controls retain their existing paths.
+
+See [Connection-aware controls](CONNECTION_CONTROLS.md) for policy, host checks and pending panel validation. Stable version remains 6.5.6.
+
+### Printer action lifetime after chooser navigation
+
+Printer teardown retires the complete `printer_actions` structure before deleting
+its LVGL parent. The readiness refresh only touches Toolhead Control while the
+Printer panel exists. This fixes a stale Motion button reference exposed by
+connection-state refresh after opening the chooser with an offline printer.
+
+`tools/audit/printer_action_lifetime_test.py` exercises the actual teardown and
+motion readiness block for 1,000 create/destroy cycles with real LVGL, including
+absent-page refresh and online/offline transitions. Firmware/panel crash
+reproduction remains pending.
+
+### Offline printer readiness and telemetry presentation
+
+The chooser uses both Moonraker connectivity and Klipper/live-data readiness for
+the active printer. A shutdown or disconnected active printer cannot inherit an
+old online/printing label from background profile health. Cached thumbnails remain
+historical images rather than proof of a live connection.
+
+WebSocket subscriptions include `webhooks.state`; explicit shutdown, error,
+disconnected and startup states remain unavailable across subsequent partial
+status updates until readiness is confirmed. HTTP bootstrap checks the same state
+before publishing print/temperature objects. Fresh transport traffic alone does
+not establish Klipper readiness. Existing configuration-generation response fences
+remain in place for HTTP and WebSocket endpoint ownership.
+
+Unavailable Printer and Dashboard readings use placeholders rather than retaining
+live-looking temperatures/progress. Host readiness, chooser (all five themes,
+densities and text sizes), telemetry and compilation checks cover this pass.
+Hardware offline/reconnect and printer-selection validation remain pending.
+
+### Final Dashboard writer availability gate
+
+The later `dashboard_live_controller` banner and machine updates now use the same
+connectivity/live-data gate as the runtime cards. The shared status formatter no
+longer treats a reachable Moonraker by itself as READY and recognizes shutdown.
+Unavailable readings, active filenames and progress become placeholders in this
+final writer rather than overwriting the earlier offline placeholders with stale
+values. Bottom page navigation and Moonraker file browsing remain available;
+printer commands still require readiness.
+
+`dashboard_offline_test.py` executes both actual Dashboard publication functions
+in all five themes with stale printing/paused/ready readings under unavailable
+conditions, then verifies restoration on fresh live data. Panel validation remains
+pending. Endpoint ownership should be checked with selection/WS_START logs if a
+wrong-printer response is still suspected.
+
+### Inactive printer notification coverage
+
+The existing UI refresh observes inactive-profile health as well as the active
+printer. Confirmed offline/recovery transitions produce correctly named notices
+at every level, deduplicate repeated samples and replace only that printer's
+connection notice. Open Printers routes to the chooser without changing the active
+profile. Initial offline discovery and endpoint edits establish baselines.
+
+Host notification checks cover inactive loss/recovery in Quiet, verification and
+stale health suppression, repeated samples, same-name profile separation,
+endpoint edits and chooser routing after active-owner changes, in all five themes,
+densities, text sizes and viewport configurations. Panel validation remains pending.
+
+
+### OTA dialog lifetime and build identity
+
+Custom URL and Releases transitions reserve asynchronous work before changing UI
+ownership, cancel on owner deletion and preserve camera quiescence throughout the
+transition. OTA action fitting rejects bubbled child size events. Pending updates
+can be cancelled before dispatch without starting firmware installation.
+
+The release browser displays the installed Stable/Nightly/Custom channel and
+source revision. Local builds remain Custom; stable release tooling explicitly
+marks Stable and generated nightly identities mark Nightly. Catalog rows mark
+Installed, Update Available, Older, channel switches and unorderable same-day
+nightly builds. Host channel/comparison and real-LVGL ownership/layout checks pass;
+CMake execution, target build, panel crash reproduction and actual OTA/reboot
+validation remain pending in this environment.
+
+
+### Settings firmware identity and update review
+
+Settings now shows the installed build channel and source revision beside the image version and compilation time. OTA confirmation separates installed and selected builds, download information, reboot/power guidance and scrollable release notes; actions remain pinned. The active chooser card shows Checking before its first health result and Connecting when initial health is online but transport is not ready. Confirmed failures and post-connection losses remain offline. Host checks cover these transitions and responsive OTA review; target/panel reboot and real installation remain pending.
+
+
+### Shared selector control styling
+
+Console, Telemetry, Motion diagnostics and Probe Accuracy now share flat selector fields and explicitly themed native lists, matching fonts for selected/normal options, a minimum 44-pixel option pitch, stable press geometry and keyboard-only focus outlines. Console reserves more width for filter names. Host checks exercise pointer selection, disabled fields and every theme/density/text configuration, plus native page and calibration layout checks. Panel touch/scroll validation remains pending; the current branch and stable version are retained.
+
+Release browser tabs now retain the bounded catalog rows and locally filter their visibility, preserving each channel scroll position. Repeated Stable/Nightly switches perform no catalog entry reads, row recreation or fetches; explicit Refresh still retires confirmation and rebuilds on catalog changes. Host fixtures cover repeated switching, row identity and fetch/read counts. Panel timing remains pending.
+
+
+### OTA transfer measurement and bounded receive tuning
+
+The common GitHub/custom-URL worker requests a 4 KiB receive buffer while retaining the 2 KiB redirect request buffer, certificate verification, keep-alive, existing cancellation/validation boundaries and sequential flash erasure. Firmware progress uses the ESP HTTPS OTA image counters after each perform call, excluding redirect bodies from transferred-image readings. A short critical section publishes coherent byte, state and clock snapshots; UI-thread formatting replaces per-data-event formatting. The progress dialog reports average effective download speed in KiB/s and elapsed time since the update started, including network preparation; readings freeze when transfer ends, before validation. Unknown image lengths remain supported. Host fault tests cover worker success/restart, cancellation, incomplete images, begin/perform/finish and task failures, lane timeouts, known/unknown lengths, clock snapshots and configuration. Real GitHub/custom download speed, target memory/cancel responsiveness and reboot remain pending; no speedup is claimed without panel measurement.
+
+Telemetry history status now has room for the compiler-reported worst-case text. Its host compile check enables format-truncation warnings as errors.
+
+The stricter Telemetry owner compilation also checks hotend-option assembly: bounded copies retain all four maximum-length object names without a potentially truncating append. Host selector tests cover those names and active-tool selection.
+
+
+### Diagnostic popup lifetime and retry
+
+Probe Accuracy and Live Endstops retire their refresh timers and widget references on external popup deletion as well as normal closure, before widgets are destroyed. Endstops also resets pending readings. Probe Accuracy ignores callbacks after closure and duplicate/reentrant dispatch, preserves its existing popup/sample selection on repeated opens, retains input with inline retry feedback if a request is rejected, and checks popup/printer ownership after dispatch. The Accuracy launcher clears its pointer when its card is deleted independently. Host checks cover direct deletion, late refresh/run callbacks, reopen cycles, rejection/retry, duplicate callbacks and printer-generation changes across all five themes/densities/text/viewports. Physical probe/endstop/panel checks remain pending.
+
+### Runtime checkpoint: OTA observation (2026-10-11)
+
+OTA did not download during the session and resumed after a controller reboot.
+The cause is not established; this remains an unresolved intermittent runtime
+issue. A successful download after reboot does not close it. Capture the serial
+log if it recurs, including the download start and any network-lane timeout.
+
+The user accepted the current download speed for now; further throughput tuning
+is deferred. Firmware/panel and physical print/recovery tests remain pending
+where documented. This checkpoint retains the feature branch and stable 6.5.6.

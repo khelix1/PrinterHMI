@@ -4,11 +4,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include "custom_theme.h"
+#include "telemetry_history.h"
+#include "settings_system_info.h"
+static unsigned history_reads;
+static bool counted_history_get(size_t index,telemetry_sample_t *sample){history_reads++;return telemetry_history_get(index,sample);}
+#define telemetry_history_get counted_history_get
 #include "ui_telemetry_charts.c"
+#undef telemetry_history_get
 #include "ui_telemetry.c"
 static moonraker_state_t state;
 static int64_t clock_us;
 static unsigned back_page,back_nav,invalidations;
+const char *esp_get_idf_version(void){return "host-test";}
+size_t heap_caps_get_free_size(unsigned caps){(void)caps;return 100000;}
+size_t heap_caps_get_minimum_free_size(unsigned caps){(void)caps;return 90000;}
+size_t heap_caps_get_largest_free_block(unsigned caps){(void)caps;return 80000;}
+static unsigned timers(void){unsigned n=0;lv_timer_t *t=NULL;while((t=lv_timer_get_next(t)))n++;return n;}
+static unsigned objects(lv_obj_t *p){unsigned n=1;for(uint32_t i=0;i<lv_obj_get_child_count(p);i++)n+=objects(lv_obj_get_child(p,i));return n;}
 int64_t esp_timer_get_time(void){return clock_us;}
 void moonraker_state_snapshot(moonraker_state_t *out){*out=state;}
 void ui_shell_page_action(ui_shell_page_t page){back_page=page;}
@@ -34,6 +46,7 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  s_window=300;s_include_targets=true;telemetry_history_reset();ready_state();clock_us=1000000;
  for(unsigned i=0;i<320;i++){clock_us+=2000000;assert(telemetry_history_sample(&state,clock_us));}
  assert(telemetry_history_count()==300);ui_telemetry_show();ui_telemetry_refresh(&state,clock_us);lv_obj_update_layout(s_panel);
+ history_reads=0;ui_telemetry_charts_refresh(clock_us,false);assert(history_reads==telemetry_history_count());
  assert(s_graph_host && lv_obj_get_height(s_graph_host)>40);
  assert(lv_obj_get_style_radius(s_range,0)==6 && lv_obj_get_style_shadow_width(s_range,0)==0);
  assert(lv_obj_get_style_radius(s_hotend_selector,0)==6 && lv_obj_get_style_shadow_width(s_hotend_selector,0)==0);
@@ -63,8 +76,23 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  tap(pointer,s_hold_button);assert(s_held);telemetry_history_reset();clock_us+=2000000;ui_telemetry_refresh(&state,clock_us);assert(!s_held && !telemetry_history_count());for(unsigned i=0;i<60;i++)assert(lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual)[i]==LV_CHART_POINT_NONE);
  ready_state();state.capabilities.has_heated_bed=false;state.capabilities.has_part_fan=false;state.capabilities.has_drybox_environment_sensor=false;clock_us+=2000000;ui_telemetry_refresh(&state,clock_us);assert(!strcmp(lv_label_get_text(s_charts[1].value),"N/A"));telemetry_sample_t sample;assert(telemetry_history_get(0,&sample));assert(isnan(sample.bed_temp)&&isnan(sample.humidity)&&isnan(sample.part_fan_speed));
  lv_refr_now(d);invalidations=0;ui_telemetry_refresh(&state,clock_us);assert(invalidations==0);
+ /* All four maximum-length names must remain distinct selector options. */
+ state.hotend_count=MOONRAKER_MAX_HOTENDS;
+ for(unsigned i=0;i<MOONRAKER_MAX_HOTENDS;i++)
+  snprintf(state.hotends[i].object_name,MOONRAKER_HOTEND_NAME_MAX,"%cabcdefghijklmnopqrstuv",'a'+i);
+ strcpy(state.active_hotend,state.hotends[3].object_name);clock_us+=2000000;
+ ui_telemetry_refresh(&state,clock_us);
+ assert(lv_dropdown_get_option_count(s_hotend_selector)==4 && lv_dropdown_get_selected(s_hotend_selector)==3);
+ assert(strlen(s_hotend_options)==MOONRAKER_MAX_HOTENDS*(MOONRAKER_HOTEND_NAME_MAX-1)+3);
+ for(unsigned i=0;i<4;i++)assert(strstr(s_hotend_options,state.hotends[i].object_name));
  lv_obj_scroll_to_y(s_graph_host,10000,LV_ANIM_OFF);lv_obj_update_layout(s_panel);assert(lv_obj_get_scroll_bottom(s_graph_host)<=1);
  lv_obj_t *root=s_panel;ui_telemetry_show();assert(root==s_panel);ui_telemetry_hide();assert(!s_panel&&!s_charts[0].chart);
+ unsigned object_baseline=objects(lv_screen_active())+objects(lv_layer_top()),timer_baseline=timers();
+ for(unsigned repeat=0;repeat<4;repeat++){ui_telemetry_show();ui_telemetry_hide();assert(objects(lv_screen_active())+objects(lv_layer_top())==object_baseline && timers()==timer_baseline);}
+ lv_obj_t *info=lv_obj_create(lv_screen_active()),*labels[4];for(unsigned j=0;j<4;j++)labels[j]=lv_label_create(info);
+ settings_system_info_bind_idf_label(labels[0]);settings_system_info_bind_heap_label(labels[1]);settings_system_info_bind_psram_label(labels[2]);settings_system_info_bind_uptime_label(labels[3]);
+ settings_system_info_refresh();lv_refr_now(d);invalidations=0;settings_system_info_refresh();assert(invalidations==0);
+ settings_system_info_unbind();lv_obj_delete(info);settings_system_info_refresh();
  ui_telemetry_show();lv_obj_delete(s_panel);assert(!s_panel&&!s_charts[0].chart);ui_telemetry_show();lv_obj_t *header=lv_obj_get_child(s_panel,0);tap(pointer,lv_obj_get_child(header,1));assert(back_page==UI_SHELL_PAGE_DEVICES && back_nav==UI_SHELL_PAGE_TOOLS);ui_telemetry_hide();
 }
 /* Physics/data checks independent of theme geometry. */
@@ -108,5 +136,5 @@ int32_t *a=lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual);
 assert(a[299]==2050 && a[298]==LV_CHART_POINT_NONE && a[297]==LV_CHART_POINT_NONE);
 state.hotends[0].temperature=NAN;clock_us+=2000000;ui_telemetry_refresh(&state,clock_us);
 assert(a[299]==LV_CHART_POINT_NONE);
-ui_telemetry_hide();
+ui_telemetry_hide();telemetry_history_reset();state.live_data_ok=state.moonraker_ok=false;ui_telemetry_refresh(&state,clock_us);ui_telemetry_show();assert(strstr(lv_label_get_text(s_history_status),"Reconnect"));state.moonraker_ok=true;ui_telemetry_refresh(&state,clock_us);assert(strstr(lv_label_get_text(s_history_status),"Klipper"));ui_telemetry_hide();
 lv_display_delete(d);lv_deinit();puts("PASS: modern telemetry native bounds/scroll, three views, range/hold, real touches, named hotend identity, time gaps, missing capabilities, offline/reset, no-op refresh and owner lifecycle across all five themes/densities/text sizes/viewports");}

@@ -1,3 +1,4 @@
+#include "ui_selector_style.h"
 #include "ui_console.h"
 #include "ui_text.h"
 
@@ -410,9 +411,8 @@ static void create_filters(void)
 {
     s_filters=plain(s_root,LV_FLEX_FLOW_ROW_WRAP);
     s_filter_dropdown=lv_dropdown_create(s_filters);
-    lv_obj_set_size(s_filter_dropdown,184,48);
-    ui_apply_surface_role(s_filter_dropdown,UI_SURFACE_TEXT_INPUT);
-    lv_obj_set_style_text_font(s_filter_dropdown,UI_FONT_CAPTION,0);
+    lv_obj_set_size(s_filter_dropdown,260,48);
+    ui_selector_style(s_filter_dropdown,UI_FONT_CAPTION);
     lv_dropdown_set_options(s_filter_dropdown,"All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
     lv_dropdown_set_selected(s_filter_dropdown,(uint32_t)s_filter);
     lv_obj_add_event_cb(s_filter_dropdown,filter_cb,LV_EVENT_VALUE_CHANGED,NULL);

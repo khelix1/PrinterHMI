@@ -4,6 +4,7 @@
 #include <string.h>
 #include "custom_theme.h"
 #include "ui_motion_diagnostics.c"
+#include "keyboard_layout_checks.h"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
@@ -34,7 +35,7 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   show_view(VIEW_DISTANCE);layout(s->popup);lv_obj_update_layout(s->popup);inside(s->pitch,lv_obj_get_parent(s->pitch));inside(s->pitch_label,lv_obj_get_parent(s->pitch));inside(s->count,lv_obj_get_parent(s->count));assert(lv_obj_get_height(s->pitch)>=56&&lv_obj_get_height(s->count)>=56);
   lv_area_t pitch_area,count_area;lv_obj_get_coords(s->pitch,&pitch_area);lv_obj_get_coords(s->count,&count_area);assert(pitch_area.y1==count_area.y1);
   if(!narrow&&density==1&&large){snapshot(theme,"distance");}calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"40.000000"));lv_dropdown_set_selected(s->mode,1);lv_obj_send_event(s->mode,LV_EVENT_VALUE_CHANGED,NULL);lv_obj_update_layout(s->popup);lv_obj_get_coords(s->pitch,&pitch_area);lv_obj_get_coords(s->count,&count_area);assert(pitch_area.y1==count_area.y1);if(!narrow&&density==1&&large)snapshot(theme,"distance-screw");calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"8.000000"));
-  click(s->pitch);assert(s->editor);layout(s->editor);assert(lv_obj_get_height(s->editor_value)>=56);if(!narrow&&density==1&&large)snapshot(theme,"editor");lv_textarea_set_text(s->editor_value,"1.25");click(lv_obj_get_child(lv_obj_get_child(s->editor,-1),1));assert(!s->editor&&!strcmp(lv_textarea_get_text(s->pitch),"1.25"));calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"5.000000"));lv_textarea_set_text(s->count,"0");calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"whole count"));
+  click(s->pitch);assert(s->editor);layout(s->editor);assert(lv_obj_get_height(s->editor_value)>=56);if(!narrow&&density==1&&large)snapshot(theme,"editor");keyboard_layout_check(s->editor,lv_obj_get_child(s->editor,2),s->editor_value);lv_textarea_set_text(s->editor_value,"0");lv_obj_send_event(lv_obj_get_child(s->editor,2),LV_EVENT_READY,NULL);assert(s->editor&&!strcmp(lv_textarea_get_text(s->editor_value),"0"));lv_textarea_set_text(s->editor_value,"1.25");lv_obj_send_event(lv_obj_get_child(s->editor,2),LV_EVENT_READY,NULL);assert(!s->editor&&!strcmp(lv_textarea_get_text(s->pitch),"1.25"));calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"5.000000"));lv_textarea_set_text(s->count,"0");calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"whole count"));
   click(s->pitch);generation++;refresh(NULL);assert(!s->editor&&strstr(lv_label_get_text(s->result),"Printer changed"));close_popup();assert(!s->timer&&!s->pitch);
  }
  width=1024;lv_display_set_resolution(d,1024,600);reset();show_view(VIEW_DISTANCE);click(s->pitch);lv_obj_delete(s->editor);assert(!s->editor&&!s->editor_target);click(s->pitch);lv_obj_delete(s->popup);assert(!s->popup&&!s->timer&&!s->editor);show_view(VIEW_LIMITS);click(lv_obj_get_child(lv_obj_get_child(s->popup,-1),0));assert(!s->popup&&!s->timer);

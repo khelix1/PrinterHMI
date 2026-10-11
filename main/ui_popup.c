@@ -593,10 +593,14 @@ lv_obj_t *ui_popup_add_textarea(lv_obj_t *popup,
     /*
      * Popup input appearance belongs to the shared theme.
      */
-    ui_apply_text_title(textarea);
+    ui_apply_text_body(textarea);
 
     ui_apply_surface_role(textarea, UI_SURFACE_TEXT_INPUT);
 
+    if(height>0 && !LV_COORD_IS_PCT(height) && height!=LV_SIZE_CONTENT) {
+        lv_obj_set_style_min_height(textarea,height,0);lv_obj_set_height(textarea,height);
+    }
+    lv_obj_add_event_cb(textarea,ui_popup_input_focus_cb,LV_EVENT_FOCUSED,NULL);
     return textarea;
 }
 
@@ -998,4 +1002,57 @@ void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *
         ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "CLOSE", cal_notice_close, NULL, NULL);
     }
     ui_popup_feedback(ui_cal_dialog_body(popup), kind, title, detail);
+}
+
+void ui_popup_focus_input(lv_obj_t *input)
+{
+    if(!input)return;
+    lv_obj_update_layout(input);
+    lv_obj_add_state(input,LV_STATE_FOCUSED);
+    lv_obj_scroll_to_view_recursive(input,LV_ANIM_OFF);
+}
+void ui_popup_input_focus_cb(lv_event_t *event)
+{
+    ui_popup_focus_input(lv_event_get_target_obj(event));
+}
+void ui_popup_keyboard_actions(lv_obj_t *keyboard,lv_event_cb_t ready,lv_event_cb_t cancel)
+{
+    if(!keyboard)return;
+    if(ready)lv_obj_add_event_cb(keyboard,ready,LV_EVENT_READY,NULL);
+    if(cancel)lv_obj_add_event_cb(keyboard,cancel,LV_EVENT_CANCEL,NULL);
+}
+void ui_popup_pin_keyboard(lv_obj_t *form,lv_obj_t *keyboard)
+{
+    if(!form||!keyboard)return;
+    lv_obj_t *input=lv_keyboard_get_textarea(keyboard),*body=input;
+    while(body && lv_obj_get_parent(body)!=form)body=lv_obj_get_parent(body);
+    lv_obj_set_parent(keyboard,form);
+    lv_obj_move_to_index(keyboard,(int32_t)lv_obj_get_child_count(form)-2);
+    int height=lv_display_get_vertical_resolution(NULL)/3;
+    if(height<140)height=140;
+    if(height>200)height=200;
+    lv_obj_set_flex_grow(keyboard,0);lv_obj_set_style_min_height(keyboard,0,0);
+    lv_obj_set_size(keyboard,LV_PCT(100),height);lv_obj_set_align(keyboard,LV_ALIGN_TOP_LEFT);
+    for(unsigned pass=0;pass<2;pass++) {
+        lv_obj_update_layout(form);
+        int reserved=0;unsigned visible=0;
+        for(unsigned i=0;i<lv_obj_get_child_count(form);i++) {
+            lv_obj_t *child=lv_obj_get_child(form,i);
+            if(lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))continue;
+            visible++;
+            if(child!=body && child!=keyboard)reserved+=lv_obj_get_height(child);
+        }
+        int minimum=input?lv_obj_get_height(input):56;
+        if(minimum<56)minimum=56;
+        if(body)minimum+=lv_obj_get_style_pad_top(body,0)+lv_obj_get_style_pad_bottom(body,0);
+        int available=lv_obj_get_content_height(form)-reserved-minimum-
+            (int)(visible?visible-1:0)*lv_obj_get_style_pad_row(form,0);
+        if(available<140 && !pass) {
+            lv_obj_set_style_pad_all(form,12,0);lv_obj_set_style_pad_row(form,8,0);continue;
+        }
+        if(height>available)height=available;
+        if(height<96)height=96;
+        lv_obj_set_height(keyboard,height);break;
+    }
+    lv_obj_update_layout(form);ui_popup_focus_input(input);
 }

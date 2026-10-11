@@ -1,4 +1,5 @@
 #include "ui_files.h"
+#include "ui_form_dialog.h"
 #include "ui_text.h"
 #include "ui_page_layout_profile.h"
 
@@ -651,75 +652,16 @@ static void search_button_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     close_search_popup();
-    s_search_popup = ui_popup_create(
-        lv_layer_top(), 760, 500, UI_POPUP_STANDARD);
-    if (!s_search_popup) return;
-    lv_obj_add_event_cb(s_search_popup,
-                        search_popup_deleted_cb,
-                        LV_EVENT_DELETE,
-                        NULL);
-
-    ui_popup_add_title(s_search_popup, ui_text("SEARCH FILES"), false, 8);
-    ui_popup_add_header_divider(s_search_popup, 44);
-
-    s_search_textarea = ui_popup_add_textarea(
-        s_search_popup,
-        700,
-        56,
-        LV_ALIGN_TOP_MID,
-        0,
-        58,
-        true,
-        false,
-        sizeof(s_search_text) - 1,
-        ui_text("Search filenames and folders"),
-        s_search_text,
-        NULL);
-
-    lv_obj_t *keyboard = ui_popup_add_keyboard(
-        s_search_popup,
-        s_search_textarea,
-        700,
-        300,
-        LV_ALIGN_TOP_MID,
-        0,
-        126,
-        LV_KEYBOARD_MODE_TEXT_LOWER);
-
-    if (keyboard) {
-        lv_obj_add_event_cb(keyboard,
-                            search_keyboard_cb,
-                            LV_EVENT_READY,
-                            NULL);
-        lv_obj_add_event_cb(keyboard,
-                            search_keyboard_cb,
-                            LV_EVENT_CANCEL,
-                            NULL);
-    }
-
-    ui_popup_add_standard_footer_divider(s_search_popup);
-    ui_popup_add_footer_action(
-        s_search_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        search_cancel_button_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_search_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_OK " SEARCH",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        search_apply_button_cb,
-        NULL,
-        NULL);
-
-    if (s_search_textarea) {
-        lv_obj_add_state(s_search_textarea, LV_STATE_FOCUSED);
-    }
+    s_search_popup=ui_form_dialog("SEARCH FILES",760,540,UI_POPUP_STANDARD);
+    if(!s_search_popup)return;
+    lv_obj_add_event_cb(s_search_popup,search_popup_deleted_cb,LV_EVENT_DELETE,NULL);
+    lv_obj_t *body=ui_form_body(s_search_popup);
+    s_search_textarea=ui_form_input(body,"Search filenames and folders",s_search_text,false,sizeof(s_search_text)-1);
+    lv_obj_t *keyboard=ui_form_keyboard(s_search_popup,s_search_textarea,LV_KEYBOARD_MODE_TEXT_LOWER);
+    ui_popup_keyboard_actions(keyboard,search_keyboard_cb,search_keyboard_cb);
+    ui_form_action(s_search_popup,UI_BUTTON_CANCEL,"CANCEL",search_cancel_button_cb,NULL);
+    ui_form_action(s_search_popup,UI_BUTTON_PRIMARY,"SEARCH",search_apply_button_cb,NULL);
+    ui_form_finish(s_search_popup);ui_popup_focus_input(s_search_textarea);
     lv_obj_move_foreground(s_search_popup);
 }
 

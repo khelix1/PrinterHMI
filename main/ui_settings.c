@@ -1081,7 +1081,7 @@ void ui_settings_show_page(
 
     ui_settings_section_add_divider(display, display_row_5 + row_height);
     s_notifications_label = ui_settings_section_add_row(display,
-        "Notifications", "Optional confirmations; errors remain visible",
+        "Notifications", "System-wide level; faults remain visible",
         ui_toast_preference_label(), display_row_6, settings_notifications_cb);
 
     section_y += display_height + section_gap;

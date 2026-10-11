@@ -288,9 +288,11 @@ static void open_editor(lv_obj_t *target, bool search)
         search ? s_macros->query : lv_textarea_get_text(target), NULL);
     ui_apply_custom_label_style(s_macros->editor_value, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_height(s_macros->editor_value, 56);
-    ui_popup_add_keyboard(body, s_macros->editor_value, LV_PCT(100), 224,
+    lv_obj_t *keyboard=ui_popup_add_keyboard(body, s_macros->editor_value, LV_PCT(100), 224,
         LV_ALIGN_TOP_LEFT, 0, 0, LV_KEYBOARD_MODE_TEXT_LOWER);
     macro_actions(s_macros->editor, "DONE", editor_cancel_cb, editor_done_cb);
+    ui_popup_keyboard_actions(keyboard,editor_done_cb,editor_cancel_cb);
+    ui_popup_pin_keyboard(s_macros->editor,keyboard);
 }
 static void field_cb(lv_event_t *event) { open_editor(lv_event_get_target(event), false); }
 static void search_cb(lv_event_t *event) { (void)event; open_editor(NULL, true); }
@@ -484,8 +486,7 @@ static void rebuild_macro_list(void)
         lv_obj_set_height(button, LV_SIZE_CONTENT);
         lv_obj_set_style_min_height(button, 56, 0);
         lv_obj_set_style_pad_ver(button, 12, 0);
-        lv_obj_set_flex_grow(label, 1);
-        lv_obj_set_width(label, 0);
+        /* Shared intrinsic label sizing keeps the icon/name group centered. */
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
         ++displayed;
     }

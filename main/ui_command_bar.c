@@ -2,6 +2,7 @@
 #include "ui_button.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_text_fit.h"
 #include <string.h>
 
 static lv_obj_t *s_command_bar = NULL;
@@ -214,6 +215,13 @@ lv_obj_t *ui_command_bar_create(lv_obj_t *parent, int x, int y, int w, int h)
         lv_obj_clean(s_resume_button); ui_button_create_label(s_resume_button,LV_SYMBOL_PLAY " Resume");
         lv_obj_clean(s_cancel_button); ui_button_create_label(s_cancel_button,LV_SYMBOL_STOP " Stop");
         lv_obj_clean(s_object_button); ui_button_create_label(s_object_button,"Object");
+        lv_obj_t *actions[]={s_pause_button,s_resume_button,s_cancel_button,s_object_button};
+        for(unsigned i=0;i<4;i++) {
+            lv_obj_t *label=lv_obj_get_child(actions[i],0);
+            ui_text_fit_single_line(label,UI_FONT_BODY);
+            lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+        }
+
     }
     ui_command_bar_update(NULL, false);
 

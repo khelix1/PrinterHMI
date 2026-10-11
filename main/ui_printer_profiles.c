@@ -673,6 +673,15 @@ static void editor_keyboard_discard(void)
 static void editor_keyboard_popup_done_cb(lv_event_t *event)
 {
     (void)event;
+    if(s_editor_keyboard_target==s_editor_port && s_editor_keyboard_value) {
+        const char *value=lv_textarea_get_text(s_editor_keyboard_value);char *end=NULL;
+        long port=strtol(value?value:"",&end,10);
+        if(!value||!value[0]||!end||*end||port<1||port>65535) {
+            ui_popup_feedback(lv_obj_get_child(s_editor_keyboard_popup,1),UI_STATUS_WARNING,
+                "INVALID PORT","Enter a port from 1 to 65535. Input has been kept.");
+            ui_popup_focus_input(s_editor_keyboard_value);return;
+        }
+    }
     if (s_editor_keyboard_target && s_editor_keyboard_value)
         lv_textarea_set_text(s_editor_keyboard_target, lv_textarea_get_text(s_editor_keyboard_value));
     editor_keyboard_discard();
@@ -715,6 +724,7 @@ static void editor_field_focused_cb(lv_event_t *event)
     lv_obj_t *footer = profiles_footer(s_editor_keyboard_popup);
     profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_keyboard_cancel_cb);
     profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " DONE", editor_keyboard_popup_done_cb);
+    ui_popup_pin_keyboard(s_editor_keyboard_popup,s_editor_keyboard);
     lv_obj_move_foreground(s_editor_keyboard_popup);
 }
 

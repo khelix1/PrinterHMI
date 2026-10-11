@@ -243,3 +243,9 @@ lv_obj_t *ui_popup_find_owner(lv_obj_t *object);
 lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind, const char *title, const char *detail);
 void ui_cal_dialog_register(lv_obj_t *popup);
 void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *detail);
+
+/* Native column forms: pin the keyboard immediately above the final footer. */
+void ui_popup_pin_keyboard(lv_obj_t *form,lv_obj_t *keyboard);
+void ui_popup_focus_input(lv_obj_t *input);
+void ui_popup_input_focus_cb(lv_event_t *event);
+void ui_popup_keyboard_actions(lv_obj_t *keyboard,lv_event_cb_t ready,lv_event_cb_t cancel);

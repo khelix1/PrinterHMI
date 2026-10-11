@@ -4,12 +4,18 @@
 #include <string.h>
 #include "custom_theme.h"
 #include "ui_printer_popups.c"
+#include "keyboard_layout_checks.h"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
+static uint32_t generation=1;
+uint32_t moonraker_config_generation(void){return generation;}
+static bool linked=true,accept_send=true;
+void moonraker_state_snapshot(moonraker_state_t *out){memset(out,0,sizeof(*out));out->moonraker_ok=out->live_data_ok=linked;}
 static char sent[128];static unsigned sends;
 static void send(const char *s){snprintf(sent,sizeof(sent),"%s",s);sends++;}
+static bool checked_send(const char *s){if(!accept_send)return false;send(s);return true;}
 static void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
 static uint16_t raster[1024*600];static int viewport_width=1024;
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*viewport_width+x]=*v++;lv_display_flush_ready(d);}
@@ -21,9 +27,9 @@ static void layout(void){lv_obj_update_layout(s_control_popup);lv_obj_t *footer=
  lv_obj_t *grid=presets();lv_obj_t *cards=lv_obj_get_child(body(),0);for(uint32_t c=0;c<lv_obj_get_child_count(cards);c++){lv_obj_t *card=lv_obj_get_child(cards,c);assert(lv_obj_get_height(card)<160);for(uint32_t n=0;n<lv_obj_get_child_count(card);n++)inside(lv_obj_get_child(card,n),card);}for(uint32_t i=0;i<lv_obj_get_child_count(grid);i++){lv_obj_t *b=lv_obj_get_child(grid,i);assert(lv_obj_get_width(b)>100&&lv_obj_get_height(b)>=48);inside(b,grid);inside(lv_obj_get_child(b,0),b);lv_area_t a;lv_obj_get_coords(b,&a);for(uint32_t j=0;j<i;j++){lv_area_t c;lv_obj_get_coords(lv_obj_get_child(grid,j),&c);assert(a.x2<c.x1||c.x2<a.x1||a.y2<c.y1||c.y2<a.y1);}}
  lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body(),200,LV_ANIM_OFF);lv_obj_update_layout(s_control_popup);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body(),0,LV_ANIM_OFF);
 }
-static void open_custom(void){lv_obj_t *cards=lv_obj_get_child(body(),0);click(lv_obj_get_child(cards,1));assert(s_custom_temp_popup);lv_obj_update_layout(s_custom_temp_popup);lv_obj_t *footer=lv_obj_get_child(s_custom_temp_popup,-1);inside(footer,s_custom_temp_popup);for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++)inside(lv_obj_get_child(footer,i),footer);assert(lv_obj_get_width(s_custom_temp_textarea)>200);}
+static void open_custom(void){lv_obj_t *cards=lv_obj_get_child(body(),0);click(lv_obj_get_child(cards,1));assert(s_custom_temp_popup);lv_obj_update_layout(s_custom_temp_popup);lv_obj_t *footer=lv_obj_get_child(s_custom_temp_popup,-1);inside(footer,s_custom_temp_popup);for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++)inside(lv_obj_get_child(footer,i),footer);assert(lv_obj_get_width(s_custom_temp_textarea)>200);keyboard_layout_check(s_custom_temp_popup,lv_obj_get_child(s_custom_temp_popup,2),s_custom_temp_textarea);}
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
- for(int width_case=0;width_case<3;width_case++)for(int theme=0;theme<4;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
+ for(int width_case=0;width_case<3;width_case++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
   viewport_width=(int[]){1024,640,480}[width_case];lv_display_set_resolution(d,viewport_width,width_case==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   ui_printer_popups_show_nozzle(send,204,215);layout();if(!width_case&&density==1&&large)snapshot(theme,"nozzle");unsigned before=sends;click(lv_obj_get_child(presets(),1));assert(sends==before+1&&!strcmp(sent,"M104 S200")&&!s_control_popup);
   ui_printer_popups_show_bed(send,59,60);layout();open_custom();if(!width_case&&density==1&&large)snapshot(theme,"keyboard");lv_textarea_set_text(s_custom_temp_textarea,"999");set_custom_temp_cb(NULL);assert(s_custom_temp_popup&&sends==before+1);lv_textarea_set_text(s_custom_temp_textarea,"0");set_custom_temp_cb(NULL);assert(!s_custom_temp_popup&&!s_control_popup&&!strcmp(sent,"M140 S0"));
@@ -31,5 +37,15 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   ui_printer_popups_show_nozzle(send,-200,-1);layout();open_custom();lv_obj_t *footer=lv_obj_get_child(s_custom_temp_popup,-1);click(lv_obj_get_child(footer,0));assert(!s_custom_temp_popup&&s_control_popup);click(lv_obj_get_child(lv_obj_get_child(s_control_popup,-1),0));assert(!s_control_popup);
  }
  // Dynamic hotend prefixes still address the selected heater, not M104's default.
- lv_display_set_resolution(d,1024,600);viewport_width=1024;s_send_gcode_cb=send;const char *cmds[]={"SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=215","SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=0"};const char *labels[]={"215 C","OFF"};double values[]={215,0};show_control_popup("T1 TEMPERATURE",210,215,"C",true,cmds,labels,values,2,"CUSTOM T1 TEMP","SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=",300);layout();open_custom();lv_textarea_set_text(s_custom_temp_textarea,"230");lv_obj_t *keyboard=lv_obj_get_child(lv_obj_get_child(s_custom_temp_popup,1),2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=230")&&!s_control_popup&&!s_custom_temp_popup);
- puts("PASS: native popup wrapping/scroll, pinned actions, four themes/densities/text sizes, 1024/640/480 widths, preset/custom/zero/range/keyboard commands and teardown");return 0;}
+ lv_display_set_resolution(d,1024,600);viewport_width=1024;s_send_gcode_cb=send;const char *cmds[]={"SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=215","SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=0"};const char *labels[]={"215 C","OFF"};double values[]={215,0};show_control_popup("T1 TEMPERATURE",210,215,"C",true,cmds,labels,values,2,"CUSTOM T1 TEMP","SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=",300);layout();open_custom();lv_textarea_set_text(s_custom_temp_textarea,"230");lv_obj_t *keyboard=lv_obj_get_child(s_custom_temp_popup,2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=230")&&!s_control_popup&&!s_custom_temp_popup);
+ ui_printer_popups_set_control_sender(checked_send);ui_printer_popups_show_bed(send,60,60);open_custom();
+ lv_textarea_set_text(s_custom_temp_textarea,"80");unsigned before=sends;accept_send=false;
+ keyboard=lv_obj_get_child(s_custom_temp_popup,2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);
+ assert(s_custom_temp_popup&&sends==before&&!strcmp(lv_textarea_get_text(s_custom_temp_textarea),"80")&&strstr(lv_label_get_text(s_custom_temp_status),"Send failed"));
+ accept_send=true;linked=false;lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before&&s_custom_temp_popup);
+ linked=true;generation++;lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before&&strstr(lv_label_get_text(s_custom_temp_status),"Printer changed"));
+ lv_obj_send_event(keyboard,LV_EVENT_CANCEL,NULL);assert(!s_custom_temp_popup&&s_control_popup);lv_obj_delete(s_control_popup);
+ ui_printer_popups_show_bed(send,60,60);open_custom();lv_textarea_set_text(s_custom_temp_textarea,"80");keyboard=lv_obj_get_child(s_custom_temp_popup,2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before+1&&!s_custom_temp_popup&&!s_control_popup);
+ ui_printer_popups_show_bed(send,60,60);open_custom();lv_obj_delete(s_control_popup);assert(!s_custom_temp_popup&&!s_custom_temp_textarea);
+ ui_printer_popups_show_part_fan(send,50);accept_send=false;click(lv_obj_get_child(presets(),3));assert(s_control_popup&&sends==before+1);accept_send=true;click(lv_obj_get_child(presets(),3));assert(!s_control_popup&&sends==before+2);
+ puts("PASS: native popup wrapping/scroll, pinned actions, five themes/densities/text sizes, 1024/640/480 widths, preset/custom/zero/range/keyboard commands and teardown");return 0;}

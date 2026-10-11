@@ -11,6 +11,7 @@
 #include "device_catalog_controller.h"
 #include "ui_devices_live_values.h"
 #include "ui_popup.h"
+#include "keyboard_layout_checks.h"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 static bool custom_tokens;
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;if(custom_tokens){*d=c+2;return true;}(void)d;return false;}
@@ -135,6 +136,10 @@ static void run(int width){
  ui_files_show_detail_popup("Final_file.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
  detail_start_event_cb(NULL);assert(s_print_confirm_popup);ui_files_close_detail_popup();assert(!s_print_confirm_popup && !s_detail_filename);
 
+ lv_obj_t *event_source=lv_button_create(lv_screen_active());lv_obj_add_event_cb(event_source,search_button_cb,LV_EVENT_CLICKED,NULL);lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);
+ assert(s_search_popup);keyboard_layout_check(s_search_popup,lv_obj_get_child(s_search_popup,2),s_search_textarea);
+ lv_textarea_set_text(s_search_textarea,"test query");lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_CANCEL,NULL);lv_timer_handler();assert(!s_search_popup);
+ lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_READY,NULL);lv_timer_handler();assert(!s_search_popup);lv_obj_delete(event_source);
  snapshot(s_printer_file_popup);ui_files_hide();assert(!s_file_detail_popup && !s_studio_metadata_popup);assert(!s_printer_file_popup);
 }
 #elif defined(TEST_NETWORK)
@@ -211,8 +216,8 @@ static void run(int width){
   lv_obj_t *label=lv_obj_get_child(button,0);
   assert(lv_obj_get_height(label)<=lv_obj_get_style_text_font(label,0)->line_height);
  }
- search_cb(NULL);macro_popup_bounds(s_macros->editor,width);snapshot(s_macros->editor);
- lv_textarea_set_text(s_macros->editor_value,"MACRO_00");editor_done_cb(NULL);
+ search_cb(NULL);macro_popup_bounds(s_macros->editor,width);keyboard_layout_check(s_macros->editor,lv_obj_get_child(s_macros->editor,2),s_macros->editor_value);snapshot(s_macros->editor);
+ lv_textarea_set_text(s_macros->editor_value,"discard me");lv_obj_send_event(lv_obj_get_child(s_macros->editor,2),LV_EVENT_CANCEL,NULL);assert(!s_macros->editor);search_cb(NULL);lv_textarea_set_text(s_macros->editor_value,"MACRO_00");lv_obj_send_event(lv_obj_get_child(s_macros->editor,2),LV_EVENT_READY,NULL);
  assert(!s_macros->editor && !strcmp(s_macros->query,"MACRO_00"));
  assert(!lv_obj_has_flag(s_macros->rows[0],LV_OBJ_FLAG_HIDDEN));
  clear_search_cb(NULL);lv_obj_update_layout(s_root);

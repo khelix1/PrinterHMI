@@ -1844,6 +1844,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 
     moonraker_state_t telemetry_state;
     moonraker_state_snapshot(&telemetry_state);
+    ui_toast_observe_printer(&telemetry_state);
 
     moonraker_filament_state_t filament_state;
     moonraker_filament_state_snapshot(
@@ -2155,12 +2156,12 @@ static void clear_sensitive_buffer(
 }
 
 
-static void connect_selected_wifi(void)
+static bool connect_selected_wifi(void)
 {
     if (!ui_network_tools_selected_wifi_ssid[0]) {
         safe_copy(ui_network_tools_network_scan_status, sizeof(ui_network_tools_network_scan_status),
                   "No WiFi selected");
-        return;
+        return false;
     }
 
     wifi_config_t cfg = {0};
@@ -2202,7 +2203,7 @@ static void connect_selected_wifi(void)
             cfg.sta.password,
             sizeof(cfg.sta.password));
 
-        return;
+        return false;
     }
 
     /*
@@ -2223,6 +2224,7 @@ static void connect_selected_wifi(void)
         snprintf(ui_network_tools_network_scan_status, sizeof(ui_network_tools_network_scan_status),
                  "Connect failed starting WiFi:\n%s", esp_err_to_name(err));
     }
+    return err == ESP_OK;
 }
 
 
@@ -2243,7 +2245,12 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
         safe_copy(saved_wifi_password, sizeof(saved_wifi_password),
                   ui_network_tools_selected_wifi_password);
     }
-    connect_selected_wifi();
+    else {
+        ui_network_tools_wifi_password_set_status("Could not save WiFi credentials. Try again.");
+        clear_sensitive_buffer(ui_network_tools_selected_wifi_password,sizeof(ui_network_tools_selected_wifi_password));
+        return;
+    }
+    bool connection_started=connect_selected_wifi();
 
     clear_sensitive_buffer(
         ui_network_tools_selected_wifi_password,
@@ -2252,7 +2259,8 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
     ui_network_tools_wifi_scan_set_status(
         ui_network_tools_network_scan_status);
 
-    ui_network_tools_wifi_scan_close_owned();
+    if(connection_started)ui_network_tools_wifi_scan_close_owned();
+    else ui_network_tools_wifi_password_set_status(ui_network_tools_network_scan_status);
 }
 
 static void ui_network_tools_show_wifi_password_popup(void)
@@ -3917,6 +3925,7 @@ void app_main(void)
 
     theme_manager_init();
     ui_toast_init();
+    ui_printer_popups_set_control_sender(action_send_gcode_inline);
     onboarding_controller_init();
 
     /* Apply the saved local timezone before any clock or SNTP path starts. */

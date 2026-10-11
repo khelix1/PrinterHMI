@@ -342,7 +342,7 @@ void ui_setup_wizard_close(void)
     s_center = NULL;
 }
 
-static void focus_cb(lv_event_t *event) { if (s_keyboard) lv_keyboard_set_textarea(s_keyboard, lv_event_get_target(event)); }
+static void focus_cb(lv_event_t *event) { if (s_keyboard) lv_keyboard_set_textarea(s_keyboard, lv_event_get_target(event)); ui_popup_focus_input(lv_event_get_target_obj(event)); }
 
 static void wifi_scan_task(void *ignored)
 {
@@ -384,13 +384,18 @@ static void wifi_scan_task(void *ignored)
 static void wifi_password_open(void)
 {
     delete_poll();setup_begin_content("Connect to Wi-Fi",s_selected_ssid);
+    /* Keep the network name with the field; the setup header already names the step. */
+    lv_obj_delete(lv_obj_get_child(s_setup_content,0));
+    lv_obj_set_parent(s_status,s_stage);
     s_password=ui_popup_add_textarea(s_stage,1,48,LV_ALIGN_TOP_LEFT,0,0,true,true,63,"Wi-Fi password","",NULL);
-    lv_obj_set_width(s_password,LV_PCT(100));
+    lv_obj_set_size(s_password,LV_PCT(100),56);
     ui_apply_text_body(s_password);
     s_keyboard=ui_popup_add_keyboard(s_stage,s_password,1,180,LV_ALIGN_TOP_LEFT,0,0,LV_KEYBOARD_MODE_TEXT_LOWER);
     lv_obj_set_width(s_keyboard,LV_PCT(100));
     if(s_password)lv_obj_add_event_cb(s_password,focus_cb,LV_EVENT_CLICKED,NULL);
     setup_action(s_actions,"Connect",UI_POPUP_ACTION_CONFIRM,wifi_save_cb);
+    ui_popup_keyboard_actions(s_keyboard,wifi_save_cb,wifi_scan_open_cb);
+    ui_popup_pin_keyboard(s_setup_content,s_keyboard);
 }
 
 static void wifi_selected_cb(lv_event_t *event)
@@ -482,6 +487,7 @@ static void wifi_verify(lv_timer_t *timer)
 static void wifi_save_cb(lv_event_t *event)
 {
     (void)event;
+    if(s_poll)return; /* Connection verification already owns this request. */
     const char *password = s_password ? lv_textarea_get_text(s_password) : "";
     if (!s_wifi_connect || !s_wifi_connect(s_selected_ssid, password)) { set_status("Could not start the connection. Check the password and try again."); return; }
     set_status("Connecting and verifying Wi-Fi…");

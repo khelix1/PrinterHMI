@@ -31,6 +31,8 @@ static lv_obj_t *control_footer(lv_obj_t *popup);
 static int32_t control_width(int32_t preferred);
 static int32_t control_height(int32_t preferred);
 static lv_obj_t *s_control_popup = NULL;
+static uint32_t s_control_owner;
+static bool (*s_control_send)(const char *command);
 static lv_obj_t *s_hotend_list_popup = NULL;
 static lv_obj_t *s_hotend_activate_popup = NULL;
 static lv_timer_t *s_hotend_refresh_timer = NULL;
@@ -739,6 +741,27 @@ static void close_popup_event_cb(lv_event_t *e)
     }
 }
 
+void ui_printer_popups_set_control_sender(bool (*send)(const char *command))
+{
+    s_control_send=send;
+}
+static bool control_send(const char *command,const char **error)
+{
+    *error="Send failed. Input kept; check the connection and retry.";
+    if(s_control_owner!=moonraker_config_generation()) {
+        *error="Printer changed. Cancel and reopen this control.";return false;
+    }
+    if(s_control_send) {
+        moonraker_state_t state;moonraker_state_snapshot(&state);
+        if(!state.moonraker_ok || !state.live_data_ok) {
+            *error="Printer is offline or live status is unavailable. Input kept.";return false;
+        }
+        return s_control_send(command);
+    }
+    if(!s_send_gcode_cb)return false;
+    s_send_gcode_cb(command);return true;
+}
+
 static void gcode_button_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -746,8 +769,10 @@ static void gcode_button_event_cb(lv_event_t *e)
     const char *cmd =
         (const char *)lv_event_get_user_data(e);
 
-    if (cmd && cmd[0] && s_send_gcode_cb) {
-        s_send_gcode_cb(cmd);
+    const char *error="No command selected.";
+    if(!cmd || !cmd[0] || !control_send(cmd,&error)) {
+        if(s_control_popup)ui_popup_feedback(lv_obj_get_child(s_control_popup,1),UI_STATUS_WARNING,"NOT SENT",error);
+        return;
     }
 
     lv_obj_t *btn = lv_event_get_target(e);
@@ -768,6 +793,7 @@ static void control_popup_deleted_cb(lv_event_t *event)
 {
     if (event && lv_event_get_target(event) == s_control_popup) {
         s_control_popup = NULL;
+        if(s_custom_temp_popup)lv_obj_delete(s_custom_temp_popup);
     }
 }
 
@@ -827,7 +853,12 @@ static void set_custom_temp_cb(lv_event_t *event)
         return;
     }
 
-    if (s_send_gcode_cb) s_send_gcode_cb(command);
+    const char *error;
+    if(!control_send(command,&error)) {
+        lv_label_set_text(s_custom_temp_status,error);
+        lv_obj_set_style_text_color(s_custom_temp_status,UI_WARN,0);
+        ui_popup_focus_input(s_custom_temp_textarea);return;
+    }
 
     close_custom_temp_cb(NULL);
     if (s_control_popup) lv_obj_delete(s_control_popup);
@@ -967,7 +998,7 @@ static void open_custom_temp_cb(lv_event_t *event)
         LV_SYMBOL_OK " SET", 0, 0, 160, 48, set_custom_temp_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1);
     lv_obj_set_flex_grow(set, 1);
-    if (s_custom_temp_textarea) lv_obj_add_state(s_custom_temp_textarea, LV_STATE_FOCUSED);
+    ui_popup_pin_keyboard(s_custom_temp_popup,keyboard);
 }
 
 static lv_obj_t *control_popup_button(lv_obj_t *parent, const char *text,
@@ -1019,6 +1050,7 @@ static void show_control_popup(const char *title, double current_value,
         control_height(460), UI_POPUP_STANDARD);
     if (!popup) return;
     s_control_popup = popup;
+    s_control_owner=moonraker_config_generation();
     s_custom_temp_title = custom_title;
     s_custom_temp_command_prefix = custom_command_prefix;
     s_custom_temp_max = custom_max;

@@ -5,6 +5,7 @@
 #include <string.h>
 size_t strlcpy(char*,const char*,size_t);
 #include "ui_setup_wizard.c"
+#include "keyboard_layout_checks.h"
 #include "custom_theme.h"
 #include "ui_page_layout_profile.h"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -57,7 +58,7 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  unsigned before=completions;finish_cb(NULL);assert(s_center&&completions==before);
  setup_select_printer_cb(NULL);before=editor_opened;center_printer_cb(NULL);assert(editor_opened==before+1);
  setup_select_wifi_cb(NULL);center_wifi_cb(NULL);assert(s_wifi_scan_busy&&scan_task);wifi_scan_open();scan_task(NULL);wifi_scan_ready(NULL);check();assert(lv_obj_get_child_count(s_wifi_list)==8);if(density==1&&large)snapshot(t,"networks");
- lv_obj_send_event(lv_obj_get_child(s_wifi_list,0),LV_EVENT_CLICKED,NULL);check();assert(s_password&&s_keyboard&&lv_textarea_get_password_mode(s_password));assert(lv_textarea_get_max_length(s_password)==63);lv_textarea_set_text(s_password,"test-password");before=connections;wifi_save_cb(NULL);assert(connections==before+1&&s_poll);wifi_ready=true;wifi_verify(NULL);assert(s_wifi_done);wifi_return_timer(s_poll);check();
+ lv_obj_send_event(lv_obj_get_child(s_wifi_list,0),LV_EVENT_CLICKED,NULL);check();assert(s_password&&s_keyboard&&lv_textarea_get_password_mode(s_password));assert(lv_textarea_get_max_length(s_password)==63);lv_textarea_set_text(s_password,"test-password");before=connections;keyboard_layout_check(s_setup_content,s_keyboard,s_password);if(density==1&&large)snapshot(t,"password");lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1&&s_poll);lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1);wifi_ready=true;wifi_verify(NULL);assert(s_wifi_done);wifi_return_timer(s_poll);check();
  configured=true;setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=false;camera_discovery_poll(NULL);check();
  assert(!s_poll&&lv_obj_get_child_count(s_camera_list)==0&&lv_obj_get_child_count(s_actions)==2);
  lv_obj_send_event(lv_obj_get_child(s_actions,1),LV_EVENT_CLICKED,NULL);assert(s_setup_step==SETUP_STEP_COMPLETE&&!camera_ready);check();

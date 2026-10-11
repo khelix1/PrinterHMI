@@ -7,6 +7,7 @@ size_t strlcpy(char*,const char*,size_t);
 #define readdir profile_test_readdir
 #define closedir profile_test_closedir
 #include "ui_printer_profiles.c"
+#include "keyboard_layout_checks.h"
 #undef opendir
 #undef readdir
 #undef closedir
@@ -76,6 +77,9 @@ static void nested_checks(int theme,bool render)
     assert(lv_keyboard_get_mode(s_editor_keyboard)==LV_KEYBOARD_MODE_NUMBER);
     assert(lv_textarea_get_max_length(s_editor_keyboard_value)==5);
     assert(!strcmp(lv_textarea_get_accepted_chars(s_editor_keyboard_value),"0123456789"));
+    keyboard_layout_check(s_editor_keyboard_popup,s_editor_keyboard,s_editor_keyboard_value);
+    lv_textarea_set_text(s_editor_keyboard_value,"0");lv_obj_send_event(s_editor_keyboard,LV_EVENT_READY,NULL);assert(s_editor_keyboard_popup&&!strcmp(lv_textarea_get_text(s_editor_keyboard_value),"0"));
+    lv_textarea_set_text(s_editor_keyboard_value,"65536");lv_obj_send_event(s_editor_keyboard,LV_EVENT_READY,NULL);assert(s_editor_keyboard_popup);
     lv_textarea_set_text(s_editor_keyboard_value,"7129");
     if(render)snapshot(theme,"keyboard");
     lv_obj_send_event(s_editor_keyboard,LV_EVENT_READY,NULL);

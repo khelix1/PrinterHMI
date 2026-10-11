@@ -36,8 +36,9 @@ static inline void studio_action_fit_label(lv_event_t *event)
     if(!label)return;
     int width=lv_obj_get_width(button)-16;
     lv_obj_set_width(label,width>0?width:1);
+    lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
     ui_text_fit_single_line(label,UI_FONT_BODY);
-    lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
     lv_obj_set_height(label,lv_font_get_line_height(lv_obj_get_style_text_font(label,0)));
     lv_obj_center(label);
 }
@@ -56,8 +57,9 @@ static inline lv_obj_t *studio_action(lv_obj_t *parent,const char *text,int x,in
     lv_obj_set_style_outline_width(o,2,LV_STATE_FOCUS_KEY);
     lv_obj_clear_flag(o,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *label=studio_text(o,text,8,0,w>16?w-16:1,UI_FONT_BODY,UI_TEXT);
+    lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
     ui_text_fit_single_line(label,UI_FONT_BODY);
-    lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);lv_obj_center(label);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);lv_obj_center(label);
     lv_obj_add_event_cb(o,studio_action_fit_label,LV_EVENT_SIZE_CHANGED,NULL);
     lv_obj_send_event(o,LV_EVENT_SIZE_CHANGED,NULL);
     if(cb)lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data);

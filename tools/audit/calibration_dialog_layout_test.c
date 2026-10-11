@@ -119,8 +119,27 @@ void vTaskDelay(uint32_t ticks){(void)ticks;}
 bool ota_manager_is_running(void){return running;}
 bool ota_manager_start(const char *url){assert(url&&url[0]);update_starts++;return update_accept;}
 void ota_manager_set_url(const char *url){(void)url;}
+#define close_cb ota_editor_close_cb
 #include "ui_ota_popup.c"
+#include "keyboard_layout_checks.h"
+#undef close_cb
 #include "ota_ui_controller.c"
+static ota_release_catalog_snapshot_t catalog;
+static unsigned catalog_fetches,chosen_updates,cancel_updates;
+static char chosen_url[256];
+void ota_release_catalog_snapshot(ota_release_catalog_snapshot_t *out){*out=catalog;}
+bool ota_release_catalog_start(void){catalog_fetches++;return true;}
+bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
+ if(index>=4)return false;
+ memset(out,0,sizeof(*out));out->channel=index<2?OTA_RELEASE_CHANNEL_STABLE:OTA_RELEASE_CHANNEL_NIGHTLY;
+ out->relation=index==1?OTA_RELEASE_OLDER:OTA_RELEASE_NEWER;
+ snprintf(out->version,sizeof(out->version),"nightly-2026-10-10-012345abcdef");
+ strcpy(out->notes,"Long release notes describing this update and everything the operator needs to know. Settings and printer profiles are retained. Review the selected build before installing.");
+ strcpy(out->published,"2026-10-10");snprintf(out->asset_url,sizeof(out->asset_url),"https://fixture/fw%u.bin",(unsigned)index);out->asset_size=2500000;return true;
+}
+#include "ui_ota_release_browser.c"
+static void chosen_update(const char *url){chosen_updates++;snprintf(chosen_url,sizeof(chosen_url),"%s",url);}
+static void cancel_update(void){cancel_updates++;}
 static void run(void){
  running=false;update_accept=false;update_starts=0;
  s_ota_popup=ui_popup_create(lv_layer_top(),300,200,UI_POPUP_STANDARD);
@@ -139,6 +158,28 @@ static void run(void){
  running=true;assert(!ota_ui_controller_start_url("https://fixture/fw.bin",false)&&!s_start_failure&&update_starts==1);
  running=false;update_accept=true;assert(ota_ui_controller_start_url("https://fixture/fw.bin",false)&&!s_start_failure&&update_starts==2);
  ui_ota_start_failure("Retry information");lv_obj_delete(s_start_failure);assert(!s_start_failure);
+ /* URL editor and progress keep their native footer reachable at every size. */
+ ui_ota_popup_show("https://fixture/fw.bin","Current: 6.5.6. HTTPS verifies the server. Review firmware and keep power connected during installation.",255,chosen_update,NULL);
+ layout(s_ota_popup);keyboard_layout_check(s_ota_popup,s_ota_kb,s_ota_url_ta);lv_obj_send_event(s_ota_kb,LV_EVENT_CANCEL,NULL);assert(!s_ota_popup);
+ ui_ota_popup_show("https://fixture/fw.bin","Update information",255,chosen_update,NULL);
+ unsigned before_updates=chosen_updates;lv_obj_send_event(s_ota_kb,LV_EVENT_READY,NULL);assert(s_deferred_start_popup&&!s_ota_popup);
+ lv_obj_delete(s_deferred_start_popup);deferred_start_cb(NULL);assert(chosen_updates==before_updates);
+ running=true;ui_ota_progress_show(cancel_update);
+ ui_ota_progress_pump("Downloading firmware\nKeep power connected",40,1000000,2500000,true);layout(s_progress_popup);
+ assert(strstr(lv_label_get_text(s_progress_label),"Keep power connected"));
+ unsigned cancelled=cancel_updates;click(s_progress_cancel_btn);assert(cancel_updates==cancelled+1&&lv_obj_has_state(s_progress_cancel_btn,LV_STATE_DISABLED));
+ ui_ota_progress_pump("Cancelling update...",40,1000000,2500000,true);assert(lv_obj_has_state(s_progress_cancel_btn,LV_STATE_DISABLED));
+ running=false;ui_ota_progress_pump("Download failed. Check connection and retry.",40,1000000,2500000,false);
+ assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_progress_cancel_btn,0)),"CLOSE"));click(s_progress_cancel_btn);assert(!s_progress_popup);
+ catalog=(ota_release_catalog_snapshot_t){.state=OTA_RELEASE_CATALOG_READY,.count=4};
+ ui_ota_release_browser_show(chosen_update,NULL);layout(s_popup);assert(lv_obj_get_child_count(s_list)==2);
+ click(lv_obj_get_child(s_list,0));assert(s_confirm);layout(s_confirm);click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),0));assert(!s_confirm&&s_popup);
+ click(s_nightly_tab);assert(s_channel==OTA_RELEASE_CHANNEL_NIGHTLY);layout(s_popup);
+ click(lv_obj_get_child(s_list,0));layout(s_confirm);before_updates=chosen_updates;click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),1));
+ assert(chosen_updates==before_updates+1&&!strcmp(chosen_url,"https://fixture/fw2.bin")&&!s_popup&&!s_confirm&&!s_timer);
+ ui_ota_release_browser_show(chosen_update,NULL);lv_obj_delete(s_popup);assert(!s_popup&&!s_list&&!s_timer&&!s_selected);
+ ui_ota_release_browser_show(chosen_update,NULL);catalog.state=OTA_RELEASE_CATALOG_ERROR;strcpy(catalog.error,"Could not retrieve releases. Check the network.");timer_cb(NULL);assert(strstr(lv_label_get_text(s_status),"network"));browser_close();
+
 }
 #elif defined(TEST_PID)
 #include "ui_calibration_pid.c"

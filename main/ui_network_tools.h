@@ -1,17 +1,7 @@
 #pragma once
 
-/*
- * Network tools module.
- *
- * Future owner of Network-related popups/actions:
- * - WiFi scan popup
- * - WiFi password popup
- * - Host editor
- * - Port editor
- * - Moonraker test/scan popup
- *
- * For now this file establishes the module boundary only.
- */
+/* Owns Network scan/password, port and result dialogs. Application credential
+ * buffers, ESP connection dispatch and scan workers remain external owners. */
 
 #include "lvgl.h"
 #include "esp_wifi.h"
@@ -34,6 +24,7 @@ void ui_network_tools_wifi_password_show_owned(
     lv_event_cb_t save_cb);
 
 void ui_network_tools_wifi_password_close_owned(void);
+void ui_network_tools_wifi_password_set_status(const char *status);
 
 void ui_network_tools_wifi_password_copy_owned(
     char *password_buf,

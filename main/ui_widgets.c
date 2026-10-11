@@ -561,6 +561,7 @@ lv_obj_t *ui_create_operator_nav_button(
     ui_apply_text_button(text_label);
     lv_obj_set_width(text_label, width - 28);
     lv_label_set_long_mode(text_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(text_label, LV_TEXT_ALIGN_CENTER, 0);
 
     lv_obj_set_style_text_color(
         text_label,
@@ -572,6 +573,18 @@ lv_obj_t *ui_create_operator_nav_button(
         LV_ALIGN_LEFT_MID,
         22,
         0);
+
+    /* Center the visible icon/text group, rather than the unused label box.
+     * Studio replaces this with its existing stacked dock arrangement. */
+    lv_point_t natural;
+    lv_text_get_size(&natural, text ? text : "",
+        lv_obj_get_style_text_font(text_label, 0), 0, 0,
+        LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    int32_t text_width = natural.x < width - 28 ? natural.x : width - 28;
+    lv_obj_set_width(text_label, text_width);
+    int32_t group_left = (width - (18 + 4 + text_width)) / 2;
+    lv_obj_align(icon_label, LV_ALIGN_LEFT_MID, group_left, 0);
+    lv_obj_align(text_label, LV_ALIGN_LEFT_MID, group_left + 22, 0);
 
     ui_operator_nav_button_set_selected(
         button,

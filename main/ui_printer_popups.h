@@ -40,3 +40,6 @@ void ui_printer_popups_show_printer_status(const char *state,
                                            bool moonraker_connected);
 
 void ui_printer_popups_close_all(void);
+
+/* Optional checked sender for temperature/fan controls. Rejected dispatch keeps input. */
+void ui_printer_popups_set_control_sender(bool (*send)(const char *command));

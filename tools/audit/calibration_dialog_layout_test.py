@@ -52,6 +52,6 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         subprocess.run([str(executable)],check=True)
     # Compile every changed calibration owner independently, including the
     # page's Probe/Z and Axis Twist confirmation constructors.
-    for source in ["ui_calibration.c","ui_calibration_motion.c","ui_calibration_geometry.c","ui_calibration_pid.c","ui_calibration_pressure_advance.c","ui_calibration_manual_probe.c","ui_calibration_results.c","ui_calibration_custom.c","ui_probe_accuracy.c","ui_endstop_status.c","ui_motion_diagnostics.c"]:
+    for source in ["ui_ota_popup.c","ui_ota_release_browser.c","ota_ui_controller.c","ui_calibration.c","ui_calibration_motion.c","ui_calibration_geometry.c","ui_calibration_pid.c","ui_calibration_pressure_advance.c","ui_calibration_manual_probe.c","ui_calibration_results.c","ui_calibration_custom.c","ui_probe_accuracy.c","ui_endstop_status.c","ui_motion_diagnostics.c"]:
         compile_ui(source)
     print("PASS: separate calibration translation units with warnings treated as errors")

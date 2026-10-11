@@ -4,6 +4,8 @@
 #include "ota_release_catalog.h"
 #include "ui_popup.h"
 #include "ui_ota_popup.h"
+#include "ui_ota_layout.h"
+#include "ui_value_update.h"
 
 #include "esp_heap_caps.h"
 
@@ -30,6 +32,7 @@ static ota_release_channel_t s_rendered_channel =
     OTA_RELEASE_CHANNEL_STABLE;
 static ota_release_entry_t *s_selected = NULL;
 static bool s_installing = false;
+static char s_rendered_error[128];
 
 
 static const char *relation_text(
@@ -72,10 +75,7 @@ static void browser_close(void)
         s_timer = NULL;
     }
 
-    if (s_popup) {
-        lv_obj_delete(s_popup);
-        s_popup = NULL;
-    }
+    if(s_popup) {lv_obj_t *popup=s_popup;s_popup=NULL;lv_obj_delete(popup);}
 
     s_status = NULL;
     s_list = NULL;
@@ -86,6 +86,7 @@ static void browser_close(void)
     s_channel = OTA_RELEASE_CHANNEL_STABLE;
     s_rendered_state = OTA_RELEASE_CATALOG_IDLE;
     s_rendered_count = SIZE_MAX;
+    s_rendered_error[0]=0;
     s_rendered_channel = OTA_RELEASE_CHANNEL_STABLE;
     free(s_selected);
     s_selected = NULL;
@@ -95,6 +96,16 @@ static void browser_close(void)
     s_installing = false;
 }
 
+
+static void browser_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)!=s_popup)return;
+    s_popup=NULL;browser_close();
+}
+static void confirm_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)==s_confirm)s_confirm=NULL;
+}
 
 static void close_cb(lv_event_t *event)
 {
@@ -166,12 +177,9 @@ static void release_select_cb(lv_event_t *event)
         s_selected->relation == OTA_RELEASE_OLDER;
     bool danger = nightly || installed || downgrade;
 
-    s_confirm = ui_popup_create(
-        lv_layer_top(),
-        720,
-        400,
-        danger ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
-    if (!s_confirm) return;
+    s_confirm=ui_ota_dialog("INSTALL FIRMWARE?",720,440,danger ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
+    if(!s_confirm)return;
+    lv_obj_add_event_cb(s_confirm,confirm_deleted,LV_EVENT_DELETE,NULL);
 
     const char *action =
         installed
@@ -183,8 +191,7 @@ static void release_select_cb(lv_event_t *event)
     snprintf(title, sizeof(title), "%s %s",
              action, s_selected->version);
 
-    ui_popup_add_title(s_confirm, title, danger, 0);
-    ui_popup_add_header_divider(s_confirm, 44);
+    lv_label_set_text(lv_obj_get_child(s_confirm,0),title);
 
     const char *warning = "";
     if (nightly && installed) {
@@ -220,18 +227,8 @@ static void release_select_cb(lv_event_t *event)
               "Settings and printer profiles are retained."
             : "");
 
-    ui_popup_add_body(s_confirm, body, 24, 62, 672);
-    ui_popup_add_standard_footer_divider(s_confirm);
-
-    ui_popup_add_footer_action(
-        s_confirm,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        confirm_close_cb,
-        NULL,
-        NULL);
+    ui_ota_text(ui_ota_body(s_confirm),body,UI_FONT_BODY,UI_TEXT);
+    ui_ota_action(s_confirm,UI_POPUP_ACTION_CLOSE,"CLOSE",confirm_close_cb,NULL);
 
     const char *button_text =
         installed
@@ -242,17 +239,8 @@ static void release_select_cb(lv_event_t *event)
                     ? LV_SYMBOL_WARNING " DOWNGRADE"
                     : LV_SYMBOL_DOWNLOAD " INSTALL"));
 
-    ui_popup_add_footer_action(
-        s_confirm,
-        danger
-            ? UI_POPUP_ACTION_DANGER
-            : UI_POPUP_ACTION_CONFIRM,
-        button_text,
-        nightly ? 230 : 190,
-        UI_POPUP_FOOTER_RIGHT,
-        install_cb,
-        NULL,
-        NULL);
+    ui_ota_action(s_confirm,danger ? UI_POPUP_ACTION_DANGER : UI_POPUP_ACTION_CONFIRM,
+                   button_text,install_cb,NULL);
 }
 
 
@@ -263,10 +251,12 @@ static void render_catalog(
 
     if (snapshot->state == s_rendered_state &&
         snapshot->count == s_rendered_count &&
-        s_channel == s_rendered_channel) {
+        s_channel == s_rendered_channel &&
+        !strcmp(snapshot->error,s_rendered_error)) {
         return;
     }
 
+    snprintf(s_rendered_error,sizeof(s_rendered_error),"%s",snapshot->error);
     s_rendered_state = snapshot->state;
     s_rendered_count = snapshot->count;
     s_rendered_channel = s_channel;
@@ -310,15 +300,14 @@ static void render_catalog(
                 : "unknown",
             release.asset_size / 1048576.0);
 
-        ui_popup_add_selectable_row(
-            s_list,
-            row,
-            8,
-            8 + (int32_t)visible * 68,
-            804,
-            60,
-            release_select_cb,
-            (void *)(uintptr_t)index);
+        lv_obj_t *button=ui_button_create(s_list,UI_BUTTON_OUTLINED,row);
+        lv_obj_set_size(button,LV_PCT(100),LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(button,64,0);lv_obj_set_style_pad_all(button,12,0);
+        lv_obj_set_flex_flow(button,LV_FLEX_FLOW_COLUMN);
+        lv_obj_t *label=lv_obj_get_child(button,0);
+        lv_obj_set_width(label,LV_PCT(100));lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+        ui_apply_custom_label_style(label,UI_FONT_BODY,UI_TEXT);
+        lv_obj_add_event_cb(button,release_select_cb,LV_EVENT_CLICKED,(void *)(uintptr_t)index);
         ++visible;
     }
 
@@ -350,14 +339,13 @@ static void timer_cb(lv_timer_t *timer)
 static void select_tab(ota_release_channel_t channel)
 {
     s_channel = channel;
-    ui_popup_set_selectable_row_selected(
-        s_stable_tab,
-        channel == OTA_RELEASE_CHANNEL_STABLE);
-    ui_popup_set_selectable_row_selected(
-        s_nightly_tab,
-        channel == OTA_RELEASE_CHANNEL_NIGHTLY);
+    if(channel==OTA_RELEASE_CHANNEL_STABLE) {lv_obj_add_state(s_stable_tab,LV_STATE_CHECKED);lv_obj_remove_state(s_nightly_tab,LV_STATE_CHECKED);}
+    else {lv_obj_remove_state(s_stable_tab,LV_STATE_CHECKED);lv_obj_add_state(s_nightly_tab,LV_STATE_CHECKED);}
     s_rendered_count = SIZE_MAX;
     timer_cb(s_timer);
+    lv_obj_update_layout(s_popup);
+    ui_text_fit_single_line(lv_obj_get_child(s_stable_tab,0),UI_FONT_BODY);
+    ui_text_fit_single_line(lv_obj_get_child(s_nightly_tab,0),UI_FONT_BODY);
 }
 
 
@@ -406,73 +394,29 @@ void ui_ota_release_browser_show(
         return;
     }
 
-    s_popup = ui_popup_create(
-        lv_layer_top(), 900, 540, UI_POPUP_STANDARD);
-    if (!s_popup) {
-        s_start_fn = NULL;
-        s_custom_fn = NULL;
-        return;
+    s_popup=ui_ota_dialog("FIRMWARE RELEASES",900,540,UI_POPUP_STANDARD);
+    if(!s_popup){s_start_fn=NULL;s_custom_fn=NULL;ui_ota_popup_resume_camera();return;}
+    lv_obj_add_event_cb(s_popup,browser_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_t *body=ui_ota_body(s_popup);
+    lv_obj_clear_flag(body,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *tabs=lv_obj_create(body);ui_responsive_column(tabs);
+    lv_obj_set_flex_flow(tabs,LV_FLEX_FLOW_ROW);lv_obj_set_style_pad_column(tabs,8,0);
+    s_stable_tab=ui_button_create(tabs,UI_BUTTON_OUTLINED,"STABLE");
+    s_nightly_tab=ui_button_create(tabs,UI_BUTTON_OUTLINED,"NIGHTLY");
+    lv_obj_t *buttons[]={s_stable_tab,s_nightly_tab};
+    for(unsigned i=0;i<2;i++) {
+        lv_obj_set_size(buttons[i],96,48);lv_obj_set_flex_grow(buttons[i],1);
+        lv_obj_add_event_cb(buttons[i],tab_cb,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
+        lv_obj_add_event_cb(buttons[i],ui_ota_fit_action,LV_EVENT_SIZE_CHANGED,NULL);
     }
-
-    ui_popup_add_title(
-        s_popup, ui_text("FIRMWARE RELEASES"), false, 0);
-    ui_popup_add_header_divider(s_popup, 44);
-
-    s_stable_tab = ui_popup_add_selectable_row(
-        s_popup,
-        ui_text("STABLE"),
-        230, 52, 210, 44,
-        tab_cb,
-        (void *)(uintptr_t)OTA_RELEASE_CHANNEL_STABLE);
-    s_nightly_tab = ui_popup_add_selectable_row(
-        s_popup,
-        ui_text("NIGHTLY"),
-        460, 52, 210, 44,
-        tab_cb,
-        (void *)(uintptr_t)OTA_RELEASE_CHANNEL_NIGHTLY);
-
-    s_status = ui_popup_add_status_label(
-        s_popup,
-        ui_text("Loading firmware releases from GitHub..."),
-        24, 104, 852);
-    s_list = ui_popup_add_list(
-        s_popup,
-        24, 134, 852, 310);
-
-    if (!s_stable_tab || !s_nightly_tab ||
-        !s_status || !s_list) {
-        browser_close();
-        return;
-    }
-
-    ui_popup_add_standard_footer_divider(s_popup);
-    ui_popup_add_footer_action(
-        s_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_EDIT " CUSTOM OTA URL",
-        220,
-        UI_POPUP_FOOTER_LEFT,
-        custom_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_popup,
-        UI_POPUP_ACTION_SECONDARY,
-        LV_SYMBOL_REFRESH " REFRESH",
-        170,
-        UI_POPUP_FOOTER_CENTER,
-        refresh_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        160,
-        UI_POPUP_FOOTER_RIGHT,
-        close_cb,
-        NULL,
-        NULL);
+    s_status=ui_ota_text(body,"Loading firmware releases...",UI_FONT_CAPTION,UI_TEXT_DIM);
+    s_list=lv_obj_create(body);lv_obj_remove_style_all(s_list);
+    lv_obj_set_size(s_list,LV_PCT(100),0);lv_obj_set_flex_grow(s_list,1);
+    lv_obj_set_flex_flow(s_list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_list,8,0);
+    lv_obj_set_scroll_dir(s_list,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_list,LV_SCROLLBAR_MODE_AUTO);
+    ui_ota_action(s_popup,UI_POPUP_ACTION_SECONDARY,"CUSTOM URL",custom_cb,NULL);
+    ui_ota_action(s_popup,UI_POPUP_ACTION_SECONDARY,"REFRESH",refresh_cb,NULL);
+    ui_ota_action(s_popup,UI_POPUP_ACTION_CLOSE,"CLOSE",close_cb,NULL);
 
     s_channel = OTA_RELEASE_CHANNEL_STABLE;
     s_rendered_state = OTA_RELEASE_CATALOG_IDLE;

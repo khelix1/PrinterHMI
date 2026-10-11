@@ -44,7 +44,7 @@ typedef struct {
     ui_accent_id_t accent;
     ui_density_id_t density;
     ui_accessibility_t accessibility;
-    bool optional_confirmations;
+    ui_notification_level_t notification_level;
 
     size_t timezone_index;
     int brightness;
@@ -193,7 +193,7 @@ static void capture_current(
     snapshot->accessibility =
         theme_manager_accessibility();
 
-    snapshot->optional_confirmations = ui_toast_confirmations_enabled();
+    snapshot->notification_level = ui_toast_level();
 
     snapshot->timezone_index =
         timezone_config_selected_index();
@@ -324,7 +324,8 @@ static cJSON *snapshot_to_json(
         "density",
         snapshot->density);
 
-    cJSON_AddBoolToObject(appearance, "optional_confirmations", snapshot->optional_confirmations);
+    cJSON_AddNumberToObject(appearance, "notification_level", snapshot->notification_level);
+    cJSON_AddBoolToObject(appearance, "optional_confirmations", snapshot->notification_level == UI_NOTIFY_DETAILED);
 
     cJSON *accessibility =
         cJSON_AddObjectToObject(
@@ -375,15 +376,23 @@ static cJSON *snapshot_to_json(
 }
 
 
-static bool parse_notification_preference(const cJSON *appearance, bool *enabled,
+static bool parse_notification_preference(const cJSON *appearance, ui_notification_level_t *level,
     char *status, size_t status_size)
 {
+    const cJSON *new_level=cJSON_GetObjectItemCaseSensitive(appearance,"notification_level");
+    if(new_level) {
+        if(!cJSON_IsNumber(new_level) || new_level->valuedouble<0 || new_level->valuedouble>2 ||
+           new_level->valuedouble!=(double)new_level->valueint) {
+            set_status(status,status_size,"Backup notification level is invalid.");return false;
+        }
+        *level=(ui_notification_level_t)new_level->valueint;return true;
+    }
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(appearance, "optional_confirmations");
     if (item && !cJSON_IsBool(item)) {
         set_status(status, status_size, "Backup notification preference is invalid.");
         return false;
     }
-    *enabled = item && cJSON_IsTrue(item); /* Older backups default to quiet. */
+    *level = item && cJSON_IsTrue(item) ? UI_NOTIFY_DETAILED : UI_NOTIFY_QUIET;
     return true;
 }
 
@@ -614,7 +623,7 @@ static bool parse_snapshot(
         return false;
     }
 
-    if (!parse_notification_preference(appearance, &snapshot->optional_confirmations, status, status_size)) return false;
+    if (!parse_notification_preference(appearance, &snapshot->notification_level, status, status_size)) return false;
 
     snapshot->theme = (ui_theme_id_t)theme;
     snapshot->accent = (ui_accent_id_t)accent;
@@ -702,7 +711,7 @@ static bool apply_snapshot(
 
     return
         theme_applied &&
-        ui_toast_set_confirmations(snapshot->optional_confirmations) &&
+        ui_toast_set_level(snapshot->notification_level) &&
         theme_manager_select_accent(snapshot->accent) &&
         theme_manager_select_density(snapshot->density) &&
         theme_manager_set_accessibility(

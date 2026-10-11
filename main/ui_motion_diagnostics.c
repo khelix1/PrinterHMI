@@ -114,6 +114,17 @@ static void mode_cb(lv_event_t *event)
 static void editor_done_cb(lv_event_t *event)
 {
     (void)event;
+    if(!s || !s->editor || !s->editor_target || !s->editor_value)return;
+    if(!owns_printer()) {
+        ui_popup_feedback(lv_obj_get_child(s->editor,1),UI_STATUS_WARNING,"PRINTER CHANGED","Cancel and reopen the calculator.");return;
+    }
+    const char *value=lv_textarea_get_text(s->editor_value),*error=NULL;double result;
+    bool valid=s->editor_target==s->pitch ? motion_axis_distance_calculate(value,"1",&result,&error) :
+        motion_axis_distance_calculate("1",value,&result,&error);
+    if(!valid) {
+        ui_popup_feedback(lv_obj_get_child(s->editor,1),UI_STATUS_WARNING,"INVALID MEASUREMENT",error);
+        ui_popup_focus_input(s->editor_value);return;
+    }
     if (owns_printer() && s->editor_target && s->editor_value)
         lv_textarea_set_text(s->editor_target, lv_textarea_get_text(s->editor_value));
     close_editor();
@@ -195,7 +206,7 @@ static void field_cb(lv_event_t *event)
     lv_obj_add_event_cb(s->editor, editor_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = layout_body(s->editor, "EDIT MEASUREMENT");
     s->editor_value = ui_popup_add_textarea(body, 584, 56, LV_ALIGN_TOP_MID,
-        0, 0, true, false, 18, "", lv_textarea_get_text(s->editor_target), "0123456789.");
+        0, 0, true, false, 18, "", lv_textarea_get_text(s->editor_target), s->editor_target==s->count?"0123456789":"0123456789.");
     lv_obj_set_width(s->editor_value, LV_PCT(100));
     lv_obj_set_style_text_font(s->editor_value, UI_FONT_BODY, 0);
     lv_obj_set_height(s->editor_value, 56);
@@ -209,6 +220,8 @@ static void field_cb(lv_event_t *event)
         0, 0, 150, 48, editor_done_cb, NULL, NULL);
     lv_obj_set_flex_grow(cancel, 1);
     lv_obj_set_flex_grow(done, 1);
+    ui_popup_keyboard_actions(keyboard,editor_done_cb,editor_cancel_cb);
+    ui_popup_pin_keyboard(s->editor,keyboard);
 }
 
 static void format_value(char *out, size_t size, bool valid, double value, const char *unit)

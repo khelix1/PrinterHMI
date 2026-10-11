@@ -9,6 +9,28 @@
 #include "ui_theme.h"
 #include "ui_toast.h"
 static ui_calibration_custom_context_t *s_custom;
+static uint32_t s_custom_owner, s_custom_epoch;
+static bool s_custom_dispatching;
+static lv_obj_t *s_custom_feedback;
+
+static void custom_retire_popup(void)
+{
+    ++s_custom_epoch;
+    s_custom_feedback = NULL;
+    if (s_custom) *s_custom->popup = NULL;
+}
+
+static void custom_popup_deleted(lv_event_t *event)
+{
+    if (s_custom && lv_event_get_target_obj(event) == *s_custom->popup)
+        custom_retire_popup();
+}
+
+static void custom_register_popup(void)
+{
+    lv_obj_set_user_data(*s_custom->popup, (void *)(uintptr_t)s_custom_owner);
+    lv_obj_add_event_cb(*s_custom->popup, custom_popup_deleted, LV_EVENT_DELETE, NULL);
+}
 static bool custom_macro_matches(
     const char *name)
 {
@@ -54,7 +76,7 @@ static void close_custom_popup(void)
 
     if (*s_custom->popup) {
         lv_obj_t *popup = *s_custom->popup;
-        *s_custom->popup = NULL;
+        custom_retire_popup();
         lv_obj_delete(popup);
     }
 }
@@ -73,7 +95,8 @@ static void run_custom_macro_cb(
 {
     (void)event;
 
-    if (!s_custom ||
+    if (!s_custom || !*s_custom->popup || s_custom_dispatching ||
+        s_custom_owner != moonraker_config_generation() || !s_custom->ready ||
         *s_custom->selected >=
             *s_custom->count ||
         !s_custom->ready(
@@ -81,32 +104,36 @@ static void run_custom_macro_cb(
         return;
     }
 
-    const char *command =
-        s_custom->names[
-            *s_custom->selected];
+    char command[MACRO_CONTROLLER_NAME_MAX];
+    lv_snprintf(command, sizeof(command), "%s", s_custom->names[*s_custom->selected]);
     uint32_t start_sequence =
         console_controller_latest_sequence();
     calibration_session_controller_begin(
         CALIBRATION_SESSION_CUSTOM,
         start_sequence);
     console_controller_add_command(command);
-    bool sent =
-        s_custom->send &&
-        s_custom->send(command);
-
-    close_custom_popup();
-
+    ui_calibration_custom_context_t *context = s_custom;
+    lv_obj_t *popup = *context->popup;
+    uint32_t epoch = s_custom_epoch;
+    uint32_t owner = s_custom_owner;
+    s_custom_dispatching = true;
+    bool sent = context->send && context->send(command);
+    s_custom_dispatching = false;
+    if (s_custom != context || s_custom_epoch != epoch ||
+        *context->popup != popup || owner != moonraker_config_generation()) return;
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the custom calibration macro.");
+        if (s_custom_feedback)
+            lv_label_set_text(s_custom_feedback,
+                "Command was not accepted. Your macro choice is retained. Retry when connected.");
+        return;
     }
-
+    close_custom_popup();
     s_custom->show_results(
         "CUSTOM CALIBRATION",
-        sent
-            ? "The selected printer macro is running. Monitor Console for its printer-specific instructions.\n\n"
-              "Apply & Restart will appear only if Klipper reports SAVE_CONFIG."
-            : "The selected custom calibration macro could not be started.");
+        "The selected printer macro is running. Monitor Console for its printer-specific instructions.\n\n"
+        "Apply & Restart will appear only if Klipper reports SAVE_CONFIG.");
     s_custom->refresh_results();
 }
 
@@ -114,7 +141,8 @@ static void run_custom_macro_cb(
 static void custom_macro_selected_cb(
     lv_event_t *event)
 {
-    if (!s_custom || !event) {
+    if (!s_custom || !*s_custom->popup || !event || s_custom_dispatching ||
+        s_custom_owner != moonraker_config_generation()) {
         return;
     }
 
@@ -134,6 +162,7 @@ static void custom_macro_selected_cb(
         return;
     }
 
+    custom_register_popup();
     ui_cal_dialog_title(*s_custom->popup, ui_text("RUN CUSTOM CALIBRATION?"));
 
 
@@ -146,6 +175,7 @@ static void custom_macro_selected_cb(
         "PrinterHMI will not save automatically.",
         s_custom->names[index]);
     ui_cal_dialog_text(ui_cal_dialog_body(*s_custom->popup), body);
+    s_custom_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_custom->popup), "");
 
     ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_custom_popup_cb, NULL, NULL);
     ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_custom_macro_cb, NULL, NULL);
@@ -157,12 +187,17 @@ static void custom_calibration_button_cb(
 {
     (void)event;
 
-    if (!s_custom ||
+    if (!s_custom || s_custom_dispatching || !s_custom->ready ||
         !s_custom->ready(
             "Custom calibration")) {
         return;
     }
 
+    if (*s_custom->popup) {
+        lv_obj_move_foreground(*s_custom->popup);
+        return;
+    }
+    s_custom_owner = moonraker_config_generation();
     *s_custom->count = 0;
     memset(
         s_custom->names,
@@ -210,6 +245,7 @@ static void custom_calibration_button_cb(
         return;
     }
 
+    custom_register_popup();
     ui_cal_dialog_title(*s_custom->popup, ui_text("CUSTOM CALIBRATION MACROS"));
 
     lv_obj_t *list =

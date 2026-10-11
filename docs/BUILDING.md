@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v6.5.6.
+- `partitions.csv` is the only supported partition layout for v7.0.0-dev.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy
@@ -108,3 +108,13 @@ the startup `.bss`/internal-RAM map and confirm the image passes
 The current lockfile records the local board component source path. A future
 cleanup should make that component reference repository-relative before builds
 are expected to work from an arbitrary checkout path.
+
+
+## Development and release versions
+
+`version.txt` owns the current build identity: `7.0.0-dev`. Regular local builds
+are Custom. CMake accepts `X.Y.Z`, `X.Y.Z-dev` and generated nightly identities.
+Stable release tooling reads the version source and rejects development suffixes
+before build or network publication. Nightly tooling restores the exact original
+version after its temporary nightly build. Removing `-dev` is a separate release
+preparation step after pending hardware validation; do not label local builds Stable.

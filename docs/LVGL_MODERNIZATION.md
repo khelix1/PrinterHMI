@@ -870,3 +870,149 @@ log if it recurs, including the download start and any network-lane timeout.
 The user accepted the current download speed for now; further throughput tuning
 is deferred. Firmware/panel and physical print/recovery tests remain pending
 where documented. This checkpoint retains the feature branch and stable 6.5.6.
+
+
+### PID and Pressure Advance dialog lifetime and retry
+
+PID heating confirmation retains the selected heater and target when dispatch is
+rejected and shows inline retry feedback. Back still returns to the same target.
+Pressure Advance setup retains its drive choices after rejection and opens the
+armed instructions only after acceptance. Repeated launcher taps preserve the
+current workflow instead of rebuilding it.
+
+Both owners clear their widget references on external deletion, suppress
+reentrant dispatch, and discard UI follow-up after owner retirement or a printer
+generation change during dispatch. Pressure Advance clears its launcher pointer
+when the card is independently deleted. PID catalog population also respects the
+provided heater-array capacity.
+
+Real LVGL checks cover accepted/rejected commands, retained input, duplicate opens,
+reentrant dispatch, deletion/reopen cycles, owner changes during dispatch and
+capacity bounds across all five themes, densities, text sizes and viewports.
+Physical heating, PA tower printing and panel checks remain pending. Stable
+remains 6.5.6; this follow-up leaves the current feature branch open. The reported
+intermittent OTA failure before reboot remains unresolved.
+
+
+### 7.0.0 development milestone
+
+The feature branch now builds as `7.0.0-dev`; latest published stable remains
+`6.5.6`. Earlier version statements in this work log record the identity at the
+time of each patch and are historical. Settings, splash and OTA read the embedded
+image version. Local development builds remain Custom; `-dev` cannot be labelled
+or published Stable. Final `7.0.0` supersedes `7.0.0-dev` in OTA comparison.
+
+Current product headers, draft release notes, changelog and version auditing
+follow the new branch identity. Historical release notes stay unchanged. The
+reported OTA failure before reboot and physical printing/recovery validation
+remain open; this bump is not a stable release.
+
+
+### Custom calibration workflow retirement and retry
+
+Custom calibration keeps its selected macro and confirmation on rejected dispatch,
+with inline retry feedback. Repeated launcher taps preserve the current workflow.
+External deletion clears widget references; dispatch guards reject closed/stale
+owners and duplicate/reentrant commands, and UI follow-up is discarded after a
+printer switch or owner retirement during dispatch. The command is copied before
+calling transport so retirement cannot invalidate its source buffer.
+
+Real LVGL checks cover rejected/accepted commands, retained selections, repeated
+opens, direct deletion/reopen, reentrant dispatch, printer changes and catalog
+capacity in all five themes, densities, text sizes and viewports. Physical macro
+execution and target/panel tests remain pending.
+
+
+### Calibration results and Apply & Restart ownership
+
+Calibration results and the nested save confirmation clear widget references on
+external deletion; deleting results also retires its confirmation. Rejected
+SAVE_CONFIG requests keep the reviewed results with inline retry feedback.
+Accepted requests replace Apply/Back with Close, hide the underlying Apply
+action and suppress repeated/reentrant sends without claiming save completion.
+
+The confirmation is bound to the reviewed session generation and active printer.
+A changed session requires Back and fresh review. Offline/printing/error states
+disable saving and retain results; recovery restores the same confirmation when
+its reviewed session is still current. Printer switches stop follow-up updates
+and explain that calibration must be reopened. A recreated results view renders
+the current session even if its generation was previously displayed.
+
+Real LVGL checks cover rejection/retry, offline/printing recovery, session changes,
+accepted/duplicate commands, nested Back/Close, external deletion/reopen cycles,
+transport callbacks that delete owners or switch printers, and all five themes,
+densities, text sizes and viewports. Target SAVE_CONFIG/reconnect and panel checks
+remain pending. Build identity remains 7.0.0-dev; no release, commit or push is
+part of this patch.
+
+
+### Manual Probe/Z and Axis Twist dialog lifetime
+
+The shared manual-probe surface clears its popup, status label and callbacks on
+external deletion as well as normal closure. Reopening the same active workflow
+retains its instructions and status instead of rebuilding it. Dispatch preserves
+the original TESTZ event data, rejects retired/stale owners and suppresses
+reentrant step/Accept/Abort callbacks. Callback-driven retirement cannot reopen a
+manual adjustment surface before the current dispatch returns. Status updates
+ignore a retired dialog or a changed printer. Workflow-specific command routing
+and acceptance/abort behavior remain with the existing callers.
+
+Real LVGL checks cover all ten signed TESTZ commands, unchanged repeated opens,
+status preservation, printer switches, external-deletion/reopen cycles, late
+updates, reentrant callbacks and callback-driven closure across all five themes,
+densities, text sizes and viewports. Physical Probe/Z, Axis Twist and panel checks
+remain pending. Current development identity remains 7.0.0-dev.
+
+### Panel validation reported 2026-10-11
+
+The operator confirmed that calibration Save/Restart and reconnect work after the
+save-review patch. This validates that observed panel path; broader calibration
+accuracy, filament recovery, printing tests and the intermittent OTA failure
+before reboot remain open where documented.
+
+
+### Responsive About PrinterHMI
+
+About now uses a native scrolling column with themed firmware and credits
+sections, a viewport-clamped modal and pinned, fitted Close action. It shows the
+embedded version, Stable/Nightly/Custom channel, source revision/modified marker,
+build timestamp, ESP-IDF version and running LVGL version. Version/channel
+identity matches Settings and OTA; the previous fixed-coordinate layout and
+unconditional compatibility-patch claim are retired. Existing author and
+open-source credits are preserved.
+
+The popup clears ownership on external deletion, preserves the existing view on
+repeated opens and safely closes/reopens. Shared form action fitting ignores
+bubbled child size events and checks the target label before fitting. Firmware
+version copying is bounded to the embedded descriptor's version field.
+
+A dedicated real-LVGL About suite covers all three firmware channels, five themes,
+densities, text sizes and viewports; long nightly names, missing descriptors,
+pinned Close, scroll reach, pointer closure, repeated opens, external deletion
+and child size notifications are checked. Host renders were inspected across all
+five themes. Identity and Network/Backup form regressions pass. Panel About
+scrolling/closure remains pending; current identity is 7.0.0-dev and the feature
+branch stays open.
+
+
+## Geometry and motion dialog retirement and retry (7.0.0-dev)
+
+Screws Tilt, gantry leveling, Input Shaper, resonance testing and accelerometer
+checking now retire their references when their dialogs are deleted. Reopening
+an active dialog preserves its choices. Rejected commands stay in the review
+dialog with local retry feedback; accepted gantry requests replace the Run/Back
+actions with Close and cannot be submitted again from that review. Acceptance
+means the transport accepted the request, not that physical calibration finished.
+
+Dispatch rechecks printer ownership, readiness and reported capabilities. Geometry
+checks also require a fresh review if homing became necessary after confirmation.
+The existing G28, SCREWS_TILT_CALCULATE, QUAD_GANTRY_LEVEL, Z_TILT_ADJUST,
+SHAPER_CALIBRATE, TEST_RESONANCES and MEASURE_AXES_NOISE command paths are retained.
+Reentrant callbacks, deletion during transport and printer changes discard stale
+UI follow-up. Screws results cannot display another selected printer's session.
+
+Host fixtures passed all five themes, densities/text sizes and standard/narrow/short
+viewports, including rejected retry, capability/readiness withdrawal, owner changes
+and repeated external deletion. The user confirmed the About popup looks good on
+the panel on 2026-10-11. Physical alignment and motion measurements remain pending,
+as do previously recorded printing/recovery and intermittent pre-reboot OTA checks.

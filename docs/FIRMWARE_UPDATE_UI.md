@@ -74,3 +74,12 @@ The common GitHub/custom-URL worker requests a 4 KiB receive buffer while retain
 Telemetry history status now has room for the compiler-reported worst-case text. Its host compile check enables format-truncation warnings as errors.
 
 The stricter Telemetry owner compilation also checks hotend-option assembly: bounded copies retain all four maximum-length object names without a potentially truncating append. Host selector tests cover those names and active-tool selection.
+
+
+## Development identity
+
+The current branch uses `7.0.0-dev` and local builds remain Custom. Settings and
+OTA display the embedded version and source revision. A final Stable `7.0.0` is
+newer than `7.0.0-dev`; Stable `6.5.6` is older. Stable publishing rejects `-dev`.
+Latest published stable remains `6.5.6`. The intermittent OTA failure that cleared
+after reboot remains unresolved.

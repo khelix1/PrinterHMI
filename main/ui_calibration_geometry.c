@@ -8,7 +8,57 @@
 #include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
+#include "ui_value_update.h"
+#include "printer_connection_policy.h"
 static ui_calibration_geometry_context_t *s_geometry;
+static uint32_t s_geometry_epoch, s_screws_owner, s_gantry_owner;
+static bool s_geometry_dispatching, s_gantry_requested, s_screws_rendered;
+static lv_obj_t *s_screws_feedback, *s_gantry_feedback;
+
+static void retire_screws(void)
+{
+    ++s_geometry_epoch;
+    s_screws_feedback = NULL;
+    s_screws_rendered = false;
+    if (s_geometry) {
+        *s_geometry->screws_popup = NULL;
+        *s_geometry->screws_results_label = NULL;
+    }
+}
+static void retire_gantry(void)
+{
+    ++s_geometry_epoch;
+    s_gantry_feedback = NULL;
+    s_gantry_requested = false;
+    if (s_geometry) *s_geometry->gantry_popup = NULL;
+}
+static void geometry_deleted(lv_event_t *event)
+{
+    if (!s_geometry) return;
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    if (target == *s_geometry->screws_popup) retire_screws();
+    else if (target == *s_geometry->gantry_popup) retire_gantry();
+}
+static void geometry_register(lv_obj_t *popup, uint32_t owner)
+{
+    lv_obj_set_user_data(popup, (void *)(uintptr_t)owner);
+    lv_obj_add_event_cb(popup, geometry_deleted, LV_EVENT_DELETE, NULL);
+}
+static const char *geometry_run_reason(bool gantry)
+{
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    const char *reason = printer_idle_reason(&state);
+    if (reason[0]) return reason;
+    calibration_capabilities_t capabilities;
+    calibration_capability_controller_snapshot(&capabilities);
+    if (gantry ? (*s_geometry->gantry_use_qgl ? !capabilities.quad_gantry_level : !capabilities.z_tilt) : !capabilities.screws_tilt)
+        return "This calibration is no longer available. Close and reopen to refresh capabilities.";
+    bool homed = strchr(state.homed_axes, 'x') && strchr(state.homed_axes, 'y') && strchr(state.homed_axes, 'z');
+    if (!homed && !(gantry ? *s_geometry->gantry_home_required : *s_geometry->screws_home_required))
+        return "Axes are no longer homed. Go Back and reopen this check to review homing.";
+    return "";
+}
 static void close_screws_popup(void)
 {
     if (!s_geometry) {
@@ -18,8 +68,7 @@ static void close_screws_popup(void)
     if (*s_geometry->screws_popup) {
         lv_obj_t *popup =
             *s_geometry->screws_popup;
-        *s_geometry->screws_popup = NULL;
-        *s_geometry->screws_results_label = NULL;
+        retire_screws();
         lv_obj_delete(popup);
     }
 }
@@ -48,6 +97,7 @@ static void show_screws_results_popup(void)
         return;
     }
 
+    geometry_register(*s_geometry->screws_popup, s_screws_owner);
     ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("SCREWS TILT RESULTS"));
 
 
@@ -69,16 +119,22 @@ static void refresh_screws_results(void)
         return;
     }
 
+    if (s_screws_owner != moonraker_config_generation()) {
+        ui_value_set_text(*s_geometry->screws_results_label,
+            "Printer changed. Close and reopen Screws Tilt for the selected printer.");
+        return;
+    }
     calibration_session_snapshot_t *session =
         &*s_geometry->session_snapshot;
     calibration_session_controller_snapshot(
         session);
 
-    if (session->generation ==
+    if (s_screws_rendered && session->generation ==
         *s_geometry->session_generation) {
         return;
     }
 
+    s_screws_rendered = true;
     *s_geometry->session_generation =
         session->generation;
 
@@ -118,49 +174,49 @@ static void refresh_screws_results(void)
 }
 
 
-static void run_screws_tilt_cb(
-    lv_event_t *event)
+static void run_screws_tilt_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (!s_geometry) {
+    if (!s_geometry || !*s_geometry->screws_popup ||
+        *s_geometry->screws_results_label || s_geometry_dispatching ||
+        s_screws_owner != moonraker_config_generation()) return;
+    const char *reason = geometry_run_reason(false);
+    if (reason[0]) { ui_value_set_text(s_screws_feedback, reason); return; }
+    const char *command = *s_geometry->screws_home_required ?
+        "G28\nSCREWS_TILT_CALCULATE" : "SCREWS_TILT_CALCULATE";
+    ui_calibration_geometry_context_t *context = s_geometry;
+    lv_obj_t *popup = *context->screws_popup;
+    uint32_t epoch = s_geometry_epoch, owner = s_screws_owner;
+    calibration_session_controller_begin_screws_tilt(console_controller_latest_sequence());
+    console_controller_add_command(command);
+    s_geometry_dispatching = true;
+    bool sent = context->send_gcode && context->send_gcode(command);
+    s_geometry_dispatching = false;
+    if (s_geometry != context || s_geometry_epoch != epoch ||
+        *context->screws_popup != popup || owner != moonraker_config_generation()) return;
+    if (!sent) {
+        calibration_session_controller_mark_error("Moonraker did not accept the calibration command.");
+        ui_value_set_text(s_screws_feedback, "Command was not accepted. Retry when connected.");
         return;
     }
-
-    const char *command =
-        *s_geometry->screws_home_required
-            ? "G28\nSCREWS_TILT_CALCULATE"
-            : "SCREWS_TILT_CALCULATE";
-
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-
-    calibration_session_controller_begin_screws_tilt(
-        start_sequence);
-    console_controller_add_command(command);
-
-    bool sent =
-        s_geometry->send_gcode &&
-        s_geometry->send_gcode(command);
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept the calibration command.");
-    }
-
     show_screws_results_popup();
     refresh_screws_results();
 }
-
 
 static void screws_tilt_button_cb(
     lv_event_t *event)
 {
     (void)event;
 
-    if (!s_geometry) {
+    if (!s_geometry || s_geometry_dispatching) {
         return;
     }
+
+    if (*s_geometry->screws_popup) {
+        lv_obj_move_foreground(*s_geometry->screws_popup);
+        return;
+    }
+    s_screws_owner = moonraker_config_generation();
 
     calibration_capabilities_t capabilities;
     calibration_capability_controller_snapshot(
@@ -214,6 +270,7 @@ static void screws_tilt_button_cb(
         return;
     }
 
+    geometry_register(*s_geometry->screws_popup, s_screws_owner);
     ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("RUN SCREWS TILT?"));
 
 
@@ -229,6 +286,7 @@ static void screws_tilt_button_cb(
             : "");
 
     ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), body);
+    s_screws_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), "");
 
 
 
@@ -247,7 +305,7 @@ static void close_gantry_level_popup(void)
     if (*s_geometry->gantry_popup) {
         lv_obj_t *popup =
             *s_geometry->gantry_popup;
-        *s_geometry->gantry_popup = NULL;
+        retire_gantry();
         lv_obj_delete(popup);
     }
 }
@@ -261,66 +319,57 @@ static void close_gantry_level_popup_cb(
 }
 
 
-static void run_gantry_level_cb(
-    lv_event_t *event)
+static void run_gantry_level_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (!s_geometry) {
-        return;
-    }
-
-    const char *command =
-        *s_geometry->gantry_use_qgl
-            ? "QUAD_GANTRY_LEVEL"
-            : "Z_TILT_ADJUST";
-
-    /*
-     * The shared action gateway prefers a detected printer macro. The macro
-     * owns printer-specific homing and sequencing. If no macro exists, keep
-     * the proven standard Klipper fallback and add G28 only when required.
-     */
+    if (!s_geometry || !*s_geometry->gantry_popup || s_geometry_dispatching ||
+        s_gantry_requested || s_gantry_owner != moonraker_config_generation()) return;
+    const char *reason = geometry_run_reason(true);
+    if (reason[0]) { ui_value_set_text(s_gantry_feedback, reason); return; }
+    const char *command = *s_geometry->gantry_use_qgl ? "QUAD_GANTRY_LEVEL" : "Z_TILT_ADJUST";
     char fallback[48];
     if (*s_geometry->gantry_home_required) {
-        lv_snprintf(
-            fallback,
-            sizeof(fallback),
-            "G28\n%s",
-            command);
+        lv_snprintf(fallback, sizeof(fallback), "G28\n%s", command);
         command = fallback;
     }
-
+    ui_calibration_geometry_context_t *context = s_geometry;
+    lv_obj_t *popup = *context->gantry_popup;
+    uint32_t epoch = s_geometry_epoch, owner = s_gantry_owner;
     console_controller_add_command(command);
-
-    bool sent =
-        s_geometry->send_gcode &&
-        s_geometry->send_gcode(command);
-
+    s_geometry_dispatching = true;
+    bool sent = context->send_gcode && context->send_gcode(command);
+    s_geometry_dispatching = false;
+    if (s_geometry != context || s_geometry_epoch != epoch ||
+        *context->gantry_popup != popup || owner != moonraker_config_generation()) return;
     if (!sent) {
-        ui_cal_dialog_notice(
-            UI_STATUS_DANGER,
-            "CALIBRATION FAILED",
-            "Moonraker did not accept the gantry-level command.");
+        ui_value_set_text(s_gantry_feedback, "Command was not accepted. Retry when connected.");
         return;
     }
-
-    ui_cal_dialog_notice(
-        UI_STATUS_INFO,
-        *s_geometry->gantry_use_qgl
-            ? "QGL REQUEST SENT"
-            : "Z TILT REQUEST SENT",
-        "Klipper is running the leveling workflow. Results remain available in Console.");
+    s_gantry_requested = true;
+    ui_value_set_text(s_gantry_feedback,
+        "Leveling request accepted. Monitor Console for completion and printer-specific instructions.");
+    lv_obj_t *footer = lv_obj_get_child(popup, 2);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(footer); ++i) {
+        lv_obj_add_state(lv_obj_get_child(footer, i), LV_STATE_DISABLED);
+        lv_obj_add_flag(lv_obj_get_child(footer, i), LV_OBJ_FLAG_HIDDEN);
+    }
+    ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_gantry_level_popup_cb, NULL, NULL);
 }
-
 
 static void gantry_level_button_cb(
     lv_event_t *event)
 {
     (void)event;
 
-    if (!s_geometry) {
+    if (!s_geometry || s_geometry_dispatching) {
         return;
     }
+
+    if (*s_geometry->gantry_popup) {
+        lv_obj_move_foreground(*s_geometry->gantry_popup);
+        return;
+    }
+    s_gantry_owner = moonraker_config_generation();
 
     calibration_capabilities_t capabilities;
     calibration_capability_controller_snapshot(
@@ -377,6 +426,7 @@ static void gantry_level_button_cb(
         return;
     }
 
+    geometry_register(*s_geometry->gantry_popup, s_gantry_owner);
     ui_cal_dialog_title(*s_geometry->gantry_popup, *s_geometry->gantry_use_qgl
             ? ui_text("RUN QUAD GANTRY LEVEL?")
             : ui_text("RUN Z TILT?"));
@@ -394,6 +444,7 @@ static void gantry_level_button_cb(
             : "");
 
     ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->gantry_popup), body);
+    s_gantry_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->gantry_popup), "");
 
 
 

@@ -1,11 +1,11 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v6.5.6 firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v7.0.0-dev firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
-The current release supports up to four Moonraker printer profiles, live
+The current development firmware supports up to four Moonraker printer profiles, live
 printer and drybox status, file browsing with thumbnails and metadata,
 telemetry, print controls, exclude-object control, a dedicated 3D Bed Mesh
 workspace, detected Klipper macros, a live console, persistent display and
@@ -13,7 +13,9 @@ timezone settings, runtime themes, and OTA firmware updates.
 
 ## Status
 
-- Firmware version: `6.5.6`
+- Firmware version: `7.0.0-dev`
+- Latest published stable: `6.5.6`
+- Development status: major-release work in progress; physical printing/recovery and intermittent OTA validation remain pending
 - Target: `esp32p4`
 - Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`

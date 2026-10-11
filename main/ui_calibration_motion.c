@@ -15,6 +15,7 @@
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_text_fit.h"
+#include "ui_value_update.h"
 
 typedef struct {
     lv_obj_t *input_shaper_button;
@@ -35,6 +36,30 @@ typedef struct {
 } ui_calibration_motion_state_t;
 
 static ui_calibration_motion_state_t s_motion;
+static uint32_t s_motion_epoch;
+static bool s_motion_dispatching;
+static lv_obj_t *s_shaper_feedback, *s_resonance_feedback, *s_sensor_feedback;
+
+static void motion_deleted(lv_event_t *event)
+{
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    lv_obj_t **slots[] = {&s_motion.input_shaper_popup, &s_motion.resonance_test_popup,
+                         &s_motion.accelerometer_check_popup};
+    lv_obj_t **feedback[] = {&s_shaper_feedback, &s_resonance_feedback, &s_sensor_feedback};
+    for (unsigned i = 0; i < 3; ++i) if (target == *slots[i]) {
+        ++s_motion_epoch;
+        *slots[i] = NULL;
+        *feedback[i] = NULL;
+    }
+    lv_obj_t **buttons[] = {&s_motion.input_shaper_button, &s_motion.resonance_test_button,
+                           &s_motion.accelerometer_check_button};
+    for (unsigned i = 0; i < 3; ++i) if (target == *buttons[i]) *buttons[i] = NULL;
+}
+
+static void motion_register(lv_obj_t *popup)
+{
+    lv_obj_add_event_cb(popup, motion_deleted, LV_EVENT_DELETE, NULL);
+}
 
 
 static void set_visible(
@@ -65,6 +90,34 @@ static bool motion_ready(
 }
 
 
+static bool motion_send(lv_obj_t **slot, lv_obj_t *feedback,
+    const char *workflow, const char *command, calibration_session_kind_t kind)
+{
+    if (!*slot || s_motion_dispatching) return false;
+    lv_obj_t *popup = *slot;
+    uint32_t owner = (uint32_t)(uintptr_t)lv_obj_get_user_data(popup);
+    if (owner != moonraker_config_generation()) return false;
+    if (!s_motion.discovered || !s_motion.accelerometer ||
+        (kind != CALIBRATION_SESSION_ACCELEROMETER_CHECK && !s_motion.input_shaper)) {
+        ui_value_set_text(feedback, "Required measurement capabilities are no longer available.");
+        return false;
+    }
+    if (!motion_ready(workflow)) return false;
+    uint32_t epoch = s_motion_epoch;
+    calibration_session_controller_begin(kind, console_controller_latest_sequence());
+    console_controller_add_command(command);
+    s_motion_dispatching = true;
+    bool sent = s_motion.send_gcode && s_motion.send_gcode(command);
+    s_motion_dispatching = false;
+    if (s_motion_epoch != epoch || *slot != popup || owner != moonraker_config_generation()) return false;
+    if (!sent) {
+        calibration_session_controller_mark_error("Moonraker did not accept the measurement command.");
+        ui_value_set_text(feedback, "Command was not accepted. Your choices are retained. Retry when connected.");
+        return false;
+    }
+    return true;
+}
+
 static void show_results(
     const char *title,
     const char *waiting_text)
@@ -86,7 +139,9 @@ static void close_input_shaper_popup(void)
     if (s_motion.input_shaper_popup) {
         lv_obj_t *popup =
             s_motion.input_shaper_popup;
+        ++s_motion_epoch;
         s_motion.input_shaper_popup = NULL;
+        s_shaper_feedback = NULL;
         lv_obj_delete(popup);
     }
 }
@@ -100,36 +155,12 @@ static void close_input_shaper_popup_cb(
 }
 
 
-static void run_input_shaper_cb(
-    lv_event_t *event)
+static void run_input_shaper_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (!motion_ready(
-            "Input Shaper calibration")) {
-        return;
-    }
-
-    static const char command[] =
-        "SHAPER_CALIBRATE";
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_INPUT_SHAPER,
-        start_sequence);
-    console_controller_add_command(command);
-
-    bool sent =
-        s_motion.send_gcode &&
-        s_motion.send_gcode(command);
-
+    if (!motion_send(&s_motion.input_shaper_popup, s_shaper_feedback,
+            "Input Shaper calibration", "SHAPER_CALIBRATE", CALIBRATION_SESSION_INPUT_SHAPER)) return;
     close_input_shaper_popup();
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept SHAPER_CALIBRATE.");
-    }
 
     show_results(
         "INPUT SHAPER CALIBRATION",
@@ -143,6 +174,11 @@ static void input_shaper_button_cb(
 {
     (void)event;
 
+    if (s_motion_dispatching) return;
+    if (s_motion.input_shaper_popup) {
+        lv_obj_move_foreground(s_motion.input_shaper_popup);
+        return;
+    }
     if (!motion_ready(
             "Input Shaper calibration")) {
         return;
@@ -165,11 +201,13 @@ static void input_shaper_button_cb(
         return;
     }
 
+    motion_register(s_motion.input_shaper_popup);
     ui_cal_dialog_title(s_motion.input_shaper_popup, ui_text("RUN INPUT SHAPER CALIBRATION?"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_motion.input_shaper_popup), "Klipper will move and vibrate the toolhead across both axes. The machine may be loud.\n\n"
         "Clear the bed and motion area, make sure nothing can contact the printer, and keep the machine attended.");
 
+    s_shaper_feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_motion.input_shaper_popup), "");
     ui_cal_dialog_action(s_motion.input_shaper_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_input_shaper_popup_cb, NULL, NULL);
     ui_cal_dialog_action(s_motion.input_shaper_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_input_shaper_cb, NULL, NULL);
 }
@@ -180,7 +218,9 @@ static void close_resonance_test_popup(void)
     if (s_motion.resonance_test_popup) {
         lv_obj_t *popup =
             s_motion.resonance_test_popup;
+        ++s_motion_epoch;
         s_motion.resonance_test_popup = NULL;
+        s_resonance_feedback = NULL;
         lv_obj_delete(popup);
     }
 }
@@ -194,14 +234,9 @@ static void close_resonance_test_popup_cb(
 }
 
 
-static void run_resonance_test_cb(
-    lv_event_t *event)
+static void run_resonance_test_cb(lv_event_t *event)
 {
-    if (!event ||
-        !motion_ready(
-            "Resonance testing")) {
-        return;
-    }
+    if (!event || !s_motion.resonance_test_popup || s_motion_dispatching) return;
 
     const char *axis =
         (const char *)lv_event_get_user_data(event);
@@ -224,24 +259,9 @@ static void run_resonance_test_cb(
         return;
     }
 
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_RESONANCE_TEST,
-        start_sequence);
-    console_controller_add_command(command);
-
-    bool sent =
-        s_motion.send_gcode &&
-        s_motion.send_gcode(command);
-
+    if (!motion_send(&s_motion.resonance_test_popup, s_resonance_feedback,
+            "Resonance testing", command, CALIBRATION_SESSION_RESONANCE_TEST)) return;
     close_resonance_test_popup();
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept TEST_RESONANCES.");
-    }
 
     char waiting[220];
     lv_snprintf(
@@ -262,6 +282,11 @@ static void resonance_test_button_cb(
 {
     (void)event;
 
+    if (s_motion_dispatching) return;
+    if (s_motion.resonance_test_popup) {
+        lv_obj_move_foreground(s_motion.resonance_test_popup);
+        return;
+    }
     if (!motion_ready(
             "Resonance testing")) {
         return;
@@ -284,10 +309,12 @@ static void resonance_test_button_cb(
         return;
     }
 
+    motion_register(s_motion.resonance_test_popup);
     ui_cal_dialog_title(s_motion.resonance_test_popup, ui_text("SELECT RESONANCE TEST AXIS"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_motion.resonance_test_popup), "Klipper will move and vibrate the selected axis. The machine may be loud.\n\n"
         "Clear the bed and motion area, then select an axis to begin.");
+    s_resonance_feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_motion.resonance_test_popup), "");
     ui_cal_dialog_choice(s_motion.resonance_test_popup, UI_POPUP_ACTION_CONFIRM, ui_text("TEST X AXIS"), 248, run_resonance_test_cb, (void *)ui_text("X"), NULL);
     ui_cal_dialog_choice(s_motion.resonance_test_popup, UI_POPUP_ACTION_CONFIRM, ui_text("TEST Y AXIS"), 248, run_resonance_test_cb, (void *)ui_text("Y"), NULL);
 
@@ -300,7 +327,9 @@ static void close_accelerometer_check_popup(void)
     if (s_motion.accelerometer_check_popup) {
         lv_obj_t *popup =
             s_motion.accelerometer_check_popup;
+        ++s_motion_epoch;
         s_motion.accelerometer_check_popup = NULL;
+        s_sensor_feedback = NULL;
         lv_obj_delete(popup);
     }
 }
@@ -314,36 +343,12 @@ static void close_accelerometer_check_popup_cb(
 }
 
 
-static void run_accelerometer_check_cb(
-    lv_event_t *event)
+static void run_accelerometer_check_cb(lv_event_t *event)
 {
     (void)event;
-
-    if (!motion_ready(
-            "Accelerometer checking")) {
-        return;
-    }
-
-    static const char command[] =
-        "MEASURE_AXES_NOISE";
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_ACCELEROMETER_CHECK,
-        start_sequence);
-    console_controller_add_command(command);
-
-    bool sent =
-        s_motion.send_gcode &&
-        s_motion.send_gcode(command);
-
+    if (!motion_send(&s_motion.accelerometer_check_popup, s_sensor_feedback,
+            "Accelerometer checking", "MEASURE_AXES_NOISE", CALIBRATION_SESSION_ACCELEROMETER_CHECK)) return;
     close_accelerometer_check_popup();
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept MEASURE_AXES_NOISE.");
-    }
 
     show_results(
         "ACCELEROMETER CHECK",
@@ -357,6 +362,11 @@ static void accelerometer_check_button_cb(
 {
     (void)event;
 
+    if (s_motion_dispatching) return;
+    if (s_motion.accelerometer_check_popup) {
+        lv_obj_move_foreground(s_motion.accelerometer_check_popup);
+        return;
+    }
     if (!motion_ready(
             "Accelerometer checking")) {
         return;
@@ -378,11 +388,13 @@ static void accelerometer_check_button_cb(
         return;
     }
 
+    motion_register(s_motion.accelerometer_check_popup);
     ui_cal_dialog_title(s_motion.accelerometer_check_popup, ui_text("CHECK ACCELEROMETER?"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_motion.accelerometer_check_popup), "Klipper will sample the idle noise on every enabled accelerometer axis.\n\n"
         "Keep the printer completely still during the measurement.");
 
+    s_sensor_feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_motion.accelerometer_check_popup), "");
     ui_cal_dialog_action(s_motion.accelerometer_check_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_accelerometer_check_popup_cb, NULL, NULL);
     ui_cal_dialog_action(s_motion.accelerometer_check_popup, UI_POPUP_ACTION_CONFIRM, "RUN CHECK", run_accelerometer_check_cb, NULL, NULL);
 }
@@ -415,6 +427,7 @@ static lv_obj_t *make_action_button(
         callback,
         LV_EVENT_CLICKED,
         NULL);
+    lv_obj_add_event_cb(button, motion_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_add_flag(
         button,
         LV_OBJ_FLAG_HIDDEN);

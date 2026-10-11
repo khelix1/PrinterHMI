@@ -36,7 +36,10 @@ static inline lv_obj_t *ui_form_text(lv_obj_t *parent,const char *text,const lv_
 }
 static inline void ui_form_action_fit(lv_event_t *event)
 {
-    ui_text_fit_single_line(lv_obj_get_child(lv_event_get_target_obj(event),0),UI_FONT_BODY);
+    if (!event || lv_event_get_target_obj(event) != lv_event_get_current_target_obj(event)) return;
+    lv_obj_t *label=lv_obj_get_child(lv_event_get_current_target_obj(event),0);
+    if (!label || !lv_obj_check_type(label,&lv_label_class)) return;
+    ui_text_fit_single_line(label,UI_FONT_BODY);
 }
 static inline lv_obj_t *ui_form_action(lv_obj_t *popup,ui_button_kind_t kind,const char *text,lv_event_cb_t cb,void *data)
 {

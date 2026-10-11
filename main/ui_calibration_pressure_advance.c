@@ -16,6 +16,9 @@
 typedef struct {
     lv_obj_t *button;
     lv_obj_t *popup;
+    lv_obj_t *feedback;
+    uint32_t owner;
+    bool armed;
     ui_calibration_pa_send_gcode_cb_t send_gcode;
     ui_calibration_pa_ready_cb_t ready;
     bool discovered;
@@ -23,6 +26,31 @@ typedef struct {
 } ui_calibration_pressure_advance_state_t;
 
 static ui_calibration_pressure_advance_state_t s_pa;
+static uint32_t s_pa_epoch;
+static bool s_pa_dispatching;
+
+static void pa_retire_popup(void)
+{
+    ++s_pa_epoch;
+    s_pa.popup = NULL;
+    s_pa.feedback = NULL;
+    s_pa.armed = false;
+}
+
+static void pa_popup_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_pa.popup) pa_retire_popup();
+}
+
+static void pa_button_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_pa.button) s_pa.button = NULL;
+}
+
+static void pa_register_popup(void)
+{
+    lv_obj_add_event_cb(s_pa.popup, pa_popup_deleted, LV_EVENT_DELETE, NULL);
+}
 
 
 static bool workflow_ready(void)
@@ -55,7 +83,7 @@ static void close_popup(void)
 {
     if (s_pa.popup) {
         lv_obj_t *popup = s_pa.popup;
-        s_pa.popup = NULL;
+        pa_retire_popup();
         lv_obj_delete(popup);
     }
 }
@@ -80,9 +108,11 @@ static void show_armed_popup(
         return;
     }
 
+    pa_register_popup();
     ui_cal_dialog_title(s_pa.popup, ui_text("PRESSURE ADVANCE TOWER ARMED"));
 
 
+    s_pa.armed = true;
     char body[500];
     lv_snprintf(
         body,
@@ -100,7 +130,8 @@ static void show_armed_popup(
 static void arm_tower_cb(
     lv_event_t *event)
 {
-    if (!event || !workflow_ready()) {
+    if (!event || !s_pa.popup || s_pa.armed || s_pa_dispatching ||
+        s_pa.owner != moonraker_config_generation() || !workflow_ready()) {
         return;
     }
 
@@ -127,20 +158,20 @@ static void arm_tower_cb(
     }
 
     console_controller_add_command(command);
-    bool sent =
-        s_pa.send_gcode &&
-        s_pa.send_gcode(command);
-
-    close_popup();
-
+    lv_obj_t *popup = s_pa.popup;
+    uint32_t epoch = s_pa_epoch;
+    uint32_t owner = s_pa.owner;
+    s_pa_dispatching = true;
+    bool sent = s_pa.send_gcode && s_pa.send_gcode(command);
+    s_pa_dispatching = false;
+    if (s_pa_epoch != epoch || s_pa.popup != popup ||
+        owner != moonraker_config_generation()) return;
     if (!sent) {
-        ui_cal_dialog_notice(
-            UI_STATUS_DANGER,
-            "PA SETUP FAILED",
-            "Moonraker did not accept the Pressure Advance tower setup.");
+        if (s_pa.feedback)
+            lv_label_set_text(s_pa.feedback,
+                "Command was not accepted. Retry your drive choice when connected.");
         return;
     }
-
     show_armed_popup(factor);
 }
 
@@ -150,7 +181,7 @@ static void button_cb(
 {
     (void)event;
 
-    if (!workflow_ready()) {
+    if (s_pa_dispatching || !workflow_ready()) {
         return;
     }
 
@@ -159,6 +190,11 @@ static void button_cb(
         return;
     }
 
+    if (s_pa.popup) {
+        lv_obj_move_foreground(s_pa.popup);
+        return;
+    }
+    s_pa.owner = moonraker_config_generation();
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
 
@@ -170,6 +206,7 @@ static void button_cb(
         return;
     }
 
+    pa_register_popup();
     ui_cal_dialog_title(s_pa.popup, ui_text("SET UP PRESSURE ADVANCE TOWER"));
 
 
@@ -185,6 +222,7 @@ static void button_cb(
             : "extruder");
     ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
 
+    s_pa.feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), "");
     ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("DIRECT DRIVE"), 260, arm_tower_cb, (void *)ui_text(".005"), NULL);
     ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("LONG BOWDEN"), 260, arm_tower_cb, (void *)ui_text(".020"), NULL);
 
@@ -228,6 +266,7 @@ void ui_calibration_pressure_advance_create(
         button_cb,
         LV_EVENT_CLICKED,
         NULL);
+    lv_obj_add_event_cb(s_pa.button, pa_button_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_add_flag(
         s_pa.button,
         LV_OBJ_FLAG_HIDDEN);

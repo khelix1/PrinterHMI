@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.0.0-dev] - Unreleased
+
+- Studio interface redesign and system-wide LVGL 9.5 modernization.
+- Responsive dialogs, input/selector consistency, preview canvases and telemetry.
+- Filament recovery, active-print controls and connection-aware workflows.
+- Notification levels, per-printer offline alerts, build identity and OTA review.
+- Dialog lifetime, retry and duplicate-dispatch protections.
+- Development identity only; latest published stable remains 6.5.6.
+- Physical printing/recovery checks and intermittent OTA validation remain pending.
+
 ## [6.5.6] - 2026-10-04
 
 ### Added

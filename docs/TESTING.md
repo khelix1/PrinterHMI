@@ -788,3 +788,52 @@ The calibration workflows now use shared native columns with scrolling content a
 ## Console and pressed button frames
 
 Console now uses native wrapped history, responsive filters, pinned page actions and command/search columns with the input and actions above the keyboard. Printer-generation/connection guards and persistent inline send feedback preserve rejected input. The appliance-wide Notifications setting defaults optional confirmations OFF and keeps important notices persistent; it is saved in NVS and backups. Shared button presses retain their geometry and semantic stroke; keyboard-only focus remains visible. See [Console](CONSOLE.md) and [Notification policy](NOTIFICATIONS.md) for behavior, audit findings and remaining notification migration. Dedicated host, source-derived frame/text and current owner checks pass; target/panel and physical printing tests remain pending. Stable remains 6.5.6 and the feature branch stays open. Drybox retains its prior layout.
+
+
+## 7.0.0-dev calibration follow-up validation (2026-10-11)
+
+The operator reports successful calibration Save/Restart and reconnect after the
+save-review patch. No additional calibration-accuracy or physical printing tests
+are inferred from that report.
+
+The calibration owner host suite now checks manual Probe/Z and Axis Twist dialog
+retirement, callback/data preservation, repeated opens, late status updates,
+reentrant dispatch and printer changes in all five themes, densities, text sizes
+and standard/narrow/short viewports. Run
+`python3 tools/audit/calibration_dialog_layout_test.py`, with optional
+`--lvgl-dir` and `--lvgl-lib` host paths. Services remain stubbed; actual TESTZ
+motion, ACCEPT/ABORT and Axis Twist points need physical validation. Earlier
+version-specific sections remain historical records. Current branch identity is
+7.0.0-dev; intermittent OTA and pending printing/recovery checks remain open.
+
+
+## About layout and identity checks
+
+Run `python3 tools/audit/about_dialog_layout_test.py`, optionally with
+`--lvgl-dir` and `--lvgl-lib` host paths. The real owner is tested under compiled
+Custom/Stable/Nightly channel definitions, with actual firmware identity code and
+native pointer input. All five themes, densities/text sizes and 1024/640/480 px
+viewports are covered, including long nightly versions, descriptor fallback,
+scroll reach, pinned Close, repeated open/delete cycles and child-bubbled size
+events. Host rendering was inspected across the five themes. Panel scrolling and
+About launch/close remain pending. The current branch is 7.0.0-dev; existing
+physical printing/recovery and intermittent OTA checks remain open.
+
+
+## Geometry and motion retry/lifetime checks
+
+`python3 tools/audit/calibration_dialog_layout_test.py` now exercises the real
+geometry and motion owners with stubbed services across all five themes, densities,
+text sizes and standard/narrow/short viewports. It checks retained retry choices,
+exact command strings, fresh capability/readiness/homing checks, duplicate and
+reentrant submission, external deletion and transport callbacks that retire the
+dialog or switch printers. Accepted gantry requests expose Close and cannot resend.
+The suite compiles separate owners with warnings treated as errors.
+
+On 2026-10-11 the user confirmed the About popup looks good on the panel, superseding
+the pending visual review in the preceding About section. This does not validate
+physical calibration: Screws Tilt, QGL/Z Tilt, shaper calibration, resonance and
+accelerometer measurement still require printer checks. Confirm rejected requests
+retain their choices and accepted requests show actual results without duplicate
+commands. Branch identity remains 7.0.0-dev. Previously documented physical
+printing/recovery and intermittent pre-reboot OTA tests remain pending.

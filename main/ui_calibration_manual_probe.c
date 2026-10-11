@@ -3,13 +3,54 @@
 
 #include "ui_popup.h"
 #include "ui_calibration_dialog.h"
+#include "ui_value_update.h"
 
 typedef struct {
     lv_obj_t *popup;
     lv_obj_t *status_label;
+    uint32_t owner;
+    lv_event_cb_t step_cb;
+    lv_event_cb_t abort_cb;
+    lv_event_cb_t accept_cb;
 } ui_calibration_manual_probe_state_t;
 
 static ui_calibration_manual_probe_state_t s_probe;
+/* A callback can retire/reopen the dialog; keep dispatch ownership separate. */
+static bool s_probe_dispatching;
+
+static void manual_probe_retire(void)
+{
+    s_probe = (ui_calibration_manual_probe_state_t){0};
+}
+
+static void manual_probe_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_probe.popup) manual_probe_retire();
+}
+
+static void manual_probe_dispatch(lv_event_t *event, lv_event_cb_t callback)
+{
+    if (!event || !s_probe.popup || !callback || s_probe_dispatching ||
+        s_probe.owner != moonraker_config_generation()) return;
+    s_probe_dispatching = true;
+    callback(event); /* Preserve original event and TESTZ command user data. */
+    s_probe_dispatching = false;
+}
+
+static void manual_probe_step(lv_event_t *event)
+{
+    manual_probe_dispatch(event, s_probe.step_cb);
+}
+
+static void manual_probe_abort(lv_event_t *event)
+{
+    manual_probe_dispatch(event, s_probe.abort_cb);
+}
+
+static void manual_probe_accept(lv_event_t *event)
+{
+    manual_probe_dispatch(event, s_probe.accept_cb);
+}
 
 
 void ui_calibration_manual_probe_hide(void)
@@ -19,8 +60,7 @@ void ui_calibration_manual_probe_hide(void)
     }
 
     lv_obj_t *popup = s_probe.popup;
-    s_probe.popup = NULL;
-    s_probe.status_label = NULL;
+    manual_probe_retire();
     lv_obj_delete(popup);
 }
 
@@ -33,10 +73,16 @@ bool ui_calibration_manual_probe_show(
     lv_event_cb_t abort_cb,
     lv_event_cb_t accept_cb)
 {
-    if (!step_cb || !abort_cb || !accept_cb) {
+    if (!step_cb || !abort_cb || !accept_cb || s_probe_dispatching) {
         return false;
     }
 
+    if (s_probe.popup && s_probe.owner == moonraker_config_generation() &&
+        s_probe.step_cb == step_cb && s_probe.abort_cb == abort_cb &&
+        s_probe.accept_cb == accept_cb) {
+        lv_obj_move_foreground(s_probe.popup);
+        return true;
+    }
     ui_calibration_manual_probe_hide();
 
     s_probe.popup =
@@ -46,6 +92,11 @@ bool ui_calibration_manual_probe_show(
         return false;
     }
 
+    s_probe.owner = moonraker_config_generation();
+    s_probe.step_cb = step_cb;
+    s_probe.abort_cb = abort_cb;
+    s_probe.accept_cb = accept_cb;
+    lv_obj_add_event_cb(s_probe.popup, manual_probe_deleted, LV_EVENT_DELETE, NULL);
     ui_cal_dialog_title(s_probe.popup, title ? title : ui_text("MANUAL PROBE"));
 
     s_probe.status_label =
@@ -75,12 +126,12 @@ bool ui_calibration_manual_probe_show(
     for (size_t index = 0;
          index < sizeof(labels) / sizeof(labels[0]);
          ++index) {
-        ui_cal_dialog_choice(s_probe.popup, UI_POPUP_ACTION_CHOICE, labels[index], 120, step_cb, (void *)commands[index], NULL);
+        ui_cal_dialog_choice(s_probe.popup, UI_POPUP_ACTION_CHOICE, labels[index], 120, manual_probe_step, (void *)commands[index], NULL);
     }
 
 
-    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "ABORT", abort_cb, NULL, NULL);
-    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "ACCEPT", accept_cb, NULL, NULL);
+    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "ABORT", manual_probe_abort, NULL, NULL);
+    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "ACCEPT", manual_probe_accept, NULL, NULL);
 
     return true;
 }
@@ -89,8 +140,9 @@ bool ui_calibration_manual_probe_show(
 void ui_calibration_manual_probe_set_status(
     const char *status)
 {
-    if (s_probe.status_label && status) {
-        lv_label_set_text(
+    if (s_probe.popup && s_probe.status_label && status &&
+        s_probe.owner == moonraker_config_generation()) {
+        ui_value_set_text(
             s_probe.status_label,
             status);
     }

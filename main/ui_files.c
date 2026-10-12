@@ -37,6 +37,8 @@ static ui_files_search_cb_t s_search_cb = NULL;
 static ui_files_action_cb_t s_sort_cb = NULL;
 static ui_files_folder_cb_t s_folder_cb = NULL;
 static ui_files_action_cb_t s_up_cb = NULL;
+static lv_obj_t *s_up_button;
+static bool s_folder_has_parent;
 static lv_obj_t *s_breadcrumb_label = NULL;
 static lv_obj_t *s_studio_file_hint;
 static lv_obj_t *s_sort_label = NULL;
@@ -44,8 +46,22 @@ static lv_obj_t *s_search_label = NULL;
 static lv_obj_t *s_search_popup = NULL;
 static lv_obj_t *s_search_textarea = NULL;
 static char s_search_text[64];
+static void up_button_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)==s_up_button)s_up_button=NULL;
+}
+static void update_up_button(void)
+{
+    if(!s_up_button)return;
+    if(!s_up_cb || (!s_folder_has_parent && !s_search_text[0]))lv_obj_add_state(s_up_button,LV_STATE_DISABLED);
+    else lv_obj_remove_state(s_up_button,LV_STATE_DISABLED);
+}
+
+
 static lv_timer_t *s_files_refresh_timer = NULL;
 static bool s_files_refresh_pending = false;
+static bool s_files_print_dispatching;
+static void files_page_deleted(lv_event_t *event);
 
 typedef struct file_row_context {
     struct file_row_context *next;
@@ -125,22 +141,21 @@ void ui_files_set_status(const char *text)
 
 static void files_refresh_deferred_cb(lv_timer_t *timer)
 {
+    if (!timer || timer != s_files_refresh_timer) return;
     s_files_refresh_timer = NULL;
+    s_files_refresh_pending = false;
     lv_timer_delete(timer);
 
     /*
      * Enqueue the file-list worker after the first page draw. HTTP retries
      * run outside LVGL; its result timer updates the current page in place.
      */
-    if (s_refresh_cb) {
-        s_refresh_cb();
-    }
-    s_files_refresh_pending = false;
+    if (s_printer_file_popup && s_refresh_cb) s_refresh_cb();
 }
 
 static void files_refresh_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED ||
+    if (!e || !s_printer_file_popup || lv_event_get_code(e) != LV_EVENT_CLICKED ||
         s_files_refresh_pending) {
         return;
     }
@@ -572,6 +587,8 @@ void ui_files_clear_rows(void)
 
 void ui_files_set_breadcrumb(const char *path)
 {
+    s_folder_has_parent=path && path[0];
+    update_up_button();
     if (!s_breadcrumb_label) return;
     char text[190];
     snprintf(text, sizeof(text), "GCODE / %s", path && path[0] ? path : "ROOT");
@@ -586,6 +603,7 @@ void ui_files_set_sort_text(const char *text)
 void ui_files_set_search_text(const char *text)
 {
     snprintf(s_search_text, sizeof(s_search_text), "%s", text ? text : "");
+    update_up_button();
 
     if (s_search_label) {
         ui_value_set_text(s_search_label,
@@ -604,9 +622,9 @@ void ui_files_set_search_text(const char *text)
 
 static void close_search_popup(void)
 {
-    if (s_search_popup) lv_obj_delete(s_search_popup);
-    s_search_popup = NULL;
-    s_search_textarea = NULL;
+    lv_obj_t *popup = s_search_popup;
+    s_search_popup = s_search_textarea = NULL;
+    if (popup) lv_obj_delete(popup);
 }
 
 static void search_popup_deleted_cb(lv_event_t *event)
@@ -619,6 +637,7 @@ static void search_popup_deleted_cb(lv_event_t *event)
 
 static void apply_search_and_close(bool async_close)
 {
+    if (!s_printer_file_popup || !s_search_popup || !s_search_textarea) return;
     char query[sizeof(s_search_text)];
     snprintf(query,
              sizeof(query),
@@ -640,6 +659,7 @@ static void apply_search_and_close(bool async_close)
 
 static void search_keyboard_cb(lv_event_t *event)
 {
+    if (!event) return;
     lv_event_code_t code = lv_event_get_code(event);
     if (code == LV_EVENT_READY) {
         apply_search_and_close(true);
@@ -653,19 +673,19 @@ static void search_keyboard_cb(lv_event_t *event)
 
 static void search_apply_button_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+    if (event && lv_event_get_code(event) == LV_EVENT_CLICKED) {
         apply_search_and_close(false);
     }
 }
 
 static void search_cancel_button_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED) close_search_popup();
+    if (event && lv_event_get_code(event) == LV_EVENT_CLICKED) close_search_popup();
 }
 
 static void search_button_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (!event || !s_printer_file_popup || s_files_print_dispatching || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     if (s_search_popup) { lv_obj_move_foreground(s_search_popup); return; }
     s_search_popup=ui_form_dialog("SEARCH FILES",760,540,UI_POPUP_STANDARD);
     if(!s_search_popup)return;
@@ -682,12 +702,12 @@ static void search_button_cb(lv_event_t *event)
 
 static void sort_button_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && s_sort_cb) s_sort_cb();
+    if (event && s_printer_file_popup && !s_files_print_dispatching && lv_event_get_code(event) == LV_EVENT_CLICKED && s_sort_cb) s_sort_cb();
 }
 
 static void up_button_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && s_up_cb) s_up_cb();
+    if (event && s_printer_file_popup && !s_files_print_dispatching && s_up_button && !lv_obj_has_state(s_up_button,LV_STATE_DISABLED) && lv_event_get_code(event) == LV_EVENT_CLICKED && s_up_cb) s_up_cb();
 }
 
 void ui_files_set_file_thumbnail(
@@ -732,9 +752,11 @@ void ui_files_show(void)
 
     if(ui_theme_is_studio()) {
         s_printer_file_popup=lv_obj_create(lv_screen_active());
+        lv_obj_add_event_cb(s_printer_file_popup,files_page_deleted,LV_EVENT_DELETE,NULL);
         lv_obj_set_size(s_printer_file_popup,854,528);ui_apply_root_style(s_printer_file_popup);
         studio_text(s_printer_file_popup,"Job library",0,0,580,&ui_studio_font_48,UI_TEXT);
-        studio_action(s_printer_file_popup,"Up",0,70,100,44,up_button_cb,NULL);
+        s_up_button=studio_action(s_printer_file_popup,"Up",0,70,100,44,up_button_cb,NULL);
+        lv_obj_add_event_cb(s_up_button,up_button_deleted,LV_EVENT_DELETE,NULL);
         lv_obj_t *search=studio_action(s_printer_file_popup,"Search",110,70,148,44,search_button_cb,NULL);
         s_search_label=lv_obj_get_child(search,0);
         lv_obj_t *sort=studio_action(s_printer_file_popup,"Name",268,70,144,44,sort_button_cb,NULL);
@@ -771,6 +793,7 @@ void ui_files_show(void)
     if (!s_printer_file_popup) {
         return;
     }
+    lv_obj_add_event_cb(s_printer_file_popup,files_page_deleted,LV_EVENT_DELETE,NULL);
 
     lv_obj_set_size(
         s_printer_file_popup,
@@ -811,7 +834,9 @@ void ui_files_show(void)
     lv_obj_t *up = ui_button_create_icon(
         toolbar, UI_BUTTON_OUTLINED,
         LV_SYMBOL_UP, "UP", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
+    s_up_button=up;
     if (up) {
+        lv_obj_add_event_cb(up,up_button_deleted,LV_EVENT_DELETE,NULL);
         ui_responsive_action(up);
 
         lv_obj_add_event_cb(up, up_button_cb, LV_EVENT_CLICKED, NULL);
@@ -948,24 +973,18 @@ schedule_files_refresh:
 
 void ui_files_hide(void)
 {
-    if (s_files_refresh_timer) {
-        lv_timer_delete(s_files_refresh_timer);
-        s_files_refresh_timer = NULL;
-    }
+    lv_obj_t *popup = s_printer_file_popup;
+    lv_timer_t *timer = s_files_refresh_timer;
+    s_files_refresh_timer = NULL;
     s_files_refresh_pending = false;
+    s_printer_file_popup = s_printer_file_popup_label = s_printer_file_list = NULL;
+    s_files_state = NULL;
+    s_breadcrumb_label = s_sort_label = s_search_label = s_studio_file_hint = s_up_button = NULL;
+    s_folder_has_parent=false;
     close_search_popup();
     ui_files_close_detail_popup();
-    if (s_printer_file_popup) {
-        lv_obj_delete(s_printer_file_popup);
-        s_printer_file_popup = NULL;
-        s_printer_file_popup_label = NULL;
-        s_printer_file_list = NULL;
-        s_files_state = NULL;
-        s_breadcrumb_label = NULL;
-        s_sort_label = NULL;
-        s_search_label = NULL;
-        s_studio_file_hint = NULL;
-    }
+    if (timer) lv_timer_delete(timer);
+    if (popup) lv_obj_delete(popup);
 }
 
 void ui_files_set_browser_callbacks(
@@ -978,6 +997,7 @@ void ui_files_set_browser_callbacks(
     s_sort_cb = sort_cb;
     s_folder_cb = folder_cb;
     s_up_cb = up_cb;
+    update_up_button();
 }
 
 void ui_files_refresh(void)
@@ -1019,37 +1039,42 @@ static lv_timer_t *s_detail_connection_timer;
 static lv_obj_t *s_detail_connection_label;
 static void detail_connection_refresh(lv_timer_t *timer)
 {
-    (void)timer;if(!s_file_detail_popup)return;
+    if(!s_file_detail_popup || (timer && timer != s_detail_connection_timer))return;
     moonraker_state_t state;moonraker_state_snapshot(&state);
     const char *reason=s_detail_generation!=moonraker_config_generation()?
         "Printer changed - reselect file.":printer_idle_reason(&state);
-    if(!reason[0] && !s_detail_metadata_ready)reason="Loading file details.";
+    if(s_detail_generation==moonraker_config_generation()) {
+        if(!state.moonraker_ok)reason="Offline - reconnect before printing.";
+        else if(!state.live_data_ok)reason="Waiting for Klipper before printing.";
+    }
+    if(!reason[0] && !s_detail_metadata_ready)reason="Loading file details - Print unavailable.";
+    if(!reason[0] && !s_detail_start_cb)reason="Print action unavailable.";
     if(s_detail_start_button) {
-        if(reason[0] || !s_detail_start_cb)lv_obj_add_state(s_detail_start_button,LV_STATE_DISABLED);
+        if(reason[0] || !s_detail_start_cb || s_files_print_dispatching)lv_obj_add_state(s_detail_start_button,LV_STATE_DISABLED);
         else lv_obj_remove_state(s_detail_start_button,LV_STATE_DISABLED);
     }
     if(s_print_accept_button) {
-        if(reason[0] || !s_detail_start_cb)lv_obj_add_state(s_print_accept_button,LV_STATE_DISABLED);
+        if(reason[0] || !s_detail_start_cb || s_files_print_dispatching)lv_obj_add_state(s_print_accept_button,LV_STATE_DISABLED);
         else lv_obj_remove_state(s_print_accept_button,LV_STATE_DISABLED);
     }
     ui_value_set_text(s_print_connection_label,reason[0]?reason:"The selected printer will run this G-code file.");
-    if(ui_value_set_text(s_detail_connection_label,reason) && ui_theme_is_studio())
-        ui_text_fit_single_line(s_detail_connection_label,UI_FONT_CAPTION);
+    /* Inline readiness caption temporarily hidden at the operator's request. */
 }
 static void detail_deleted(lv_event_t *event)
 {
     if(lv_event_get_target_obj(event)!=s_file_detail_popup)return;
-    if(s_detail_connection_timer)lv_timer_delete(s_detail_connection_timer);
-    s_detail_connection_timer=NULL;s_detail_connection_label=NULL;s_detail_metadata_ready=false;
-    s_file_detail_popup=NULL;s_detail_info_label=NULL;s_detail_start_button=NULL;
-    print_confirm_cancel(NULL);
-    if(s_studio_metadata_popup)lv_obj_delete(s_studio_metadata_popup);
-    s_studio_metadata_popup=NULL;s_studio_metadata_label=NULL;
-    free(s_detail_filename);s_detail_filename=NULL;s_detail_start_cb=NULL;s_detail_cancel_cb=NULL;
+    ui_files_detail_cb_t cancel = s_detail_cancel_cb;
+    s_file_detail_popup = NULL;
+    s_detail_cancel_cb = NULL;
+    ui_files_close_detail_popup();
+    /* Notify the loader/thumbnail owner after UI references are retired. */
+    if (cancel) cancel();
 }
 static void detail_watch(lv_obj_t *label)
 {
     s_detail_connection_label=label;
+    lv_label_set_text(label,"");
+    lv_obj_add_flag(label,LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(s_file_detail_popup,detail_deleted,LV_EVENT_DELETE,NULL);
     s_detail_connection_timer=lv_timer_create(detail_connection_refresh,250,NULL);
     detail_connection_refresh(NULL);
@@ -1057,13 +1082,17 @@ static void detail_watch(lv_obj_t *label)
 
 static void print_confirm_deleted(lv_event_t *event)
 {
-    (void)event;s_print_confirm_popup=NULL;s_print_accept_button=NULL;s_print_connection_label=NULL;
+    if(lv_event_get_target_obj(event)==s_print_confirm_popup) {
+        s_print_confirm_popup=NULL;s_print_accept_button=NULL;s_print_connection_label=NULL;
+    }
 }
 
 static void print_confirm_cancel(lv_event_t *event)
 {
     (void)event;
-    if(s_print_confirm_popup)lv_obj_delete(s_print_confirm_popup);
+    lv_obj_t *popup=s_print_confirm_popup;
+    s_print_confirm_popup=s_print_accept_button=s_print_connection_label=NULL;
+    if(popup)lv_obj_delete(popup);
 }
 
 
@@ -1080,20 +1109,27 @@ bool ui_files_can_refresh_rows(void)
 
 void ui_files_close_detail_popup(void)
 {
-    print_confirm_cancel(NULL);
-    if(s_detail_connection_timer)lv_timer_delete(s_detail_connection_timer);
+    lv_obj_t *detail=s_file_detail_popup, *metadata=s_studio_metadata_popup;
+    lv_timer_t *timer=s_detail_connection_timer;
+    s_file_detail_popup=s_detail_info_label=s_detail_start_button=NULL;
+    s_studio_metadata_popup=s_studio_metadata_label=NULL;
     s_detail_connection_timer=NULL;s_detail_connection_label=NULL;s_detail_metadata_ready=false;
+    s_detail_cancel_cb=s_detail_start_cb=NULL;
     free(s_detail_filename);s_detail_filename=NULL;
-    if (s_studio_metadata_popup) {lv_obj_delete(s_studio_metadata_popup);s_studio_metadata_popup=NULL;s_studio_metadata_label=NULL;}
-    if (s_studio_file_hint) lv_obj_remove_flag(s_studio_file_hint,LV_OBJ_FLAG_HIDDEN);
-    if (s_file_detail_popup) {
-        lv_obj_delete(s_file_detail_popup);
-        s_file_detail_popup = NULL;
-        s_detail_info_label = NULL;
-        s_detail_start_button = NULL;
-    }
-    s_detail_cancel_cb = NULL;
-    s_detail_start_cb = NULL;
+    print_confirm_cancel(NULL);
+    if(timer)lv_timer_delete(timer);
+    if(metadata)lv_obj_delete(metadata);
+    if(s_studio_file_hint)lv_obj_remove_flag(s_studio_file_hint,LV_OBJ_FLAG_HIDDEN);
+    if(detail)lv_obj_delete(detail);
+}
+
+static void files_page_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)!=s_printer_file_popup)return;
+    ui_files_detail_cb_t cancel=s_detail_cancel_cb;
+    s_printer_file_popup=NULL;
+    ui_files_hide();
+    if(cancel)cancel();
 }
 
 static void detail_cancel_event_cb(lv_event_t *e)
@@ -1115,7 +1151,7 @@ void ui_files_print_feedback(const char *message)
 static void print_confirm_accept(lv_event_t *event)
 {
     (void)event;
-    if(!s_print_confirm_popup)return;
+    if(!s_print_confirm_popup || s_files_print_dispatching)return;
     detail_connection_refresh(NULL);
     bool ready=s_detail_start_cb && s_detail_start_button &&
         !lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED);
@@ -1129,14 +1165,21 @@ static void print_confirm_accept(lv_event_t *event)
         ui_files_print_feedback("Print not ready. Wait for the file details, then try again.");
         return;
     }
-    s_detail_start_cb();
+    lv_obj_t *popup=s_print_confirm_popup;
+    uint32_t owner=s_print_confirm_generation;
+    ui_files_detail_cb_t start=s_detail_start_cb;
+    s_files_print_dispatching=true;
+    detail_connection_refresh(NULL);
+    start();
+    s_files_print_dispatching=false;
+    if(s_print_confirm_popup==popup && owner==moonraker_config_generation())detail_connection_refresh(NULL);
 }
 
 static void detail_start_event_cb(lv_event_t *event)
 {
     (void)event;
     detail_connection_refresh(NULL);
-    if(s_print_confirm_popup || !s_detail_filename || !s_detail_start_cb ||
+    if(s_files_print_dispatching || s_print_confirm_popup || !s_detail_filename || !s_detail_start_cb ||
        !s_detail_start_button || lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED))return;
     int width=lv_display_get_horizontal_resolution(NULL)-32;
     int height=lv_display_get_vertical_resolution(NULL)-32;
@@ -1180,7 +1223,9 @@ static void detail_start_event_cb(lv_event_t *event)
 
 static void file_metadata_scroll_style(lv_obj_t *body)
 {
-    lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);
+    /* studio_plane() clears CLICKABLE; a scroll body must receive pointer hits. */
+    lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(body,LV_OBJ_FLAG_SCROLL_CHAIN_VER | LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
     lv_obj_set_scroll_dir(body,LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_style_bg_color(body,UI_TEXT_MUTED,LV_PART_SCROLLBAR);
@@ -1191,7 +1236,14 @@ static void file_metadata_scroll_style(lv_obj_t *body)
 static void studio_metadata_close(lv_event_t *e)
 {
     (void)e;
-    if(s_studio_metadata_popup) {lv_obj_delete(s_studio_metadata_popup);s_studio_metadata_popup=NULL;s_studio_metadata_label=NULL;}
+    lv_obj_t *popup=s_studio_metadata_popup;
+    s_studio_metadata_popup=s_studio_metadata_label=NULL;
+    if(popup)lv_obj_delete(popup);
+}
+static void studio_metadata_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)==s_studio_metadata_popup)
+        s_studio_metadata_popup=s_studio_metadata_label=NULL;
 }
 static void studio_metadata_open(lv_event_t *e)
 {
@@ -1203,6 +1255,7 @@ static void studio_metadata_open(lv_event_t *e)
     if (height > 440) height = 440;
     s_studio_metadata_popup=ui_popup_create(lv_layer_top(),width,height,UI_POPUP_STANDARD);
     if(!s_studio_metadata_popup)return;
+    lv_obj_add_event_cb(s_studio_metadata_popup,studio_metadata_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_studio_metadata_popup, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_studio_metadata_popup, 16, 0);
     lv_obj_set_style_pad_row(s_studio_metadata_popup, UI_GAP_ROW, 0);

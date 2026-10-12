@@ -14,6 +14,7 @@ static uint32_t generation=1,sequence=64;
 static size_t entries=64;
 static unsigned sends,invalidations;
 static bool accept=true,long_messages;
+static void (*send_hook)(void);
 static char sent[CONSOLE_COMMAND_MAX+1];
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -31,7 +32,12 @@ size_t console_controller_history_count(void){return 2;}
 bool console_controller_history_get(size_t i,char *o,size_t n){if(i>=2)return false;snprintf(o,n,"%s",i?"M105":"STATUS");return true;}
 void console_controller_add_command(const char *c){(void)c;sequence++;}
 void console_controller_add(console_entry_type_t t,const char *f,...){(void)t;(void)f;sequence++;}
-static bool send(const char *command){sends++;snprintf(sent,sizeof(sent),"%s",command);return accept;}
+static bool send(const char *command){sends++;snprintf(sent,sizeof(sent),"%s",command);if(send_hook)send_hook();return accept;}
+static unsigned timer_count(void){unsigned count=0;for(lv_timer_t*t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))count++;return count;}
+static void reenter_send(void){send_command_cb(NULL);open_command_cb(NULL);history_prev_cb(NULL);ui_console_show(send);}
+static void retire_send(void){lv_obj_delete(s_command_popup);}
+static void retire_root_send(void){lv_obj_delete(s_root);}
+static void switch_send(void){generation++;}
 static void click(lv_obj_t *b){lv_obj_send_event(b,LV_EVENT_CLICKED,NULL);}
 static void inside(lv_obj_t *c,lv_obj_t *p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(a.x1<b.x1||a.x2>b.x2||a.y1<b.y1||a.y2>b.y2){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void same(lv_obj_t *label,const char *expected){assert(!strcmp(lv_textarea_get_text(label),expected));}
@@ -58,8 +64,8 @@ static void press_catalog(void){
 }
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
  for(unsigned high_contrast=0;high_contrast<2;high_contrast++)for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned narrow=0;narrow<3;narrow++){
-  lv_display_set_resolution(d,(int[]){1024,640,480}[narrow],narrow==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large,.reduced_motion=high_contrast,.high_contrast=high_contrast});state=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true};generation++;entries=64;sequence=64;sends=0;accept=true;long_messages=true;s_query[0]=0;s_filter=CONSOLE_FILTER_ALL;s_hide_temperatures=false;s_follow=true;
-  ui_console_show(send);page_bounds();assert(s_rows->rows[63]);assert(lv_label_get_long_mode(s_rows->rows[0])==LV_LABEL_LONG_WRAP);assert(lv_obj_get_height(s_rows->rows[0])>UI_FONT_CAPTION->line_height);capture("console");
+  lv_display_set_resolution(d,(int[]){1024,640,480}[narrow],narrow==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large,.reduced_motion=high_contrast,.high_contrast=high_contrast});state=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true};generation++;send_hook=NULL;entries=64;sequence=64;sends=0;accept=true;long_messages=true;s_query[0]=0;s_filter=CONSOLE_FILTER_ALL;s_hide_temperatures=false;s_follow=true;
+  unsigned baseline_timers=timer_count();ui_console_show(send);page_bounds();assert(s_rows->rows[63]);assert(lv_label_get_long_mode(s_rows->rows[0])==LV_LABEL_LONG_WRAP);assert(lv_obj_get_height(s_rows->rows[0])>UI_FONT_CAPTION->line_height);capture("console");
   lv_obj_t *first=s_rows->rows[0];s_follow=false;lv_obj_scroll_to_y(s_output,200,LV_ANIM_OFF);lv_obj_update_layout(s_root);int scroll=lv_obj_get_scroll_y(s_output);rebuild_output();assert(scroll==lv_obj_get_scroll_y(s_output)&&s_rows->rows[0]==first);
   uint32_t anchor=0;int anchor_y=0;lv_area_t vp;lv_obj_get_coords(s_output,&vp);
   for(unsigned i=0;i<64;i++){lv_area_t a;lv_obj_get_coords(s_rows->rows[i],&a);if(a.y2>=vp.y1){anchor=s_row_sequence[i];anchor_y=a.y1;break;}}
@@ -68,9 +74,20 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   s_filter=CONSOLE_FILTER_ERRORS;rebuild_output();assert(!strcmp(lv_label_get_text(s_filter_count),"32 / 64"));s_filter=CONSOLE_FILTER_ALL;strcpy(s_query,"Message 64");rebuild_output();assert(!strcmp(lv_label_get_text(s_filter_count),"1 / 64"));s_query[0]=0;rebuild_output();
   lv_refr_now(d);invalidations=0;for(unsigned i=0;i<100;i++)refresh_timer_cb(NULL);assert(!invalidations);
   click(s_command_button);assert(s_command_popup);popup_bounds(s_command_popup);capture("console-command");history_prev_cb(NULL);same(s_command_input,"STATUS");history_prev_cb(NULL);same(s_command_input,"M105");history_next_cb(NULL);same(s_command_input,"STATUS");history_next_cb(NULL);same(s_command_input,"");
-  lv_textarea_set_text(s_command_input,"  STATUS  ");generation++;send_command_cb(NULL);assert(!sends&&s_command_popup);assert(strstr(lv_label_get_text(s_command_feedback),"Printer changed"));close_command_popup();open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");state.moonraker_ok=false;send_command_cb(NULL);assert(!sends);state.moonraker_ok=true;accept=false;send_command_cb(NULL);assert(sends==1&&s_command_popup);same(s_command_input,"STATUS");assert(strstr(lv_label_get_text(s_command_feedback),"Send failed"));accept=true;send_command_cb(NULL);assert(sends==2&&!s_command_popup&&!strcmp(sent,"STATUS"));
+  lv_textarea_set_text(s_command_input,"  STATUS  ");generation++;send_command_cb(NULL);assert(!sends&&s_command_popup);assert(strstr(lv_label_get_text(s_command_feedback),"Printer changed"));close_command_popup();open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");state.moonraker_ok=false;send_command_cb(NULL);assert(!sends);state.moonraker_ok=true;accept=false;send_command_cb(NULL);assert(sends==1&&s_command_popup);same(s_command_input,"STATUS");assert(strstr(lv_label_get_text(s_command_feedback),"Send failed"));accept=true;send_hook=reenter_send;send_command_cb(NULL);send_hook=NULL;assert(sends==2&&!s_command_popup&&!strcmp(sent,"STATUS"));
   search_cb(NULL);popup_bounds(s_search_popup);lv_textarea_set_text(s_search_input,"Message 64");search_done_cb(NULL);assert(!strcmp(s_query,"Message 64")&&!s_search_popup);search_cb(NULL);lv_obj_delete(s_search_popup);assert(!s_search_popup&&!s_search_input);
   open_command_cb(NULL);lv_obj_delete(s_command_popup);assert(!s_command_popup&&!s_command_input&&!s_command_send);state.moonraker_ok=false;update_connection();assert(lv_obj_has_state(s_command_button,LV_STATE_DISABLED));open_command_cb(NULL);assert(!s_command_popup);state.moonraker_ok=true;update_connection();
-  state.live_data_ok=false;strcpy(state.printer_state,"error");open_command_cb(NULL);assert(s_command_popup);lv_textarea_set_text(s_command_input,"RESTART");send_command_cb(NULL);assert(!s_command_popup&&!strcmp(sent,"RESTART"));reset_filters_cb(NULL);clear_cb(NULL);assert(!strcmp(lv_label_get_text(s_filter_count),"0 / 0"));ui_console_hide();assert(!s_root&&!s_refresh_timer&&!lv_obj_get_child_count(lv_layer_top()));press_catalog();
+  state.live_data_ok=false;strcpy(state.printer_state,"error");open_command_cb(NULL);assert(s_command_popup);lv_textarea_set_text(s_command_input,"RESTART");send_command_cb(NULL);assert(!s_command_popup&&!strcmp(sent,"RESTART"));reset_filters_cb(NULL);
+  open_command_cb(NULL);lv_textarea_set_text(s_command_input,"  STATUS  ");lv_obj_t*editor=s_command_popup;open_command_cb(NULL);assert(s_command_popup==editor&&!strcmp(lv_textarea_get_text(s_command_input),"  STATUS  "));unsigned before=sends;send_hook=retire_send;send_command_cb(NULL);send_hook=NULL;assert(sends==before+1&&!s_command_popup&&!s_command_feedback&&!s_command_send);
+  open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");before=sends;send_hook=switch_send;send_command_cb(NULL);send_hook=NULL;assert(sends==before+1&&s_command_popup);send_command_cb(NULL);assert(sends==before+1);close_command_popup();
+  for(unsigned i=0;i<10;i++){
+   search_cb(NULL);lv_textarea_set_text(s_search_input,"draft");lv_obj_t*search=s_search_popup;search_cb(NULL);assert(search==s_search_popup&&!strcmp(lv_textarea_get_text(s_search_input),"draft"));lv_obj_delete(s_search_popup);search_done_cb(NULL);assert(!s_search_popup&&!s_search_input);
+   open_command_cb(NULL);lv_obj_delete(s_command_popup);send_command_cb(NULL);history_prev_cb(NULL);history_next_cb(NULL);assert(!s_command_popup&&!s_command_input&&!s_command_feedback&&!s_command_keyboard);
+  }
+  clear_cb(NULL);assert(!strcmp(lv_label_get_text(s_filter_count),"0 / 0"));
+  open_command_cb(NULL);lv_textarea_set_text(s_command_input,"RESTART");search_cb(NULL);before=sends;send_hook=retire_root_send;send_command_cb(NULL);send_hook=NULL;assert(sends==before+1&&!s_root&&!s_command_popup&&!s_search_popup&&!s_refresh_timer&&timer_count()==baseline_timers);
+  send_command_cb(NULL);history_prev_cb(NULL);history_next_cb(NULL);search_done_cb(NULL);open_command_cb(NULL);search_cb(NULL);reset_filters_cb(NULL);filter_cb(NULL);temperature_cb(NULL);follow_cb(NULL);clear_cb(NULL);refresh_timer_cb(NULL);keyboard_event_cb(NULL);search_keyboard_cb(NULL);assert(!s_root&&!s_command_popup&&!s_search_popup);
+  for(unsigned i=0;i<5;i++){ui_console_show(send);open_command_cb(NULL);search_cb(NULL);lv_obj_delete(s_root);assert(!s_root&&!s_output&&!s_rows->rows[0]&&!s_command_popup&&!s_search_popup&&!s_refresh_timer&&timer_count()==baseline_timers);}
+  ui_console_hide();assert(!s_root&&!s_refresh_timer&&!lv_obj_get_child_count(lv_layer_top()));press_catalog();
  }
- lv_display_delete(d);lv_deinit();puts("PASS: Console layouts/history/filters/editor, owner/offline send guards, rejection retention, no-op refresh, lifecycle and pressed/focused/checked/disabled button frames across themes/densities/text sizes/viewports");return 0;}
+ lv_display_delete(d);lv_deinit();puts("PASS: Console layouts/history/filters/editor, owner/offline send guards, rejection retention, reentrant send, timer-balanced external deletion, stale callbacks, no-op refresh and pressed/focused/checked/disabled button frames across themes/densities/text sizes/viewports");return 0;}

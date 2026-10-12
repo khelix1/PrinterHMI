@@ -1016,3 +1016,300 @@ viewports, including rejected retry, capability/readiness withdrawal, owner chan
 and repeated external deletion. The user confirmed the About popup looks good on
 the panel on 2026-10-11. Physical alignment and motion measurements remain pending,
 as do previously recorded printing/recovery and intermittent pre-reboot OTA checks.
+
+
+## Native Bed Mesh profile forms (7.0.0-dev)
+
+The user checkpointed and pushed the development milestone as 635fdcf0e8d8 on
+feature/profile-setup-dialogs. The branch remains open and the published stable
+release remains 6.5.6. No new panel or physical calibration result is inferred
+from that checkpoint.
+
+Bed Mesh Profiles now uses native scrolling columns and pinned action rows for
+the manager, name editor and Save/Remove review. The name keyboard is pinned
+between content and actions. Profile names remain single-line rows with ellipsis
+when needed; labels and action buttons fit every tested viewport and text setting.
+Empty lists still permit saving an available current mesh. Invalid names have
+local feedback instead of silently ignoring Continue.
+
+Load and Save/Remove requests retain their selection and review when transport
+rejects them, and close only after acceptance. Duplicate/reentrant callbacks are
+blocked. Independent dialog or parent-page deletion retires nested dialogs and
+references; transport callbacks that retire the owner or switch printers cannot
+follow up on stale widgets. Reported names are copied into bounded owner storage,
+and visible rows keep their displayed-name snapshot while live updates arrive.
+A reordered live list cannot redirect a tap to another profile. Profiles no longer
+reported and absent current meshes are blocked at dispatch. Existing
+BED_MESH_PROFILE LOAD/SAVE/REMOVE and SAVE_CONFIG scripts remain unchanged.
+
+The real owner suite passed all five themes, densities/text sizes and
+1024/640/480-pixel viewports. Native pointer actions, keyboard/footer bounds,
+scroll reach, rejected retry, offline/recovery/printing gates, list reorder/removal,
+external deletion and printer changes are covered. Host renders were inspected
+in all five themes. Panel touch and actual mesh save/load/remove/restart remain
+pending, along with prior physical printing/recovery and intermittent OTA checks.
+
+
+## Motion Diagnostics retained edits and live ownership (7.0.0-dev)
+
+The user confirmed the Bed Mesh profile form changes look good on the panel on
+2026-10-11. This records visual acceptance; physical profile operations and
+SAVE_CONFIG restart still need validation.
+
+Reopening the active Motion Limits, Drivers or Distance view for the same printer
+now raises the existing view. Distance retains calculator values, results and an
+unfinished measurement editor; repeated field taps do not discard typed input.
+The numeric editor uses the shared native form with pinned keyboard/actions and
+local validation feedback. Calculator and mode callbacks ignore retired dialogs.
+
+Normal close and independent popup deletion retire all widget and timer references
+before deletion. A printer switch closes the editor, marks the view stale and
+stops its refresh timer; reopening establishes the new owner. Live readings now
+require a usable printer connection and a matching diagnostics snapshot owner.
+Offline/shutdown views cannot label cached runtime data as live. Configured
+rotation-distance references become explicitly unavailable, while same-printer
+local geometry calculations remain usable offline. No printer motion or settings
+commands are introduced.
+
+Real LVGL checks passed all five themes, three densities, both text sizes and
+1024/640/480-pixel viewports, including keyboard/footer bounds, retained edits,
+validation, driver selection after reorder, offline recovery, stale snapshots,
+printer changes, late callbacks and repeated deletion with balanced timer counts.
+The actual calculation helpers and separate owner compile with warnings treated
+as errors. Panel diagnostics checks remain pending, as do earlier physical
+calibration/printing/recovery and intermittent OTA checks.
+
+
+## Macros dialog retirement and reviewed dispatch (7.0.0-dev)
+
+The user confirmed Motion Diagnostics looks good on the panel on 2026-10-11.
+This records visual acceptance; earlier physical calibration/printing/recovery
+and intermittent OTA tests remain open.
+
+Macros now clears its search/parameter editor, parameter references and reviewed
+command when the corresponding dialogs are deleted independently. Parent-page
+deletion also retires the refresh timer and nested dialogs before their widgets
+are destroyed. Late callbacks ignore retired pages. Search and parameter editors
+capture their printer generation; Done cannot apply an old printer's draft after
+a switch. Parameter editing also requires the current parameter review owner.
+
+Run requires an actual reviewed confirmation and blocks duplicate/reentrant
+dispatch. The command is copied before transport; UI follow-up is discarded when
+a callback closes the owner or changes printers. A rejected request retains the
+exact reviewed command with local retry feedback. Repeating Review on a completed
+review does not access retired fields. Opening a macro while its parameter editor
+is active raises both existing dialogs. No command-building, parameter validation,
+favorite or search semantics are changed.
+
+The responsive real-owner suite passed across all five themes, three densities,
+both text sizes and existing width/custom-profile combinations, including
+retained retry, parameter/search ownership, external delete/reopen cycles,
+callback-driven retirement and timer balance. Existing Tools/Files/Network layout
+variants also passed. Panel macro search/edit/review/retry and physical macro
+execution remain pending. Branch identity remains 7.0.0-dev; no commit or push is
+part of this patch.
+
+
+## Console dispatch and page retirement (7.0.0-dev)
+
+The user confirmed the Macros follow-up looks good on the panel on 2026-10-11.
+This records visual acceptance; physical macro/calibration/printing/recovery and
+intermittent OTA checks remain open.
+
+Console now retires every command-editor reference before normal deletion, and
+independent parent-page deletion closes both editors, clears cached row references
+and removes the refresh timer before destroying widgets. Late Send, history,
+search/filter and keyboard callbacks ignore absent pages. Search closure clears
+its references before deletion; Reset closes an unfinished search editor.
+
+A dispatch guard prevents repeated/reentrant sends and changes to the editor
+during transport. The command is copied before dispatch; UI follow-up is discarded
+when callbacks retire the editor/page or switch printers. Rejected sends preserve
+the exact input for retry. Same-editor reopening continues to preserve typed
+input. Console intentionally retains its Moonraker-link readiness rule so raw
+RESTART and other recovery commands remain available with a Klipper error or
+missing live data. No literal command routing, WS/HTTP fallback, history/filter
+preferences or pressed-button geometry is changed.
+
+Real-LVGL checks passed five themes, densities/text sizes, contrast/motion settings
+and standard/narrow/short viewports, including timer-balanced delete/reopen cycles,
+callback retirement and owner changes. Separate owner compilation treats warnings
+as errors. The actual routing fixture also passed literal dispatch, fallback and
+inline failures. Panel Console search/history/Send/Close and recovery checks remain
+pending. This patch stays on feature/profile-setup-dialogs at 7.0.0-dev.
+
+
+## Native Camera selection and View forms (7.0.0-dev)
+
+The user confirmed the Console changes look good on the panel on 2026-10-11.
+This records visual acceptance; physical recovery and earlier intermittent OTA
+checks remain open.
+
+Camera View and Select Camera now use native scrolling bodies with pinned
+actions, replacing fixed coordinates. Rotation options use two-column rows;
+mirror/rotation settings are marked active, and the picker distinguishes the
+current camera and persisted default. Rows and actions fit large text. An empty
+picker explains how to add a camera. Accepted selections retain the existing
+stream restart and per-profile settings behavior.
+
+Both dialogs capture their printer generation and displayed camera URL. View also
+captures the selected camera index. A stale printer, changed camera or replaced
+URL cannot apply old controls to the current configuration. Independent deletion
+retires popup/feedback references, and late callbacks cannot write settings. Failed
+view/default saves keep the dialog with local retry feedback; accepted writes
+close it. Reentrant writes and UI follow-up after callback retirement or printer
+changes are guarded. No decoding, network worker or fullscreen rendering behavior
+is changed.
+
+The actual Camera owner suite passed five themes, three densities, both text
+sizes and standard/narrow/short viewports for these dialogs, including pinned
+actions, row/label bounds, empty state, saved-option markers, rejected retry,
+delete/reopen cycles, changed URLs and printer generations. Existing frame/cache
+retirement, all rotations/mirrors, fullscreen fit and malformed-frame checks also
+passed. Panel picker/View touch and real persisted settings/reconnect remain
+pending. Identity stays 7.0.0-dev on feature/profile-setup-dialogs.
+
+
+## Camera page and fullscreen retirement (7.0.0-dev)
+
+The user confirmed the native Camera selection/View forms look good on the panel
+on 2026-10-11. Persisted settings and real reconnect tests remain pending.
+
+Camera now has a single page-retirement path for normal destruction and external
+page deletion. It stops polling/stream requests, detaches the image source/cache
+while descriptor/pixels are valid, clears every widget reference, closes camera
+dialogs and deletes any fullscreen card reparented above the page. Normal
+destruction no longer reparents/repaints fullscreen solely to delete it.
+
+Independent image/card deletion also retires frames and timers; reopening rebuilds
+a missing surface. Poll, Retry and Configure/fullscreen callbacks ignore absent,
+hidden or setup-suspended pages. Reopening a cached page does not overwrite its
+printer generation before the poll can retire the previous printer's frame.
+Configure suspension clears the old frame/dialogs and timestamps; resume starts
+only a visible, intact camera page. Rebuilding while setup remains active does
+not create a background refresh timer.
+
+Real-owner checks passed five themes, densities/text sizes, repeated fullscreen
+page deletion, independent image/card deletion, cached-page printer changes, late
+callbacks and setup suspension/resume. Timer counts balance and frame allocations
+are freed, with the existing pixel/cache/transform/dialog checks still passing.
+Panel fullscreen exit/navigation, theme/printer switches and Configure return
+remain pending, along with earlier real streaming/persistence, physical
+calibration/printing/recovery and intermittent OTA checks. Identity remains
+7.0.0-dev on feature/profile-setup-dialogs.
+
+
+## Files page and print-review retirement (7.0.0-dev)
+
+The user accepted the Camera page/fullscreen follow-up on 2026-10-11. This records
+panel acceptance; real camera persistence/reconnect and prior physical/OTA tests
+remain open.
+
+Files now retires page references before normal deletion and handles independent
+page deletion, including search, detail, metadata and print-confirmation surfaces
+and refresh timers. External detail/page deletion notifies the existing cancellation
+callback after UI references are retired so the loader/thumbnail owner can clean
+up. Metadata's independent deletion clears its label reference before late detail
+updates. Normal close clears print/metadata/detail references before deletion.
+
+Start print blocks duplicate/reentrant dispatch and keeps actions disabled while
+the existing start callback runs. Rejected requests retain the file/review for
+retry through the existing feedback path; accepted-close behavior remains owned
+by the existing callback. Printer-generation/readiness gates are retained. Late
+refresh/search/toolbar callbacks ignore retired pages, and deferred refresh retires
+its own timer/pending flag before invoking the file-list callback. No print command
+semantics, file-list worker routing or preview layout is changed.
+
+The real Files responsive suite passed all five themes, densities/text sizes and
+existing width/custom-profile combinations, including metadata deletion, callback
+retirement, duplicate starts, late updates and object/timer-balanced reopen cycles.
+The existing file-list worker suite also passed asynchronous work and stale-result
+fencing. Panel preview/metadata/Print/Cancel/refresh/printer-switch checks and
+physical print-start validation remain pending. Identity remains 7.0.0-dev.
+
+
+## Files metadata touch-scroll correction (7.0.0-dev)
+
+On 2026-10-11 the user reported incomplete preview details, no touch scrolling and
+a panel that appeared frozen while attempting to scroll. The metadata bodies
+created with studio_plane inherited its cleared CLICKABLE flag. SCROLLABLE alone
+allowed the prior programmatic scroll test to pass while pointer hit-testing
+could bypass those bodies.
+
+Metadata scroll bodies now explicitly receive pointer hits and keep scroll
+chaining within the details area. Both the compact Studio preview metadata and
+the full Details popup use this behavior. A real LVGL pointer-drag regression
+fails against the preceding source and passes with this correction. A forty-line
+details fixture verifies the final field is reachable and the footer stays fixed.
+The host tests reproduce the missed gesture; no device panic cause is claimed
+without a serial trace. Panel touch/freeze verification remains pending.
+
+Files-specific Print readiness text now distinguishes Offline/reconnect before
+printing, waiting for Klipper, loading file details and a missing Print action.
+The underlying selected-printer readiness gates are retained; an actually ready
+printer must not be labeled offline. Current identity remains 7.0.0-dev. Earlier
+physical print/calibration/recovery and intermittent OTA checks remain open.
+
+
+Files Up clarification: Up navigates to a parent folder; the root had silently
+ignored it, and library-wide search could leave the same results visible after
+folder changes. Up is now disabled at the G-code root when no search is active.
+During search, the first Up clears the query and returns to the current folder;
+subsequent Up navigates to its parent. UI checks verify root/child/search enabled
+states and dispatch, and actual controller tests cover nested-folder navigation
+and leaving search without changing its remembered folder. Panel verification
+remains pending. This is part of the metadata touch-scroll correction.
+
+
+## Quiet subscription status sampling (7.0.0-dev)
+
+The user reported that Files still displayed Offline on 2026-10-11 after the
+metadata scroll/navigation patch. Source review found a transport path that
+cleared connection/readiness after three seconds without changed subscription
+status, even while the WebSocket remained connected. Status subscriptions report
+changes; a quiet standby printer can reach this path without a disconnect.
+
+The network task now requests a small read-only printer.objects.query sample for
+webhooks readiness and print_stats state after 1.5 seconds without status updates.
+Requests use the existing selected-profile WebSocket, a separate reserved ID and
+a zero-wait send, with a 1.5-second retry limit. It runs only after a valid initial
+sample and an established subscription. Frequent telemetry avoids extra queries.
+No HTTP fallback or UI-thread network operation is introduced.
+
+Sending is not evidence of readiness. Only the existing generation-fenced response
+merge refreshes state/freshness. Failed/unanswered queries leave the three-second
+offline gate intact; initial bootstrap, printer changes and Klipper error/shutdown
+remain blocked. Host scheduler tests cover quiet/frequent samples, request cadence,
+failed sends, absent subscription/discovery, future timestamps and stale profiles,
+with existing readiness latch and offline navigation tests passing. Hardware
+verification of the reported Offline caption is pending: verify a quiet online
+printer, printer switches and real power/network loss before closing this issue.
+Prior physical/OTA tests remain open. Identity remains 7.0.0-dev.
+
+
+## Temporary Files inline-readiness caption removal
+
+On 2026-10-11 the user chose to hide the persistent file-preview readiness caption
+for now and did not run the diagnostic logging patch. The preview's readiness
+label is empty and hidden in every theme; its refresh timer and Print readiness
+gates remain active. Print confirmation retains its blocker/feedback text. This
+is a presentation change, not confirmation that the false-offline issue is
+resolved. No diagnostic logging is included. The real Files host suite verifies
+the hidden caption alongside disabled Print and confirmation offline behavior.
+Previous touch scrolling, navigation, physical and OTA checks remain documented.
+Current identity stays 7.0.0-dev on feature/profile-setup-dialogs.
+
+## Operator follow-up checkpoint (2026-10-11)
+
+Bed Mesh profile forms, Motion Diagnostics, Macros/Console dialog retirement,
+Camera forms/fullscreen cleanup and Files touch/navigation follow-ups are
+checkpointed on feature/profile-setup-dialogs at 7.0.0-dev. The branch remains
+open; no merge, nightly or stable release is part of this checkpoint.
+
+The false-offline caption remains unresolved after quiet-link sampling. At the
+user's request, the inline Files readiness caption is temporarily hidden while
+Print readiness gates remain active. The diagnostic logging patch was not run.
+The reported scrolling freeze still requires panel confirmation. Earlier physical
+printing/recovery/calibration, real camera persistence/reconnect and intermittent
+pre-reboot OTA checks remain pending where documented. Published stable remains
+6.5.6. Devices and remaining printer-control audits are next.

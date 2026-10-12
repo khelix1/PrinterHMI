@@ -131,7 +131,6 @@ int main(void) {
 }
 '''.replace('#include <string.h>', '#include <string.h>\n#include <stdio.h>'))
     main = (ROOT / 'main/main.c').read_text()
-    profiles = (ROOT / 'main/ui_bed_mesh_profiles.c').read_text()
     (tmp / 'actions.c').write_text(r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -139,13 +138,11 @@ int main(void) {
 #include <stdio.h>
 #include <string.h>
 typedef struct { bool moonraker_ok, live_data_ok; char printer_state[32]; } moonraker_state_t;
-typedef bool (*ui_bed_mesh_profiles_command_cb_t)(const char *);
 static moonraker_state_t state = {true, true, "ready"};
 static bool s_got_ip = true, accepted = true;
 static uint32_t s_bed_mesh_owner_generation = 1, generation = 1;
 static int sends, recorded;
 static char sent[256];
-static struct { const char *pending_profile_name; ui_bed_mesh_profiles_command_cb_t command; } s;
 #define UI_STATUS_DANGER 0
 static uint32_t moonraker_config_generation(void) { return generation; }
 static void moonraker_state_snapshot(moonraker_state_t *out) { *out = state; }
@@ -156,9 +153,7 @@ static void console_controller_add_command(const char *cmd) { (void)cmd; ++recor
 static bool moonraker_send_gcode(const char *cmd) {
     ++sends; snprintf(sent, sizeof(sent), "%s", cmd); return accepted;
 }
-static void close_profile_popup_cb(void *event) { (void)event; }
-''' + function(main, 'bed_mesh_send_gcode_bridge') + '\n' +
-        function(profiles, 'confirmed_profile_command') + r'''
+''' + function(main, 'bed_mesh_send_gcode_bridge') + r'''
 int main(void) {
     const char *blocked[] = {"printing", "paused", "error", "shutdown"};
     for (unsigned i = 0; i < 4; ++i) {
@@ -171,13 +166,13 @@ int main(void) {
     state.live_data_ok = false; assert(!bed_mesh_send_gcode_bridge("test")); state.live_data_ok = true;
     ++generation; assert(!bed_mesh_send_gcode_bridge("test")); --generation;
     assert(sends == 0 && recorded == 0);
-    s.command = bed_mesh_send_gcode_bridge; s.pending_profile_name = "default";
-    confirmed_profile_command("SAVE");
+    /* Profile-owner review/retry is covered by bed_mesh_profiles_layout_test.py. */
+    assert(bed_mesh_send_gcode_bridge("BED_MESH_PROFILE SAVE=default\nSAVE_CONFIG"));
     assert(sends == 1 && !strcmp(sent, "BED_MESH_PROFILE SAVE=default\nSAVE_CONFIG"));
-    confirmed_profile_command("REMOVE");
+    assert(bed_mesh_send_gcode_bridge("BED_MESH_PROFILE REMOVE=default\nSAVE_CONFIG"));
     assert(sends == 2 && !strcmp(sent, "BED_MESH_PROFILE REMOVE=default\nSAVE_CONFIG"));
     strcpy(state.printer_state, "printing");
-    confirmed_profile_command("REMOVE"); /* State changed with confirmation open. */
+    assert(!bed_mesh_send_gcode_bridge("BED_MESH_PROFILE REMOVE=default\nSAVE_CONFIG")); /* State changed with confirmation open. */
     assert(sends == 2);
     strcpy(state.printer_state, "ready"); accepted = false;
     assert(!bed_mesh_send_gcode_bridge("BED_MESH_CALIBRATE"));

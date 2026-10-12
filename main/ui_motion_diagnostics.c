@@ -12,13 +12,15 @@
 #include "ui_toast.h"
 #include "ui_value_update.h"
 #include "ui_text_fit.h"
+#include "ui_form_dialog.h"
+#include "printer_connection_policy.h"
 
 typedef enum { VIEW_LIMITS, VIEW_DISTANCE, VIEW_DRIVERS } motion_view_t;
 typedef struct {
     lv_obj_t *popup, *body, *driver_selector, *status;
     lv_obj_t *limits[4];
     lv_obj_t *mode, *pitch, *count, *pitch_label, *count_label, *result, *reference;
-    lv_obj_t *editor, *editor_value, *editor_target;
+    lv_obj_t *editor, *editor_value, *editor_target, *editor_feedback;
     lv_timer_t *timer;
     uint32_t owner;
     motion_view_t view;
@@ -45,46 +47,60 @@ static void label_text(lv_obj_t *label, const char *text)
 
 static void close_editor(void)
 {
-    if (s->editor) lv_obj_delete(s->editor);
-    s->editor = s->editor_value = s->editor_target = NULL;
+    if (!s) return;
+    lv_obj_t *editor = s->editor;
+    s->editor = s->editor_value = s->editor_target = s->editor_feedback = NULL;
+    if (editor) lv_obj_delete(editor);
 }
 
 static void editor_deleted(lv_event_t *event)
 {
-    if (s && lv_event_get_target(event) == s->editor)
-        s->editor = s->editor_value = s->editor_target = NULL;
+    if (s && lv_event_get_target_obj(event) == s->editor)
+        s->editor = s->editor_value = s->editor_target = s->editor_feedback = NULL;
 }
+
+static void retire_popup(lv_obj_t **editor, lv_timer_t **timer)
+{
+    *editor = s->editor;
+    *timer = s->timer;
+    /* Keep the permanent allocation, retire every reference before deletion. */
+    memset(s, 0, sizeof(*s));
+}
+
 static void popup_deleted(lv_event_t *event)
 {
-    if (!s || lv_event_get_target(event) != s->popup) return;
-    close_editor();
-    if (s->timer) lv_timer_delete(s->timer);
-    memset(s, 0, sizeof(*s));
+    if (!s || lv_event_get_target_obj(event) != s->popup) return;
+    lv_obj_t *editor;
+    lv_timer_t *timer;
+    retire_popup(&editor, &timer);
+    if (timer) lv_timer_delete(timer);
+    if (editor) lv_obj_delete(editor);
 }
 
 static void close_popup(void)
 {
     if (!s) return;
-    close_editor();
-    if (s->timer) lv_timer_delete(s->timer);
-    s->timer = NULL;
-    if (s->popup) lv_obj_delete(s->popup);
-    /* Permanent allocation remains; all LVGL references are retired. */
-    memset(s, 0, sizeof(*s));
+    lv_obj_t *popup = s->popup, *editor;
+    lv_timer_t *timer;
+    retire_popup(&editor, &timer);
+    if (timer) lv_timer_delete(timer);
+    if (editor) lv_obj_delete(editor);
+    if (popup) lv_obj_delete(popup);
 }
 static void close_cb(lv_event_t *event) { (void)event; close_popup(); }
 static void refresh(lv_timer_t *timer);
 
 static bool owns_printer(void)
 {
-    return s->owner == moonraker_config_generation();
+    return s && s->popup && s->owner == moonraker_config_generation();
 }
 
 static void calculate_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s || !s->popup || s->view != VIEW_DISTANCE || !s->pitch || !s->count || !s->result) return;
     if (!owns_printer()) {
-        ui_toast_show(UI_STATUS_WARNING, "PRINTER CHANGED", "Close and reopen the calculator.");
+        label_text(s->result, "Printer changed. Close and reopen the calculator.");
         return;
     }
     double result;
@@ -103,6 +119,8 @@ static void calculate_cb(lv_event_t *event)
 static void mode_cb(lv_event_t *event)
 {
     (void)event;
+    if (!owns_printer() || s->view != VIEW_DISTANCE || !s->mode || !s->pitch || !s->count) return;
+    close_editor();
     bool screw = lv_dropdown_get_selected(s->mode) == 1;
     label_text(s->pitch_label, screw ? "THREAD PITCH (mm)" : "BELT PITCH (mm)");
     label_text(s->count_label, screw ? "THREAD STARTS" : "PULLEY TEETH");
@@ -117,13 +135,13 @@ static void editor_done_cb(lv_event_t *event)
     (void)event;
     if(!s || !s->editor || !s->editor_target || !s->editor_value)return;
     if(!owns_printer()) {
-        ui_popup_feedback(lv_obj_get_child(s->editor,1),UI_STATUS_WARNING,"PRINTER CHANGED","Cancel and reopen the calculator.");return;
+        label_text(s->editor_feedback,"Printer changed. Cancel and reopen the calculator.");return;
     }
     const char *value=lv_textarea_get_text(s->editor_value),*error=NULL;double result;
     bool valid=s->editor_target==s->pitch ? motion_axis_distance_calculate(value,"1",&result,&error) :
         motion_axis_distance_calculate("1",value,&result,&error);
     if(!valid) {
-        ui_popup_feedback(lv_obj_get_child(s->editor,1),UI_STATUS_WARNING,"INVALID MEASUREMENT",error);
+        label_text(s->editor_feedback,error);
         ui_popup_focus_input(s->editor_value);return;
     }
     if (owns_printer() && s->editor_target && s->editor_value)
@@ -199,30 +217,23 @@ static void layout_cell(lv_obj_t *object, unsigned column)
 }
 static void field_cb(lv_event_t *event)
 {
-    if (!owns_printer()) return;
-    close_editor();
-    s->editor_target = lv_event_get_target(event);
-    s->editor = ui_popup_create(lv_layer_top(), popup_width(640), popup_height(420), UI_POPUP_STANDARD);
+    if (!event || !owns_printer() || s->view != VIEW_DISTANCE) return;
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    if (target != s->pitch && target != s->count) return;
+    if (s->editor) { lv_obj_move_foreground(s->editor); return; }
+    s->editor_target = target;
+    s->editor = ui_form_dialog("EDIT MEASUREMENT", 640, 480, UI_POPUP_STANDARD);
     if (!s->editor) { s->editor_target = NULL; return; }
     lv_obj_add_event_cb(s->editor, editor_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = layout_body(s->editor, "EDIT MEASUREMENT");
-    s->editor_value = ui_popup_add_textarea(body, 584, 56, LV_ALIGN_TOP_MID,
-        0, 0, true, false, 18, "", lv_textarea_get_text(s->editor_target), s->editor_target==s->count?"0123456789":"0123456789.");
-    lv_obj_set_width(s->editor_value, LV_PCT(100));
-    lv_obj_set_style_text_font(s->editor_value, UI_FONT_BODY, 0);
-    lv_obj_set_height(s->editor_value, 56);
-    lv_obj_t *keyboard = ui_popup_add_keyboard(body, s->editor_value, 584, 182,
-        LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_NUMBER);
-    lv_obj_set_width(keyboard, LV_PCT(100));
-    lv_obj_t *footer = layout_footer(s->editor);
-    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, "CANCEL",
-        0, 0, 150, 48, editor_cancel_cb, NULL, NULL);
-    lv_obj_t *done = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM, "DONE",
-        0, 0, 150, 48, editor_done_cb, NULL, NULL);
-    lv_obj_set_flex_grow(cancel, 1);
-    lv_obj_set_flex_grow(done, 1);
-    ui_popup_keyboard_actions(keyboard,editor_done_cb,editor_cancel_cb);
-    ui_popup_pin_keyboard(s->editor,keyboard);
+    s->editor_value = ui_form_input(ui_form_body(s->editor), "Measurement",
+        lv_textarea_get_text(target), false, 18);
+    lv_textarea_set_accepted_chars(s->editor_value, target == s->count ? "0123456789" : "0123456789.");
+    s->editor_feedback = ui_form_text(ui_form_body(s->editor), "", UI_FONT_CAPTION, UI_TEXT_DIM);
+    lv_obj_t *keyboard = ui_form_keyboard(s->editor, s->editor_value, LV_KEYBOARD_MODE_NUMBER);
+    ui_form_action(s->editor, UI_BUTTON_SECONDARY, "CANCEL", editor_cancel_cb, NULL);
+    ui_form_action(s->editor, UI_BUTTON_PRIMARY, "DONE", editor_done_cb, NULL);
+    ui_popup_keyboard_actions(keyboard, editor_done_cb, editor_cancel_cb);
+    ui_form_finish(s->editor);
 }
 
 static void format_value(char *out, size_t size, bool valid, double value, const char *unit)
@@ -328,10 +339,10 @@ static void render_drivers(bool live, const char *status_override)
 
 static void refresh(lv_timer_t *timer)
 {
-    (void)timer;
-    if (!s || !s->popup) return;
+    if (!s || !s->popup || (timer && timer != s->timer)) return;
     if (!owns_printer()) {
         close_editor();
+        if (s->timer) { lv_timer_delete(s->timer); s->timer = NULL; }
         if (s->view == VIEW_DISTANCE) {
             label_text(s->result, "Printer changed. Close and reopen the calculator.");
             label_text(s->reference, "");
@@ -344,10 +355,16 @@ static void refresh(lv_timer_t *timer)
     motion_diagnostics_controller_snapshot(&s->snapshot);
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
-    bool live = state.moonraker_ok && state.live_data_ok;
-    if (s->view == VIEW_LIMITS) render_limits(live, NULL);
-    else if (s->view == VIEW_DRIVERS) render_drivers(live, NULL);
+    const char *reason = printer_connection_reason(&state);
+    bool live = !reason[0] && s->snapshot.owner_generation == s->owner;
+    const char *unavailable = reason[0] ? reason : "Waiting for current printer readings.";
+    if (s->view == VIEW_LIMITS) render_limits(live, live ? NULL : unavailable);
+    else if (s->view == VIEW_DRIVERS) render_drivers(live, live ? NULL : unavailable);
     else {
+        if (!live) {
+            label_text(s->reference, "Configured rotation distance unavailable. Local calculations still work; no printer settings are changed.");
+            return;
+        }
         char x[40], y[40], z[40];
         format_value(x, sizeof(x), s->snapshot.rotation_valid[0], s->snapshot.rotation_distance[0], "mm");
         format_value(y, sizeof(y), s->snapshot.rotation_valid[1], s->snapshot.rotation_distance[1], "mm");
@@ -362,6 +379,11 @@ static void refresh(lv_timer_t *timer)
 static void show_view(motion_view_t view)
 {
     if (!init()) return;
+    if (s->popup && s->view == view && owns_printer()) {
+        lv_obj_move_foreground(s->popup);
+        if (s->editor) lv_obj_move_foreground(s->editor);
+        return;
+    }
     close_popup();
     s->owner = moonraker_config_generation();
     s->view = view;

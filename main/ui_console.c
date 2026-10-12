@@ -48,7 +48,8 @@ static bool s_follow = true;
 static lv_obj_t *s_header, *s_filters, *s_footer, *s_command_button;
 static lv_obj_t *s_command_feedback;
 static lv_obj_t *s_command_send, *s_command_keyboard, *s_command_actions;
-static uint32_t s_command_owner;
+static uint32_t s_command_owner, s_console_epoch;
+static bool s_command_dispatching;
 static bool s_programmatic_scroll;
 static uint32_t s_row_sequence[CONSOLE_LOG_CAPACITY];
 static console_filter_kind_t s_filter = CONSOLE_FILTER_ALL;
@@ -212,9 +213,7 @@ static void update_connection(void)
 
 static void refresh_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (!s_root) {
+    if (!s_root || (timer && timer != s_refresh_timer)) {
         return;
     }
 
@@ -256,6 +255,7 @@ static void update_follow_button(void)
 static void follow_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_root || s_command_dispatching) return;
     s_follow = !s_follow;
     update_follow_button();
     rebuild_output();
@@ -265,6 +265,7 @@ static void follow_cb(lv_event_t *event)
 static void clear_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_root || s_command_dispatching) return;
     console_controller_clear();
     rebuild_output();
 }
@@ -272,15 +273,16 @@ static void clear_cb(lv_event_t *event)
 
 static void close_search_popup(void)
 {
-    if (s_search_popup) lv_obj_delete(s_search_popup);
+    lv_obj_t *popup = s_search_popup;
     s_search_popup = s_search_input = NULL;
+    if (popup) lv_obj_delete(popup);
 }
 
 static void search_cancel_cb(lv_event_t *event) { (void)event; close_search_popup(); }
 static void search_done_cb(lv_event_t *event)
 {
     (void)event;
-    if (!s_search_input) return;
+    if (!s_root || !s_search_popup || !s_search_input || s_command_dispatching) return;
     snprintf(s_query, sizeof(s_query), "%s", lv_textarea_get_text(s_search_input));
     close_search_popup();
     lv_label_set_text(s_search_label, s_query[0] ? "SEARCH*" : "SEARCH");
@@ -291,6 +293,7 @@ static void search_done_cb(lv_event_t *event)
 
 static void search_keyboard_cb(lv_event_t *event)
 {
+    if (!event) return;
     if (lv_event_get_code(event) == LV_EVENT_READY) search_done_cb(event);
     else if (lv_event_get_code(event) == LV_EVENT_CANCEL) search_cancel_cb(event);
 }
@@ -361,10 +364,11 @@ static lv_obj_t *editor_keyboard(lv_obj_t *popup,lv_obj_t *input,lv_event_cb_t c
     lv_obj_add_event_cb(keyboard,cb,LV_EVENT_ALL,NULL);
     return keyboard;
 }
-static void search_deleted(lv_event_t *e){(void)e;s_search_popup=s_search_input=NULL;}
+static void search_deleted(lv_event_t *e){if(lv_event_get_target_obj(e)==s_search_popup)s_search_popup=s_search_input=NULL;}
 static void search_cb(lv_event_t *event)
 {
-    (void)event;if(s_search_popup){lv_obj_move_foreground(s_search_popup);
+    (void)event;if(!s_root || s_command_dispatching)return;
+    if(s_search_popup){lv_obj_move_foreground(s_search_popup);
     return;}
     s_search_popup=editor_popup("FILTER CONSOLE TEXT");if(!s_search_popup)return;
     lv_obj_add_event_cb(s_search_popup,search_deleted,LV_EVENT_DELETE,NULL);
@@ -377,12 +381,14 @@ static void search_cb(lv_event_t *event)
 static void filter_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_root || !s_filter_dropdown || s_command_dispatching) return;
     s_filter = (console_filter_kind_t)lv_dropdown_get_selected(s_filter_dropdown);
     rebuild_output();
 }
 
 static void update_temperature_button(void)
 {
+    if (!s_root || !s_temperature_label || !s_temperature_button) return;
     lv_label_set_text(s_temperature_label, s_hide_temperatures ? "TEMPS OFF" : "TEMPS ON");
     ui_button_apply_kind(s_temperature_button, s_hide_temperatures ? UI_BUTTON_SECONDARY : UI_BUTTON_OUTLINED);
     ui_text_fit_single_line(s_temperature_label,UI_FONT_BODY_LARGE);
@@ -391,6 +397,7 @@ static void update_temperature_button(void)
 static void temperature_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_root || s_command_dispatching) return;
     s_hide_temperatures = !s_hide_temperatures;
     update_temperature_button();
     rebuild_output();
@@ -398,6 +405,8 @@ static void temperature_cb(lv_event_t *event)
 static void reset_filters_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_root || !s_filter_dropdown || s_command_dispatching) return;
+    close_search_popup();
     s_filter = CONSOLE_FILTER_ALL;
     s_hide_temperatures = false;
     s_query[0] = 0;
@@ -423,18 +432,21 @@ static void create_filters(void)
     console_action(s_filters,"RESET",UI_BUTTON_SECONDARY,96,reset_filters_cb);
 }
 
-static void close_command_popup(void)
+static void retire_command(void)
 {
-    if (s_command_popup) {
-        lv_obj_t *popup = s_command_popup;
-        s_command_popup = NULL;
-        s_command_input = NULL;
-        lv_obj_delete(popup);
-    }
-
+    ++s_console_epoch;
+    s_command_popup = s_command_input = s_command_send = s_command_keyboard = NULL;
+    s_command_actions = s_command_feedback = NULL;
+    s_command_owner = 0;
     s_history_cursor = SIZE_MAX;
 }
 
+static void close_command_popup(void)
+{
+    lv_obj_t *popup = s_command_popup;
+    retire_command();
+    if (popup) lv_obj_delete(popup);
+}
 
 static void close_command_cb(lv_event_t *event)
 {
@@ -450,7 +462,7 @@ static void history_prev_cb(lv_event_t *event)
     size_t count =
         console_controller_history_count();
 
-    if (!s_command_input || count == 0) {
+    if (!s_root || !s_command_popup || s_command_dispatching || !s_command_input || count == 0) {
         return;
     }
 
@@ -479,7 +491,7 @@ static void history_next_cb(lv_event_t *event)
 {
     (void)event;
 
-    if (!s_command_input ||
+    if (!s_root || !s_command_popup || s_command_dispatching || !s_command_input ||
         s_history_cursor == SIZE_MAX) {
         return;
     }
@@ -511,7 +523,7 @@ static void send_command_cb(lv_event_t *event)
 {
     (void)event;
 
-    if (!s_command_input) {
+    if (!s_root || !s_command_popup || !s_command_input || s_command_dispatching) {
         return;
     }
 
@@ -554,11 +566,16 @@ static void send_command_cb(lv_event_t *event)
         return;
     }
 
+    uint32_t epoch = s_console_epoch, owner = s_command_owner;
+    lv_obj_t *popup = s_command_popup;
+    s_command_dispatching = true;
     console_controller_add_command(command);
 
     bool sent =
         s_command_callback &&
         s_command_callback(command);
+    s_command_dispatching = false;
+    if (s_console_epoch != epoch || s_command_popup != popup || owner != moonraker_config_generation()) return;
 
     if (!sent) {
         console_controller_add(
@@ -577,6 +594,7 @@ static void send_command_cb(lv_event_t *event)
 
 static void keyboard_event_cb(lv_event_t *event)
 {
+    if (!event) return;
     lv_event_code_t code =
         lv_event_get_code(event);
 
@@ -590,11 +608,12 @@ static void keyboard_event_cb(lv_event_t *event)
 
 static void command_deleted(lv_event_t *e)
 {
-    (void)e;s_command_popup=s_command_input=s_command_send=s_command_keyboard=s_command_actions=s_command_feedback=NULL;s_history_cursor=SIZE_MAX;
+    if (lv_event_get_target_obj(e) == s_command_popup) retire_command();
 }
 static void open_command_cb(lv_event_t *event)
 {
-    (void)event;if(s_command_popup){lv_obj_move_foreground(s_command_popup);
+    (void)event;if(!s_root || s_command_dispatching)return;
+    if(s_command_popup){lv_obj_move_foreground(s_command_popup);
     return;}
     moonraker_state_t state;moonraker_state_snapshot(&state);if(!state.moonraker_ok){update_connection();
     return;}
@@ -621,8 +640,16 @@ static void history_scroll(lv_event_t *e)
 {
     if(!s_programmatic_scroll && s_follow && lv_event_get_code(e)==LV_EVENT_SCROLL_BEGIN){s_follow=false;update_follow_button();}
 }
+static void console_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) != s_root) return;
+    s_root = NULL;
+    ui_console_hide();
+}
+
 void ui_console_show(ui_console_command_cb_t command_callback)
 {
+    if (s_command_dispatching) return;
     if(!console_rows_init())return;
     s_command_callback=command_callback;
     if(s_root){rebuild_output();
@@ -630,6 +657,7 @@ void ui_console_show(ui_console_command_cb_t command_callback)
     lv_obj_move_foreground(s_root);
     return;}
     s_root=lv_obj_create(lv_screen_active());
+    lv_obj_add_event_cb(s_root,console_deleted,LV_EVENT_DELETE,NULL);
     ui_apply_root_style(s_root);
     int sw=lv_display_get_horizontal_resolution(NULL),sh=lv_display_get_vertical_resolution(NULL);
     int x=ui_theme_is_studio()?24:UI_PAGE_ROOT_X,y=ui_theme_is_studio()?80:UI_PAGE_ROOT_Y;
@@ -683,29 +711,22 @@ void ui_console_show(ui_console_command_cb_t command_callback)
 
 void ui_console_hide(void)
 {
-    close_command_popup();
-    close_search_popup();
-
-    if (s_refresh_timer) {
-        lv_timer_delete(s_refresh_timer);
-        s_refresh_timer = NULL;
-    }
-
-    if (s_root) {
-        lv_obj_delete(s_root);
-    }
-
-    if (s_rows) memset(s_rows, 0, sizeof(*s_rows));
-    s_root = NULL;
-    s_output = NULL;
-    s_connection = NULL;
-    s_follow_button = NULL;
-    s_follow_label = NULL;
+    ++s_console_epoch;
+    lv_obj_t *root = s_root;
+    lv_timer_t *timer = s_refresh_timer;
+    s_refresh_timer = NULL;
+    s_root = s_output = s_connection = NULL;
+    s_follow_button = s_follow_label = NULL;
     s_filter_dropdown = s_temperature_button = s_temperature_label = NULL;
     s_search_label = s_filter_count = NULL;
-    s_header=s_filters=s_footer=s_command_button=NULL;
-    memset(s_row_sequence,0,sizeof(s_row_sequence));
+    s_header = s_filters = s_footer = s_command_button = NULL;
+    if (s_rows) memset(s_rows, 0, sizeof(*s_rows));
+    memset(s_row_sequence, 0, sizeof(s_row_sequence));
     s_command_callback = NULL;
     s_rendered_sequence = 0;
     s_rendered_count = 0;
+    close_command_popup();
+    close_search_popup();
+    if (timer) lv_timer_delete(timer);
+    if (root) lv_obj_delete(root);
 }

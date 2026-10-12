@@ -34,7 +34,8 @@ typedef struct {
     lv_obj_t *parameter_fields[MACRO_PARAMETER_MAX + MACRO_PARAMETER_EXTRA];
     lv_obj_t *parameter_names[MACRO_PARAMETER_EXTRA];
     macro_parameter_catalog_t parameters;
-    uint32_t pending_owner;
+    uint32_t pending_owner, editor_owner;
+    bool reviewed;
     bool editing_search;
     lv_obj_t *rows[MACRO_CONTROLLER_MAX_MACROS];
     lv_obj_t *empty;
@@ -52,6 +53,8 @@ typedef struct {
  * internal RAM.
  */
 static ui_macros_state_t *s_macros = NULL;
+static uint32_t s_macro_epoch;
+static bool s_macro_dispatching;
 
 #define s_root                (s_macros->root)
 #define s_list                (s_macros->list)
@@ -112,30 +115,49 @@ bool ui_macros_init(void)
 static void rebuild_macro_list(void);
 static void close_editor(void)
 {
-    if (s_macros->editor) lv_obj_delete(s_macros->editor);
+    if (!s_macros) return;
+    ++s_macro_epoch;
+    lv_obj_t *editor = s_macros->editor;
     s_macros->editor = s_macros->editor_value = s_macros->editor_target = NULL;
+    s_macros->editor_owner = 0;
+    s_macros->editing_search = false;
+    if (editor) lv_obj_delete(editor);
 }
 
 static void close_confirm(void)
 {
-    if (!s_macros) {
-        return;
-    }
-
-    close_editor();
+    if (!s_macros) return;
+    ++s_macro_epoch;
+    lv_obj_t *popup = s_confirm;
+    s_confirm = NULL;
+    s_macros->run_action = NULL;
+    s_macros->reviewed = false;
+    s_macros->pending_owner = 0;
     memset(s_macros->parameter_fields, 0, sizeof(s_macros->parameter_fields));
     memset(s_macros->parameter_names, 0, sizeof(s_macros->parameter_names));
     s_macros->pending_command[0] = 0;
-    if (s_confirm) {
-        lv_obj_t *popup = s_confirm;
-        s_confirm = NULL;
-        lv_obj_delete(popup);
-    }
-
-    s_macros->run_action=NULL;
     s_pending_macro[0] = '\0';
+    close_editor();
+    if (popup) lv_obj_delete(popup);
 }
 
+static void macro_dialog_deleted(lv_event_t *event)
+{
+    if (!s_macros) return;
+    lv_obj_t *object = lv_event_get_target_obj(event);
+    if (object == s_confirm) {
+        s_confirm = NULL;
+        close_confirm();
+    } else if (object == s_macros->editor) {
+        ++s_macro_epoch;
+        s_macros->editor = s_macros->editor_value = s_macros->editor_target = NULL;
+        s_macros->editor_owner = 0;
+        s_macros->editing_search = false;
+    } else if (object == s_root) {
+        s_root = NULL;
+        ui_macros_hide();
+    }
+}
 
 static void close_confirm_cb(lv_event_t *event)
 {
@@ -148,26 +170,32 @@ static void run_macro_cb(lv_event_t *event)
 {
     (void)event;
 
-    if (!s_pending_macro[0]) {
+    if (!s_macros || !s_root || !s_confirm || !s_macros->reviewed || s_macro_dispatching || !s_pending_macro[0]) {
         return;
     }
 
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
-    if (s_macros->pending_owner != moonraker_config_generation() ||
-        printer_connection_reason(&state)[0]) {
-        macro_feedback(UI_STATUS_DANGER, "MACRO NOT SENT", "Printer changed or is not ready. Reopen the macro.");
+    const char *reason = s_macros->pending_owner != moonraker_config_generation()
+        ? "Printer changed. Cancel and reopen the macro." : printer_connection_reason(&state);
+    if (reason[0]) {
+        macro_feedback(UI_STATUS_DANGER, "MACRO NOT SENT", reason);
         return;
     }
     char command[MACRO_COMMAND_MAX];
     snprintf(command, sizeof(command), "%s", s_macros->pending_command);
     if (!command[0]) return;
 
+    lv_obj_t *popup = s_confirm;
+    uint32_t epoch = s_macro_epoch, owner = s_macros->pending_owner;
+    s_macro_dispatching = true;
     console_controller_add_command(command);
 
     bool sent =
         s_command_callback &&
         s_command_callback(command);
+    s_macro_dispatching = false;
+    if (epoch != s_macro_epoch || s_confirm != popup || owner != moonraker_config_generation()) return;
 
     if (!sent) {
         console_controller_add(
@@ -177,7 +205,7 @@ static void run_macro_cb(lv_event_t *event)
         macro_feedback(
             UI_STATUS_DANGER,
             "MACRO NOT SENT",
-            command);
+            "Request was not accepted. Your reviewed command is retained. Retry when connected.");
         return;
     }
 
@@ -190,6 +218,7 @@ static void rebuild_macro_list(void);
 
 static void macro_favorite_cb(lv_event_t *event)
 {
+    if (!event || !s_macros || !s_root || s_macro_dispatching) return;
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
     macro_controller_status(&status);
@@ -208,7 +237,14 @@ static void macro_favorite_cb(lv_event_t *event)
 static void editor_done_cb(lv_event_t *event)
 {
     (void)event;
-    if (!s_macros->editor_value) return;
+    if (!s_macros || !s_root || !s_macros->editor || !s_macros->editor_value || s_macro_dispatching) return;
+    if (s_macros->editor_owner != moonraker_config_generation()) {
+        ui_popup_feedback(lv_obj_get_child(s_macros->editor,1), UI_STATUS_WARNING,
+            "PRINTER CHANGED", "Cancel and reopen this editor.");
+        return;
+    }
+    if (!s_macros->editing_search && (!s_confirm || s_macros->reviewed ||
+        s_macros->pending_owner != moonraker_config_generation())) return;
     if (s_macros->editing_search) {
         snprintf(s_macros->query, sizeof(s_macros->query), "%s", lv_textarea_get_text(s_macros->editor_value));
         close_editor();
@@ -232,6 +268,7 @@ static lv_obj_t *macro_dialog(const char *text, lv_obj_t **body)
     if (height > 500) height = 500;
     lv_obj_t *popup = ui_popup_create(lv_layer_top(), width, height, UI_POPUP_STANDARD);
     if (!popup) return NULL;
+    lv_obj_add_event_cb(popup, macro_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(popup, 16, 0);
     lv_obj_set_style_pad_row(popup, UI_GAP_ROW, 0);
@@ -292,6 +329,17 @@ static lv_obj_t *macro_body_text(lv_obj_t *body, const char *text)
 
 static void open_editor(lv_obj_t *target, bool search)
 {
+    if (!s_macros || !s_root || s_macro_dispatching) return;
+    if (search && s_confirm) { lv_obj_move_foreground(s_confirm); return; }
+    if (!search) {
+        if (!s_confirm || s_macros->reviewed || s_macros->pending_owner != moonraker_config_generation()) return;
+        bool valid = false;
+        for (unsigned i=0;i<MACRO_PARAMETER_MAX+MACRO_PARAMETER_EXTRA;i++)
+            if (target && target == s_macros->parameter_fields[i]) valid = true;
+        for (unsigned i=0;i<MACRO_PARAMETER_EXTRA;i++)
+            if (target && target == s_macros->parameter_names[i]) valid = true;
+        if (!valid) return;
+    }
     if (s_macros->editor && s_macros->editor_target == target &&
         s_macros->editing_search == search) {
         lv_obj_move_foreground(s_macros->editor);
@@ -299,6 +347,7 @@ static void open_editor(lv_obj_t *target, bool search)
     }
     close_editor();
     s_macros->editing_search = search;
+    s_macros->editor_owner = moonraker_config_generation();
     s_macros->editor_target = target;
     lv_obj_t *body;
     s_macros->editor = macro_dialog(search ? "SEARCH MACROS" : "EDIT PARAMETER", &body);
@@ -315,11 +364,13 @@ static void open_editor(lv_obj_t *target, bool search)
     ui_popup_keyboard_actions(keyboard,editor_done_cb,editor_cancel_cb);
     ui_popup_pin_keyboard(s_macros->editor,keyboard);
 }
-static void field_cb(lv_event_t *event) { open_editor(lv_event_get_target(event), false); }
+static void field_cb(lv_event_t *event) { if(event)open_editor(lv_event_get_target_obj(event), false); }
 static void search_cb(lv_event_t *event) { (void)event; open_editor(NULL, true); }
 static void clear_search_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_macros || !s_root || s_macro_dispatching) return;
+    close_editor();
     s_macros->query[0] = 0;
     if (s_macros->search_label) lv_label_set_text(s_macros->search_label, "SEARCH");
     rebuild_macro_list();
@@ -328,8 +379,14 @@ static void clear_search_cb(lv_event_t *event)
 static void review_macro_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_macros || !s_root || !s_confirm || s_macros->reviewed || s_macro_dispatching) return;
+    if (s_macros->pending_owner != moonraker_config_generation()) {
+        macro_feedback(UI_STATUS_WARNING,"PRINTER CHANGED","Cancel and reopen the macro.");
+        return;
+    }
     macro_parameter_value_t values[MACRO_PARAMETER_MAX + MACRO_PARAMETER_EXTRA];
     size_t count = s_macros->parameters.count;
+    if (count > MACRO_PARAMETER_MAX) return;
     for (size_t i = 0; i < count; ++i) {
         values[i].name = s_macros->parameters.names[i];
         values[i].value = lv_textarea_get_text(s_macros->parameter_fields[i]);
@@ -345,14 +402,16 @@ static void review_macro_cb(lv_event_t *event)
         return;
     }
     close_editor();
+    ++s_macro_epoch;
     lv_obj_t *old = s_confirm;
     s_confirm = NULL;
-    lv_obj_delete(old);
     memset(s_macros->parameter_fields, 0, sizeof(s_macros->parameter_fields));
     memset(s_macros->parameter_names, 0, sizeof(s_macros->parameter_names));
+    lv_obj_delete(old);
     lv_obj_t *body;
     s_confirm = macro_dialog("RUN MACRO?", &body);
     if (!s_confirm) { s_pending_macro[0] = 0; return; }
+    s_macros->reviewed = true;
     macro_body_text(body, "Review the command before running:");
     macro_body_text(body, s_macros->pending_command);
     s_macros->run_action=macro_actions(s_confirm, LV_SYMBOL_PLAY " RUN", close_confirm_cb, run_macro_cb);
@@ -362,12 +421,15 @@ static void review_macro_cb(lv_event_t *event)
 
 static void macro_button_cb(lv_event_t *event)
 {
-    if (s_confirm) { lv_obj_move_foreground(s_confirm); return; }
+    if (!event || !s_macros || !s_root || s_macro_dispatching) return;
+    if (s_confirm) { lv_obj_move_foreground(s_confirm); if(s_macros->editor)lv_obj_move_foreground(s_macros->editor); return; }
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
     macro_controller_status(&status);
     if (!encoded || status.generation != s_rendered_generation) { rebuild_macro_list(); return; }
     if (!macro_controller_get((size_t)(encoded - 1), s_pending_macro, sizeof(s_pending_macro))) return;
+    close_editor();
+    s_macros->reviewed = false;
     s_macros->pending_owner = moonraker_config_generation();
     macro_controller_parameters(s_pending_macro, &s_macros->parameters);
     lv_obj_t *body;
@@ -531,9 +593,7 @@ static void rebuild_macro_list(void)
 
 static void refresh_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (!s_macros || !s_root) {
+    if (!s_macros || !s_root || (timer && timer != s_refresh_timer)) {
         return;
     }
 
@@ -551,7 +611,7 @@ static void refresh_timer_cb(lv_timer_t *timer)
 void ui_macros_show(
     ui_macros_command_cb_t command_callback)
 {
-    if (!ui_macros_init()) {
+    if (s_macro_dispatching || !ui_macros_init()) {
         return;
     }
 
@@ -564,6 +624,7 @@ void ui_macros_show(
     }
 
     s_root = lv_obj_create(lv_screen_active());
+    lv_obj_add_event_cb(s_root, macro_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_size(
         s_root,
         UI_PAGE_ROOT_WIDTH,
@@ -655,27 +716,18 @@ void ui_macros_show(
 
 void ui_macros_hide(void)
 {
-    if (!s_macros) {
-        return;
-    }
-
-    close_confirm();
-
-    if (s_refresh_timer) {
-        lv_timer_delete(s_refresh_timer);
-        s_refresh_timer = NULL;
-    }
-
-    if (s_root) {
-        lv_obj_delete(s_root);
-    }
-
-    s_root = NULL;
-    s_list = NULL;
-    s_status = NULL;
+    if (!s_macros) return;
+    ++s_macro_epoch;
+    lv_obj_t *root = s_root;
+    lv_timer_t *timer = s_refresh_timer;
+    s_root = s_list = s_status = NULL;
+    s_refresh_timer = NULL;
     memset(s_macros->rows, 0, sizeof(s_macros->rows));
     s_macros->empty = NULL;
     s_macros->search_label = NULL;
     s_command_callback = NULL;
     s_rendered_generation = 0;
+    close_confirm();
+    if (timer) lv_timer_delete(timer);
+    if (root) lv_obj_delete(root);
 }

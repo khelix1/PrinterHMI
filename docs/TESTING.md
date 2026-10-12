@@ -837,3 +837,202 @@ accelerometer measurement still require printer checks. Confirm rejected request
 retain their choices and accepted requests show actual results without duplicate
 commands. Branch identity remains 7.0.0-dev. Previously documented physical
 printing/recovery and intermittent pre-reboot OTA tests remain pending.
+
+
+## Bed Mesh profile manager, editor and review
+
+Run `python3 tools/audit/bed_mesh_profiles_layout_test.py`, optionally with
+`--lvgl-dir` and `--lvgl-lib`. The actual owner and shared LVGL form/button/theme
+code are compiled with warnings treated as errors. Five themes, three densities,
+both text sizes and standard/narrow/short viewports cover pinned actions/keyboard,
+single-line row bounds, long names, empty lists, native pointer action selection,
+invalid-name feedback, unchanged repeated opens, exact scripts, rejected retry,
+offline recovery and printing/paused blocks. Owned copies preserve displayed
+selection through reordered snapshots. Removed profiles, absent meshes, external
+delete/reopen cycles, parent deletion and printer changes cannot issue stale
+commands. Services are stubbed. Host renders of the three dialogs were inspected
+across all five themes.
+
+`python3 tools/audit/tools_action_safety_test.py` retains calibration-session and
+actual Bed Mesh command-bridge coverage; profile review/retry coverage now uses
+the real-owner suite instead of an extracted function with synthetic UI state.
+Panel checks should cover list scrolling, Save As input, Back/Cancel/Close and
+confirmation visibility with large text. Physical mesh save/load/remove and
+SAVE_CONFIG restart are pending. Checkpoint 635fdcf0e8d8 was confirmed pushed by
+the user; this follow-up stays on feature/profile-setup-dialogs at 7.0.0-dev.
+Previously documented printing/recovery and intermittent OTA checks remain open.
+
+
+## Motion Diagnostics repeat-open and retirement checks
+
+Run `python3 tools/audit/motion_layout_test.py`, optionally with `--lvgl-dir` and
+`--lvgl-lib`. The real owner, theme/layout helpers and calculation code are covered
+across five themes, three densities, both text sizes and standard/narrow/short
+viewports. Checks include retained calculator/editor state on repeated opens,
+invalid-number retry, native keyboard Ready, stationary actions/keyboard, driver
+selection through reordered readings, offline/shutdown recovery, mismatched
+snapshot owners and no reads after a printer switch. Repeated external deletion
+of all three views balances timer counts; late refresh/mode/calculation callbacks
+are harmless. A standalone owner compilation treats warnings as errors.
+
+The user accepted Bed Mesh profile visuals on 2026-10-11; physical profile
+operations remain pending. After this Motion patch, check repeated Distance and
+field opening, keyboard Done/Cancel, Limits/Drivers reconnect and printer switching
+on the panel. Geometry calculations must still send no motion/configuration
+commands. Current identity remains 7.0.0-dev on feature/profile-setup-dialogs.
+Earlier physical calibration/printing/recovery and intermittent OTA tests remain
+open.
+
+
+## Macros dialog lifetimes and retry
+
+`python3 tools/audit/responsive_layout_test.py` now extends the real Macros owner
+with rejected-request retry, repeated reviewed callbacks, duplicate/reentrant
+Run, independent search/parameter/confirmation deletion, parent-page deletion
+during transport, printer changes during dispatch and stale editor Done. Reopen
+cycles balance refresh timer counts. Existing parameter command validation,
+keyboard Ready/Cancel, footer scroll stability and theme/width/custom-token checks
+remain covered. Services are stubbed; physical macro execution is not tested.
+
+The user reported Motion Diagnostics looks good on 2026-10-11. For this Macros
+follow-up, verify search typing/cancel, parameter edits, Review/Run, reconnect
+retry and page/printer switching on the panel. Existing physical calibration,
+printing/recovery and intermittent OTA tests remain pending. Current development
+identity stays 7.0.0-dev on feature/profile-setup-dialogs.
+
+
+## Console callback and external page retirement
+
+`python3 tools/audit/console_modern_layout_test.py` covers reentrant Send, editor or
+page deletion during transport, printer changes after dispatch, late callbacks
+after deletion, retained repeated-open drafts, external search/command deletion
+and timer-balanced page reopen cycles. Existing filters, history, scroll anchoring,
+no-op refresh, rejection retention and button-state frame checks remain covered
+across five themes, three densities, text/contrast/motion settings and
+standard/narrow/short viewports. Actual UI owners compile with warnings as errors.
+
+`python3 tools/audit/console_transport_test.py` passed unchanged literal command
+routing, WS/HTTP fallback and inline-owned failures. Recovery commands remain
+sendable through a connected Moonraker even when Klipper is in error or live data
+is unavailable. These are host tests with stubbed transport. Check Console
+search/history/Send/Close, reconnect retry and page/printer switching on the panel.
+The user accepted Macros visuals on 2026-10-11; physical execution/recovery and
+intermittent OTA checks remain pending. Current identity remains 7.0.0-dev.
+
+
+## Camera native selection and view dialog checks
+
+`python3 tools/audit/camera_pipeline_test.py` now includes real Camera View and
+picker layouts under five themes, three densities, both text sizes and
+1024/640/480-pixel displays, including the short 400-pixel display. It checks
+stationary actions, scroll reach, touch-sized controls and label bounds, current
+rotation/mirror markers, repeated opens, empty catalog, failed save retry, exact
+selected defaults, external deletion, reentrant writes and changed printer/URL
+ownership. Existing frame/free/cache, transform, fullscreen, invalid-frame and
+Dashboard retirement checks remain active. Transport and storage are stubbed;
+physical persistence and streaming are not established by these tests.
+
+The user accepted Console visuals on 2026-10-11. For this Camera patch, check
+Select Camera, current/default markers, View rotation/mirrors, Reset/Close and
+printer switching on the panel. Real saved settings after reboot and reconnect
+remain pending, along with earlier physical calibration/printing/recovery and
+intermittent OTA checks. Development identity remains 7.0.0-dev.
+
+
+## Camera root, fullscreen and setup lifecycle checks
+
+`python3 tools/audit/camera_pipeline_test.py` adds actual page creation and
+timer-balanced repeated fullscreen root deletion in all five themes, three
+densities and both text sizes. It checks orphan-card/dialog retirement, frame/cache
+detachment before free, late callbacks after hide/delete, independent image/card
+deletion and rebuild, setup suspension while reopening, visible-only resume,
+hidden-page resume suppression and cached-page printer changes. Existing Camera
+dialog viewport tests and rotation/mirror/frame validation remain active.
+
+The user accepted native Camera dialog visuals on 2026-10-11. This lifecycle
+follow-up still needs panel fullscreen exit, navigation/theme/printer switching
+and Configure pause/return checks. Streaming/storage are host fixtures; real
+connection and persisted settings are pending, as are earlier physical
+calibration/printing/recovery and intermittent OTA checks. Current development
+identity remains 7.0.0-dev.
+
+
+## Files external deletion and print dispatch checks
+
+`python3 tools/audit/responsive_layout_test.py` extends the real Files owner with
+reentrant Start print, detail deletion during dispatch, independent metadata
+deletion followed by updates, page deletion with nested dialogs, late callback
+guards and object/timer-balanced reopen cycles. Existing file/preview bounds,
+metadata scroll reach, pinned actions, printer/offline/loading gates, rejection
+retry and search keyboard checks remain covered under all five themes and the
+existing density/text/width/custom-profile combinations. Services are fixtures;
+these checks do not start a physical print.
+
+`python3 tools/audit/files_load_worker_test.py` passed the actual worker routing
+checks for work outside LVGL, coalesced latest requests, profile/page/serial fencing,
+deferred detail publication and allocation/task-failure cleanup. After flashing,
+verify file selection, preview/details, Print review/Cancel, refresh and printer
+switching. Physical print-start validation remains pending. The user accepted the
+Camera lifecycle follow-up on 2026-10-11; earlier real streaming/persistence,
+physical calibration/printing/recovery and intermittent OTA checks remain open.
+Current identity remains 7.0.0-dev.
+
+
+## Real metadata pointer-drag regression
+
+The Files variant of `tools/audit/responsive_layout_test.py` now injects actual
+pointer presses/moves/releases into metadata scroll bodies and asserts a scroll
+position change. It exercises the compact preview metadata and full Studio
+Details popup, with a forced forty-line payload, final-field reach and stationary
+Close footer. Previous source fails the gesture assertion; the correction passes
+the existing theme/density/text/width/custom-profile combinations. The older
+programmatic checks remain useful for layout but did not establish touch routing.
+
+The user reported non-scrolling details and an apparent freeze on 2026-10-11.
+After flashing, drag over the details text in both surfaces, reach the end, scroll
+back and use Close/Cancel. Real panel verification of the reported freeze is still
+pending; the host regression identifies a missed pointer hit, not a proven device
+panic. Check that Print status names the actual selected-printer blocker and that
+ready printers do not show Offline. Earlier physical and OTA checks remain open.
+
+
+Files Up clarification: Up navigates to a parent folder; the root had silently
+ignored it, and library-wide search could leave the same results visible after
+folder changes. Up is now disabled at the G-code root when no search is active.
+During search, the first Up clears the query and returns to the current folder;
+subsequent Up navigates to its parent. UI checks verify root/child/search enabled
+states and dispatch, and actual controller tests cover nested-folder navigation
+and leaving search without changing its remembered folder. Panel verification
+remains pending. This is part of the metadata touch-scroll correction.
+
+
+## Quiet-link status-query cadence and offline guards
+
+`python3 tools/audit/offline_navigation_test.py` now exercises the real extracted
+WebSocket quiet-status scheduler: no queries with frequent telemetry, a read-only
+webhooks/print_stats query after 1.5 seconds, bounded retries, no freshness advance
+on send, failure aging, subscription/discovery/bootstrap guards and selected-owner
+fencing. Existing nonblocking camera retirement and rapid WebSocket profile
+selection tests pass. `python3 tools/audit/klipper_readiness_test.py` still passes
+bootstrap, shutdown/error/disconnected/startup latching and explicit recovery.
+The transport fixture does not prove actual server responses or network timing.
+
+The user reports an Offline caption still present in Files on 2026-10-11. After
+flashing, leave the selected online printer quiet, open file details and check
+that real status replies retain correct readiness. Also remove printer/network
+power and switch printers: unanswered queries must not keep an offline printer
+ready. Metadata touch/freeze and physical/OTA checks remain pending. Current
+identity stays 7.0.0-dev on feature/profile-setup-dialogs.
+
+
+## Temporary Files inline-readiness caption removal
+
+On 2026-10-11 the user chose to hide the persistent file-preview readiness caption
+for now and did not run the diagnostic logging patch. The preview's readiness
+label is empty and hidden in every theme; its refresh timer and Print readiness
+gates remain active. Print confirmation retains its blocker/feedback text. This
+is a presentation change, not confirmation that the false-offline issue is
+resolved. No diagnostic logging is included. The real Files host suite verifies
+the hidden caption alongside disabled Print and confirmation offline behavior.
+Previous touch scrolling, navigation, physical and OTA checks remain documented.
+Current identity stays 7.0.0-dev on feature/profile-setup-dialogs.

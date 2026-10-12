@@ -56,8 +56,11 @@ int main(void){
  empty_list=true;load("empty");run_worker();poll();assert(!s_entry_count&&s_index_ready&&strstr(status,"current search"));files_page_controller_set_search("");assert(strstr(status,"gcodes root"));files_page_controller_open_folder("subfolder");assert(strstr(status,"this folder"));empty_list=false;
  generation++;load("new-printer");assert(!s_folder[0]&&!s_search[0]);run_worker();poll();assert(!strcmp(last_path,"new-printer.gcode")&&cleared);
  unsigned stable_rows=rendered,stable_clears=cleared;
- files_page_controller_set_search("  ");files_page_controller_open_folder("");files_page_controller_up_folder();
+ files_page_controller_set_search("  ");files_page_controller_open_folder("");files_page_controller_up_folder();assert(!s_folder[0]);
  assert(rendered==stable_rows && cleared==stable_clears);
+ files_page_controller_open_folder("parts/subfolder");assert(!strcmp(s_folder,"parts/subfolder"));files_page_controller_up_folder();assert(!strcmp(s_folder,"parts"));files_page_controller_up_folder();assert(!s_folder[0]);
+ files_page_controller_open_folder("parts/subfolder");files_page_controller_set_search("needle");files_page_controller_up_folder();assert(!s_search[0]&&!strcmp(s_folder,"parts/subfolder"));files_page_controller_up_folder();assert(!strcmp(s_folder,"parts"));files_page_controller_open_folder("");
+
  files_page_controller_set_search("new-printer");stable_clears=cleared;files_page_controller_set_search("  new-printer  ");assert(cleared==stable_clears);
  files_page_controller_set_search("");assert(cleared>stable_clears);
  heap_caps_free(s_entries);s_entries=NULL;assert(allocations==frees && !s_pending_load && !s_load_busy && !s_load_timer);lv_deinit();puts("PASS: file-list HTTP/retries run outside LVGL, one worker/coalesced latest job, profile/page/serial fencing, deferred detail publication and allocation/task-failure cleanup");

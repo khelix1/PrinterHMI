@@ -222,6 +222,8 @@ void files_page_controller_open_folder(const char *path)
 
 void files_page_controller_up_folder(void)
 {
+    /* Search spans the library; Up first returns to the current folder. */
+    if(s_search[0]) {s_search[0]=0;render_entries();return;}
     if (!s_folder[0]) return;
     char *slash = strrchr(s_folder, '/');
     if (slash) *slash = '\0';

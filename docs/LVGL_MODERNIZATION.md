@@ -1313,3 +1313,49 @@ The reported scrolling freeze still requires panel confirmation. Earlier physica
 printing/recovery/calibration, real camera persistence/reconnect and intermittent
 pre-reboot OTA checks remain pending where documented. Published stable remains
 6.5.6. Devices and remaining printer-control audits are next.
+
+
+## Devices lifetime and live-reading follow-up (2026-10-11)
+
+Devices now retires its page references, catalog timer, live-value labels and
+Endstops dialog when its LVGL root is deleted externally. Normal close retires
+references before deleting widgets. Catalog and live-value owners also handle
+independent deletion; old timer and hidden-page navigation callbacks are guarded.
+Reopening the same printer preserves the view. Reopening after a printer change
+rebuilds it, while the old view refuses navigation and hides its old device rows.
+
+Cached temperatures, fan values and generic readings display UNAVAILABLE when
+the current connection policy reports offline, waiting or shutdown, or when the
+view belongs to another printer. Readings remain available during a healthy
+active print. This change preserves the existing Devices layout and does not
+change discovery, send commands, or resolve the documented false-offline cause.
+
+The real LVGL Devices audit passes all five themes, three densities and both
+text sizes at the native 1024x600 display size. It covers repeated external page
+removal/reopen, timer balance, stale printer navigation, shutdown/offline cached
+values and independent live-label deletion. Firmware/panel checks remain pending.
+Next: remaining printer-control dialog ownership and failed-command retries.
+
+
+## Temperature/fan control dispatch lifetime follow-up (2026-10-11)
+
+Preset and custom-temperature actions now copy the command and capture the
+owning modal before sending. They guard nested sends and reopen attempts during
+dispatch, and discard UI follow-up when sending deletes the popup/editor, deletes
+its feedback field, or changes printers. They no longer walk the clicked button's
+parents after a send callback that can delete that button. Closing an editor
+retires its references first; external deletion clears references and advances
+the modal epoch. The fallback sender is captured per control popup.
+
+Both checked and legacy send paths apply connection/shutdown readiness while
+allowing hotend, bed and fan controls during a healthy active print. Failed sends
+keep custom input or the preset modal for retry. Existing commands, heater names,
+zero/off semantics and layout are preserved. This pass covers temperature/fan
+controls; remaining motion, hotend activation and other operator dialogs remain
+separate follow-ups.
+
+The actual LVGL control audit passes five themes, three densities, normal/large
+text and 1024/640/480 widths (480 uses a 400px-high viewport). Additional callback
+hooks cover deletion, printer changes, nested actions, repeated external teardown,
+failed-send retry and shutdown/printing gating. Firmware and physical print-time
+adjustment tests remain pending.

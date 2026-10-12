@@ -12,6 +12,7 @@
 #include "ui_devices_live_values.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "moonraker_config_controller.h"
 
 #define DEVICE_FILTER_COUNT 8
 #define DEVICE_UI_MAX_VISIBLE 12
@@ -45,6 +46,7 @@ typedef struct {
     } rows[DEVICE_UI_MAX_VISIBLE];
     lv_obj_t *empty;
     uint32_t rendered_generation;
+    uint32_t owner_generation;
 } ui_devices_catalog_state_t;
 
 static ui_devices_catalog_state_t *s_devices;
@@ -325,6 +327,8 @@ static void render_catalog(void)
     device_catalog_status_t status;
     device_catalog_controller_status(&status);
 
+    if (s_devices->owner_generation != moonraker_config_generation())
+        memset(&status, 0, sizeof(status));
     update_filter_buttons(&status);
     for (size_t i = 0; i < DEVICE_UI_MAX_VISIBLE; ++i)
         if (s_devices->rows[i].card) lv_obj_add_flag(s_devices->rows[i].card, LV_OBJ_FLAG_HIDDEN);
@@ -467,17 +471,15 @@ static void render_catalog(void)
 static void devices_refresh_timer_cb(
     lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (!s_devices || !s_devices->root) {
+    if (!s_devices || !s_devices->root || timer != s_devices->refresh_timer) {
         return;
     }
 
     device_catalog_status_t status;
     device_catalog_controller_status(&status);
 
-    if (status.generation !=
-        s_devices->rendered_generation) {
+    if (s_devices->owner_generation != moonraker_config_generation() ||
+        status.generation != s_devices->rendered_generation) {
         render_catalog();
         return;
     }
@@ -489,7 +491,8 @@ static void devices_refresh_timer_cb(
 static void devices_page_event_cb(
     lv_event_t *event)
 {
-    if (!s_devices ||
+    if (!s_devices || !s_devices->root || !s_devices->list ||
+        s_devices->owner_generation != moonraker_config_generation() ||
         lv_event_get_code(event) != LV_EVENT_CLICKED) {
         return;
     }
@@ -520,7 +523,8 @@ static void devices_page_event_cb(
 static void devices_filter_event_cb(
     lv_event_t *event)
 {
-    if (!s_devices ||
+    if (!s_devices || !s_devices->root || !s_devices->list ||
+        s_devices->owner_generation != moonraker_config_generation() ||
         lv_event_get_code(event) != LV_EVENT_CLICKED) {
         return;
     }
@@ -553,6 +557,12 @@ static void devices_filter_event_cb(
 
 
 
+static void catalog_owner_deleted(lv_event_t *event)
+{
+    if (s_devices && lv_event_get_target(event) == s_devices->root)
+        ui_devices_catalog_view_close();
+}
+
 void ui_devices_catalog_view_create(
     lv_obj_t *owner,
     lv_obj_t *banner_status)
@@ -568,6 +578,8 @@ void ui_devices_catalog_view_create(
     }
 
     s_devices->root = owner;
+    s_devices->owner_generation = moonraker_config_generation();
+    lv_obj_add_event_cb(owner, catalog_owner_deleted, LV_EVENT_DELETE, NULL);
     s_devices->banner_status = banner_status;
     ui_devices_live_values_init(owner);
 
@@ -746,6 +758,9 @@ void ui_devices_catalog_view_close(void)
         ui_devices_live_values_close();
         return;
     }
+
+    if (s_devices->root)
+        lv_obj_remove_event_cb(s_devices->root, catalog_owner_deleted);
 
     if (s_devices->refresh_timer) {
         lv_timer_delete(

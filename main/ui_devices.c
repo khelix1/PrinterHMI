@@ -13,9 +13,11 @@
 #include "ui_widgets.h"
 #include "ui_devices_catalog_view.h"
 #include "ui_endstop_status.h"
+#include "moonraker_config_controller.h"
 
 typedef struct {
     lv_obj_t *root;
+    uint32_t owner_generation;
     lv_obj_t *banner_status;
     ui_devices_open_telemetry_cb_t open_telemetry;
 } ui_devices_state_t;
@@ -84,7 +86,9 @@ static void devices_open_telemetry_event_cb(
 {
     (void)event;
 
-    if (s_devices && s_devices->open_telemetry) {
+    if (s_devices && s_devices->root &&
+        s_devices->owner_generation == moonraker_config_generation() &&
+        s_devices->open_telemetry) {
         s_devices->open_telemetry();
     }
 }
@@ -93,7 +97,19 @@ static void devices_open_telemetry_event_cb(
 static void endstops_cb(lv_event_t *event)
 {
     (void)event;
-    ui_endstop_status_show();
+    if (s_devices && s_devices->root &&
+        s_devices->owner_generation == moonraker_config_generation())
+        ui_endstop_status_show();
+}
+
+static void devices_root_deleted(lv_event_t *event)
+{
+    if (!s_devices || lv_event_get_target(event) != s_devices->root) return;
+    s_devices->root = NULL;
+    s_devices->banner_status = NULL;
+    s_devices->open_telemetry = NULL;
+    ui_endstop_status_close();
+    ui_devices_catalog_view_close();
 }
 
 void ui_devices_show(
@@ -102,6 +118,9 @@ void ui_devices_show(
     if (!devices_state_init()) {
         return;
     }
+
+    if (s_devices->root && s_devices->owner_generation != moonraker_config_generation())
+        ui_devices_hide();
 
     s_devices->open_telemetry =
         open_telemetry_cb;
@@ -114,6 +133,9 @@ void ui_devices_show(
 
     s_devices->root = lv_obj_create(
         lv_screen_active());
+
+    s_devices->owner_generation = moonraker_config_generation();
+    lv_obj_add_event_cb(s_devices->root, devices_root_deleted, LV_EVENT_DELETE, NULL);
 
     lv_obj_set_size(
         s_devices->root,
@@ -224,10 +246,9 @@ void ui_devices_hide(void)
     ui_endstop_status_close();
     ui_devices_catalog_view_close();
 
-    if (s_devices->root) {
-        lv_obj_delete(s_devices->root);
-    }
-
+    lv_obj_t *root = s_devices->root;
     s_devices->root = NULL;
     s_devices->banner_status = NULL;
+    s_devices->open_telemetry = NULL;
+    if (root) lv_obj_delete(root);
 }

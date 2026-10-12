@@ -9,6 +9,9 @@
 #include "ui_devices_catalog_view.c"
 static device_descriptor_t entries[96];static device_catalog_status_t status;
 static moonraker_state_t state;
+static uint32_t owner_generation=1;
+uint32_t moonraker_config_generation(void){return owner_generation;}
+static unsigned timer_count(void){unsigned n=0;for(lv_timer_t*t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))n++;return n;}
 void device_catalog_controller_status(device_catalog_status_t*out){*out=status;}
 bool device_catalog_controller_get(size_t i,device_descriptor_t*out){if(i>=status.stored_count)return false;*out=entries[i];return true;}
 bool device_catalog_controller_has_live_value_source(const char*n){(void)n;return true;}
@@ -37,6 +40,7 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
 lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
 ui_devices_catalog_state_t storage={0};s_devices=&storage;
 for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
+state.moonraker_ok=true;state.live_data_ok=true;strcpy(state.printer_state,"ready");
 ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});memset(&status,0,sizeof(status));status.discovered=true;status.stored_count=status.total_object_count=96;status.kind_count[DEVICE_KIND_THERMAL]=96;status.generation++;
 for(int i=0;i<96;i++){snprintf(entries[i].display_name,sizeof(entries[i].display_name),"Extruder chamber temperature sensor %d",i);snprintf(entries[i].object_name,sizeof(entries[i].object_name),"temperature_sensor chamber_%d",i);entries[i].kind=DEVICE_KIND_THERMAL;entries[i].live_value_valid=true;strcpy(entries[i].live_value,"205.0 / 205.0 C  ACTIVE");}
 lv_obj_t*root=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(root);lv_obj_set_size(root,ui_theme_is_studio()?976:854,ui_theme_is_studio()?424:528);lv_obj_t*banner=lv_label_create(root);lv_obj_set_width(banner,190);ui_devices_catalog_view_create(root,banner);lv_obj_update_layout(root);
@@ -45,6 +49,14 @@ for(int i=0;i<12;i++){lv_obj_t*card=s_devices->rows[i].card;assert(card);lv_obj_
 if(ui_theme_is_studio()){inside(s_devices->filter_strip,root);inside(s_devices->list,root);inside(s_devices->previous_button,root);inside(s_devices->next_button,root);assert(lv_obj_get_width(s_devices->list)==792 && lv_obj_get_height(s_devices->list)==304 && lv_obj_has_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE));assert(s_devices->page_count==8);
 lv_obj_scroll_to_y(s_devices->list,10000,LV_ANIM_OFF);lv_obj_update_layout(root);inside(s_devices->rows[11].card,s_devices->list);assert(lv_obj_get_scroll_y(s_devices->list)>0);
 lv_obj_send_event(s_devices->next_button,LV_EVENT_CLICKED,NULL);lv_obj_update_layout(root);assert(s_devices->page_index==1 && lv_obj_get_scroll_y(s_devices->list)==0);assert(strstr(lv_label_get_text(s_devices->rows[0].name),"sensor 12"));}
+lv_obj_t *value=s_devices->rows[0].value;
+assert(strstr(lv_label_get_text(value),"205.0"));
+state.moonraker_ok=false;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
+state.moonraker_ok=true;strcpy(state.printer_state,"shutdown");ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
+strcpy(state.printer_state,"printing");ui_devices_live_values_update();assert(strstr(lv_label_get_text(value),"205.0"));
+strcpy(state.printer_state,"ready");
+owner_generation++;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
+devices_refresh_timer_cb(s_devices->refresh_timer);assert(lv_obj_has_flag(s_devices->rows[0].card,LV_OBJ_FLAG_HIDDEN));assert(s_devices->empty);
 if(density==1&&large){snapshot(theme,"devices");}status.stored_count=0;status.generation++;ui_devices_catalog_view_refresh();lv_obj_update_layout(root);assert(s_devices->empty);inside(s_devices->empty,s_devices->list);ui_devices_catalog_view_close();assert(!s_devices->refresh_timer&&!s_devices->root);lv_obj_delete(root);
 ui_devices_show(open_graphs);root=s_devices->root;assert(root);lv_obj_update_layout(root);
 lv_obj_t *graph_label=find(root,ui_theme_is_studio()?"GRAPHS":"TELEMETRY");
@@ -55,5 +67,16 @@ if(ui_theme_is_studio()){inside(graph_label,graphs);inside(endstop_label,endstop
 assert(lv_obj_get_height(graphs)>=44&&lv_obj_get_height(endstops)>=44);unsigned before=graph_calls;tap(pointer,graphs);assert(graph_calls==before+1);before=endstop_calls;tap(pointer,endstops);assert(endstop_calls==before+1);
 if(density==1&&large)snapshot(theme,"devices-header");
 ui_devices_show(open_graphs);assert(root==s_devices->root);before=endstop_closes;ui_devices_hide();assert(!s_devices->root && !s_devices->refresh_timer && endstop_closes==before+1);
+unsigned timers=timer_count();
+for(int cycle=0;cycle<5;cycle++){
+ ui_devices_show(open_graphs);root=s_devices->root;assert(root && s_devices->refresh_timer);
+ lv_obj_delete(root);assert(!s_devices->root&&!s_devices->refresh_timer);assert(timer_count()==timers);
+ ui_devices_catalog_view_refresh();ui_devices_live_values_update();ui_devices_hide();
+ ui_devices_show(open_graphs);owner_generation++;
+ before=graph_calls;lv_obj_t *button=lv_obj_get_parent(find(s_devices->root,ui_theme_is_studio()?"GRAPHS":"TELEMETRY"));lv_obj_send_event(button,LV_EVENT_CLICKED,NULL);assert(graph_calls==before);
+ ui_devices_show(open_graphs);assert(s_devices->owner_generation==owner_generation);ui_devices_hide();assert(timer_count()==timers);
 }
-s_devices=NULL;puts("PASS: Devices category counts, complete live readings, card bounds, actual header pointer routes for Graphs/Endstops, empty state and cleanup across all five themes/densities/text sizes");return 0;}
+/* Live labels and their owner may also be retired independently. */
+root=lv_obj_create(lv_screen_active());value=lv_label_create(root);ui_devices_live_values_init(root);ui_devices_live_values_register(0,value,0);lv_obj_delete(value);ui_devices_live_values_update();lv_obj_delete(root);ui_devices_live_values_update();ui_devices_live_values_close();
+}
+s_devices=NULL;puts("PASS: Devices category counts, complete live readings, card bounds, actual header pointer routes for Graphs/Endstops, offline/shutdown readings, printer fencing, independent label deletion and repeated external page cleanup across all five themes/densities/text sizes");return 0;}

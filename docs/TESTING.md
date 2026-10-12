@@ -1036,3 +1036,34 @@ resolved. No diagnostic logging is included. The real Files host suite verifies
 the hidden caption alongside disabled Print and confirmation offline behavior.
 Previous touch scrolling, navigation, physical and OTA checks remain documented.
 Current identity stays 7.0.0-dev on feature/profile-setup-dialogs.
+
+
+### Devices page retirement and reading validity
+
+Run `python3 tools/audit/devices_text_layout_test.py` with managed LVGL sources
+(or supply `--lvgl-dir`). The actual Devices/catalog/live-value code checks
+native-size layout in every theme/density/text-size combination, pointer routing,
+external page deletion/reopen and balanced timers, independent live-label deletion,
+printer generation fencing, offline/shutdown value suppression and printing reads.
+
+After flashing, open Devices and Graphs/Endstops, navigate away and return, switch
+printers and themes, and disconnect/reconnect the selected printer. Verify old
+readings become UNAVAILABLE and current readings return without a crash. Panel
+verification is pending. The false-offline cause, previously reported Files
+scrolling freeze and physical/OTA checks remain open where documented; the Files
+inline readiness caption remains hidden by request.
+
+
+### Temperature/fan send-callback lifetime
+
+Run `python3 tools/audit/control_popups_layout_test.py` (with `--lvgl-dir` if
+needed). The actual popup code tests preset/custom/zero/range/keyboard commands,
+retained retry input, callback deletion of parent/editor/feedback, printer changes,
+nested sends and reopen attempts, repeated external teardown and both checked and
+legacy sender readiness. Layout checks cover five themes/densities/text sizes and
+1024/640/480 display widths, with a 400px-high short viewport at 480px.
+
+After flashing, check nozzle/bed presets and Custom temperature, fan presets,
+Back/keyboard cancel, and reopening a control after a printer change. Physical
+adjustment during a print remains pending. Existing OTA, false-offline and Files
+scrolling-freeze verification remain open where documented.

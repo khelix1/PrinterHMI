@@ -8,6 +8,7 @@
 #include "ui_dashboard.h"
 #include "moonraker.h"
 #include "printer_controller.h"
+#include "printer_connection_policy.h"
 #include "esp_heap_caps.h"
 
 #include <stdio.h>
@@ -32,6 +33,9 @@ static int32_t control_width(int32_t preferred);
 static int32_t control_height(int32_t preferred);
 static lv_obj_t *s_control_popup = NULL;
 static uint32_t s_control_owner;
+static uint32_t s_control_epoch;
+static bool s_control_dispatching;
+static ui_printer_popups_send_gcode_cb_t s_control_legacy_send;
 static bool (*s_control_send)(const char *command);
 static lv_obj_t *s_hotend_list_popup = NULL;
 static lv_obj_t *s_hotend_activate_popup = NULL;
@@ -748,44 +752,44 @@ void ui_printer_popups_set_control_sender(bool (*send)(const char *command))
 static bool control_send(const char *command,const char **error)
 {
     *error="Send failed. Input kept; check the connection and retry.";
+    if (!s_control_popup || s_control_dispatching) return false;
     if(s_control_owner!=moonraker_config_generation()) {
         *error="Printer changed. Cancel and reopen this control.";return false;
     }
-    if(s_control_send) {
-        moonraker_state_t state;moonraker_state_snapshot(&state);
-        if(!state.moonraker_ok || !state.live_data_ok) {
-            *error="Printer is offline or live status is unavailable. Input kept.";return false;
-        }
-        return s_control_send(command);
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    if (printer_connection_reason(&state)[0]) {
+        *error="Printer is offline or Klipper is unavailable. Input kept.";return false;
     }
-    if(!s_send_gcode_cb)return false;
-    s_send_gcode_cb(command);return true;
+    s_control_dispatching = true;
+    bool accepted = false;
+    if (s_control_send) accepted = s_control_send(command);
+    else if (s_control_legacy_send) { s_control_legacy_send(command); accepted = true; }
+    s_control_dispatching = false;
+    return accepted;
 }
 
 static void gcode_button_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    const char *cmd =
-        (const char *)lv_event_get_user_data(e);
-
-    const char *error="No command selected.";
-    if(!cmd || !cmd[0] || !control_send(cmd,&error)) {
-        if(s_control_popup)ui_popup_feedback(lv_obj_get_child(s_control_popup,1),UI_STATUS_WARNING,"NOT SENT",error);
+    if (!e || lv_event_get_code(e) != LV_EVENT_CLICKED ||
+        !s_control_popup || s_control_dispatching) return;
+    lv_obj_t *popup = s_control_popup;
+    uint32_t epoch = s_control_epoch, owner = moonraker_config_generation();
+    const char *cmd = (const char *)lv_event_get_user_data(e);
+    char command[128];
+    if (!cmd || !cmd[0]) return;
+    int written = snprintf(command, sizeof(command), "%s", cmd);
+    if (written <= 0 || (size_t)written >= sizeof(command)) return;
+    const char *error;
+    bool accepted = control_send(command, &error);
+    /* Sending may delete the modal or switch the active printer. Never use
+     * the event target, borrowed command, or another modal after dispatch. */
+    if (s_control_epoch != epoch || s_control_popup != popup ||
+        owner != moonraker_config_generation()) return;
+    if (!accepted) {
+        ui_popup_feedback(lv_obj_get_child(popup,1),UI_STATUS_WARNING,"NOT SENT",error);
         return;
     }
-
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_t *popup = btn;
-
-    while (popup &&
-           lv_obj_get_parent(popup) != lv_layer_top()) {
-        popup = lv_obj_get_parent(popup);
-    }
-
-    if (popup) {
-        lv_obj_delete(popup);
-    }
+    lv_obj_delete(popup);
 }
 
 
@@ -793,6 +797,8 @@ static void control_popup_deleted_cb(lv_event_t *event)
 {
     if (event && lv_event_get_target(event) == s_control_popup) {
         s_control_popup = NULL;
+        ++s_control_epoch;
+        s_control_legacy_send = NULL;
         if(s_custom_temp_popup)lv_obj_delete(s_custom_temp_popup);
     }
 }
@@ -801,6 +807,7 @@ static void control_popup_deleted_cb(lv_event_t *event)
 static void custom_temp_popup_deleted_cb(lv_event_t *event)
 {
     if (event && lv_event_get_target(event) == s_custom_temp_popup) {
+        ++s_control_epoch;
         s_custom_temp_popup = NULL;
         s_custom_temp_textarea = NULL;
         s_custom_temp_status = NULL;
@@ -811,16 +818,19 @@ static void custom_temp_popup_deleted_cb(lv_event_t *event)
 static void close_custom_temp_cb(lv_event_t *event)
 {
     (void)event;
-    if (s_custom_temp_popup) {
-        lv_obj_delete(s_custom_temp_popup);
-    }
+    lv_obj_t *popup = s_custom_temp_popup;
+    s_custom_temp_popup = NULL;
+    s_custom_temp_textarea = NULL;
+    s_custom_temp_status = NULL;
+    if (popup) { ++s_control_epoch; lv_obj_delete(popup); }
 }
 
 
 static void set_custom_temp_cb(lv_event_t *event)
 {
     (void)event;
-    if (!s_custom_temp_textarea ||
+    if (s_control_dispatching || !s_control_popup || !s_custom_temp_popup ||
+        !s_custom_temp_textarea ||
         !s_custom_temp_command_prefix ||
         s_custom_temp_max <= 0) {
         return;
@@ -853,15 +863,23 @@ static void set_custom_temp_cb(lv_event_t *event)
         return;
     }
 
+    lv_obj_t *popup = s_control_popup, *editor = s_custom_temp_popup;
+    lv_obj_t *textarea = s_custom_temp_textarea, *status = s_custom_temp_status;
+    uint32_t epoch = s_control_epoch, owner = moonraker_config_generation();
     const char *error;
-    if(!control_send(command,&error)) {
-        lv_label_set_text(s_custom_temp_status,error);
-        lv_obj_set_style_text_color(s_custom_temp_status,UI_WARN,0);
-        ui_popup_focus_input(s_custom_temp_textarea);return;
+    bool accepted = control_send(command, &error);
+    if (s_control_epoch != epoch || s_control_popup != popup ||
+        s_custom_temp_popup != editor || s_custom_temp_textarea != textarea ||
+        s_custom_temp_status != status || owner != moonraker_config_generation()) return;
+    if (!accepted) {
+        if (status) {
+            lv_label_set_text(status,error);
+            lv_obj_set_style_text_color(status,UI_WARN,0);
+        }
+        ui_popup_focus_input(textarea);return;
     }
-
     close_custom_temp_cb(NULL);
-    if (s_control_popup) lv_obj_delete(s_control_popup);
+    if (s_control_popup == popup) lv_obj_delete(popup);
 }
 
 
@@ -961,9 +979,17 @@ static lv_obj_t *control_grid(lv_obj_t *parent, unsigned maximum)
     return grid;
 }
 
+static void custom_temp_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target = lv_event_get_target(event);
+    if (target == s_custom_temp_textarea) s_custom_temp_textarea = NULL;
+    if (target == s_custom_temp_status) s_custom_temp_status = NULL;
+}
+
 static void open_custom_temp_cb(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        s_control_dispatching || !s_control_popup ||
         !s_custom_temp_title || !s_custom_temp_command_prefix || s_custom_temp_max <= 0) return;
     if (s_custom_temp_popup) { lv_obj_move_foreground(s_custom_temp_popup); return; }
     s_custom_temp_popup = ui_popup_create(lv_layer_top(), control_width(600),
@@ -975,6 +1001,7 @@ static void open_custom_temp_cb(lv_event_t *event)
     char instruction[64];
     snprintf(instruction, sizeof(instruction), "ENTER 0-%d C  (0 = OFF)", s_custom_temp_max);
     s_custom_temp_status = lv_label_create(body);
+    lv_obj_add_event_cb(s_custom_temp_status, custom_temp_field_deleted, LV_EVENT_DELETE, NULL);
     lv_label_set_text(s_custom_temp_status, instruction);
     ui_apply_custom_label_style(s_custom_temp_status, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_width(s_custom_temp_status, LV_PCT(100));
@@ -983,6 +1010,7 @@ static void open_custom_temp_cb(lv_event_t *event)
     s_custom_temp_textarea = ui_popup_add_textarea(body, 220, 56,
         LV_ALIGN_TOP_MID, 0, 0, true, false, 3, ui_text("Temperature"),
         initial_text, ui_text("0123456789"));
+    lv_obj_add_event_cb(s_custom_temp_textarea, custom_temp_field_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_width(s_custom_temp_textarea, LV_PCT(100));
     lv_obj_t *keyboard = ui_popup_add_keyboard(body, s_custom_temp_textarea,
         500, 200, LV_ALIGN_TOP_MID, 0, 0, LV_KEYBOARD_MODE_NUMBER);
@@ -1043,6 +1071,7 @@ static void show_control_popup(const char *title, double current_value,
     const char *labels[], const double preset_values[], int count,
     const char *custom_title, const char *custom_command_prefix, int custom_max)
 {
+    if (s_control_dispatching) return;
     /* Avoid retaining another preset modal with commands from an old hotend. */
     close_custom_temp_cb(NULL);
     if (s_control_popup) lv_obj_delete(s_control_popup);
@@ -1050,6 +1079,8 @@ static void show_control_popup(const char *title, double current_value,
         control_height(460), UI_POPUP_STANDARD);
     if (!popup) return;
     s_control_popup = popup;
+    ++s_control_epoch;
+    s_control_legacy_send = s_send_gcode_cb;
     s_control_owner=moonraker_config_generation();
     s_custom_temp_title = custom_title;
     s_custom_temp_command_prefix = custom_command_prefix;
@@ -1394,6 +1425,7 @@ void ui_printer_popups_show_part_fan(
     ui_printer_popups_send_gcode_cb_t send_cb,
     double current_fan_percent)
 {
+    if (s_control_dispatching) return;
     s_send_gcode_cb = send_cb;
 
     static const char *cmds[] = {
@@ -1433,6 +1465,7 @@ void ui_printer_popups_show_nozzle(
     double current_temp,
     double target_temp)
 {
+    if (s_control_dispatching) return;
     s_send_gcode_cb = send_cb;
 
     static const char *cmds[] = {
@@ -1474,6 +1507,7 @@ void ui_printer_popups_show_bed(
     double current_temp,
     double target_temp)
 {
+    if (s_control_dispatching) return;
     s_send_gcode_cb = send_cb;
 
     static const char *cmds[] = {

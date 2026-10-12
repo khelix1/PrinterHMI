@@ -9,11 +9,14 @@
 #include "device_catalog_controller.h"
 #include "moonraker.h"
 #include "ui_theme.h"
+#include "moonraker_config_controller.h"
+#include "printer_connection_policy.h"
 
 #define DEVICE_LIVE_VALUE_CAPACITY 48
 
 typedef struct {
     lv_obj_t *owner;
+    uint32_t owner_generation;
     lv_obj_t *labels[DEVICE_LIVE_VALUE_CAPACITY];
     size_t catalog_indices[DEVICE_LIVE_VALUE_CAPACITY];
     size_t count;
@@ -183,11 +186,25 @@ static bool format_known_live_value(
 
 
 
+static void live_owner_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) == s_live.owner) ui_devices_live_values_close();
+}
+
+static void live_label_deleted(lv_event_t *event)
+{
+    lv_obj_t *label = lv_event_get_target(event);
+    for (size_t i = 0; i < s_live.count; ++i)
+        if (s_live.labels[i] == label) s_live.labels[i] = NULL;
+}
+
 void ui_devices_live_values_init(
     lv_obj_t *owner)
 {
     ui_devices_live_values_close();
     s_live.owner = owner;
+    s_live.owner_generation = moonraker_config_generation();
+    if (owner) lv_obj_add_event_cb(owner, live_owner_deleted, LV_EVENT_DELETE, NULL);
 }
 
 
@@ -196,6 +213,8 @@ void ui_devices_live_values_clear(void)
     for (size_t index = 0;
          index < DEVICE_LIVE_VALUE_CAPACITY;
          ++index) {
+        if (s_live.labels[index])
+            lv_obj_remove_event_cb(s_live.labels[index], live_label_deleted);
         s_live.labels[index] = NULL;
         s_live.catalog_indices[index] = 0;
     }
@@ -215,7 +234,10 @@ void ui_devices_live_values_register(
         return;
     }
 
+    if (s_live.labels[visible_index])
+        lv_obj_remove_event_cb(s_live.labels[visible_index], live_label_deleted);
     s_live.labels[visible_index] = value_label;
+    lv_obj_add_event_cb(value_label, live_label_deleted, LV_EVENT_DELETE, NULL);
     s_live.catalog_indices[visible_index] =
         catalog_index;
 
@@ -236,6 +258,8 @@ void ui_devices_live_values_update(void)
 
     moonraker_state_snapshot(&state);
     moonraker_filament_state_snapshot(&filament);
+    bool live = s_live.owner_generation == moonraker_config_generation() &&
+                !printer_connection_reason(&state)[0];
 
     for (size_t visible = 0;
          visible < s_live.count;
@@ -243,6 +267,13 @@ void ui_devices_live_values_update(void)
         lv_obj_t *label = s_live.labels[visible];
 
         if (!label) {
+            continue;
+        }
+
+        if (!live) {
+            ui_value_set_text(label, ui_text("UNAVAILABLE"));
+            ui_value_set_color(label, UI_TEXT_DIM, 0);
+            ui_text_fit_single_line(label, UI_FONT_CAPTION);
             continue;
         }
 
@@ -289,6 +320,7 @@ void ui_devices_live_values_update(void)
 
 void ui_devices_live_values_close(void)
 {
+    if (s_live.owner) lv_obj_remove_event_cb(s_live.owner, live_owner_deleted);
     ui_devices_live_values_clear();
     s_live.owner = NULL;
 }

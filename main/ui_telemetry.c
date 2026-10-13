@@ -21,7 +21,14 @@ static bool s_held,s_include_targets=true,s_history_available;
 static char s_hotend[MOONRAKER_HOTEND_NAME_MAX],s_hotend_options[128];
 static moonraker_state_t s_latest;
 static int64_t s_now_us,s_plot_tick=-1;
-static uint32_t s_generation;
+static uint32_t s_generation, s_telemetry_epoch;
+static void field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **fields[]={&s_status,&s_history_status,&s_range,&s_hotend_selector,&s_hold_button,&s_scale_button,&s_tabs[0],&s_tabs[1],&s_tabs[2]};
+    for(size_t i=0;i<9;i++)if(*fields[i]==target){*fields[i]=NULL;++s_telemetry_epoch;return;}
+    if(target==s_graph_host){s_graph_host=NULL;++s_telemetry_epoch;ui_telemetry_charts_reset();}
+}
 
 static void telemetry_render(bool force);
 
@@ -55,32 +62,38 @@ static void back_cb(lv_event_t *e)
 
 static void view_cb(lv_event_t *e)
 {
-    if(s_held)return;
+    if(!e || !s_panel || s_held || lv_event_get_code(e)!=LV_EVENT_CLICKED)return;
+    unsigned view=(unsigned)(uintptr_t)lv_event_get_user_data(e);
+    if(view>=3 || lv_event_get_target_obj(e)!=s_tabs[view])return;
     s_view=(ui_telemetry_view_t)(uintptr_t)lv_event_get_user_data(e);
     telemetry_render(true);
 }
 
 static void range_cb(lv_event_t *e)
 {
-    (void)e;if(s_held)return;unsigned selected=lv_dropdown_get_selected(s_range);
+    if(!s_panel || !s_range || s_held || (e && (lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED || lv_event_get_target_obj(e)!=s_range)))return;
+    unsigned selected=lv_dropdown_get_selected(s_range);
     s_window=(unsigned[]){60,150,300}[selected<3?selected:2];telemetry_render(true);
 }
 
 static void hotend_cb(lv_event_t *e)
 {
-    (void)e;if(s_held)return;lv_dropdown_get_selected_str(s_hotend_selector,s_hotend,sizeof(s_hotend));
+    if(!s_panel || !s_hotend_selector || s_held || (e && (lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED || lv_event_get_target_obj(e)!=s_hotend_selector)))return;
+    lv_dropdown_get_selected_str(s_hotend_selector,s_hotend,sizeof(s_hotend));
     if(!strcmp(s_hotend,"Nozzle"))snprintf(s_hotend,sizeof(s_hotend),"%s",s_latest.active_hotend);
     telemetry_render(true);
 }
 
 static void hold_cb(lv_event_t *e)
 {
-    (void)e;s_held=!s_held;telemetry_render(!s_held);
+    if(!s_panel || !s_hold_button || (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_hold_button)))return;
+    s_held=!s_held;telemetry_render(!s_held);
 }
 
 static void scale_cb(lv_event_t *e)
 {
-    (void)e;if(s_held)return;s_include_targets=!s_include_targets;telemetry_render(true);
+    if(!s_panel || !s_scale_button || s_held || (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_scale_button)))return;
+    s_include_targets=!s_include_targets;telemetry_render(true);
 }
 
 static lv_obj_t *selector(lv_obj_t *parent,const char *options,int width,lv_event_cb_t callback)
@@ -96,6 +109,7 @@ static lv_obj_t *selector(lv_obj_t *parent,const char *options,int width,lv_even
 static void panel_deleted(lv_event_t *event)
 {
     if(lv_event_get_target(event)!=s_panel)return;
+    ++s_telemetry_epoch;
     s_panel=s_status=s_history_status=s_graph_host=NULL;
     memset(s_tabs,0,sizeof(s_tabs));s_range=s_hotend_selector=s_hold_button=s_scale_button=NULL;
     s_held=false;s_plot_tick=-1;ui_telemetry_charts_reset();
@@ -104,6 +118,7 @@ static void panel_deleted(lv_event_t *event)
 void ui_telemetry_show(void)
 {
     if(s_panel){lv_obj_move_foreground(s_panel);return;}
+    ++s_telemetry_epoch;
     s_history_available=telemetry_history_init();s_generation=telemetry_history_generation();
     s_now_us=esp_timer_get_time();moonraker_state_snapshot(&s_latest);
     s_held=false;s_plot_tick=-1;s_view=UI_TELEMETRY_HEAT;
@@ -141,6 +156,8 @@ void ui_telemetry_show(void)
     ui_telemetry_charts_create(s_graph_host);
     s_history_status=telemetry_make_label(s_panel,"",UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_obj_set_width(s_history_status,LV_PCT(100));
+    lv_obj_t *fields[]={s_status,s_history_status,s_graph_host,s_range,s_hotend_selector,s_hold_button,s_scale_button,s_tabs[0],s_tabs[1],s_tabs[2]};
+    for(size_t i=0;i<10;i++)if(fields[i])lv_obj_add_event_cb(fields[i],field_deleted,LV_EVENT_DELETE,NULL);
     telemetry_render(true);
 }
 
@@ -151,6 +168,7 @@ void ui_telemetry_hide(void)
 
 static void synchronize_hotends(void)
 {
+    if(!s_hotend_selector)return;
     char options[sizeof(s_hotend_options)]="",first[MOONRAKER_HOTEND_NAME_MAX]="";
     unsigned selected=0,count=0,active_index=0;bool found=false,active_found=false;
     size_t used=0;
@@ -181,12 +199,15 @@ static void synchronize_hotends(void)
 static void telemetry_render(bool force)
 {
     if(!s_panel)return;
+    uint32_t epoch=s_telemetry_epoch;
     if(s_generation!=telemetry_history_generation()) {
         s_generation=telemetry_history_generation();s_held=false;s_plot_tick=-1;
         s_hotend[0]='\0';s_hotend_options[0]='\0';force=true;
     }
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
     synchronize_hotends();
     for(unsigned i=0;i<3;i++) {
+        if(!s_tabs[i])continue;
         if(i==(unsigned)s_view)lv_obj_add_state(s_tabs[i],LV_STATE_CHECKED);
         else lv_obj_remove_state(s_tabs[i],LV_STATE_CHECKED);
         ui_value_set_bg_color(s_tabs[i],UI_CONTROL,LV_PART_MAIN|LV_STATE_CHECKED);
@@ -197,12 +218,12 @@ static void telemetry_render(bool force)
         if(s_held)lv_obj_add_state(s_tabs[i],LV_STATE_DISABLED);else lv_obj_remove_state(s_tabs[i],LV_STATE_DISABLED);
     }
     lv_obj_t *selectors[]={s_range,s_hotend_selector,s_scale_button};
-    for(unsigned i=0;i<3;i++){if(s_held)lv_obj_add_state(selectors[i],LV_STATE_DISABLED);else lv_obj_remove_state(selectors[i],LV_STATE_DISABLED);}
-    if(s_view==UI_TELEMETRY_HEAT){lv_obj_remove_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);lv_obj_remove_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);}
-    else {lv_obj_add_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);}
+    for(unsigned i=0;i<3;i++){if(!selectors[i])continue;if(s_held)lv_obj_add_state(selectors[i],LV_STATE_DISABLED);else lv_obj_remove_state(selectors[i],LV_STATE_DISABLED);}
+    if(s_hotend_selector){if(s_view==UI_TELEMETRY_HEAT)lv_obj_remove_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);}
+    if(s_scale_button){if(s_view==UI_TELEMETRY_HEAT)lv_obj_remove_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);}
     /* Both action labels have room for either state, keeping touch geometry stable. */
-    lv_obj_t *hold_label=lv_obj_get_child(s_hold_button,0);ui_value_set_text(hold_label,s_held?"Resume live":"Hold graph");
-    ui_value_set_text(lv_obj_get_child(s_scale_button,0),s_include_targets?"Targets on":"Detail only");
+    lv_obj_t *hold_label=s_hold_button?lv_obj_get_child(s_hold_button,0):NULL;ui_value_set_text(hold_label,s_held?"Resume live":"Hold graph");
+    ui_value_set_text(s_scale_button?lv_obj_get_child(s_scale_button,0):NULL,s_include_targets?"Targets on":"Detail only");
     telemetry_sample_t sample;telemetry_history_from_state(&s_latest,s_now_us,&sample);
     bool live=s_latest.live_data_ok;
     char status[160];
@@ -213,22 +234,28 @@ static void telemetry_render(bool force)
     ui_telemetry_charts_configure(s_view,s_window,s_hotend,s_include_targets);
     ui_telemetry_charts_update_live(&sample,live,s_held);
     int64_t tick=s_now_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
-    if(!s_held && (force || tick!=s_plot_tick)) {ui_telemetry_charts_refresh(s_now_us,false);s_plot_tick=tick;}
+    if(!s_held && (force || tick!=s_plot_tick)) {ui_telemetry_charts_refresh(s_now_us,false);if(epoch!=s_telemetry_epoch || !s_panel)return;s_plot_tick=tick;}
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
     size_t count=telemetry_history_count();telemetry_sample_t last;
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
     if(count)s_history_available=true;
     if(!s_history_available)snprintf(status,sizeof(status),"Live values only | History storage unavailable");
     else if(count && telemetry_history_get(count-1,&last)) {
+        if(epoch!=s_telemetry_epoch || !s_panel)return;
         long long age=s_now_us>=last.time_us?(s_now_us-last.time_us)/1000000:0;
         snprintf(status,sizeof(status),"2 s sampling | Last sample %lld s ago | %u / 300 samples | Scroll for more%s",age,(unsigned)count,s_held?" | held":"");
     } else if (!live) snprintf(status,sizeof(status),"No live history yet | %s",
         s_latest.moonraker_ok ? "Waiting for Klipper to become ready" : "Reconnect the active printer to begin sampling");
     else snprintf(status,sizeof(status),"2 s sampling | Waiting for this printer's first live sample");
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
     ui_value_set_text(s_history_status,status);
 }
 
 void ui_telemetry_refresh(const moonraker_state_t *state,int64_t now_us)
 {
+    uint32_t epoch=s_telemetry_epoch;
     telemetry_history_sample(state,now_us);
+    if(epoch!=s_telemetry_epoch)return;
     if(state)s_latest=*state;else memset(&s_latest,0,sizeof(s_latest));
     s_now_us=now_us;telemetry_render(false);
 }

@@ -336,7 +336,7 @@ static bool probe_send(const char *command_text)
  return send_command(command_text);
 }
 static void run(void){
- probe_results=0;probe_dispatch_mode=0;
+ probe_results=0;probe_dispatch_mode=0;s_accepted=false;
  lv_obj_t *card=lv_obj_create(lv_screen_active());
  ui_probe_accuracy_create(card,probe_send,ready);ui_probe_accuracy_refresh(true);
  unsigned baseline=diagnostic_timers();
@@ -353,7 +353,7 @@ static void run(void){
  strcpy(state.homed_axes,"xyz");refresh_status(NULL);click(s_run);
  assert(sends==1 && !strcmp(command,"PROBE_ACCURACY SAMPLES=20") && !s_popup && !s_status_timer && probe_results==1);
  run_cb(NULL);refresh_status(NULL);assert(sends==1 && diagnostic_timers()==baseline);
- click(s_button);lv_dropdown_set_selected(s_samples,0);send_accept=false;click(s_run);
+ lv_tick_inc(5000);click(s_button);lv_dropdown_set_selected(s_samples,0);send_accept=false;click(s_run);
  assert(sends==2 && s_popup && s_status_timer && lv_dropdown_get_selected(s_samples)==0 && probe_results==1);
  assert(strstr(lv_label_get_text(s_status),"not accepted") && session.status==CALIBRATION_SESSION_ERROR);
  refresh_status(NULL);assert(strstr(lv_label_get_text(s_status),"retry"));
@@ -364,9 +364,9 @@ static void run(void){
   assert(diagnostic_timers()==baseline);refresh_status(NULL);run_cb(NULL);assert(sends==3);
  }
  open_cb(NULL);owner++;refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(sends==3);close_popup();
- probe_dispatch_mode=1;open_cb(NULL);click(s_run);assert(sends==4 && probe_results==3 && !s_popup);
- probe_dispatch_mode=2;open_cb(NULL);click(s_run);assert(sends==5 && probe_results==3 && !s_popup && diagnostic_timers()==baseline);
- probe_dispatch_mode=3;open_cb(NULL);click(s_run);assert(sends==6 && probe_results==3 && s_popup);refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));close_popup();
+ ui_probe_accuracy_create(card,probe_send,ready);ui_probe_accuracy_refresh(true);lv_tick_inc(5000);probe_dispatch_mode=1;open_cb(NULL);click(s_run);assert(sends==4 && probe_results==3 && !s_popup);
+ lv_tick_inc(5000);probe_dispatch_mode=2;open_cb(NULL);click(s_run);assert(sends==5 && probe_results==3 && !s_popup && diagnostic_timers()==baseline);
+ lv_tick_inc(5000);probe_dispatch_mode=3;open_cb(NULL);click(s_run);assert(sends==6 && probe_results==3 && s_popup);refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));close_popup();
  lv_obj_delete(card);assert(!s_button);ui_probe_accuracy_refresh(true);ui_probe_accuracy_hide();assert(diagnostic_timers()==baseline);
 }
 #elif defined(TEST_ENDSTOP)

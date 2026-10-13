@@ -18,6 +18,17 @@ typedef struct {
 } telemetry_chart_t;
 static telemetry_chart_t s_charts[4];
 static lv_obj_t *s_chart_host;
+static uint32_t s_chart_epoch;
+static void chart_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_chart_host){ui_telemetry_charts_reset();return;}
+    for(unsigned i=0;i<4;i++){
+        telemetry_chart_t*c=&s_charts[i];
+        lv_obj_t*fields[]={c->card,c->title,c->value,c->target,c->chart,c->stats,c->scale,c->time,c->time_left,c->marker};
+        for(size_t j=0;j<10;j++)if(target==fields[j]){ui_telemetry_charts_reset();return;}
+    }
+}
 static unsigned s_points=300;
 static bool s_chart_include_targets=true;
 static char s_chart_hotend[MOONRAKER_HOTEND_NAME_MAX];
@@ -72,6 +83,7 @@ static int32_t plot_value(double value)
 
 static void marker_position(telemetry_chart_t *c)
 {
+    if(!c || !c->chart || !c->marker)return;
     if(c->newest==LV_CHART_POINT_NONE || c->high<=c->low){lv_obj_add_flag(c->marker,LV_OBJ_FLAG_HIDDEN);return;}
     lv_obj_remove_flag(c->marker,LV_OBJ_FLAG_HIDDEN);
     int32_t w=lv_obj_get_content_width(c->chart),h=lv_obj_get_content_height(c->chart);
@@ -82,11 +94,11 @@ static void marker_position(telemetry_chart_t *c)
     lv_obj_set_pos(c->marker,lv_obj_get_style_pad_left(c->chart,0)+w-7,lv_obj_get_style_pad_top(c->chart,0)+y-3);
 }
 
-static void marker_layout(lv_event_t *event){marker_position(lv_event_get_user_data(event));}
+static void marker_layout(lv_event_t *event){telemetry_chart_t*c=lv_event_get_user_data(event);if(c && lv_event_get_target_obj(event)==c->chart)marker_position(c);}
 
 static void chart_host_resized(lv_event_t *event)
 {
-    (void)event;
+    if(event && lv_event_get_target_obj(event)!=s_chart_host)return;
     if(!s_chart_host)return;
     int32_t width=lv_obj_get_content_width(s_chart_host);
     unsigned columns=width>=600?2:1;
@@ -97,7 +109,9 @@ static void chart_host_resized(lv_event_t *event)
 
 void ui_telemetry_charts_create(lv_obj_t *parent)
 {
+    ++s_chart_epoch;
     s_chart_host=parent;
+    lv_obj_add_event_cb(parent,chart_field_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(parent,LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_column(parent,12,0);lv_obj_set_style_pad_row(parent,12,0);
     lv_obj_add_event_cb(parent,chart_host_resized,LV_EVENT_SIZE_CHANGED,NULL);
@@ -131,6 +145,8 @@ void ui_telemetry_charts_create(lv_obj_t *parent)
         c->time_left=telemetry_make_label(footer,"",UI_FONT_CAPTION,UI_TEXT_DIM);lv_obj_set_width(c->time_left,LV_PCT(50));
         c->time=telemetry_make_label(footer,"NOW",UI_FONT_CAPTION,UI_TEXT_DIM);lv_obj_set_width(c->time,0);lv_obj_set_flex_grow(c->time,1);lv_obj_set_style_text_align(c->time,LV_TEXT_ALIGN_RIGHT,0);
     }
+    for(unsigned i=0;i<4;i++){telemetry_chart_t*c=&s_charts[i];lv_obj_t*fields[]={c->card,c->title,c->value,c->target,c->chart,c->stats,c->scale,c->time,c->time_left,c->marker};
+        for(size_t j=0;j<10;j++)if(fields[j])lv_obj_add_event_cb(fields[j],chart_field_deleted,LV_EVENT_DELETE,NULL);}
     chart_host_resized(NULL);
 }
 
@@ -150,6 +166,7 @@ void ui_telemetry_charts_configure(ui_telemetry_view_t view,unsigned points,cons
 
 void ui_telemetry_charts_update_live(const telemetry_sample_t *sample,bool live,bool held)
 {
+    if(!s_chart_host || !sample)return;
     for(unsigned i=0;i<4;i++) {
         telemetry_chart_t *c=&s_charts[i];if(!c->value)continue;
         double value=channel_value(sample,c->channel,false),target=channel_value(sample,c->channel,true);
@@ -174,6 +191,7 @@ void ui_telemetry_charts_update_live(const telemetry_sample_t *sample,bool live,
 void ui_telemetry_charts_refresh(int64_t end_us,bool held)
 {
     if(!s_chart_host)return;
+    uint32_t epoch=s_chart_epoch;
     /* One fixed-time bin per two seconds. Missing intervals stay empty and
      * named tool lookups prevent traces from mixing after active-tool changes. */
     int64_t end_tick=end_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
@@ -189,8 +207,11 @@ void ui_telemetry_charts_refresh(int64_t end_us,bool held)
     /* Decode each history sample once for all visible channels. No extra
      * history allocation or chart objects are needed while scrolling. */
     size_t history_count=telemetry_history_count();
+    if(epoch!=s_chart_epoch || !s_chart_host)return;
     for(size_t i=0;i<history_count;i++) {
-        telemetry_sample_t sample;if(!telemetry_history_get(i,&sample))continue;
+        telemetry_sample_t sample;bool got=telemetry_history_get(i,&sample);
+        if(epoch!=s_chart_epoch || !s_chart_host)return;
+        if(!got)continue;
         int64_t age=end_tick-sample.time_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
         if(age<0 || age>=(int64_t)s_points)continue;
         unsigned index=s_points-1-(unsigned)age;
@@ -240,5 +261,6 @@ void ui_telemetry_charts_refresh(int64_t end_us,bool held)
 
 void ui_telemetry_charts_reset(void)
 {
+    ++s_chart_epoch;
     memset(s_charts,0,sizeof(s_charts));s_chart_host=NULL;
 }

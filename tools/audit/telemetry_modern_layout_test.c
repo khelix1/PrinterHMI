@@ -7,11 +7,14 @@
 #include "telemetry_history.h"
 #include "settings_system_info.h"
 static unsigned history_reads;
-static bool counted_history_get(size_t index,telemetry_sample_t *sample){history_reads++;return telemetry_history_get(index,sample);}
+static void (*history_hook)(void);
+static bool counted_history_get(size_t index,telemetry_sample_t *sample){history_reads++;if(history_hook){void(*hook)(void)=history_hook;history_hook=NULL;hook();}return telemetry_history_get(index,sample);}
 #define telemetry_history_get counted_history_get
 #include "ui_telemetry_charts.c"
 #undef telemetry_history_get
 #include "ui_telemetry.c"
+static void retire_history_host(void){ui_telemetry_hide();}
+static void replace_history_host(void){ui_telemetry_hide();ui_telemetry_show();}
 static moonraker_state_t state;
 static int64_t clock_us;
 static unsigned back_page,back_nav,invalidations;
@@ -136,5 +139,10 @@ int32_t *a=lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual);
 assert(a[299]==2050 && a[298]==LV_CHART_POINT_NONE && a[297]==LV_CHART_POINT_NONE);
 state.hotends[0].temperature=NAN;clock_us+=2000000;ui_telemetry_refresh(&state,clock_us);
 assert(a[299]==LV_CHART_POINT_NONE);
+ui_telemetry_hide();ready_state();ui_telemetry_show();history_hook=retire_history_host;ui_telemetry_charts_refresh(clock_us,false);assert(!s_panel&&!s_chart_host);
+ui_telemetry_show();history_hook=replace_history_host;ui_telemetry_charts_refresh(clock_us,false);assert(s_panel&&s_chart_host&&s_charts[0].chart);ui_telemetry_refresh(&state,clock_us);
+lv_obj_delete(s_range);assert(!s_range);range_cb(NULL);lv_obj_delete(s_hold_button);assert(!s_hold_button);hold_cb(NULL);ui_telemetry_refresh(&state,clock_us);
+lv_obj_delete(s_charts[0].chart);assert(!s_chart_host&&!s_charts[0].chart);ui_telemetry_refresh(&state,clock_us);ui_telemetry_charts_refresh(clock_us,false);ui_telemetry_hide();ui_telemetry_show();
+lv_obj_delete(s_graph_host);assert(!s_graph_host&&!s_chart_host);ui_telemetry_refresh(&state,clock_us);ui_telemetry_hide();range_cb(NULL);hotend_cb(NULL);hold_cb(NULL);scale_cb(NULL);
 ui_telemetry_hide();telemetry_history_reset();state.live_data_ok=state.moonraker_ok=false;ui_telemetry_refresh(&state,clock_us);ui_telemetry_show();assert(strstr(lv_label_get_text(s_history_status),"Reconnect"));state.moonraker_ok=true;ui_telemetry_refresh(&state,clock_us);assert(strstr(lv_label_get_text(s_history_status),"Klipper"));ui_telemetry_hide();
 lv_display_delete(d);lv_deinit();puts("PASS: modern telemetry native bounds/scroll, three views, range/hold, real touches, named hotend identity, time gaps, missing capabilities, offline/reset, no-op refresh and owner lifecycle across all five themes/densities/text sizes/viewports");}

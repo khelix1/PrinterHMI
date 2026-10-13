@@ -50,6 +50,8 @@ static lv_obj_t *s_command_feedback;
 static lv_obj_t *s_command_send, *s_command_keyboard, *s_command_actions;
 static uint32_t s_command_owner, s_console_epoch;
 static bool s_command_dispatching;
+static lv_obj_t *s_search_keyboard;
+
 static bool s_programmatic_scroll;
 static uint32_t s_row_sequence[CONSOLE_LOG_CAPACITY];
 static console_filter_kind_t s_filter = CONSOLE_FILTER_ALL;
@@ -58,6 +60,18 @@ static char s_query[64];
 static lv_obj_t *s_filter_dropdown, *s_temperature_button, *s_temperature_label;
 static lv_obj_t *s_search_label, *s_filter_count;
 static lv_obj_t *s_search_popup, *s_search_input;
+static void editor_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_command_input){s_command_input=NULL;if(s_command_keyboard)lv_keyboard_set_textarea(s_command_keyboard,NULL);}
+    else if(target==s_search_input){s_search_input=NULL;if(s_search_keyboard)lv_keyboard_set_textarea(s_search_keyboard,NULL);}
+    else if(target==s_command_keyboard)s_command_keyboard=NULL;
+    else if(target==s_search_keyboard)s_search_keyboard=NULL;
+    else if(target==s_command_feedback)s_command_feedback=NULL;
+    else if(target==s_command_send)s_command_send=NULL;
+    else return;
+    ++s_console_epoch;
+}
 
 
 
@@ -200,7 +214,7 @@ static void update_connection(void)
     lv_label_set_long_mode(s_connection,LV_LABEL_LONG_CLIP);}
     ui_value_set_color(s_connection,live?UI_OK_BRIGHT:UI_DANGER_BRIGHT,0);
     bool owner_ok=!s_command_popup || s_command_owner==moonraker_config_generation();
-    bool ready=live && owner_ok;
+    bool ready=live && owner_ok && s_command_input && !s_command_dispatching;
     if(s_command_feedback) {
         if(!owner_ok)ui_value_set_text(s_command_feedback,"Printer changed. Close and reopen this editor.");
         else if(!live)ui_value_set_text(s_command_feedback,"Printer offline. Reconnect before sending.");
@@ -274,7 +288,8 @@ static void clear_cb(lv_event_t *event)
 static void close_search_popup(void)
 {
     lv_obj_t *popup = s_search_popup;
-    s_search_popup = s_search_input = NULL;
+    ++s_console_epoch;
+    s_search_popup = s_search_input = s_search_keyboard = NULL;
     if (popup) lv_obj_delete(popup);
 }
 
@@ -284,7 +299,9 @@ static void search_done_cb(lv_event_t *event)
     (void)event;
     if (!s_root || !s_search_popup || !s_search_input || s_command_dispatching) return;
     snprintf(s_query, sizeof(s_query), "%s", lv_textarea_get_text(s_search_input));
+    uint32_t expected_epoch=s_console_epoch+1;
     close_search_popup();
+    if(s_console_epoch!=expected_epoch || !s_root || !s_search_label)return;
     lv_label_set_text(s_search_label, s_query[0] ? "SEARCH*" : "SEARCH");
     ui_text_fit_single_line(s_search_label,UI_FONT_BODY_LARGE);
     lv_label_set_long_mode(s_search_label,LV_LABEL_LONG_CLIP);
@@ -364,7 +381,7 @@ static lv_obj_t *editor_keyboard(lv_obj_t *popup,lv_obj_t *input,lv_event_cb_t c
     lv_obj_add_event_cb(keyboard,cb,LV_EVENT_ALL,NULL);
     return keyboard;
 }
-static void search_deleted(lv_event_t *e){if(lv_event_get_target_obj(e)==s_search_popup)s_search_popup=s_search_input=NULL;}
+static void search_deleted(lv_event_t *e){if(lv_event_get_target_obj(e)==s_search_popup)++s_console_epoch;s_search_popup=s_search_input=s_search_keyboard=NULL;}
 static void search_cb(lv_event_t *event)
 {
     (void)event;if(!s_root || s_command_dispatching)return;
@@ -375,7 +392,9 @@ static void search_cb(lv_event_t *event)
     s_search_input=editor_input(s_search_popup,sizeof(s_query)-1,"Match message text",s_query);
     lv_obj_t *actions=plain(s_search_popup,LV_FLEX_FLOW_ROW_WRAP);
     console_action(actions,"CANCEL",UI_BUTTON_CANCEL,128,search_cancel_cb);console_action(actions,"APPLY",UI_BUTTON_PRIMARY,128,search_done_cb);
-    editor_keyboard(s_search_popup,s_search_input,search_keyboard_cb);
+    s_search_keyboard=editor_keyboard(s_search_popup,s_search_input,search_keyboard_cb);
+    lv_obj_add_event_cb(s_search_input,editor_field_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_add_event_cb(s_search_keyboard,editor_field_deleted,LV_EVENT_DELETE,NULL);
 }
 
 static void filter_cb(lv_event_t *event)
@@ -455,68 +474,27 @@ static void close_command_cb(lv_event_t *event)
 }
 
 
-static void history_prev_cb(lv_event_t *event)
+static void history_step(bool previous)
 {
-    (void)event;
-
-    size_t count =
-        console_controller_history_count();
-
-    if (!s_root || !s_command_popup || s_command_dispatching || !s_command_input || count == 0) {
-        return;
-    }
-
-    if (s_history_cursor == SIZE_MAX) {
-        s_history_cursor = 0;
-    } else if (s_history_cursor + 1 < count) {
-        ++s_history_cursor;
-    }
-
-    char command[CONSOLE_COMMAND_MAX + 1];
-    if (console_controller_history_get(
-            s_history_cursor,
-            command,
-            sizeof(command))) {
-        lv_textarea_set_text(
-            s_command_input,
-            command);
-        lv_textarea_set_cursor_pos(
-            s_command_input,
-            LV_TEXTAREA_CURSOR_LAST);
-    }
+    if(!s_root || !s_command_popup || !s_command_input || s_command_dispatching ||
+        s_command_owner!=moonraker_config_generation())return;
+    uint32_t epoch=s_console_epoch,owner=s_command_owner;
+    size_t count=console_controller_history_count();
+    if(epoch!=s_console_epoch || owner!=moonraker_config_generation() || !s_command_input || !count)return;
+    size_t cursor=s_history_cursor;
+    char command[CONSOLE_COMMAND_MAX+1];
+    bool got=false;
+    if(previous){cursor=cursor==SIZE_MAX?0:cursor+1<count?cursor+1:cursor;got=console_controller_history_get(cursor,command,sizeof(command));}
+    else if(cursor==SIZE_MAX)return;
+    else if(cursor==0){cursor=SIZE_MAX;command[0]=0;got=true;}
+    else {--cursor;got=console_controller_history_get(cursor,command,sizeof(command));}
+    if(epoch!=s_console_epoch || owner!=moonraker_config_generation() || !s_command_input || !got)return;
+    s_history_cursor=cursor;
+    lv_textarea_set_text(s_command_input,command);
+    lv_textarea_set_cursor_pos(s_command_input,LV_TEXTAREA_CURSOR_LAST);
 }
-
-
-static void history_next_cb(lv_event_t *event)
-{
-    (void)event;
-
-    if (!s_root || !s_command_popup || s_command_dispatching || !s_command_input ||
-        s_history_cursor == SIZE_MAX) {
-        return;
-    }
-
-    if (s_history_cursor > 0) {
-        --s_history_cursor;
-
-        char command[CONSOLE_COMMAND_MAX + 1];
-        if (console_controller_history_get(
-                s_history_cursor,
-                command,
-                sizeof(command))) {
-            lv_textarea_set_text(
-                s_command_input,
-                command);
-        }
-    } else {
-        s_history_cursor = SIZE_MAX;
-        lv_textarea_set_text(s_command_input, "");
-    }
-
-    lv_textarea_set_cursor_pos(
-        s_command_input,
-        LV_TEXTAREA_CURSOR_LAST);
-}
+static void history_prev_cb(lv_event_t *event){(void)event;history_step(true);}
+static void history_next_cb(lv_event_t *event){(void)event;history_step(false);}
 
 
 static void send_command_cb(lv_event_t *event)
@@ -568,22 +546,18 @@ static void send_command_cb(lv_event_t *event)
 
     uint32_t epoch = s_console_epoch, owner = s_command_owner;
     lv_obj_t *popup = s_command_popup;
+    ui_console_command_cb_t send=s_command_callback;
     s_command_dispatching = true;
     console_controller_add_command(command);
+    if(s_console_epoch!=epoch || !s_root || s_command_popup!=popup || owner!=moonraker_config_generation()){s_command_dispatching=false;return;}
 
-    bool sent =
-        s_command_callback &&
-        s_command_callback(command);
+    bool sent = send && send(command);
+    if(!sent && s_console_epoch==epoch && s_command_popup==popup && owner==moonraker_config_generation())
+        console_controller_add(CONSOLE_ENTRY_ERROR,"Command was not accepted by Moonraker.");
     s_command_dispatching = false;
-    if (s_console_epoch != epoch || s_command_popup != popup || owner != moonraker_config_generation()) return;
+    if(s_console_epoch!=epoch || !s_root || s_command_popup!=popup || owner!=moonraker_config_generation())return;
 
-    if (!sent) {
-        console_controller_add(
-            CONSOLE_ENTRY_ERROR,
-            "Command was not accepted by Moonraker.");
-    }
-
-    if(sent)close_command_popup();
+    if(sent){uint32_t expected_epoch=s_console_epoch+1;close_command_popup();if(s_console_epoch!=expected_epoch || !s_root || owner!=moonraker_config_generation())return;}
     else {
         ui_value_set_text(s_command_feedback,"Send failed. Input preserved; check the connection.");
         ui_value_set_color(s_command_feedback,UI_WARN,0);
@@ -634,6 +608,8 @@ static void open_command_cb(lv_event_t *event)
     ui_apply_custom_label_style(s_command_feedback,UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_label_set_text(s_command_feedback,"Commands run immediately on this printer.");
     s_command_keyboard=editor_keyboard(s_command_popup,s_command_input,keyboard_event_cb);
+    lv_obj_t *fields[]={s_command_input,s_command_feedback,s_command_send,s_command_keyboard};
+    for(size_t i=0;i<4;i++)if(fields[i])lv_obj_add_event_cb(fields[i],editor_field_deleted,LV_EVENT_DELETE,NULL);
     update_connection();
 }
 static void history_scroll(lv_event_t *e)

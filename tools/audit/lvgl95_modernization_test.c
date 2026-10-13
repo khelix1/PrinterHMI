@@ -57,13 +57,14 @@ static void run(void){
  fav[63]=true;gen++;rebuild_macro_list();assert(s_macros->rows[0]==first && (uintptr_t)lv_obj_get_user_data(first)==64);
  lv_obj_send_event(first,LV_EVENT_CLICKED,NULL);assert(!strcmp(selected,"MACRO_63"));assert(s_confirm);
  lv_obj_update_layout(s_confirm);for(int i=0;i<10;i++)assert(s_macros->parameter_fields[i]);
- for(int i=0;i<10;i+=2){lv_obj_t *a=lv_obj_get_parent(s_macros->parameter_fields[i]),*b=lv_obj_get_parent(s_macros->parameter_fields[i+1]);lv_area_t aa,bb;lv_obj_get_coords(a,&aa);lv_obj_get_coords(b,&bb);assert(aa.x2<bb.x1);assert(aa.y1==bb.y1);if(i>=2){lv_area_t prev;lv_obj_get_coords(lv_obj_get_parent(s_macros->parameter_fields[i-2]),&prev);assert(prev.y2<aa.y1);}}
+ for(int i=1;i<10;i++){lv_obj_t *a=lv_obj_get_parent(s_macros->parameter_fields[i-1]),*b=lv_obj_get_parent(s_macros->parameter_fields[i]);lv_area_t aa,bb;lv_obj_get_coords(a,&aa);lv_obj_get_coords(b,&bb);assert(aa.y2<bb.y1);assert(aa.x1==bb.x1);}
+
  close_confirm();gen++;selected[0]=0;lv_obj_send_event(first,LV_EVENT_CLICKED,NULL);assert(!s_confirm && !selected[0]);
  strcpy(s_macros->query,"MACRO_12");rebuild_macro_list();assert(first==s_macros->rows[0] && (uintptr_t)lv_obj_get_user_data(first)==13);assert(lv_obj_has_flag(s_macros->rows[1],LV_OBJ_FLAG_HIDDEN));
  lv_obj_send_event(first,LV_EVENT_LONG_PRESSED,NULL);assert(fav[12]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));assert(lv_obj_get_child_count(s_list)==65);
  ui_macros_hide();assert(!s_macros->rows[0]);s_macros->query[0]=0;ui_macros_show(NULL);assert(s_macros->rows[63]);ui_macros_hide();
- puts("PASS: Macro row reuse, favorite/search rebinding, stale callbacks, ten-field Grid and reopen");
+ puts("PASS: Macro row reuse, favorite/search rebinding, stale callbacks, ten-field native column and reopen");
 }
 #elif defined(TEST_DEVICES)
 static size_t bindings,indices[12];static bool discovered=true;

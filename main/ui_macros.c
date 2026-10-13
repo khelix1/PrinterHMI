@@ -34,7 +34,10 @@ typedef struct {
     lv_obj_t *parameter_fields[MACRO_PARAMETER_MAX + MACRO_PARAMETER_EXTRA];
     lv_obj_t *parameter_names[MACRO_PARAMETER_EXTRA];
     macro_parameter_catalog_t parameters;
-    uint32_t pending_owner, editor_owner;
+    uint32_t pending_owner, editor_owner, root_owner;
+    uint32_t accepted_owner, accepted_at;
+    bool accepted;
+    char accepted_command[MACRO_COMMAND_MAX];
     bool reviewed;
     bool editing_search;
     lv_obj_t *rows[MACRO_CONTROLLER_MAX_MACROS];
@@ -166,14 +169,33 @@ static void close_confirm_cb(lv_event_t *event)
 }
 
 
+static bool macro_already_sent(const char *command)
+{
+    return s_macros->accepted && s_macros->accepted_owner == moonraker_config_generation() &&
+        lv_tick_elaps(s_macros->accepted_at) < 5000 && !strcmp(s_macros->accepted_command,command);
+}
+static void macro_field_deleted(lv_event_t *event)
+{
+    if(!s_macros)return;
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    bool retired=false;
+    if(target==s_macros->editor_value){s_macros->editor_value=NULL;retired=true;}
+    for(size_t i=0;i<MACRO_PARAMETER_MAX+MACRO_PARAMETER_EXTRA;i++)
+        if(target==s_macros->parameter_fields[i]){s_macros->parameter_fields[i]=NULL;retired=true;}
+    for(size_t i=0;i<MACRO_PARAMETER_EXTRA;i++)
+        if(target==s_macros->parameter_names[i]){s_macros->parameter_names[i]=NULL;retired=true;}
+    if(retired)++s_macro_epoch;
+    if(target==s_macros->editor_target)close_editor();
+}
 static void run_macro_cb(lv_event_t *event)
 {
-    (void)event;
+    if(event && lv_event_get_code(event)!=LV_EVENT_CLICKED)return;
 
     if (!s_macros || !s_root || !s_confirm || !s_macros->reviewed || s_macro_dispatching || !s_pending_macro[0]) {
         return;
     }
 
+    if(event && lv_event_get_target_obj(event)!=s_macros->run_action)return;
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
     const char *reason = s_macros->pending_owner != moonraker_config_generation()
@@ -185,32 +207,27 @@ static void run_macro_cb(lv_event_t *event)
     char command[MACRO_COMMAND_MAX];
     snprintf(command, sizeof(command), "%s", s_macros->pending_command);
     if (!command[0]) return;
+    if(macro_already_sent(command)){macro_feedback(UI_STATUS_INFO,"MACRO ALREADY SENT","Check the printer before repeating this reviewed command.");return;}
 
     lv_obj_t *popup = s_confirm;
     uint32_t epoch = s_macro_epoch, owner = s_macros->pending_owner;
+    ui_macros_command_cb_t send=s_command_callback;
     s_macro_dispatching = true;
     console_controller_add_command(command);
+    if(epoch!=s_macro_epoch || !s_root || s_confirm!=popup || owner!=moonraker_config_generation()){s_macro_dispatching=false;return;}
 
-    bool sent =
-        s_command_callback &&
-        s_command_callback(command);
+    bool sent = send && send(command);
+    if(sent){s_macros->accepted=true;s_macros->accepted_owner=owner;s_macros->accepted_at=lv_tick_get();snprintf(s_macros->accepted_command,sizeof(s_macros->accepted_command),"%s",command);}
+    if(!sent && epoch==s_macro_epoch && s_confirm==popup && owner==moonraker_config_generation())
+        console_controller_add(CONSOLE_ENTRY_ERROR,"Macro %s was not accepted by Moonraker.",command);
     s_macro_dispatching = false;
-    if (epoch != s_macro_epoch || s_confirm != popup || owner != moonraker_config_generation()) return;
-
-    if (!sent) {
-        console_controller_add(
-            CONSOLE_ENTRY_ERROR,
-            "Macro %s was not accepted by Moonraker.",
-            command);
-        macro_feedback(
-            UI_STATUS_DANGER,
-            "MACRO NOT SENT",
-            "Request was not accepted. Your reviewed command is retained. Retry when connected.");
-        return;
-    }
-
+    if(epoch!=s_macro_epoch || !s_root || s_confirm!=popup || owner!=moonraker_config_generation())return;
+    if(!sent){macro_feedback(UI_STATUS_DANGER,"MACRO NOT SENT",
+        "Request was not accepted. Your reviewed command is retained. Retry when connected.");return;}
+    uint32_t expected_epoch=s_macro_epoch+2;
     close_confirm();
-    macro_feedback(UI_STATUS_OK, "MACRO SENT", command);
+    if(s_macro_epoch!=expected_epoch || !s_root || owner!=moonraker_config_generation())return;
+    macro_feedback(UI_STATUS_OK,"MACRO SENT",command);
 }
 
 
@@ -247,7 +264,9 @@ static void editor_done_cb(lv_event_t *event)
         s_macros->pending_owner != moonraker_config_generation())) return;
     if (s_macros->editing_search) {
         snprintf(s_macros->query, sizeof(s_macros->query), "%s", lv_textarea_get_text(s_macros->editor_value));
+        uint32_t expected_epoch=s_macro_epoch+1,owner=s_macros->editor_owner;
         close_editor();
+        if(s_macro_epoch!=expected_epoch || !s_root || owner!=moonraker_config_generation())return;
         if (s_macros->search_label)
             lv_label_set_text(s_macros->search_label, s_macros->query[0] ? "SEARCH*" : "SEARCH");
         rebuild_macro_list();
@@ -329,7 +348,7 @@ static lv_obj_t *macro_body_text(lv_obj_t *body, const char *text)
 
 static void open_editor(lv_obj_t *target, bool search)
 {
-    if (!s_macros || !s_root || s_macro_dispatching) return;
+    if (!s_macros || !s_root || s_macro_dispatching || s_macros->root_owner!=moonraker_config_generation()) return;
     if (search && s_confirm) { lv_obj_move_foreground(s_confirm); return; }
     if (!search) {
         if (!s_confirm || s_macros->reviewed || s_macros->pending_owner != moonraker_config_generation()) return;
@@ -356,6 +375,7 @@ static void open_editor(lv_obj_t *target, bool search)
     s_macros->editor_value = ui_popup_add_textarea(body, LV_PCT(100), 56,
         LV_ALIGN_TOP_LEFT, 0, 0, true, false, maximum, "",
         search ? s_macros->query : lv_textarea_get_text(target), NULL);
+    lv_obj_add_event_cb(s_macros->editor_value,macro_field_deleted,LV_EVENT_DELETE,NULL);
     ui_apply_custom_label_style(s_macros->editor_value, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_height(s_macros->editor_value, 56);
     lv_obj_t *keyboard=ui_popup_add_keyboard(body, s_macros->editor_value, LV_PCT(100), 224,
@@ -388,10 +408,12 @@ static void review_macro_cb(lv_event_t *event)
     size_t count = s_macros->parameters.count;
     if (count > MACRO_PARAMETER_MAX) return;
     for (size_t i = 0; i < count; ++i) {
+        if(!s_macros->parameter_fields[i]){macro_feedback(UI_STATUS_WARNING,"PARAMETER UNAVAILABLE","Cancel and reopen the macro parameters.");return;}
         values[i].name = s_macros->parameters.names[i];
         values[i].value = lv_textarea_get_text(s_macros->parameter_fields[i]);
     }
     for (size_t i = 0; i < MACRO_PARAMETER_EXTRA; ++i) {
+        if(!s_macros->parameter_names[i] || !s_macros->parameter_fields[count+i]){macro_feedback(UI_STATUS_WARNING,"PARAMETER UNAVAILABLE","Cancel and reopen the macro parameters.");return;}
         values[count + i].name = lv_textarea_get_text(s_macros->parameter_names[i]);
         values[count + i].value = lv_textarea_get_text(s_macros->parameter_fields[count + i]);
     }
@@ -401,13 +423,17 @@ static void review_macro_cb(lv_event_t *event)
         macro_feedback(UI_STATUS_DANGER, "CHECK PARAMETERS", error);
         return;
     }
+    uint32_t editor_epoch=s_macro_epoch+1,review_owner=s_macros->pending_owner;
     close_editor();
+    if(editor_epoch!=s_macro_epoch || !s_root || !s_confirm || review_owner!=moonraker_config_generation())return;
     ++s_macro_epoch;
     lv_obj_t *old = s_confirm;
     s_confirm = NULL;
     memset(s_macros->parameter_fields, 0, sizeof(s_macros->parameter_fields));
     memset(s_macros->parameter_names, 0, sizeof(s_macros->parameter_names));
+    uint32_t epoch=s_macro_epoch,owner=s_macros->pending_owner;
     lv_obj_delete(old);
+    if(epoch!=s_macro_epoch || !s_root || owner!=moonraker_config_generation())return;
     lv_obj_t *body;
     s_confirm = macro_dialog("RUN MACRO?", &body);
     if (!s_confirm) { s_pending_macro[0] = 0; return; }
@@ -421,7 +447,7 @@ static void review_macro_cb(lv_event_t *event)
 
 static void macro_button_cb(lv_event_t *event)
 {
-    if (!event || !s_macros || !s_root || s_macro_dispatching) return;
+    if (!event || lv_event_get_code(event)!=LV_EVENT_CLICKED || !s_macros || !s_root || s_macro_dispatching || s_macros->root_owner!=moonraker_config_generation()) return;
     if (s_confirm) { lv_obj_move_foreground(s_confirm); if(s_macros->editor)lv_obj_move_foreground(s_macros->editor); return; }
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
@@ -456,6 +482,7 @@ static void macro_button_cb(lv_event_t *event)
             lv_obj_set_height(name, 56);
             s_macros->parameter_names[i - count] = name;
             lv_obj_add_event_cb(name, field_cb, LV_EVENT_CLICKED, NULL);
+            lv_obj_add_event_cb(name,macro_field_deleted,LV_EVENT_DELETE,NULL);
         }
         lv_obj_t *value = ui_popup_add_textarea(cell, LV_PCT(100), 56, LV_ALIGN_TOP_LEFT,
             0, 0, true, false, MACRO_PARAMETER_VALUE_MAX - 1, "Value (optional)", "", NULL);
@@ -463,6 +490,7 @@ static void macro_button_cb(lv_event_t *event)
         lv_obj_set_height(value, 56);
         s_macros->parameter_fields[i] = value;
         lv_obj_add_event_cb(value, field_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(value,macro_field_deleted,LV_EVENT_DELETE,NULL);
     }
     macro_actions(s_confirm, "REVIEW", close_confirm_cb, review_macro_cb);
 }
@@ -601,6 +629,10 @@ static void refresh_timer_cb(lv_timer_t *timer)
     macro_controller_status(&status);
 
     if(s_confirm)macro_run_availability();
+    if(s_macros->root_owner!=moonraker_config_generation()){
+        for(size_t i=0;i<MACRO_CONTROLLER_MAX_MACROS;i++)if(s_macros->rows[i])lv_obj_add_state(s_macros->rows[i],LV_STATE_DISABLED);
+        macro_feedback(UI_STATUS_WARNING,"PRINTER CHANGED","Reopen Macros for this printer.");return;
+    }
     if (status.generation !=
         s_rendered_generation) {
         rebuild_macro_list();
@@ -615,7 +647,9 @@ void ui_macros_show(
         return;
     }
 
+    if(s_root && s_macros->root_owner!=moonraker_config_generation())ui_macros_hide();
     s_command_callback = command_callback;
+    s_macros->root_owner=moonraker_config_generation();
 
     if (s_root) {
         rebuild_macro_list();

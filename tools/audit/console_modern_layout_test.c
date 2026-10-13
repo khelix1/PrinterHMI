@@ -14,7 +14,7 @@ static uint32_t generation=1,sequence=64;
 static size_t entries=64;
 static unsigned sends,invalidations;
 static bool accept=true,long_messages;
-static void (*send_hook)(void);
+static void (*send_hook)(void),(*log_hook)(void),(*error_hook)(void),(*history_hook)(void);
 static char sent[CONSOLE_COMMAND_MAX+1];
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -29,15 +29,16 @@ uint32_t console_controller_latest_sequence(void){return sequence;}
 bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->sequence=sequence-(uint32_t)i;e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;snprintf(e->message,sizeof(e->message),"Message %u%.170s",e->sequence,long_messages?" | LONG TOKEN ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 followed by a complete multiline response that must wrap and remain readable at large text sizes.":"");return true;}
 void console_controller_clear(void){entries=0;sequence++;}
 size_t console_controller_history_count(void){return 2;}
-bool console_controller_history_get(size_t i,char *o,size_t n){if(i>=2)return false;snprintf(o,n,"%s",i?"M105":"STATUS");return true;}
-void console_controller_add_command(const char *c){(void)c;sequence++;}
-void console_controller_add(console_entry_type_t t,const char *f,...){(void)t;(void)f;sequence++;}
+bool console_controller_history_get(size_t i,char *o,size_t n){if(history_hook){void(*hook)(void)=history_hook;history_hook=NULL;hook();}if(i>=2)return false;snprintf(o,n,"%s",i?"M105":"STATUS");return true;}
+void console_controller_add_command(const char *c){(void)c;sequence++;if(log_hook){void(*hook)(void)=log_hook;log_hook=NULL;hook();}}
+void console_controller_add(console_entry_type_t t,const char *f,...){(void)t;(void)f;sequence++;if(error_hook){void(*hook)(void)=error_hook;error_hook=NULL;hook();}}
 static bool send(const char *command){sends++;snprintf(sent,sizeof(sent),"%s",command);if(send_hook)send_hook();return accept;}
 static unsigned timer_count(void){unsigned count=0;for(lv_timer_t*t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))count++;return count;}
 static void reenter_send(void){send_command_cb(NULL);open_command_cb(NULL);history_prev_cb(NULL);ui_console_show(send);}
 static void retire_send(void){lv_obj_delete(s_command_popup);}
 static void retire_root_send(void){lv_obj_delete(s_root);}
 static void switch_send(void){generation++;}
+static void clear_sender(void){s_command_callback=NULL;}
 static void click(lv_obj_t *b){lv_obj_send_event(b,LV_EVENT_CLICKED,NULL);}
 static void inside(lv_obj_t *c,lv_obj_t *p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(a.x1<b.x1||a.x2>b.x2||a.y1<b.y1||a.y2>b.y2){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void same(lv_obj_t *label,const char *expected){assert(!strcmp(lv_textarea_get_text(label),expected));}
@@ -88,6 +89,12 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   open_command_cb(NULL);lv_textarea_set_text(s_command_input,"RESTART");search_cb(NULL);before=sends;send_hook=retire_root_send;send_command_cb(NULL);send_hook=NULL;assert(sends==before+1&&!s_root&&!s_command_popup&&!s_search_popup&&!s_refresh_timer&&timer_count()==baseline_timers);
   send_command_cb(NULL);history_prev_cb(NULL);history_next_cb(NULL);search_done_cb(NULL);open_command_cb(NULL);search_cb(NULL);reset_filters_cb(NULL);filter_cb(NULL);temperature_cb(NULL);follow_cb(NULL);clear_cb(NULL);refresh_timer_cb(NULL);keyboard_event_cb(NULL);search_keyboard_cb(NULL);assert(!s_root&&!s_command_popup&&!s_search_popup);
   for(unsigned i=0;i<5;i++){ui_console_show(send);open_command_cb(NULL);search_cb(NULL);lv_obj_delete(s_root);assert(!s_root&&!s_output&&!s_rows->rows[0]&&!s_command_popup&&!s_search_popup&&!s_refresh_timer&&timer_count()==baseline_timers);}
+  ui_console_show(send);open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");before=sends;log_hook=retire_root_send;send_command_cb(NULL);assert(sends==before&&!s_root&&!s_command_dispatching);
+  ui_console_show(send);open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");before=sends;log_hook=clear_sender;send_command_cb(NULL);assert(sends==before+1&&!s_command_popup);
+  ui_console_show(send);open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");accept=false;before=sends;error_hook=retire_root_send;send_command_cb(NULL);assert(sends==before+1&&!s_root&&!s_command_dispatching);accept=true;
+  ui_console_show(send);open_command_cb(NULL);history_hook=retire_send;history_prev_cb(NULL);assert(!s_command_popup&&!s_command_input);
+  open_command_cb(NULL);before=sends;lv_obj_delete(s_command_input);assert(!s_command_input&&lv_keyboard_get_textarea(s_command_keyboard)==NULL);update_connection();assert(lv_obj_has_state(s_command_send,LV_STATE_DISABLED));send_command_cb(NULL);assert(sends==before);close_command_popup();
+  search_cb(NULL);lv_obj_delete(s_search_input);assert(!s_search_input&&lv_keyboard_get_textarea(s_search_keyboard)==NULL);search_done_cb(NULL);close_search_popup();
   ui_console_hide();assert(!s_root&&!s_refresh_timer&&!lv_obj_get_child_count(lv_layer_top()));press_catalog();
  }
  lv_display_delete(d);lv_deinit();puts("PASS: Console layouts/history/filters/editor, owner/offline send guards, rejection retention, reentrant send, timer-balanced external deletion, stale callbacks, no-op refresh and pressed/focused/checked/disabled button frames across themes/densities/text sizes/viewports");return 0;}

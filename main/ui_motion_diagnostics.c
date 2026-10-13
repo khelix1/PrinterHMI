@@ -31,6 +31,8 @@ typedef struct {
 } motion_ui_state_t;
 
 static motion_ui_state_t *s;
+static uint32_t s_epoch, s_card_owner;
+static lv_obj_t *s_card, *s_actions[3];
 
 static bool init(void)
 {
@@ -48,6 +50,7 @@ static void label_text(lv_obj_t *label, const char *text)
 static void close_editor(void)
 {
     if (!s) return;
+    ++s_epoch;
     lv_obj_t *editor = s->editor;
     s->editor = s->editor_value = s->editor_target = s->editor_feedback = NULL;
     if (editor) lv_obj_delete(editor);
@@ -55,12 +58,15 @@ static void close_editor(void)
 
 static void editor_deleted(lv_event_t *event)
 {
-    if (s && lv_event_get_target_obj(event) == s->editor)
+    if (s && lv_event_get_target_obj(event) == s->editor) {
+        ++s_epoch;
         s->editor = s->editor_value = s->editor_target = s->editor_feedback = NULL;
+    }
 }
 
 static void retire_popup(lv_obj_t **editor, lv_timer_t **timer)
 {
+    ++s_epoch;
     *editor = s->editor;
     *timer = s->timer;
     /* Keep the permanent allocation, retire every reference before deletion. */
@@ -86,6 +92,41 @@ static void close_popup(void)
     if (timer) lv_timer_delete(timer);
     if (editor) lv_obj_delete(editor);
     if (popup) lv_obj_delete(popup);
+}
+static void field_deleted(lv_event_t *event)
+{
+    if (!s) return;
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    lv_obj_t **refs[] = {&s->body,&s->driver_selector,&s->status,&s->mode,&s->pitch,&s->count,
+        &s->pitch_label,&s->count_label,&s->result,&s->reference,&s->editor_value,&s->editor_feedback,
+        &s->limits[0],&s->limits[1],&s->limits[2],&s->limits[3]};
+    bool retired = false;
+    for (size_t i = 0; i < sizeof(refs)/sizeof(refs[0]); ++i)
+        if (*refs[i] == target) { *refs[i] = NULL; retired = true; }
+    if (retired) ++s_epoch;
+    if (s->editor_target == target) close_editor();
+}
+static void watch_fields(void)
+{
+    lv_obj_t *refs[] = {s->body,s->driver_selector,s->status,s->mode,s->pitch,s->count,
+        s->pitch_label,s->count_label,s->result,s->reference,s->editor_value,s->editor_feedback,
+        s->limits[0],s->limits[1],s->limits[2],s->limits[3]};
+    for (size_t i = 0; i < sizeof(refs)/sizeof(refs[0]); ++i)
+        if (refs[i]) lv_obj_add_event_cb(refs[i], field_deleted, LV_EVENT_DELETE, NULL);
+}
+static void card_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) != s_card) return;
+    s_card = NULL; memset(s_actions, 0, sizeof(s_actions)); close_popup();
+}
+static void action_deleted(lv_event_t *event)
+{
+    for (size_t i=0;i<3;++i) if (s_actions[i]==lv_event_get_target_obj(event)) s_actions[i]=NULL;
+}
+static bool action_owned(lv_event_t *event, size_t index)
+{
+    return event && lv_event_get_code(event) == LV_EVENT_CLICKED && s_card &&
+        s_card_owner == moonraker_config_generation() && lv_event_get_target_obj(event) == s_actions[index];
 }
 static void close_cb(lv_event_t *event) { (void)event; close_popup(); }
 static void refresh(lv_timer_t *timer);
@@ -119,8 +160,12 @@ static void calculate_cb(lv_event_t *event)
 static void mode_cb(lv_event_t *event)
 {
     (void)event;
-    if (!owns_printer() || s->view != VIEW_DISTANCE || !s->mode || !s->pitch || !s->count) return;
+    if (!s) return;
+    if (event && (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED || lv_event_get_target_obj(event) != s->mode)) return;
+    if (!owns_printer() || s->view != VIEW_DISTANCE || !s->mode || !s->pitch || !s->count || !s->result) return;
+    uint32_t expected_epoch = s_epoch + 1;
     close_editor();
+    if (s_epoch != expected_epoch || !owns_printer() || !s->mode || !s->pitch || !s->count || !s->result) return;
     bool screw = lv_dropdown_get_selected(s->mode) == 1;
     label_text(s->pitch_label, screw ? "THREAD PITCH (mm)" : "BELT PITCH (mm)");
     label_text(s->count_label, screw ? "THREAD STARTS" : "PULLEY TEETH");
@@ -146,7 +191,9 @@ static void editor_done_cb(lv_event_t *event)
     }
     if (owns_printer() && s->editor_target && s->editor_value)
         lv_textarea_set_text(s->editor_target, lv_textarea_get_text(s->editor_value));
+    uint32_t expected_epoch = s_epoch + 1;
     close_editor();
+    if (s_epoch != expected_epoch || !owns_printer() || !s->result) return;
     label_text(s->result, "Values changed. Tap Calculate for a new result.");
     ui_apply_label_primary(s->result);
 }
@@ -229,6 +276,8 @@ static void field_cb(lv_event_t *event)
         lv_textarea_get_text(target), false, 18);
     lv_textarea_set_accepted_chars(s->editor_value, target == s->count ? "0123456789" : "0123456789.");
     s->editor_feedback = ui_form_text(ui_form_body(s->editor), "", UI_FONT_CAPTION, UI_TEXT_DIM);
+    lv_obj_add_event_cb(s->editor_value, field_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_add_event_cb(s->editor_feedback, field_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *keyboard = ui_form_keyboard(s->editor, s->editor_value, LV_KEYBOARD_MODE_NUMBER);
     ui_form_action(s->editor, UI_BUTTON_SECONDARY, "CANCEL", editor_cancel_cb, NULL);
     ui_form_action(s->editor, UI_BUTTON_PRIMARY, "DONE", editor_done_cb, NULL);
@@ -273,6 +322,7 @@ static void driver_selected_cb(lv_event_t *event) { (void)event; refresh(NULL); 
 
 static void render_drivers(bool live, const char *status_override)
 {
+    if (!s->driver_selector || !s->body || !s->status) return;
     if (!live) {
         lv_obj_add_state(s->driver_selector, LV_STATE_DISABLED);
         label_text(s->status, status_override ? status_override : "LIVE DRIVER DATA UNAVAILABLE");
@@ -341,7 +391,9 @@ static void refresh(lv_timer_t *timer)
 {
     if (!s || !s->popup || (timer && timer != s->timer)) return;
     if (!owns_printer()) {
+        uint32_t expected_epoch = s_epoch + 1;
         close_editor();
+        if (s_epoch != expected_epoch || !s->popup || owns_printer()) return;
         if (s->timer) { lv_timer_delete(s->timer); s->timer = NULL; }
         if (s->view == VIEW_DISTANCE) {
             label_text(s->result, "Printer changed. Close and reopen the calculator.");
@@ -352,9 +404,12 @@ static void refresh(lv_timer_t *timer)
         }
         return;
     }
+    uint32_t epoch = s_epoch, owner = s->owner;
     motion_diagnostics_controller_snapshot(&s->snapshot);
+    if (epoch != s_epoch || !s->popup || owner != moonraker_config_generation()) return;
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
+    if (epoch != s_epoch || !s->popup || owner != moonraker_config_generation()) return;
     const char *reason = printer_connection_reason(&state);
     bool live = !reason[0] && s->snapshot.owner_generation == s->owner;
     const char *unavailable = reason[0] ? reason : "Waiting for current printer readings.";
@@ -451,17 +506,22 @@ static void show_view(motion_view_t view)
             0, 0, 180, 48, calculate_cb, NULL, NULL);
         lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(calculate, 1);
     }
+    watch_fields();
     s->timer = lv_timer_create(refresh, 500, NULL);
     refresh(NULL);
 }
 
-static void limits_cb(lv_event_t *event) { (void)event; show_view(VIEW_LIMITS); }
-static void distance_cb(lv_event_t *event) { (void)event; show_view(VIEW_DISTANCE); }
-static void drivers_cb(lv_event_t *event) { (void)event; show_view(VIEW_DRIVERS); }
+static void limits_cb(lv_event_t *event) { if (action_owned(event,0)) show_view(VIEW_LIMITS); }
+static void distance_cb(lv_event_t *event) { if (action_owned(event,1)) show_view(VIEW_DISTANCE); }
+static void drivers_cb(lv_event_t *event) { if (action_owned(event,2)) show_view(VIEW_DRIVERS); }
 
 void ui_motion_diagnostics_create(lv_obj_t *card)
 {
     if (!card || !init()) return;
+    close_popup();
+    s_card = card; s_card_owner = moonraker_config_generation();
+    memset(s_actions, 0, sizeof(s_actions));
+    lv_obj_add_event_cb(card, card_deleted, LV_EVENT_DELETE, NULL);
     const char *labels[] = {"LIMITS", "DISTANCE", "DRIVERS"};
     lv_event_cb_t callbacks[] = {limits_cb, distance_cb, drivers_cb};
     const int widths[] = {100, 132, 110};
@@ -469,11 +529,13 @@ void ui_motion_diagnostics_create(lv_obj_t *card)
     for (size_t i = 0; i < 3; ++i) {
         lv_obj_t *button = ui_button_create(card, UI_BUTTON_OUTLINED, labels[i]);
         if (!button) continue;
+        s_actions[i] = button;
         lv_obj_set_size(button, widths[i], 44);
         lv_obj_set_style_pad_hor(button, 1, 0);
         lv_obj_set_pos(button, positions[i], 86);
         lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_CLIP);
         lv_obj_add_event_cb(button, callbacks[i], LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(button, action_deleted, LV_EVENT_DELETE, NULL);
     }
 }
 

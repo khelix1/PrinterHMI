@@ -14,6 +14,8 @@
 
 static lv_obj_t *s_popup = NULL;
 static lv_obj_t *s_list = NULL;
+static uint32_t s_history_epoch;
+static bool s_rebuilding;
 static lv_timer_t *s_refresh_timer = NULL;
 static size_t s_rendered_count = 0;
 static uint32_t s_rendered_sequence = 0;
@@ -94,15 +96,19 @@ static void format_event_time(
 }
 
 
-static void rebuild_event_list(void)
+static void rebuild_event_list_impl(void)
 {
     if (!s_list) {
         return;
     }
 
+    uint32_t epoch=s_history_epoch;lv_obj_t *list=s_list;
     lv_obj_clean(s_list);
+    if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
 
     size_t count = operator_event_log_count();
+    if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
+    if(count>OPERATOR_EVENT_LOG_CAPACITY)count=OPERATOR_EVENT_LOG_CAPACITY;
     s_rendered_count = count;
     s_rendered_sequence = 0;
 
@@ -110,9 +116,11 @@ static void rebuild_event_list(void)
 
     if (count > 0 &&
         operator_event_log_get(0, &newest)) {
+        if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
         s_rendered_sequence = newest.sequence;
     }
 
+    if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
     if (count == 0) {
         lv_obj_t *empty = lv_label_create(s_list);
 
@@ -143,11 +151,9 @@ static void rebuild_event_list(void)
 
         operator_event_t event;
 
-        if (!operator_event_log_get(
-                newest_index,
-                &event)) {
-            continue;
-        }
+        bool got=operator_event_log_get(newest_index,&event);
+        if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
+        if(!got)continue;
 
         char time_text[24] = "";
         char metadata[48];
@@ -192,20 +198,36 @@ static void rebuild_event_list(void)
 }
 
 
+static void rebuild_event_list(void)
+{
+    if(s_rebuilding)return;
+    s_rebuilding=true;rebuild_event_list_impl();s_rebuilding=false;
+}
+static void history_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_list){s_list=NULL;if(s_refresh_timer)lv_timer_delete(s_refresh_timer);s_refresh_timer=NULL;}
+    else if(target==s_follow_button)s_follow_button=NULL;
+    else return;
+    ++s_history_epoch;
+    s_rendered_count=SIZE_MAX;s_rendered_sequence=0;
+}
 static void refresh_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
+    if(timer && timer!=s_refresh_timer)return;
+    uint32_t epoch=s_history_epoch;
     if (!s_popup || !s_list || !s_follow_live) {
         return;
     }
 
     size_t count = operator_event_log_count();
+    if(epoch!=s_history_epoch || !s_popup || !s_list)return;
     uint32_t newest_sequence = 0;
     operator_event_t newest;
 
     if (count > 0 &&
         operator_event_log_get(0, &newest)) {
+        if(epoch!=s_history_epoch || !s_popup || !s_list)return;
         newest_sequence = newest.sequence;
     }
 
@@ -213,6 +235,7 @@ static void refresh_timer_cb(lv_timer_t *timer)
      * Sequence comparison also detects replacement of the oldest entry
      * after the bounded ring reaches capacity and its count stays at 40.
      */
+    if(epoch!=s_history_epoch || !s_popup || !s_list)return;
     if (count != s_rendered_count ||
         newest_sequence != s_rendered_sequence) {
         rebuild_event_list();
@@ -224,6 +247,7 @@ static void history_deleted(lv_event_t *event)
 {
     if(lv_event_get_target_obj(event)!=s_popup)return;
     if(s_refresh_timer)lv_timer_delete(s_refresh_timer);
+    ++s_history_epoch;
     s_refresh_timer=NULL;s_popup=NULL;s_list=NULL;s_follow_button=NULL;
     s_rendered_count=0;s_rendered_sequence=0;s_follow_live=true;
 }
@@ -243,15 +267,18 @@ static void close_cb(lv_event_t *event)
 
 static void clear_cb(lv_event_t *event)
 {
-    (void)event;
+    (void)event;if(!s_popup || !s_list)return;
+    uint32_t epoch=s_history_epoch;
     operator_event_log_clear();
-    rebuild_event_list();
+    if(epoch==s_history_epoch && s_popup && s_list)rebuild_event_list();
 }
 
 
 static void follow_cb(lv_event_t *event)
 {
-    (void)event;s_follow_live=!s_follow_live;
+    if(event && lv_event_get_code(event)!=LV_EVENT_CLICKED)return;
+    if(!s_popup || !s_list || !s_follow_button)return;
+    s_follow_live=!s_follow_live;
     lv_label_set_text(lv_obj_get_child(s_follow_button,0),s_follow_live ? "HOLD" : "FOLLOW LIVE");
     if(s_follow_live)rebuild_event_list();
 }
@@ -276,6 +303,7 @@ void ui_event_history_popup_show(void)
     if(height>540)height=540;
     s_popup=ui_popup_create(lv_layer_top(),width,height,UI_POPUP_STANDARD);
     if(!s_popup)return;
+    ++s_history_epoch;
     s_follow_live=true;
     lv_obj_add_event_cb(s_popup,history_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_popup,LV_FLEX_FLOW_COLUMN);
@@ -284,7 +312,7 @@ void ui_event_history_popup_show(void)
     lv_label_set_text(title,"EVENT HISTORY");lv_obj_set_width(title,LV_PCT(100));
     ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
     lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
-    s_list=lv_obj_create(s_popup);lv_obj_remove_style_all(s_list);
+    s_list=lv_obj_create(s_popup);lv_obj_add_event_cb(s_list,history_field_deleted,LV_EVENT_DELETE,NULL);lv_obj_remove_style_all(s_list);
     lv_obj_set_size(s_list,LV_PCT(100),0);lv_obj_set_flex_grow(s_list,1);
     lv_obj_set_flex_flow(s_list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_list,8,0);
     lv_obj_set_scroll_dir(s_list,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_list,LV_SCROLLBAR_MODE_AUTO);
@@ -292,9 +320,12 @@ void ui_event_history_popup_show(void)
     lv_obj_set_flex_flow(footer,LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_column(footer,8,0);lv_obj_set_style_pad_row(footer,8,0);
     s_follow_button=history_action(footer,UI_BUTTON_OUTLINED,"HOLD",follow_cb);
+    lv_obj_add_event_cb(s_follow_button,history_field_deleted,LV_EVENT_DELETE,NULL);
     history_action(footer,UI_BUTTON_DANGER,"CLEAR",clear_cb);
     history_action(footer,UI_BUTTON_CLOSE,"CLOSE",close_cb);
+    uint32_t epoch=s_history_epoch;
     rebuild_event_list();
+    if(epoch!=s_history_epoch || !s_popup || !s_list)return;
     lv_obj_update_layout(s_popup);
     for(unsigned i=0;i<lv_obj_get_child_count(footer);i++)
         ui_text_fit_single_line(lv_obj_get_child(lv_obj_get_child(footer,i),0),UI_FONT_BODY);

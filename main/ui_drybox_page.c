@@ -13,6 +13,7 @@
 #include "ui_status_banner.h"
 #include "ui_page_geometry.h"
 #include "ui_studio_layout.h"
+#include "moonraker_config_controller.h"
 
 /*
  * Theme A Drybox control surface.
@@ -31,6 +32,15 @@
  */
 
 static ui_drybox_page_action_cb_t s_action_cb = NULL;
+static ui_drybox_page_t *s_page_owner;
+static uint32_t s_page_generation;
+static void retire_page(ui_drybox_page_t *page);
+static void watch_page_fields(void);
+static void page_deleted(lv_event_t *event)
+{
+    ui_drybox_page_t *page=lv_event_get_user_data(event);
+    if(page && lv_event_get_target_obj(event)==page->panel)retire_page(page);
+}
 
 static lv_obj_t *s_heater_dot = NULL;
 static lv_obj_t *s_fan_dot = NULL;
@@ -352,14 +362,15 @@ static void make_divider(
 
 static void drybox_button_event_cb(lv_event_t *event)
 {
-    const char *command =
-        (const char *)lv_event_get_user_data(event);
-
-    if (!command || !s_action_cb) {
-        return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || !s_page_owner ||
+        !s_page_owner->panel || s_page_generation != moonraker_config_generation() || !s_action_cb) return;
+    static const char *const commands[] = {"DRY_PLA","DRY_PETG","DRY_HOLD","DRY_RESUME","DRY_STOP"};
+    for (size_t i=0;i<5;++i) {
+        lv_obj_t *button=s_program_buttons[i+1];
+        if (button && lv_event_get_target_obj(event)==button && !lv_obj_has_state(button,LV_STATE_DISABLED)) {
+            s_action_cb(commands[i],event);return;
+        }
     }
-
-    s_action_cb(command, event);
 }
 
 static lv_obj_t *make_program_button(
@@ -810,6 +821,8 @@ bool ui_drybox_page_create(
     }
 
     s_action_cb = action_cb;
+    s_page_owner = page;
+    s_page_generation = moonraker_config_generation();
 
     page->panel = lv_obj_create(lv_screen_active());
 
@@ -817,6 +830,7 @@ bool ui_drybox_page_create(
         return false;
     }
 
+    lv_obj_add_event_cb(page->panel,page_deleted,LV_EVENT_DELETE,page);
     lv_obj_set_size(page->panel,
                     UI_PAGE_ROOT_WIDTH,
                     UI_PAGE_ROOT_HEIGHT);
@@ -828,7 +842,7 @@ bool ui_drybox_page_create(
         LV_OBJ_FLAG_SCROLLABLE);
 
     ui_apply_root_style(page->panel);
-    if (ui_theme_is_studio()) { studio_drybox_create(page); return true; }
+    if (ui_theme_is_studio()) { studio_drybox_create(page); watch_page_fields(); return true; }
 
     const ui_drybox_layout_profile_t *layout =
         &ui_page_layout_profile_current()->drybox;
@@ -866,6 +880,7 @@ bool ui_drybox_page_create(
     build_system_panel(page);
     build_program_panel(page);
 
+    watch_page_fields();
     return true;
 }
 
@@ -873,7 +888,7 @@ void ui_drybox_page_refresh(
     const ui_drybox_page_t *page,
     const ui_drybox_page_state_t *state)
 {
-    if (!page || !page->panel || !state) {
+    if (!page || page != s_page_owner || !page->panel || !state) {
         return;
     }
 
@@ -1145,17 +1160,10 @@ void ui_drybox_page_refresh(
     }
 }
 
-void ui_drybox_page_cleanup(
-    ui_drybox_page_t *page)
+static void retire_page(ui_drybox_page_t *page)
 {
-    if (!page) {
-        return;
-    }
-
-    if (page->panel) {
-        lv_obj_delete(page->panel);
-    }
-
+    if (!page) return;
+    bool owns = page == s_page_owner;
     page->panel = NULL;
     page->banner_label = NULL;
     page->air_label = NULL;
@@ -1165,6 +1173,8 @@ void ui_drybox_page_cleanup(
     page->heater_label = NULL;
     page->fan_label = NULL;
 
+    if (!owns) return;
+    s_page_owner = NULL;
     s_heater_dot = NULL;
     s_fan_dot = NULL;
     s_active_dot = NULL;
@@ -1179,4 +1189,31 @@ void ui_drybox_page_cleanup(
     }
 
     s_action_cb = NULL;
+}
+void ui_drybox_page_cleanup(ui_drybox_page_t *page)
+{
+    if (!page) return;
+    lv_obj_t *panel=page->panel;
+    retire_page(page);
+    if (panel) lv_obj_delete(panel);
+}
+static void page_field_deleted(lv_event_t *event)
+{
+    if (!s_page_owner) return;
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **refs[]={&s_page_owner->banner_label,&s_page_owner->air_label,&s_page_owner->center_label,
+        &s_page_owner->humidity_label,&s_page_owner->target_label,&s_page_owner->heater_label,&s_page_owner->fan_label,
+        &s_heater_dot,&s_fan_dot,&s_active_dot,&s_program_status_label,&s_humidity_condition_label,
+        &s_humidity_bar,&s_studio_humidity_arc,&s_heater_activity_bar};
+    for(size_t i=0;i<sizeof(refs)/sizeof(refs[0]);i++)if(*refs[i]==target)*refs[i]=NULL;
+    for(size_t i=0;i<DRYBOX_PROGRAM_COUNT;i++)if(s_program_buttons[i]==target)s_program_buttons[i]=NULL;
+}
+static void watch_page_fields(void)
+{
+    lv_obj_t *refs[]={s_page_owner->banner_label,s_page_owner->air_label,s_page_owner->center_label,
+        s_page_owner->humidity_label,s_page_owner->target_label,s_page_owner->heater_label,s_page_owner->fan_label,
+        s_heater_dot,s_fan_dot,s_active_dot,s_program_status_label,s_humidity_condition_label,
+        s_humidity_bar,s_studio_humidity_arc,s_heater_activity_bar};
+    for(size_t i=0;i<sizeof(refs)/sizeof(refs[0]);i++)if(refs[i])lv_obj_add_event_cb(refs[i],page_field_deleted,LV_EVENT_DELETE,NULL);
+    for(size_t i=0;i<DRYBOX_PROGRAM_COUNT;i++)if(s_program_buttons[i])lv_obj_add_event_cb(s_program_buttons[i],page_field_deleted,LV_EVENT_DELETE,NULL);
 }

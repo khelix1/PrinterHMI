@@ -9,10 +9,12 @@
 #include "ui_popup.h"
 #include "ui_calibration_dialog.h"
 #include "ui_value_update.h"
+#include "printer_connection_policy.h"
 
 static lv_obj_t *s_popup, *s_body;
 static lv_timer_t *s_timer;
-static uint32_t s_owner;
+static uint32_t s_owner, s_epoch;
+static bool s_query_dispatching;
 static int64_t s_next_query;
 
 static void endstop_retire_popup(void)
@@ -20,6 +22,7 @@ static void endstop_retire_popup(void)
     if (s_timer) lv_timer_delete(s_timer);
     s_timer = NULL;
     s_popup = s_body = NULL;
+    ++s_epoch;
     endstop_status_controller_reset();
 }
 static void endstop_popup_deleted(lv_event_t *event)
@@ -32,12 +35,21 @@ void ui_endstop_status_close(void)
     endstop_retire_popup();
     if (popup) lv_obj_delete(popup);
 }
+static void body_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) != s_body) return;
+    s_body = NULL;
+    ++s_epoch;
+    if (s_timer) lv_timer_delete(s_timer);
+    s_timer = NULL;
+    endstop_status_controller_reset();
+}
 static void close_cb(lv_event_t *event) { (void)event; ui_endstop_status_close(); }
 
 static void refresh(lv_timer_t *timer)
 {
-    (void)timer;
-    if (!s_body) return;
+    if (s_query_dispatching || (timer && timer != s_timer) || !s_popup || !s_body) return;
+    uint32_t epoch = s_epoch, owner = s_owner;
     if (s_owner != moonraker_config_generation()) {
         endstop_status_controller_reset();
         ui_value_set_text(s_body, "Printer changed. Close and reopen Endstops.");
@@ -45,9 +57,8 @@ static void refresh(lv_timer_t *timer)
     }
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
-    if (!state.moonraker_ok || !state.live_data_ok ||
-        !moonraker_live_websocket_connected() ||
-        !strcmp(state.printer_state, "error") || !strcmp(state.printer_state, "shutdown")) {
+    if (epoch != s_epoch || owner != moonraker_config_generation() || !s_body) return;
+    if (printer_connection_reason(&state)[0] || !moonraker_live_websocket_connected()) {
         endstop_status_controller_reset();
         ui_value_set_text(s_body, "Live readings unavailable. Waiting for the printer...");
         return;
@@ -59,15 +70,22 @@ static void refresh(lv_timer_t *timer)
     }
     endstop_status_snapshot_t status;
     endstop_status_controller_snapshot(&status);
+    if (epoch != s_epoch || owner != moonraker_config_generation() || !s_body) return;
     int64_t now = esp_timer_get_time();
     if (!status.waiting && now >= s_next_query &&
         (!status.error[0] || now - status.updated_us >= 2000000LL)) {
-        uint32_t id = endstop_status_controller_begin(s_owner);
-        if (!moonraker_live_websocket_request_endstops(id))
-            endstop_status_controller_failed("Could not request endstops. Retrying...");
         s_next_query = now + 2000000LL;
+        s_query_dispatching = true;
+        uint32_t id = endstop_status_controller_begin(owner);
+        if (epoch != s_epoch || owner != moonraker_config_generation() || !s_body) { s_query_dispatching = false; return; }
+        bool accepted = moonraker_live_websocket_request_endstops(id);
+        s_query_dispatching = false;
+        if (epoch != s_epoch || owner != moonraker_config_generation() || !s_body) return;
+        if (!accepted) endstop_status_controller_failed("Could not request endstops. Retrying...");
+        if (epoch != s_epoch || owner != moonraker_config_generation() || !s_body) return;
         endstop_status_controller_snapshot(&status);
     }
+    if (epoch != s_epoch || owner != moonraker_config_generation() || !s_body) return;
     if (status.waiting) {
         /* Keep the last rendered sample briefly; never manufacture a new state. */
         if (!status.count && now - status.updated_us < 500000LL) return;
@@ -93,7 +111,9 @@ static void refresh(lv_timer_t *timer)
 
 void ui_endstop_status_show(void)
 {
+    if (s_popup && s_owner != moonraker_config_generation()) ui_endstop_status_close();
     if (s_popup) { lv_obj_move_foreground(s_popup); return; }
+    ++s_epoch;
     s_owner = moonraker_config_generation();
     s_next_query = 0;
     endstop_status_controller_reset();
@@ -104,6 +124,7 @@ void ui_endstop_status_show(void)
 
     lv_obj_t *list = ui_cal_dialog_body(s_popup);
     s_body = ui_cal_dialog_text(list, "Waiting for the first live sample...");
+    lv_obj_add_event_cb(s_body, body_deleted, LV_EVENT_DELETE, NULL);
 
     ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_cb, NULL, NULL);
     s_timer = lv_timer_create(refresh, 250, NULL);

@@ -7,6 +7,7 @@
 static uint16_t raster[1024*600];
 static size_t event_count;
 static uint32_t sequence;
+static unsigned read_hook,clear_hook;
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t*b){(void)a;(void)b;return false;}
@@ -14,12 +15,17 @@ bool custom_theme_surface_opacity(uint8_t*a){(void)a;return false;}
 size_t operator_event_log_count(void){return event_count;}
 bool operator_event_log_get(size_t index,operator_event_t *out)
 {
+    unsigned hook=read_hook;read_hook=0;
+    if(hook==1)ui_event_history_popup_close();
+    if(hook==2){ui_event_history_popup_close();ui_event_history_popup_show();}
+    if(hook==3)refresh_timer_cb(NULL);
+    if(hook==4)lv_obj_delete(s_list);
     if(index>=event_count)return false;
     *out=(operator_event_t){.sequence=sequence-(uint32_t)index,.uptime_seconds=100+(uint32_t)index,.level=index%3};
     snprintf(out->message,sizeof(out->message),"Sermoon D1: connection or command needs review. A complete long event message stays readable with large text.");
     return true;
 }
-void operator_event_log_clear(void){event_count=0;}
+void operator_event_log_clear(void){event_count=0;if(clear_hook){clear_hook=0;ui_event_history_popup_close();}}
 static void inside(lv_obj_t *child,lv_obj_t *parent)
 {
     lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);
@@ -86,6 +92,10 @@ int main(void)
         follow_cb(NULL);assert(s_follow_live&&s_rendered_sequence==101);check_layout();
         clear_cb(NULL);assert(!event_count&&lv_obj_get_child_count(s_list)==1);check_layout();
         lv_obj_delete(s_popup);assert(!s_popup&&!s_list&&!s_refresh_timer&&!s_follow_button);
+        event_count=2;sequence++;ui_event_history_popup_show();read_hook=1;sequence++;refresh_timer_cb(NULL);assert(!s_popup&&!s_list&&!s_refresh_timer);
+        ui_event_history_popup_show();read_hook=2;sequence++;refresh_timer_cb(NULL);assert(s_popup&&s_list&&s_refresh_timer);refresh_timer_cb(NULL);assert(lv_obj_get_child_count(s_list)==2);
+        read_hook=3;sequence++;refresh_timer_cb(NULL);assert(s_popup&&s_list);read_hook=4;sequence++;refresh_timer_cb(NULL);assert(s_popup&&!s_list&&!s_refresh_timer);ui_event_history_popup_close();
+        ui_event_history_popup_show();lv_obj_delete(s_follow_button);assert(!s_follow_button);follow_cb(NULL);refresh_timer_cb(NULL);clear_hook=1;clear_cb(NULL);assert(!s_popup&&!s_list&&!s_refresh_timer);
         ui_event_history_popup_show();ui_event_history_popup_close();assert(!s_popup&&!s_refresh_timer);
     }
     lv_display_delete(display);lv_deinit();

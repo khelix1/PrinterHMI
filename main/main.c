@@ -158,6 +158,7 @@ static void sntp_wait_task(void *arg);
 #include "telemetry_history.h"
 #include "ui_printer.h"
 #include "ui_printer_motion.h"
+#include "ui_printer_toolhead.h"
 #include "ui_printer_popups.h"
 #include "ui_filament_recovery.h"
 #include "ui_printer_live_status.h"
@@ -2132,6 +2133,7 @@ static void printer_ui_controller_show_object_bridge(void)
 /* BEGIN LEGACY PRINTER PAGE BLOCK */
 void ui_printer_destroy(void)
 {
+    ui_printer_toolhead_close();
     /* Retire page-owned actions before LVGL releases their objects. */
     memset(&printer_actions, 0, sizeof(printer_actions));
 
@@ -3963,6 +3965,7 @@ void app_main(void)
     ui_toast_init();
     ui_toast_set_printer_chooser_action(printer_chooser_open_from_topbar);
     ui_printer_popups_set_control_sender(action_send_gcode_inline);
+    ui_printer_toolhead_set_sender(action_send_gcode_inline);
     onboarding_controller_init();
 
     /* Apply the saved local timezone before any clock or SNTP path starts. */

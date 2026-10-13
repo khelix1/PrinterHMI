@@ -1067,3 +1067,41 @@ After flashing, check nozzle/bed presets and Custom temperature, fan presets,
 Back/keyboard cancel, and reopening a control after a printer change. Physical
 adjustment during a print remains pending. Existing OTA, false-offline and Files
 scrolling-freeze verification remain open where documented.
+
+
+### Reviewed motion/hotend patch and responsive Toolhead layout
+
+`tools/audit/toolhead_dialog_safety_test.py`, `hotend_layout_test.py` and
+`control_popups_layout_test.py` passed against the exact user-supplied motion/
+hotend safety patch. The Toolhead audit additionally checks native panel bounds,
+centered single-line button labels, pointer dragging of the content, pinned Close,
+final-control reachability and exact jog/extrude/runtime-offset commands across
+all five themes/densities/text sizes and 1024x600, 640x600 and 480x400 viewports.
+
+Run `python3 tools/audit/toolhead_dialog_safety_test.py` with managed LVGL sources
+(or `--lvgl-dir`). After flashing, check Toolhead with normal and large text in all
+themes: Close stays visible, scrolling reaches Filament and runtime offset, step
+selection is clear and reopening does not duplicate the popup. Verify physical
+motion, extrusion, offsets and hotend activation separately when appropriate.
+These physical checks, intermittent OTA and the documented false-offline/Files
+freeze verification remain pending. Files' inline readiness caption stays hidden.
+
+### Expanded Toolhead Z and extrusion steps
+
+The real LVGL toolhead_dialog_safety audit passes all five themes, three densities, normal/large text and 1024/640/480 widths. It checks exact commands for all eight Z lengths in both directions, all ten signed runtime offsets, Reset, and both extrusion directions at all five lengths, plus button bounds, real pointer scrolling and pinned Close. Firmware build and physical movement/extrusion checks remain pending.
+
+### Toolhead tab fit and touch checks
+
+The actual LVGL audit verifies zero overflow and whole-panel visibility in all three tabs at 1024x600 across all five themes, three densities and both text sizes. Real pointer taps verify tab switching without sending commands; selections and timers survive tab switching/reopening. Smaller views retain working pointer scrolling. Existing exact-command checks for every Z length, signed runtime offset and extrusion length still pass, alongside ownership, duplicate-send, retry and deletion checks. Fifteen native renders were inspected across all themes with large text. ESP-IDF build and physical panel/movement checks remain pending.
+
+### Filament Recovery lifecycle and fit
+
+Toolhead tabs passed the user panel check. The actual LVGL filament_recovery_test passes all five themes, three densities and normal/large text; layout fixtures additionally cover 1024x600, 640x600 and 480x400. Tests cover exact Heat/Unload routing and Resume interception, temperature bounds, missing macros, cold nozzle, homing, unknown/empty/truncated sensors, offline/printer ownership, failure/retry, duplicate/reentrant callbacks, close/reopen during dispatch, independent field deletion and timer retirement. Native-panel checks verify no scroll overflow, button bounds and text fit, fixed Close and actual pointer temperature/Close taps. Five large-text renders were inspected. Macro files are unchanged; physical runout/load/purge/resume validation and target build remain pending. The separate macro simulation could not run here because Jinja2 is unavailable; no macro-simulation pass is claimed. Earlier false-offline/Files freeze and intermittent OTA checks remain open.
+
+### Whole-print Cancel readiness and lifecycle
+
+The actual LVGL Cancel audit now includes Studio and passes five themes, three densities, both text sizes and 1024/640/480 widths including a 240-pixel-high viewport. Checks cover pinned actions, Back without dispatch, exact CANCEL_PRINT, rejected send/retry, offline/waiting/error/inactive states, printer switching, repeat-open sender ownership, duplicate/reentrant callbacks, deletion/reopening mid-send and independent status deletion. The existing temperature/fan audit is run to check the shared popup source. Filament Recovery was reported good on the panel; physical recovery and cancellation checks, target build, false-offline/Files freeze and intermittent OTA verification remain pending.
+
+### Cancel Object lifecycle and retry checks
+
+The actual LVGL object audit now includes Studio and passes all five themes, three densities, both text sizes and 1024/640/480 widths. Fixtures cover 48 long names, map projection, pinned actions, reviewed-name dispatch after list selection/live reordering, failure/retry retaining the displayed snapshot, duplicate/reentrant callbacks, deletion/reopening during dispatch, sender capture, printer/readiness gates, removed/already-excluded names and independent status deletion. The whole-print Cancel audit also passes with the shared source. User panel confirmation for whole-print Cancel is recorded; actual printing/cancellation, target build, false-offline/Files freeze and intermittent OTA verification remain pending.

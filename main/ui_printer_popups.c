@@ -1,4 +1,5 @@
 #include "ui_printer_popups.h"
+#include "ui_printer_toolhead.h"
 #include "ui_value_update.h"
 #include "moonraker_config_controller.h"
 #include "ui_filament_recovery.h"
@@ -16,6 +17,11 @@
 #include <string.h>
 
 static lv_obj_t *s_cancel_confirm_popup = NULL;
+static lv_obj_t *s_cancel_status;
+static ui_printer_popups_send_gcode_cb_t s_cancel_send;
+static uint32_t s_cancel_owner, s_cancel_epoch;
+static bool s_cancel_dispatching, s_cancel_pending;
+static uint32_t s_cancel_sent_owner, s_cancel_sent_at;
 static lv_obj_t *s_object_list_popup = NULL;
 static lv_obj_t *s_object_confirm_popup = NULL;
 static ui_printer_popups_send_gcode_cb_t s_send_gcode_cb = NULL;
@@ -25,7 +31,12 @@ static lv_obj_t *s_object_map = NULL;
 static lv_obj_t *s_object_rows[MOONRAKER_EXCLUDE_MAX_OBJECTS];
 static lv_obj_t *s_exclude_action_button = NULL;
 static int s_selected_object_index = -1;
-static uint32_t s_object_owner;
+static uint32_t s_object_owner, s_object_epoch;
+static ui_printer_popups_send_gcode_cb_t s_object_send;
+static lv_obj_t *s_object_status;
+static bool s_object_dispatching, s_object_pending;
+static uint32_t s_object_sent_owner, s_object_sent_at;
+static char s_object_sent_name[MOONRAKER_EXCLUDE_NAME_MAX];
 static char s_confirm_object[MOONRAKER_EXCLUDE_NAME_MAX];
 static lv_obj_t *control_layout(lv_obj_t *popup, const char *title);
 static lv_obj_t *control_footer(lv_obj_t *popup);
@@ -78,30 +89,81 @@ static int s_custom_temp_initial = 0;
 
 static void cancel_confirm_deleted(lv_event_t *event)
 {
-    if (lv_event_get_target(event) == s_cancel_confirm_popup) s_cancel_confirm_popup = NULL;
+    if (lv_event_get_target(event) != s_cancel_confirm_popup) return;
+    s_cancel_confirm_popup = s_cancel_status = NULL;
+    s_cancel_send = NULL;
+    ++s_cancel_epoch;
 }
 static void close_cancel_confirm_cb(lv_event_t *event)
 {
     (void)event;
     if (s_cancel_confirm_popup) lv_obj_delete(s_cancel_confirm_popup);
 }
+static void cancel_status_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_cancel_status) s_cancel_status = NULL;
+}
+static void cancel_feedback(const char *text)
+{
+    if (s_cancel_status) lv_label_set_text(s_cancel_status, text);
+}
 static void confirm_cancel_cb(lv_event_t *event)
 {
-    if (s_send_gcode_cb) s_send_gcode_cb("CANCEL_PRINT");
-    close_cancel_confirm_cb(event);
+    if (!s_cancel_confirm_popup || s_cancel_dispatching) return;
+    if (event && lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (s_cancel_owner != moonraker_config_generation()) {
+        cancel_feedback("Printer changed. Back out and reopen Cancel.");return;
+    }
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    const char *reason = printer_connection_reason(&state);
+    if (reason[0]) { cancel_feedback(reason);return; }
+    if (strcmp(state.printer_state,"printing") && strcmp(state.printer_state,"paused")) {
+        cancel_feedback("No active print to cancel. Back out and check the printer.");return;
+    }
+    if (s_cancel_pending && s_cancel_sent_owner == s_cancel_owner &&
+        lv_tick_elaps(s_cancel_sent_at) < 5000) {
+        cancel_feedback("Cancel already sent. Check the printer before retrying.");return;
+    }
+    if (!s_control_send && !s_cancel_send) {
+        cancel_feedback("Cancel unavailable. Back out and reopen this control.");return;
+    }
+    lv_obj_t *popup = s_cancel_confirm_popup;
+    uint32_t epoch = s_cancel_epoch, owner = s_cancel_owner;
+    s_cancel_dispatching = true;
+    bool accepted = false;
+    if (s_control_send) accepted = s_control_send("CANCEL_PRINT");
+    else { s_cancel_send("CANCEL_PRINT");accepted = true; }
+    s_cancel_dispatching = false;
+    if (accepted) {
+        s_cancel_pending = true;s_cancel_sent_owner = owner;s_cancel_sent_at = lv_tick_get();
+    }
+    if (epoch != s_cancel_epoch || popup != s_cancel_confirm_popup ||
+        owner != moonraker_config_generation()) return;
+    if (!accepted) { cancel_feedback("Cancel not sent. Check connection and retry.");return; }
+    close_cancel_confirm_cb(NULL);
 }
 static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
 {
-    s_send_gcode_cb = send_cb;
+    if (s_cancel_confirm_popup && s_cancel_owner != moonraker_config_generation()) close_cancel_confirm_cb(NULL);
     if (s_cancel_confirm_popup) { lv_obj_move_foreground(s_cancel_confirm_popup); return; }
-    s_cancel_confirm_popup = ui_popup_create(lv_layer_top(), control_width(520), control_height(260), UI_POPUP_DANGER);
+    s_cancel_send = send_cb;
+    s_cancel_owner = moonraker_config_generation();
+    s_cancel_confirm_popup = ui_popup_create(lv_layer_top(), control_width(620), control_height(320), UI_POPUP_DANGER);
     if (!s_cancel_confirm_popup) return;
+    ++s_cancel_epoch;
     lv_obj_add_event_cb(s_cancel_confirm_popup, cancel_confirm_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = control_layout(s_cancel_confirm_popup, ui_text("CANCEL PRINT?"));
     lv_obj_t *warning = lv_label_create(body);
     lv_label_set_text(warning, "This will stop the active print job.");
     ui_apply_custom_label_style(warning, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_width(warning, LV_PCT(100));
+    s_cancel_status = lv_label_create(body);
+    lv_label_set_text(s_cancel_status, "");
+    ui_apply_custom_label_style(s_cancel_status, UI_FONT_BODY, UI_WARN);
+    lv_obj_set_width(s_cancel_status, LV_PCT(100));
+    lv_obj_add_event_cb(s_cancel_status, cancel_status_deleted, LV_EVENT_DELETE, NULL);
+    if (s_cancel_pending && s_cancel_sent_owner == s_cancel_owner && lv_tick_elaps(s_cancel_sent_at) < 5000)
+        cancel_feedback("Cancel already sent. Check the printer before retrying.");
     lv_obj_t *footer = control_footer(s_cancel_confirm_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
         0, 0, 150, 48, close_cancel_confirm_cb, NULL, NULL);
@@ -113,7 +175,8 @@ static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
 static void object_confirm_deleted(lv_event_t *event)
 {
     if (lv_event_get_target(event) == s_object_confirm_popup) {
-        s_object_confirm_popup = NULL;
+        s_object_confirm_popup = s_object_status = NULL;
+        ++s_object_epoch;
         s_confirm_object[0] = 0;
     }
 }
@@ -126,6 +189,8 @@ static void object_list_deleted(lv_event_t *event)
 {
     if (lv_event_get_target(event) != s_object_list_popup) return;
     s_object_list_popup = NULL;
+    s_object_send = NULL;
+    ++s_object_epoch;
     close_object_confirm_cb(NULL);
     if (s_exclude_snapshot) heap_caps_free(s_exclude_snapshot);
     s_exclude_snapshot = NULL;
@@ -157,26 +222,64 @@ static bool object_name_is_safe(const char *name)
 }
 
 
+static void object_status_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_object_status) s_object_status = NULL;
+}
+static void object_feedback(const char *message)
+{
+    if (s_object_status) lv_label_set_text(s_object_status, message);
+}
 static void confirm_cancel_object_cb(lv_event_t *event)
 {
-    (void)event;
+    if (!s_object_confirm_popup || !s_object_list_popup || s_object_dispatching) return;
+    if (event && lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (s_object_owner != moonraker_config_generation()) {
+        object_feedback("Printer changed. Close and reopen the object list.");return;
+    }
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    const char *reason = printer_connection_reason(&state);
+    if (reason[0]) { object_feedback(reason);return; }
+    if (strcmp(state.printer_state,"printing") && strcmp(state.printer_state,"paused")) {
+        object_feedback("No active print. Close and check the printer.");return;
+    }
+    if (!object_name_is_safe(s_confirm_object)) return;
+    if (s_object_pending && s_object_sent_owner == s_object_owner &&
+        !strcmp(s_object_sent_name,s_confirm_object) && lv_tick_elaps(s_object_sent_at) < 5000) {
+        object_feedback("Exclusion already sent. Check the printer before retrying.");return;
+    }
+    /* Fresh validation must not overwrite the displayed list or its row data. */
+    moonraker_exclude_state_t *live = heap_caps_calloc(1, sizeof(*live), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!live) live = calloc(1, sizeof(*live));
+    if (!live) { object_feedback("Not enough memory to verify. Back out and retry.");return; }
+    moonraker_exclude_state_snapshot(live);
+    size_t count = live->object_count;
+    if (count > MOONRAKER_EXCLUDE_MAX_OBJECTS) count = MOONRAKER_EXCLUDE_MAX_OBJECTS;
     bool valid = false;
-    if (s_exclude_snapshot && s_object_owner == moonraker_config_generation() &&
-        object_name_is_safe(s_confirm_object)) {
-        // The confirmation owns its name; a later list selection cannot redirect it.
-        moonraker_exclude_state_snapshot(s_exclude_snapshot);
-        size_t count = s_exclude_snapshot->object_count;
-        if (count > MOONRAKER_EXCLUDE_MAX_OBJECTS) count = MOONRAKER_EXCLUDE_MAX_OBJECTS;
-        for (size_t i = 0; i < count; ++i) {
-            if (s_exclude_snapshot->available && !s_exclude_snapshot->objects[i].excluded &&
-                !strcmp(s_exclude_snapshot->objects[i].name, s_confirm_object)) valid = true;
-        }
+    for (size_t i = 0; i < count; ++i)
+        if (live->available && !live->objects[i].excluded &&
+            !strcmp(live->objects[i].name,s_confirm_object)) valid = true;
+    heap_caps_free(live);
+    if (!valid) { object_feedback("Object unavailable or already excluded. Back out and refresh the list.");return; }
+    if (!s_control_send && !s_object_send) { object_feedback("Exclusion unavailable. Close and reopen the list.");return; }
+    char name[sizeof(s_confirm_object)], command[sizeof(s_confirm_object)+32];
+    snprintf(name,sizeof(name),"%s",s_confirm_object);
+    int written = snprintf(command,sizeof(command),"EXCLUDE_OBJECT NAME=%s",name);
+    if (written <= 0 || (size_t)written >= sizeof(command)) return;
+    lv_obj_t *list = s_object_list_popup, *confirm = s_object_confirm_popup;
+    uint32_t owner = s_object_owner, epoch = s_object_epoch;
+    s_object_dispatching = true;
+    bool accepted = false;
+    if (s_control_send) accepted = s_control_send(command);
+    else { s_object_send(command);accepted = true; }
+    s_object_dispatching = false;
+    if (accepted) {
+        s_object_pending = true;s_object_sent_owner = owner;s_object_sent_at = lv_tick_get();
+        snprintf(s_object_sent_name,sizeof(s_object_sent_name),"%s",name);
     }
-    if (valid && s_object_owner == moonraker_config_generation() && s_send_gcode_cb) {
-        char command[sizeof(s_confirm_object) + 32];
-        int written = snprintf(command, sizeof(command), "EXCLUDE_OBJECT NAME=%s", s_confirm_object);
-        if (written > 0 && (size_t)written < sizeof(command)) s_send_gcode_cb(command);
-    }
+    if (epoch != s_object_epoch || list != s_object_list_popup || confirm != s_object_confirm_popup ||
+        owner != moonraker_config_generation()) return;
+    if (!accepted) { object_feedback("Exclusion not sent. Selection kept; check connection and retry.");return; }
     close_object_list_cb(NULL);
 }
 static void show_object_confirm(const char *name)
@@ -187,6 +290,7 @@ static void show_object_confirm(const char *name)
     memcpy(s_confirm_object, name, length); s_confirm_object[length] = 0;
     s_object_confirm_popup = ui_popup_create(lv_layer_top(), control_width(560), control_height(320), UI_POPUP_DANGER);
     if (!s_object_confirm_popup) return;
+    ++s_object_epoch;
     lv_obj_add_event_cb(s_object_confirm_popup, object_confirm_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = control_layout(s_object_confirm_popup, ui_text("CANCEL OBJECT?"));
     lv_obj_t *message = lv_label_create(body);
@@ -197,6 +301,11 @@ static void show_object_confirm(const char *name)
     lv_label_set_text(object, s_confirm_object);
     ui_apply_custom_label_style(object, UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT);
     lv_obj_set_width(object, LV_PCT(100));
+    s_object_status = lv_label_create(body);
+    lv_label_set_text(s_object_status, "");
+    ui_apply_custom_label_style(s_object_status, UI_FONT_BODY, UI_WARN);
+    lv_obj_set_width(s_object_status, LV_PCT(100));
+    lv_obj_add_event_cb(s_object_status, object_status_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *footer = control_footer(s_object_confirm_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
         0, 0, 170, 48, close_object_confirm_cb, NULL, NULL);
@@ -679,7 +788,9 @@ void ui_printer_popups_show_cancel(
 void ui_printer_popups_show_cancel_object(
     ui_printer_popups_send_gcode_cb_t send_cb)
 {
+    if (s_object_list_popup && s_object_owner != moonraker_config_generation()) close_object_list_cb(NULL);
     if (s_object_list_popup) { lv_obj_move_foreground(s_object_list_popup); return; }
+    s_object_send = send_cb;
     s_send_gcode_cb = send_cb;
     s_object_owner = moonraker_config_generation();
 
@@ -1127,6 +1238,15 @@ static char s_hotend_row_names[MOONRAKER_MAX_HOTENDS][MOONRAKER_HOTEND_NAME_MAX]
 static lv_obj_t *s_hotend_temp_buttons[MOONRAKER_MAX_HOTENDS];
 static lv_obj_t *s_hotend_confirm_button;
 static char s_hotend_confirm_name[MOONRAKER_HOTEND_NAME_MAX];
+static lv_obj_t *s_hotend_confirm_status;
+static uint32_t s_hotend_epoch;
+static bool s_hotend_dispatching, s_hotend_pending;
+static uint32_t s_hotend_sent_at;
+static uint32_t s_hotend_pending_owner;
+static char s_hotend_pending_name[MOONRAKER_HOTEND_NAME_MAX];
+static bool (*s_hotend_send)(const char *command);
+
+static void close_hotend_list_cb(lv_event_t *event);
 
 static const moonraker_hotend_t *hotend_row(size_t row)
 {
@@ -1153,6 +1273,8 @@ static void hotend_activate_deleted(lv_event_t *event)
     if (lv_event_get_target(event) == s_hotend_activate_popup) {
         s_hotend_activate_popup = s_hotend_confirm_button = NULL;
         s_hotend_confirm_name[0] = 0;
+        s_hotend_confirm_status = NULL;
+        ++s_hotend_epoch;
     }
 }
 static void close_hotend_activate_cb(lv_event_t *event)
@@ -1163,24 +1285,58 @@ static void close_hotend_activate_cb(lv_event_t *event)
 static void confirm_hotend_activate_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_hotend_activate_popup || s_hotend_dispatching || s_hotend_pending) return;
+    if (s_hotend_owner != moonraker_config_generation()) {
+        close_hotend_list_cb(NULL);
+        return;
+    }
     moonraker_state_snapshot(&s_hotend_list_state);
     const moonraker_hotend_t *hotend = hotend_row(s_hotend_activate_index);
-    if (hotend_live_here() && hotend && !hotend->active && hotend_name_safe(hotend->object_name) &&
-        !strcmp(hotend->object_name, s_hotend_confirm_name) &&
-        !printer_controller_is_live_state(s_hotend_list_state.printer_state)) {
-        char command[96];
-        snprintf(command, sizeof(command), "ACTIVATE_EXTRUDER EXTRUDER=%s", s_hotend_confirm_name);
-        if (s_send_gcode_cb) s_send_gcode_cb(command);
+    if (!hotend_live_here() || printer_connection_reason(&s_hotend_list_state)[0] ||
+        !hotend || !hotend_name_safe(hotend->object_name) ||
+        strcmp(hotend->object_name, s_hotend_confirm_name) ||
+        printer_controller_is_live_state(s_hotend_list_state.printer_state)) {
+        lv_label_set_text(s_hotend_confirm_status, "Unavailable. Check printer state and retry.");
+        return;
     }
-    close_hotend_activate_cb(NULL);
+    if (hotend->active) { close_hotend_activate_cb(NULL); return; }
+    char command[MOONRAKER_HOTEND_NAME_MAX + 40];
+    int written = snprintf(command, sizeof(command),
+        "ACTIVATE_EXTRUDER EXTRUDER=%s", s_hotend_confirm_name);
+    if (written <= 0 || (size_t)written >= sizeof(command)) return;
+    lv_obj_t *popup = s_hotend_activate_popup;
+    uint32_t epoch = s_hotend_epoch, owner = s_hotend_owner;
+    char selected_name[MOONRAKER_HOTEND_NAME_MAX];
+    snprintf(selected_name, sizeof(selected_name), "%s", s_hotend_confirm_name);
+    s_hotend_dispatching = true;
+    lv_obj_add_state(s_hotend_confirm_button, LV_STATE_DISABLED);
+    bool accepted = s_hotend_send && s_hotend_send(command);
+    s_hotend_dispatching = false;
+    /* Keep a submitted selection pending even if BACK/cleanup closed the UI.
+     * Reopening the list must not submit the same outstanding action again. */
+    if (accepted && owner == moonraker_config_generation()) {
+        s_hotend_pending = true;
+        s_hotend_pending_owner = owner;
+        snprintf(s_hotend_pending_name, sizeof(s_hotend_pending_name), "%s", selected_name);
+        s_hotend_sent_at = lv_tick_get();
+    }
+    if (s_hotend_epoch != epoch || s_hotend_activate_popup != popup ||
+        owner != moonraker_config_generation()) return;
+    if (!accepted) {
+        lv_label_set_text(s_hotend_confirm_status, "Not sent. Check connection and retry.");
+        lv_obj_remove_state(s_hotend_confirm_button, LV_STATE_DISABLED);
+        return;
+    }
+    lv_label_set_text(s_hotend_confirm_status, "Sent. Waiting for active-hotend confirmation...");
 }
 static void hotend_activate_event_cb(lv_event_t *event)
 {
-    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !s_hotend_list_popup || s_hotend_dispatching || s_hotend_pending) return;
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
     moonraker_state_snapshot(&s_hotend_list_state);
     const moonraker_hotend_t *hotend = hotend_row(index);
-    if (!hotend_live_here() || !hotend || hotend->active || !hotend_name_safe(hotend->object_name) ||
+    if (!hotend_live_here() || printer_connection_reason(&s_hotend_list_state)[0] || !hotend || hotend->active || !hotend_name_safe(hotend->object_name) ||
         printer_controller_is_live_state(s_hotend_list_state.printer_state)) return;
     if (s_hotend_activate_popup) { lv_obj_move_foreground(s_hotend_activate_popup); return; }
     s_hotend_activate_index = index;
@@ -1188,6 +1344,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
     s_hotend_activate_popup = ui_popup_create(lv_layer_top(), control_width(560),
         control_height(300), UI_POPUP_STANDARD);
     if (!s_hotend_activate_popup) return;
+    ++s_hotend_epoch;
     lv_obj_add_event_cb(s_hotend_activate_popup, hotend_activate_deleted, LV_EVENT_DELETE, NULL);
     char title[48], text[180];
     snprintf(title, sizeof(title), "ACTIVATE T%u?", (unsigned)index);
@@ -1198,6 +1355,10 @@ static void hotend_activate_event_cb(lv_event_t *event)
     lv_label_set_text(label, text);
     ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_width(label, LV_PCT(100));
+    s_hotend_confirm_status = lv_label_create(body);
+    lv_label_set_text(s_hotend_confirm_status, "");
+    ui_apply_custom_label_style(s_hotend_confirm_status, UI_FONT_CAPTION, UI_TEXT);
+    lv_obj_set_width(s_hotend_confirm_status, LV_PCT(100));
     lv_obj_t *footer = control_footer(s_hotend_activate_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
         LV_SYMBOL_LEFT " BACK", 0, 0, 170, 48, close_hotend_activate_cb, NULL, NULL);
@@ -1209,9 +1370,30 @@ static void refresh_hotend_list(lv_timer_t *timer)
 {
     (void)timer;
     if (!s_hotend_list_popup) return;
+    if (s_hotend_owner != moonraker_config_generation()) {
+        close_hotend_list_cb(NULL);
+        return;
+    }
     moonraker_state_snapshot(&s_hotend_list_state);
-    bool live = hotend_live_here();
+    bool live = hotend_live_here() && !printer_connection_reason(&s_hotend_list_state)[0];
     bool activation_locked = printer_controller_is_live_state(s_hotend_list_state.printer_state);
+    if (s_hotend_pending) {
+        bool confirmed = false;
+        size_t count = s_hotend_list_state.hotend_count;
+        if (count > MOONRAKER_MAX_HOTENDS) count = MOONRAKER_MAX_HOTENDS;
+        for (size_t i = 0; live && i < count; ++i)
+            if (s_hotend_list_state.hotends[i].active &&
+                !strcmp(s_hotend_list_state.hotends[i].object_name, s_hotend_pending_name))
+                confirmed = true;
+        if (s_hotend_pending_owner != moonraker_config_generation() || confirmed ||
+            lv_tick_elaps(s_hotend_sent_at) >= 5000) {
+            s_hotend_pending = false;
+            s_hotend_pending_name[0] = 0;
+            if (confirmed) close_hotend_activate_cb(NULL);
+            else if (s_hotend_confirm_status) lv_label_set_text(s_hotend_confirm_status,
+                "Selection not confirmed. Check printer before retrying.");
+        }
+    }
     for (size_t i = 0; i < s_hotend_row_count; ++i) {
         const moonraker_hotend_t *hotend = live ? hotend_row(i) : NULL;
         if (!hotend) {
@@ -1229,18 +1411,21 @@ static void refresh_hotend_list(lv_timer_t *timer)
         else snprintf(temperature, sizeof(temperature), "-- / -- C");
         ui_value_set_text(s_hotend_temp_labels[i], temperature);
         ui_value_set_text(s_hotend_activate_labels[i], hotend->active ? ui_text(LV_SYMBOL_OK " ACTIVE") : ui_text("MAKE ACTIVE"));
-        bool disabled = hotend->active || activation_locked || !hotend_name_safe(hotend->object_name);
+        bool disabled = hotend->active || activation_locked || s_hotend_pending ||
+            s_hotend_dispatching || !hotend_name_safe(hotend->object_name);
         if (disabled) lv_obj_add_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
         else lv_obj_remove_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
         ui_value_set_color(s_hotend_temp_labels[i], UI_TEXT_BRIGHT, 0);
         if (hotend_name_safe(hotend->object_name)) lv_obj_remove_state(s_hotend_temp_buttons[i], LV_STATE_DISABLED);
         else lv_obj_add_state(s_hotend_temp_buttons[i], LV_STATE_DISABLED);
-        if (lv_obj_get_style_opa(s_hotend_activate_buttons[i], 0) != (disabled ? LV_OPA_50 : LV_OPA_COVER))
-            lv_obj_set_style_opa(s_hotend_activate_buttons[i], disabled ? LV_OPA_50 : LV_OPA_COVER, 0);
+        /* ui_button owns disabled opacity for the active theme. Comparing
+         * resolved disabled opacity with a base selector causes Studio to
+         * invalidate the button on every unchanged telemetry refresh. */
     }
     if (s_hotend_confirm_button) {
         const moonraker_hotend_t *hotend = hotend_row(s_hotend_activate_index);
         if (live && hotend && !hotend->active && !activation_locked &&
+            !s_hotend_pending && !s_hotend_dispatching && hotend_name_safe(hotend->object_name) &&
             !strcmp(hotend->object_name, s_hotend_confirm_name))
             lv_obj_remove_state(s_hotend_confirm_button, LV_STATE_DISABLED);
         else lv_obj_add_state(s_hotend_confirm_button, LV_STATE_DISABLED);
@@ -1254,6 +1439,7 @@ static void hotend_list_deleted(lv_event_t *event)
     if (s_hotend_refresh_timer) lv_timer_delete(s_hotend_refresh_timer);
     s_hotend_refresh_timer = NULL;
     s_hotend_row_count = 0;
+    s_hotend_send = NULL;
     memset(s_hotend_row_names, 0, sizeof(s_hotend_row_names));
     memset(s_hotend_name_labels, 0, sizeof(s_hotend_name_labels));
     memset(s_hotend_temp_labels, 0, sizeof(s_hotend_temp_labels));
@@ -1269,7 +1455,8 @@ static void close_hotend_list_cb(lv_event_t *event)
 
 static void hotend_temperature_event_cb(lv_event_t *event)
 {
-    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !s_hotend_list_popup || s_hotend_dispatching || s_hotend_pending) return;
 
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
     moonraker_state_snapshot(&s_hotend_list_state);
@@ -1365,10 +1552,13 @@ static void hotend_row_resize(lv_event_t *event)
 void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
     const moonraker_state_t *state)
 {
-    if (!state || state->hotend_count == 0) return;
+    if (!state || state->hotend_count == 0 || s_hotend_dispatching) return;
+    if (s_hotend_list_popup && s_hotend_owner != moonraker_config_generation())
+        close_hotend_list_cb(NULL);
     if (s_hotend_list_popup) { lv_obj_move_foreground(s_hotend_list_popup); return; }
     s_send_gcode_cb = send_cb;
     s_hotend_list_state = *state;
+    s_hotend_send = s_control_send;
     s_hotend_owner = moonraker_config_generation();
     s_hotend_row_count = state->hotend_count < MOONRAKER_MAX_HOTENDS ? state->hotend_count : MOONRAKER_MAX_HOTENDS;
     s_hotend_list_popup = ui_popup_create(lv_layer_top(), control_width(760), control_height(500), UI_POPUP_STANDARD);
@@ -1407,9 +1597,11 @@ void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
         lv_obj_set_grid_dsc_array(actions, action_columns, action_rows);
         lv_obj_set_style_pad_column(actions, UI_GAP_CARD, 0);
         s_hotend_temp_buttons[i] = ui_popup_add_action_at(actions, UI_POPUP_ACTION_CHOICE,
-            ui_text("SET TEMP"), 0, 0, 1, 52, hotend_temperature_event_cb, (void *)(uintptr_t)i, NULL);
+            ui_text("SET TEMP"), 0, 0, 1, ui_theme_is_studio() ? 72 : 52,
+            hotend_temperature_event_cb, (void *)(uintptr_t)i, NULL);
         s_hotend_activate_buttons[i] = ui_popup_add_action_at(actions, UI_POPUP_ACTION_CONFIRM,
-            ui_text("MAKE ACTIVE"), 0, 0, 1, 52, hotend_activate_event_cb, (void *)(uintptr_t)i,
+            ui_text("MAKE ACTIVE"), 0, 0, 1, ui_theme_is_studio() ? 72 : 52,
+            hotend_activate_event_cb, (void *)(uintptr_t)i,
             &s_hotend_activate_labels[i]);
         lv_obj_set_grid_cell(s_hotend_temp_buttons[i], LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
         lv_obj_set_grid_cell(s_hotend_activate_buttons[i], LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_START, 0, 1);
@@ -1863,6 +2055,7 @@ void ui_printer_popups_show_printer_status(
 
 void ui_printer_popups_close_all(void)
 {
+    ui_printer_toolhead_close();
     ui_filament_recovery_close();
     ui_dashboard_status_popup_close();
     close_custom_temp_cb(NULL);

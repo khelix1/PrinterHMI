@@ -1359,3 +1359,50 @@ text and 1024/640/480 widths (480 uses a 400px-high viewport). Additional callba
 hooks cover deletion, printer changes, nested actions, repeated external teardown,
 failed-send retry and shutdown/printing gating. Firmware and physical print-time
 adjustment tests remain pending.
+
+
+## Applied motion/hotend patch review and native Toolhead form (2026-10-12)
+
+The user-supplied `apply_motion_hotend_dialog_safety(1).py` is the local applied
+baseline after checkpoint 62b1962, not yet published. Its exact source payload was
+reviewed and its actual LVGL Toolhead safety, hotend layout and temperature/fan
+control audits passed. The payload adds checked motion dispatch, printer-owner
+and modal epochs, duplicate suppression, external-delete cleanup, hotend rejected
+send retry and telemetry-confirmed activation with a bounded confirmation timeout.
+Hotend layout tests now include Studio. Physical motion/activation tests remain
+pending; passing host checks is not a firmware build or panel confirmation.
+
+Toolhead Control now uses the common native form with a viewport-clamped popup,
+a scrolling body and pinned Close action. XY and Z sections use two columns at
+the native panel size and stack at narrower widths. Jog controls retain a cross
+layout; step, extrusion and runtime-offset controls use native grids. All action
+labels fit on one centered line. Position/homed/offset readings use content-height
+labels rather than overlapping fixed coordinates. Existing commands, selected
+step behavior and the applied patch's dispatch/cooldown/owner checks are retained.
+
+The actual Toolhead audit now verifies button fit/centering, panel bounds, no panel
+overlap, pointer scrolling, pinned footer and reachable final controls for all
+five themes, three densities and normal/large text at 1024x600, 640x600 and 480x400.
+Command assertions verify XY/Z jog, extrusion and runtime Z-offset routing.
+The new layout still requires firmware/panel testing. No merge, push or release
+is performed by the installer; branch identity remains 7.0.0-dev.
+
+## Expanded Toolhead steps (2026-10-12)
+
+Z jog choices: 0.01, 0.05, 0.10, 0.50, 1, 5, 10 and 25 mm. Runtime Z offset has paired adjustments of 0.005, 0.01, 0.025, 0.05 and 0.10 mm plus Reset. Extrude and Retract now use the selected 1, 5, 10, 25 or 50 mm length at the existing F300 speed. Default extrusion remains 10 mm. The legacy command formatter retains its 10 mm default. Responsive scrolling, pinned Close and dispatch/lifetime safeguards are retained.
+
+## Toolhead tabs without panel scrolling (2026-10-12)
+
+Toolhead Control groups Move, Filament and Z Offset in three tabs in a 960x568 viewport-clamped dialog. All options are retained, with 52-pixel touch buttons and a pinned Close. Tab changes only change visibility, preserve selections and do not dispatch commands or rebuild timers. The native 1024x600 panel needs no scrolling in any theme, density or text size. Narrower displays retain scroll fallback when necessary. Live float readings use snprintf before setting label text, independent of LVGL float-format support.
+
+## Filament Recovery dispatch and native form (2026-10-12)
+
+The user confirmed the Toolhead Move/Filament/Z Offset tabs look good on the panel. Filament Recovery now uses a native form with pinned Close and a three-column action grid. All recovery controls fit at 1024x600 in every theme/density/text size, with scroll fallback for smaller screens. Heat/Unload/Load/Purge/Resume routing and telemetry/macro/homing/sensor prerequisites are retained. Dispatch is guarded against reentrant actions; rejected sends retain the temperature for retry. Popup epoch and printer generation fence post-send updates, deletion clears every field and timer, and accepted-action cooldown survives close/reopen on the same printer. Offline and switched-printer views do not present cached sensor readiness as current. No Klipper macros are changed.
+
+## Whole-print Cancel confirmation safety (2026-10-12)
+
+The user confirmed Filament Recovery looks good on the panel; physical runout/load/purge/resume tests remain pending. Whole-print Cancel now owns its sender and printer generation, rechecks readiness and active printing/paused state, and guards reentrant dispatch. Failed checked sends keep the confirmation open with inline retry feedback. Accepted sends close only the original, still-current modal and suppress repeat cancellation on the same printer for five seconds, including reopen. External deletion retires the sender and status references. A printer switch replaces an existing stale review on reopening. The bounded wait prevents immediate repeats and is not cancellation-completion telemetry. Cancel Object remains for the next pass.
+
+## Cancel Object retry and dialog safety (2026-10-12)
+
+The user confirmed the whole-print Cancel confirmation looks good on the panel; actual cancellation remains pending. Cancel Object now has checked-send retry feedback, a dedicated captured sender, a dispatch guard and modal epoch/printer-owner checks before post-send cleanup. Accepted exclusions suppress immediate repeats of the same object on the same printer for five seconds, including reopening; this is dispatch suppression, not telemetry confirmation. Validation uses a separately allocated fresh exclusion snapshot so a failed request or changed live ordering cannot overwrite the displayed list/row data. The reviewed object name remains the command target. Offline, inactive-job, switched-printer and removed/already-excluded objects are blocked with inline feedback. Deletion clears the confirmation status and sender; reopening after a printer change retires the old list. Map/list layout and pinned actions are retained.

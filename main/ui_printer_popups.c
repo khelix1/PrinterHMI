@@ -73,15 +73,18 @@ static lv_obj_t *s_filament_toggle_buttons[
     MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
 static lv_obj_t *s_filament_toggle_labels[
     MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
-static bool s_filament_toggle_pending[
-    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
-static bool s_filament_toggle_expected[
-    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
-static uint8_t s_filament_toggle_wait_ticks[
-    MOONRAKER_MAX_FILAMENT_SENSORS] = {0};
 static size_t s_filament_row_count;
-static uint32_t s_filament_owner;
+static uint32_t s_filament_owner, s_filament_epoch;
+static bool s_filament_dispatching;
+static ui_printer_popups_send_gcode_cb_t s_filament_send;
 static char s_filament_row_names[MOONRAKER_MAX_FILAMENT_SENSORS][MOONRAKER_FILAMENT_SENSOR_NAME_MAX];
+static char s_filament_feedback[MOONRAKER_MAX_FILAMENT_SENSORS][96];
+/* Accepted requests outlive the popup; reopening must not resend them. */
+static struct {
+    bool pending, expected;
+    uint32_t owner, sent_at;
+    char name[MOONRAKER_FILAMENT_SENSOR_NAME_MAX];
+} s_filament_requests[MOONRAKER_MAX_FILAMENT_SENSORS];
 static const char *s_custom_temp_title = NULL;
 static const char *s_custom_temp_command_prefix = NULL;
 static int s_custom_temp_max = 0;
@@ -1782,6 +1785,8 @@ static void filament_list_popup_deleted_cb(lv_event_t *event)
     }
 
     s_filament_list_popup = NULL;
+    s_filament_send = NULL;
+    ++s_filament_epoch;
     s_filament_row_count = 0;
     memset(s_filament_row_names, 0, sizeof(s_filament_row_names));
 
@@ -1806,18 +1811,7 @@ static void filament_list_popup_deleted_cb(lv_event_t *event)
         s_filament_toggle_labels,
         0,
         sizeof(s_filament_toggle_labels));
-    memset(
-        s_filament_toggle_pending,
-        0,
-        sizeof(s_filament_toggle_pending));
-    memset(
-        s_filament_toggle_expected,
-        0,
-        sizeof(s_filament_toggle_expected));
-    memset(
-        s_filament_toggle_wait_ticks,
-        0,
-        sizeof(s_filament_toggle_wait_ticks));
+    memset(s_filament_feedback, 0, sizeof(s_filament_feedback));
 }
 
 
@@ -1841,107 +1835,111 @@ static const moonraker_filament_sensor_t *filament_row_sensor(size_t row)
     return NULL;
 }
 
+static int filament_request(const char *name, uint32_t owner)
+{
+    for (size_t i = 0; i < MOONRAKER_MAX_FILAMENT_SENSORS; ++i)
+        if (s_filament_requests[i].pending && s_filament_requests[i].owner == owner &&
+            !strcmp(s_filament_requests[i].name, name)) return (int)i;
+    return -1;
+}
+
 static void refresh_filament_list(lv_timer_t *timer)
 {
     (void)timer;
     if (!s_filament_list_popup) return;
     moonraker_filament_state_snapshot(&s_filament_list_state);
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    const char *reason = printer_connection_reason(&state);
     bool owns = s_filament_owner == moonraker_config_generation();
     for (size_t i = 0; i < s_filament_row_count; ++i) {
-        const moonraker_filament_sensor_t *sensor = owns ? filament_row_sensor(i) : NULL;
+        const moonraker_filament_sensor_t *sensor = owns && s_filament_list_state.discovered ? filament_row_sensor(i) : NULL;
+        lv_obj_t *button = s_filament_toggle_buttons[i], *label = s_filament_toggle_labels[i];
         if (!sensor) {
             ui_value_set_text(s_filament_status_labels[i], owns ? "UNAVAILABLE / REOPEN" : "PRINTER CHANGED / REOPEN");
             ui_value_set_color(s_filament_status_labels[i], UI_TEXT_DIM, 0);
-            lv_obj_add_state(s_filament_toggle_buttons[i], LV_STATE_DISABLED);
+            lv_obj_add_state(button, LV_STATE_DISABLED);
             continue;
         }
-        const char *status = !sensor->enabled ? "DISABLED" : !sensor->status_known ? "CHECKING" :
-            sensor->filament_detected ? "FILAMENT PRESENT" : "RUNOUT";
-        ui_value_set_text(s_filament_status_labels[i], status);
-        ui_value_set_color(s_filament_status_labels[i], !sensor->enabled || !sensor->status_known ? UI_TEXT :
-            sensor->filament_detected ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
-        if (s_filament_toggle_pending[i]) {
-            if (sensor->enabled == s_filament_toggle_expected[i] ||
-                ++s_filament_toggle_wait_ticks[i] >= 10) {
-                s_filament_toggle_pending[i] = false;
-                s_filament_toggle_wait_ticks[i] = 0;
+        int request = filament_request(sensor->object_name, s_filament_owner);
+        if (request >= 0) {
+            if (!reason[0] && sensor->enabled == s_filament_requests[request].expected) {
+                s_filament_requests[request].pending = false;
+                s_filament_feedback[i][0] = 0;
+                request = -1;
+            } else if (lv_tick_elaps(s_filament_requests[request].sent_at) >= 5000) {
+                s_filament_requests[request].pending = false;
+                snprintf(s_filament_feedback[i], sizeof(s_filament_feedback[i]),
+                    "Update unconfirmed. Check printer before retrying.");
+                request = -1;
             }
         }
-        lv_obj_t *button = s_filament_toggle_buttons[i], *label = s_filament_toggle_labels[i];
-        if (s_filament_toggle_pending[i]) {
-            ui_value_set_text(label, ui_text("UPDATING"));
+        const char *status = reason[0] ? "PRINTER UNAVAILABLE" : s_filament_feedback[i][0] ? s_filament_feedback[i] :
+            !sensor->enabled ? "DISABLED" : !sensor->status_known ? "CHECKING" :
+            sensor->filament_detected ? "FILAMENT PRESENT" : "RUNOUT";
+        ui_value_set_text(s_filament_status_labels[i], status);
+        ui_value_set_color(s_filament_status_labels[i], reason[0] || s_filament_feedback[i][0] ? UI_DANGER_BRIGHT :
+            !sensor->enabled || !sensor->status_known ? UI_TEXT :
+            sensor->filament_detected ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
+        bool changed = ui_value_set_text(label, request >= 0 ? ui_text("UPDATING") :
+            sensor->enabled ? ui_text("DISABLE") : ui_text("ENABLE"));
+        if (changed) ui_button_apply_kind(button, sensor->enabled ? UI_BUTTON_WARNING : UI_BUTTON_SUCCESS);
+        if (request >= 0 || reason[0] || s_filament_dispatching ||
+            (!s_control_send && !s_filament_send) ||
+            !filament_sensor_command_name_is_safe(filament_sensor_display_name(sensor->object_name)))
             lv_obj_add_state(button, LV_STATE_DISABLED);
-        } else {
-            lv_obj_remove_state(button, LV_STATE_DISABLED);
-            if (ui_value_set_text(label, sensor->enabled ? ui_text("DISABLE") : ui_text("ENABLE")))
-                ui_button_apply_kind(button, sensor->enabled ? UI_BUTTON_WARNING : UI_BUTTON_SUCCESS);
-        }
+        else lv_obj_remove_state(button, LV_STATE_DISABLED);
     }
 }
 
 static void filament_toggle_event_cb(lv_event_t *event)
 {
-    if (!event ||
-        lv_event_get_code(event) != LV_EVENT_CLICKED ||
-        !s_send_gcode_cb) {
-        return;
-    }
-
-    size_t index =
-        (size_t)(uintptr_t)lv_event_get_user_data(event);
-
-    moonraker_filament_state_snapshot(
-        &s_filament_list_state);
-
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !s_filament_list_popup || s_filament_dispatching) return;
+    size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= s_filament_row_count ||
+        lv_event_get_target(event) != s_filament_toggle_buttons[index]) return;
+    refresh_filament_list(NULL);
     if (s_filament_owner != moonraker_config_generation() ||
-        index >= s_filament_row_count || s_filament_toggle_pending[index]) return;
-    /* Keep the displayed row bound to its sensor if discovery order changes. */
+        lv_obj_has_state(s_filament_toggle_buttons[index], LV_STATE_DISABLED)) return;
     const moonraker_filament_sensor_t *sensor = filament_row_sensor(index);
     if (!sensor) return;
-    const char *sensor_name =
-        filament_sensor_display_name(
-            sensor->object_name);
-
-    if (!filament_sensor_command_name_is_safe(
-            sensor_name)) {
-        ui_dashboard_status_popup_show(
-            "FILAMENT SENSOR",
-            "This sensor name cannot be sent safely as a "
-            "Klipper G-code parameter.");
-        return;
-    }
-
+    char name[MOONRAKER_FILAMENT_SENSOR_NAME_MAX];
+    snprintf(name, sizeof(name), "%s", sensor->object_name);
+    const char *sensor_name = filament_sensor_display_name(name);
+    if (!filament_sensor_command_name_is_safe(sensor_name)) return;
     bool enable = !sensor->enabled;
-    char command[
-        MOONRAKER_FILAMENT_SENSOR_NAME_MAX + 48];
-    int written = snprintf(
-        command,
-        sizeof(command),
-        "SET_FILAMENT_SENSOR SENSOR=%s ENABLE=%u",
-        sensor_name,
-        enable ? 1U : 0U);
-
-    if (written <= 0 ||
-        (size_t)written >= sizeof(command)) {
-        return;
+    char command[MOONRAKER_FILAMENT_SENSOR_NAME_MAX + 48];
+    int written = snprintf(command, sizeof(command),
+        "SET_FILAMENT_SENSOR SENSOR=%s ENABLE=%u", sensor_name, enable ? 1U : 0U);
+    if (written <= 0 || (size_t)written >= sizeof(command)) return;
+    int slot = -1;
+    for (size_t i = 0; i < MOONRAKER_MAX_FILAMENT_SENSORS; ++i) {
+        if (!s_filament_requests[i].pending || s_filament_requests[i].owner != s_filament_owner ||
+            lv_tick_elaps(s_filament_requests[i].sent_at) >= 5000) { slot = (int)i; break; }
     }
-
-    s_filament_toggle_pending[index] = true;
-    s_filament_toggle_expected[index] = enable;
-    s_filament_toggle_wait_ticks[index] = 0;
-
-    if (s_filament_toggle_labels[index]) {
-        lv_label_set_text(
-            s_filament_toggle_labels[index],
-            ui_text("UPDATING"));
+    if (slot < 0) return;
+    uint32_t owner = s_filament_owner, epoch = s_filament_epoch;
+    bool (*checked_send)(const char *) = s_control_send;
+    ui_printer_popups_send_gcode_cb_t legacy_send = s_filament_send;
+    s_filament_dispatching = true;
+    bool accepted = false;
+    if (checked_send) accepted = checked_send(command);
+    else if (legacy_send) { legacy_send(command); accepted = true; }
+    s_filament_dispatching = false;
+    if (accepted) {
+        s_filament_requests[slot].pending = true;
+        s_filament_requests[slot].expected = enable;
+        s_filament_requests[slot].owner = owner;
+        s_filament_requests[slot].sent_at = lv_tick_get();
+        snprintf(s_filament_requests[slot].name, sizeof(s_filament_requests[slot].name), "%s", name);
     }
-    if (s_filament_toggle_buttons[index]) {
-        lv_obj_add_state(
-            s_filament_toggle_buttons[index],
-            LV_STATE_DISABLED);
-    }
-
-    s_send_gcode_cb(command);
+    /* Sender callbacks may close, reopen, or switch printers. */
+    if (!s_filament_list_popup || epoch != s_filament_epoch ||
+        owner != moonraker_config_generation()) return;
+    snprintf(s_filament_feedback[index], sizeof(s_filament_feedback[index]), "%s",
+        accepted ? "" : "Send failed. Check connection and retry.");
+    refresh_filament_list(NULL);
 }
 
 
@@ -1949,15 +1947,18 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
     const moonraker_filament_state_t *state)
 {
     if (!state || !state->discovered || state->total_count == 0) return;
-    if (s_filament_list_popup) { lv_obj_move_foreground(s_filament_list_popup); return; }
-    s_send_gcode_cb = send_cb;
+    if (s_filament_list_popup && s_filament_owner != moonraker_config_generation())
+        close_filament_list_cb(NULL);
+    if (s_filament_list_popup) { lv_obj_move_foreground(s_filament_list_popup); refresh_filament_list(NULL); return; }
+    ++s_filament_epoch;
+    s_filament_send = send_cb;
     s_filament_list_state = *state;
     s_filament_owner = moonraker_config_generation();
     s_filament_row_count = state->sensor_count < MOONRAKER_MAX_FILAMENT_SENSORS ?
         state->sensor_count : MOONRAKER_MAX_FILAMENT_SENSORS;
     s_filament_list_popup = ui_popup_create(lv_layer_top(), control_width(720),
         control_height(480), UI_POPUP_STANDARD);
-    if (!s_filament_list_popup) { s_filament_row_count = 0; return; }
+    if (!s_filament_list_popup) { s_filament_send = NULL; s_filament_row_count = 0; return; }
     lv_obj_add_event_cb(s_filament_list_popup, filament_list_popup_deleted_cb, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = control_layout(s_filament_list_popup, ui_text("FILAMENT SENSOR CONTROL"));
     static const int32_t columns[] = {LV_GRID_FR(1), LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};

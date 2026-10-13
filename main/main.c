@@ -3459,6 +3459,8 @@ void ui_printer_create(void)
         printer_ui_controller_command_event_cb,
         printer_ui_controller_motion_event_cb);
 
+    printer_ui_controller_bind_actions(&printer_actions);
+
     printer_home_btn = printer_actions.home;
     printer_pause_btn = printer_actions.pause;
     printer_resume_btn = printer_actions.resume;

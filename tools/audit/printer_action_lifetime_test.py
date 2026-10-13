@@ -21,6 +21,7 @@ code='''#include "lvgl.h"
 #include <string.h>
 static ui_printer_actions_t printer_actions;
 static void ui_printer_preview_destroy_refs(void){}
+static void ui_printer_toolhead_close(void){}
 static void ui_shell_raise_topbar(void){}
 static void ui_shell_raise_nav(void){}
 '''+''.join('static lv_obj_t *'+n+';\n' for n in sorted(refs))+destroy+'''

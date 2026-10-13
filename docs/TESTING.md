@@ -1105,3 +1105,21 @@ The actual LVGL Cancel audit now includes Studio and passes five themes, three d
 ### Cancel Object lifecycle and retry checks
 
 The actual LVGL object audit now includes Studio and passes all five themes, three densities, both text sizes and 1024/640/480 widths. Fixtures cover 48 long names, map projection, pinned actions, reviewed-name dispatch after list selection/live reordering, failure/retry retaining the displayed snapshot, duplicate/reentrant callbacks, deletion/reopening during dispatch, sender capture, printer/readiness gates, removed/already-excluded names and independent status deletion. The whole-print Cancel audit also passes with the shared source. User panel confirmation for whole-print Cancel is recorded; actual printing/cancellation, target build, false-offline/Files freeze and intermittent OTA verification remain pending.
+
+### Filament sensor safety follow-up (7.0.0-dev)
+
+Run `python3 tools/audit/filament_sensor_safety_test.py` after dependencies are available. The real LVGL host audit covers rejected sends and retry, duplicate/reentrant clicks, name reordering, telemetry acknowledgement, elapsed timeout, accepted-request close/reopen suppression, printer switching during dispatch, missing/offline/unsafe sensors, isolated legacy sender, external deletion, timer cleanup and all five themes/densities/text sizes. `sensor_status_layout_test.py` also covers narrow layouts, quiet refresh and pinned Close.
+
+Panel verification pending: check Enable/Disable for the intended sensor, accepted state updates, Close/reopen, printer switching, and failure feedback when the connection fails. Changes to a filament sensor affect runout detection; verify the final sensor state in the printer host. Physical runout testing remains separate.
+
+### Direct Printer action safety follow-up (7.0.0-dev)
+
+Run `python3 tools/audit/printer_direct_action_safety_test.py` with LVGL dependencies available. It exercises real themed action buttons and the controller across all five themes, densities and text sizes: rejected Home/Pause sends and retries, accepted-command cooldown across page recreation, Pause acknowledgement, duplicate/reentrant events, retired or mismatched targets, printer changes, callback close/reopen/switch, fenced notifications and the existing Resume/Object/Stop/Toolhead paths. The connection and filament recovery audits bind their real action targets; the teardown audit provides the Toolhead close stub used by the page. Older Bed Mesh audit fixtures now supply valid mesh data and use the current feedback/name-buffer API.
+
+Panel verification pending: Home once while idle, confirm normal homing; Pause during a suitable print, then Resume through recovery; rapid repeat taps, leave/reopen Printer, switch printers and retry after a failed command. The five-second guard suppresses immediate duplicates; it is not a homing-completion signal. Follow-ups remain on feature/profile-setup-dialogs, version 7.0.0-dev, with no release merge or visual-polish work in this patch.
+
+### Speed/Flow tuning safety follow-up (7.0.0-dev)
+
+Run `python3 tools/audit/printer_tuning_safety_test.py` with LVGL dependencies available. It covers real sliders across all five themes/densities/text sizes: rejected selected values and retry, accepted identical-request suppression across recreation, independent speed/flow commands, telemetry acknowledgement, elapsed timeout restoring live values, printer ownership, offline and mismatched targets, callback close/reopen/switch, individually deleted fields, teardown during failure/timeout notifications, expired requests while opening controls and overlapping old/new pages. Studio page audit fixtures now locate the current tabbed Toolhead controls by label, acknowledge their tuning telemetry and supply the current Bed Mesh profile availability stub.
+
+Panel verification pending: change Speed and Flow once and confirm values in the host; reopen Tune or leave/reopen Printer, repeat the same release, switch printers and check reported values, then check unavailable/retry behavior. Resume, cancellation and filament controls remain separate. No changes to tuning range (50-150 percent), theme geometry or release version are part of this patch.

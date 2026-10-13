@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #include "lvgl.h"
+#include "ui_printer_actions.h"
 #include "ui_printer_info_cards.h"
 #include "moonraker.h"
 
@@ -70,6 +71,9 @@ void printer_ui_controller_init(
     printer_ui_controller_action_cb_t show_cancel_cb,
     printer_ui_controller_action_cb_t show_object_cb,
     printer_ui_controller_action_cb_t show_motion_cb);
+
+/* Bind action targets to the printer displayed when this page was created. */
+void printer_ui_controller_bind_actions(const ui_printer_actions_t *actions);
 
 void printer_ui_controller_command_event_cb(lv_event_t *event);
 void printer_ui_controller_motion_event_cb(lv_event_t *event);

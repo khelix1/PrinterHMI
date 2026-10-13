@@ -11,6 +11,7 @@ static uint32_t generation = 1;
 static bool catalog_available = true, command_ok = true;
 static char sent[96];
 static int send_count, send_mode;
+void ui_toast_show(ui_status_kind_t k,const char*t,const char*d){(void)k;(void)t;(void)d;}
 static bool send(const char *s);
 static void click(lv_obj_t *b);
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -120,7 +121,7 @@ int main(void){
   lifetime_checks();
  }
  fixture_reset();ui_filament_recovery_show(send);command_ok=false;click(buttons[0]);assert(!action_pending);assert(strstr(lv_label_get_text(message_label),"could not"));ui_filament_recovery_close();
- fixture_reset();printer_ui_controller_init(send,NULL,NULL,NULL);lv_obj_t *b=lv_button_create(lv_screen_active());lv_obj_add_event_cb(b,printer_ui_controller_command_event_cb,LV_EVENT_CLICKED,"RESUME");click(b);assert(popup&&send_count==0);ui_filament_recovery_close();lv_obj_delete(b);
+ fixture_reset();printer_ui_controller_init(send,NULL,NULL,NULL);lv_obj_t *b=lv_button_create(lv_screen_active());ui_printer_actions_t actions={.resume=b};printer_ui_controller_bind_actions(&actions);lv_obj_add_event_cb(b,printer_ui_controller_command_event_cb,LV_EVENT_CLICKED,"RESUME");click(b);assert(popup&&send_count==0);ui_filament_recovery_close();lv_obj_delete(b);
  fixture_reset();ui_filament_recovery_show(send);strcpy(fixture.homed_axes,"xy");enabled(1,false);enabled(4,false);ui_filament_recovery_close();
  fixture_reset();ui_filament_recovery_show(send);strcpy(fixture.printer_state,"printing");int before=send_count;click(buttons[4]);assert(send_count==before);ui_filament_recovery_close();
  lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);layout_checks(d,pointer);

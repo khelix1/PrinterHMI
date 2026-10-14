@@ -17,14 +17,18 @@ static void retire_history_host(void){ui_telemetry_hide();}
 static void replace_history_host(void){ui_telemetry_hide();ui_telemetry_show();}
 static moonraker_state_t state;
 static int64_t clock_us;
-static unsigned back_page,back_nav,invalidations;
-const char *esp_get_idf_version(void){return "host-test";}
-size_t heap_caps_get_free_size(unsigned caps){(void)caps;return 100000;}
-size_t heap_caps_get_minimum_free_size(unsigned caps){(void)caps;return 90000;}
-size_t heap_caps_get_largest_free_block(unsigned caps){(void)caps;return 80000;}
+static unsigned back_page,back_nav,invalidations,info_reads;
+static void(*info_read_hook)(void);
+static void info_read(void){info_reads++;if(info_read_hook){void(*hook)(void)=info_read_hook;info_read_hook=NULL;hook();}}
+static lv_obj_t *replacement_info_label,*replacement_info_parent;
+static void rebind_info(void){replacement_info_label=lv_label_create(replacement_info_parent);lv_label_set_text(replacement_info_label,"REPLACEMENT");settings_system_info_bind_heap_label(replacement_info_label);}
+const char *esp_get_idf_version(void){info_read();return "host-test";}
+size_t heap_caps_get_free_size(unsigned caps){(void)caps;info_read();return 100000;}
+size_t heap_caps_get_minimum_free_size(unsigned caps){(void)caps;info_read();return 90000;}
+size_t heap_caps_get_largest_free_block(unsigned caps){(void)caps;info_read();return 80000;}
 static unsigned timers(void){unsigned n=0;lv_timer_t *t=NULL;while((t=lv_timer_get_next(t)))n++;return n;}
 static unsigned objects(lv_obj_t *p){unsigned n=1;for(uint32_t i=0;i<lv_obj_get_child_count(p);i++)n+=objects(lv_obj_get_child(p,i));return n;}
-int64_t esp_timer_get_time(void){return clock_us;}
+int64_t esp_timer_get_time(void){info_read();return clock_us;}
 void moonraker_state_snapshot(moonraker_state_t *out){*out=state;}
 void ui_shell_page_action(ui_shell_page_t page){back_page=page;}
 void ui_shell_set_active_nav(int page){back_nav=page;}
@@ -95,7 +99,13 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  lv_obj_t *info=lv_obj_create(lv_screen_active()),*labels[4];for(unsigned j=0;j<4;j++)labels[j]=lv_label_create(info);
  settings_system_info_bind_idf_label(labels[0]);settings_system_info_bind_heap_label(labels[1]);settings_system_info_bind_psram_label(labels[2]);settings_system_info_bind_uptime_label(labels[3]);
  settings_system_info_refresh();lv_refr_now(d);invalidations=0;settings_system_info_refresh();assert(invalidations==0);
- settings_system_info_unbind();lv_obj_delete(info);settings_system_info_refresh();
+ unsigned reads_before=info_reads;info_read_hook=settings_system_info_refresh;settings_system_info_refresh();assert(info_reads==reads_before+7);
+ replacement_info_parent=info;info_read_hook=rebind_info;settings_system_info_refresh();assert(!strcmp(lv_label_get_text(replacement_info_label),"REPLACEMENT"));
+ lv_obj_delete(labels[1]);settings_system_info_refresh();assert(strcmp(lv_label_get_text(replacement_info_label),"REPLACEMENT"));
+ lv_obj_delete(labels[3]);settings_system_info_refresh();
+ lv_obj_delete(info);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before);
+ info=lv_obj_create(lv_screen_active());lv_obj_t *idf_only=lv_label_create(info);settings_system_info_bind_idf_label(idf_only);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before+1&&!strcmp(lv_label_get_text(idf_only),"host-test"));
+ info_read_hook=settings_system_info_unbind;settings_system_info_refresh();lv_obj_delete(info);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before);
  ui_telemetry_show();lv_obj_delete(s_panel);assert(!s_panel&&!s_charts[0].chart);ui_telemetry_show();lv_obj_t *header=lv_obj_get_child(s_panel,0);tap(pointer,lv_obj_get_child(header,1));assert(back_page==UI_SHELL_PAGE_DEVICES && back_nav==UI_SHELL_PAGE_TOOLS);ui_telemetry_hide();
 }
 /* Physics/data checks independent of theme geometry. */

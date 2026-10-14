@@ -2,6 +2,7 @@
 #include "ui_text.h"
 
 #include "ota_release_catalog.h"
+#include "ota_manager.h"
 #include "ui_popup.h"
 #include "ui_ota_popup.h"
 #include "ui_ota_layout.h"
@@ -38,6 +39,8 @@ static ota_release_channel_t s_rendered_channel =
 static ota_release_entry_t *s_selected = NULL;
 static bool s_installing = false;
 static char s_rendered_error[128];
+static uint32_t s_browser_epoch;
+static bool s_catalog_rendering, s_refresh_dispatching;
 static bool s_custom_pending;
 static lv_obj_t *s_custom_owner;
 static void custom_transition(void *data);
@@ -65,50 +68,44 @@ static const char *relation_text(
 
 static void confirm_close(void)
 {
-    if (s_confirm) {
-        lv_obj_delete(s_confirm);
-        s_confirm = NULL;
-    }
+    lv_obj_t *confirm=s_confirm;
+    s_confirm=NULL;
+    if(confirm)lv_obj_delete(confirm);
 }
 
 
 static void browser_close(void)
 {
-    if (s_custom_pending) lv_async_call_cancel(custom_transition, NULL);
-    s_custom_pending = false;
-    s_custom_owner = NULL;
-    confirm_close();
-
-    if (s_timer) {
-        lv_timer_delete(s_timer);
-        s_timer = NULL;
-    }
-
-    if(s_popup) {lv_obj_t *popup=s_popup;s_popup=NULL;lv_obj_delete(popup);}
-
-    s_status = NULL;
-    s_list = NULL;
-    s_row_count = 0;
-    memset(s_channel_scroll, 0, sizeof(s_channel_scroll));
-    s_stable_tab = NULL;
-    s_nightly_tab = NULL;
-    s_refresh_button = NULL;
-    s_start_fn = NULL;
-    s_custom_fn = NULL;
-    s_channel = OTA_RELEASE_CHANNEL_STABLE;
-    s_rendered_state = OTA_RELEASE_CATALOG_IDLE;
-    s_rendered_count = SIZE_MAX;
-    s_rendered_error[0]=0;
-    s_rendered_channel = OTA_RELEASE_CHANNEL_STABLE;
-    free(s_selected);
-    s_selected = NULL;
-    if (!s_installing) {
-        ui_ota_popup_resume_camera();
-    }
-    s_installing = false;
+    uint32_t epoch=++s_browser_epoch;
+    bool installing=s_installing;
+    lv_obj_t *popup=s_popup, *confirm=s_confirm;
+    lv_timer_t *timer=s_timer;
+    s_popup=s_confirm=s_status=s_list=s_stable_tab=s_nightly_tab=s_refresh_button=NULL;
+    s_timer=NULL;
+    if(s_custom_pending)lv_async_call_cancel(custom_transition,NULL);
+    s_custom_pending=false;s_custom_owner=NULL;
+    s_row_count=0;memset(s_channel_scroll,0,sizeof(s_channel_scroll));
+    s_start_fn=NULL;s_custom_fn=NULL;s_channel=OTA_RELEASE_CHANNEL_STABLE;
+    s_rendered_state=OTA_RELEASE_CATALOG_IDLE;s_rendered_count=SIZE_MAX;
+    s_rendered_error[0]=0;s_rendered_channel=OTA_RELEASE_CHANNEL_STABLE;
+    free(s_selected);s_selected=NULL;s_installing=false;
+    if(timer)lv_timer_delete(timer);
+    if(confirm)lv_obj_delete(confirm);
+    if(popup)lv_obj_delete(popup);
+    if(!installing && epoch==s_browser_epoch)ui_ota_popup_resume_camera();
 }
 
-
+static void browser_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_status)s_status=NULL;
+    else if(target==s_list){s_list=NULL;s_row_count=0;if(s_timer)lv_timer_delete(s_timer);s_timer=NULL;}
+    else if(target==s_stable_tab)s_stable_tab=NULL;
+    else if(target==s_nightly_tab)s_nightly_tab=NULL;
+    else if(target==s_refresh_button)s_refresh_button=NULL;
+    else return;
+    ++s_browser_epoch;
+}
 static void browser_deleted(lv_event_t *event)
 {
     if(lv_event_get_target_obj(event)!=s_popup)return;
@@ -137,6 +134,7 @@ static void install_cb(lv_event_t *event)
 {
     if (!event ||
         lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        !s_popup || !s_confirm || ota_manager_is_running() ||
         !s_selected ||
         !s_selected->asset_url[0]) {
         return;
@@ -162,7 +160,12 @@ static void release_select_cb(lv_event_t *event)
         return;
     }
 
+    if(!s_popup || !s_list || s_refresh_dispatching || s_catalog_rendering)return;
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    uint32_t epoch=s_browser_epoch;
+    ota_release_entry_t selected;
+    bool found=ota_release_catalog_entry(index,&selected);
+    if(epoch!=s_browser_epoch || !s_popup || !found)return;
 
     if (!s_selected) {
         s_selected = heap_caps_calloc(
@@ -174,12 +177,10 @@ static void release_select_cb(lv_event_t *event)
         }
     }
 
-    if (!s_selected ||
-        !ota_release_catalog_entry(index, s_selected)) {
-        return;
-    }
-
+    if (!s_selected) return;
+    *s_selected=selected;
     confirm_close();
+    if(epoch!=s_browser_epoch || !s_popup || !s_selected)return;
 
     bool nightly =
         s_selected->channel == OTA_RELEASE_CHANNEL_NIGHTLY;
@@ -263,9 +264,11 @@ static void release_select_cb(lv_event_t *event)
  * state changes rebuild them; tabs filter locally without network work. */
 static void show_channel_rows(void)
 {
+    if(!s_list)return;
     size_t visible = 0;
     for (size_t i = 0; i < s_row_count; ++i) {
         lv_obj_t *row = lv_obj_get_child(s_list, (int32_t)i);
+        if(!row)continue;
         if (s_row_channels[i] == s_channel) {
             lv_obj_remove_flag(row, LV_OBJ_FLAG_HIDDEN);
             ++visible;
@@ -281,10 +284,11 @@ static void show_channel_rows(void)
             : "No compatible nightly builds were found."));
 }
 
-static void render_catalog(
+static void render_catalog_impl(
     const ota_release_catalog_snapshot_t *snapshot)
 {
-    if (!snapshot || !s_status || !s_list) return;
+    if (!snapshot || !s_popup || !s_status || !s_list) return;
+    uint32_t epoch=s_browser_epoch;
     if (s_refresh_button) {
         if (snapshot->state == OTA_RELEASE_CATALOG_LOADING)
             lv_obj_add_state(s_refresh_button, LV_STATE_DISABLED);
@@ -306,6 +310,7 @@ static void render_catalog(
     s_rendered_count = snapshot->count;
     s_rendered_channel = s_channel;
     lv_obj_clean(s_list);
+    if(epoch!=s_browser_epoch || !s_list || !s_popup)return;
     s_row_count = 0;
     memset(s_channel_scroll, 0, sizeof(s_channel_scroll));
 
@@ -332,9 +337,9 @@ static void render_catalog(
 
     for (size_t index = 0; index < snapshot->count && s_row_count < OTA_RELEASE_CATALOG_MAX; ++index) {
         ota_release_entry_t release;
-        if (!ota_release_catalog_entry(index, &release)) {
-            continue;
-        }
+        bool found=ota_release_catalog_entry(index,&release);
+        if(epoch!=s_browser_epoch || !s_popup || !s_list)return;
+        if(!found)continue;
 
         char row[196];
         snprintf(
@@ -367,22 +372,27 @@ static void render_catalog(
 
 static void timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
+    if(timer!=s_timer || !s_popup || !s_list || s_catalog_rendering)return;
+    uint32_t epoch=s_browser_epoch;
+    s_catalog_rendering=true;
     ota_release_catalog_snapshot_t snapshot;
     ota_release_catalog_snapshot(&snapshot);
-    render_catalog(&snapshot);
+    if(epoch==s_browser_epoch)render_catalog_impl(&snapshot);
+    s_catalog_rendering=false;
 }
 
 
 static void select_tab(ota_release_channel_t channel)
 {
-    if (!s_popup || !s_list) return;
+    if (!s_popup || !s_list || !s_stable_tab || !s_nightly_tab) return;
     if (channel == s_channel && s_rendered_count != SIZE_MAX) return;
     s_channel_scroll[s_channel] = lv_obj_get_scroll_y(s_list);
     s_channel = channel;
     if(channel==OTA_RELEASE_CHANNEL_STABLE) {lv_obj_add_state(s_stable_tab,LV_STATE_CHECKED);lv_obj_remove_state(s_nightly_tab,LV_STATE_CHECKED);}
     else {lv_obj_remove_state(s_stable_tab,LV_STATE_CHECKED);lv_obj_add_state(s_nightly_tab,LV_STATE_CHECKED);}
+    uint32_t epoch=s_browser_epoch;
     timer_cb(s_timer);
+    if(epoch!=s_browser_epoch || !s_popup || !s_list)return;
     lv_obj_update_layout(s_popup);
     lv_obj_scroll_to_y(s_list,s_channel_scroll[s_channel],LV_ANIM_OFF);
 }
@@ -402,16 +412,20 @@ static void tab_cb(lv_event_t *event)
 static void refresh_cb(lv_event_t *event)
 {
     (void)event;
+    if(!s_popup || !s_list || s_refresh_dispatching)return;
+    uint32_t epoch=s_browser_epoch;
+    s_refresh_dispatching=true;
     ota_release_catalog_snapshot_t snapshot;
     ota_release_catalog_snapshot(&snapshot);
-    if (snapshot.state == OTA_RELEASE_CATALOG_LOADING) return;
+    if(epoch!=s_browser_epoch || snapshot.state==OTA_RELEASE_CATALOG_LOADING)goto done;
     confirm_close();
-    s_rendered_state = OTA_RELEASE_CATALOG_IDLE;
-    s_rendered_count = SIZE_MAX;
+    if(epoch!=s_browser_epoch || !s_popup)goto done;
+    s_rendered_state=OTA_RELEASE_CATALOG_IDLE;s_rendered_count=SIZE_MAX;
     (void)ota_release_catalog_start();
-    timer_cb(s_timer);
+    if(epoch==s_browser_epoch)timer_cb(s_timer);
+ done:
+    s_refresh_dispatching=false;
 }
-
 
 static void custom_transition(void *data)
 {
@@ -444,14 +458,14 @@ void ui_ota_release_browser_show(
     ui_ota_start_cb_t start_cb,
     ui_ota_custom_cb_t custom_cb_fn)
 {
-    s_start_fn = start_cb;
-    s_custom_fn = custom_cb_fn;
-    ui_ota_popup_quiesce_camera();
-
+    if (ota_manager_is_running())return;
     if (s_popup) {
         lv_obj_move_foreground(s_popup);
         return;
     }
+    ++s_browser_epoch;
+    s_start_fn=start_cb;s_custom_fn=custom_cb_fn;
+    ui_ota_popup_quiesce_camera();
 
     s_popup=ui_ota_dialog("FIRMWARE RELEASES",900,540,UI_POPUP_STANDARD);
     if(!s_popup){s_start_fn=NULL;s_custom_fn=NULL;ui_ota_popup_resume_camera();return;}
@@ -489,6 +503,8 @@ void ui_ota_release_browser_show(
     select_tab(installed_identity.channel == FIRMWARE_CHANNEL_NIGHTLY
         ? OTA_RELEASE_CHANNEL_NIGHTLY : OTA_RELEASE_CHANNEL_STABLE);
 
+    lv_obj_t *fields[]={s_status,s_list,s_stable_tab,s_nightly_tab,s_refresh_button};
+    for(size_t i=0;i<5;i++)lv_obj_add_event_cb(fields[i],browser_field_deleted,LV_EVENT_DELETE,NULL);
     s_timer = lv_timer_create(timer_cb, 200, NULL);
     ota_release_catalog_start();
     timer_cb(s_timer);

@@ -6,11 +6,17 @@
 static size_t preview_allocations;static bool fail_preview_alloc;
 void *theme_test_calloc(size_t n,size_t size,int caps){(void)caps;if(fail_preview_alloc)return NULL;void *p=calloc(n,size);if(p)preview_allocations++;return p;}
 void theme_test_free(void *p){if(p){assert(preview_allocations);preview_allocations--;free(p);}}
+static bool reject_theme_async;
+static lv_result_t theme_async(lv_async_cb_t callback,void *data){return reject_theme_async?LV_RESULT_INVALID:lv_async_call(callback,data);}
+#define lv_async_call theme_async
 #include "ui_settings_popups.c"
+#undef lv_async_call
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
+static void (*theme_backend_hook)(void);
+static void run_theme_hook(void){if(theme_backend_hook){void(*hook)(void)=theme_backend_hook;theme_backend_hook=NULL;hook();}}
 static unsigned background_draws;
 static void background_draw(lv_event_t *e){(void)e;background_draws++;}
 static void scroll_occlusion(void){
@@ -34,7 +40,7 @@ const char *custom_theme_active_id(void){return active_id;}
 size_t theme_manager_scan_custom_themes(void){return count;}
 size_t theme_manager_custom_count(void){return count;}
 const custom_theme_summary_t *theme_manager_custom_summary(size_t index){return index<count?&summaries[index]:NULL;}
-bool theme_manager_select(ui_theme_id_t theme){selected_calls++;if(fail_select)return false;active_theme=theme;active_custom=false;return true;}
+bool theme_manager_select(ui_theme_id_t theme){selected_calls++;run_theme_hook();if(fail_select)return false;active_theme=theme;active_custom=false;return true;}
 bool theme_manager_select_custom(size_t index){selected_calls++;selected_custom=index;if(fail_select)return false;active_custom=true;snprintf(active_id,sizeof(active_id),"%s",summaries[index].id);return true;}
 bool theme_manager_remove_custom(size_t index){removed_calls++;removed_index=index;if(fail_remove)return false;if(active_custom&&!strcmp(active_id,summaries[index].id)){active_custom=false;active_theme=UI_THEME_OPERATOR;}return true;}
 static void changed(void){assert(!s_theme_popup&&!s_custom_theme_popup&&!s_custom_remove_popup);changed_calls++;}
@@ -51,6 +57,8 @@ static void layout(lv_obj_t *popup){lv_obj_update_layout(popup);lv_obj_t *body=l
 static lv_obj_t *previews(void){return lv_obj_get_child(lv_obj_get_child(s_theme_popup,1),1);}
 static void builtin_layout(void){layout(s_theme_popup);lv_obj_t *grid=previews();assert(lv_obj_get_child_count(grid)==5);for(unsigned i=0;i<5;i++){lv_obj_t *card=lv_obj_get_child(grid,i);inside(card,grid);for(unsigned j=0;j<lv_obj_get_child_count(card);j++)inside(lv_obj_get_child(card,j),card);lv_obj_t *sample=lv_obj_get_child(card,2);if(!fail_preview_alloc){assert(lv_obj_get_child_count(sample)==1);assert(lv_obj_check_type(lv_obj_get_child(sample,0),&lv_canvas_class));}lv_obj_t *head=lv_obj_get_child(card,0);for(unsigned j=0;j<lv_obj_get_child_count(head);j++)inside(lv_obj_get_child(head,j),head);lv_area_t a;lv_obj_get_coords(card,&a);for(unsigned k=0;k<i;k++){lv_area_t b;lv_obj_get_coords(lv_obj_get_child(grid,k),&b);assert(a.x2<b.x1||b.x2<a.x1||a.y2<b.y1||b.y2<a.y1);}}}
 static void custom_layout(void){layout(s_custom_theme_popup);for(unsigned i=0;i<count;i++){lv_obj_t *row=s_custom_rows[i];assert(row);for(unsigned j=0;j<lv_obj_get_child_count(row);j++)inside(lv_obj_get_child(row,j),row);assert(strstr(lv_label_get_text(lv_obj_get_child(row,0)),summaries[i].name));assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,1)),summaries[i].description));}}
+static void nested_theme(void){click(lv_obj_get_child(previews(),2));}
+static void replace_theme(void){theme_popup_close();ui_settings_popups_show_theme(changed);}
 static void miniature_bounds(lv_obj_t *sample) {
  for(unsigned i=0;i<lv_obj_get_child_count(sample);i++) {
   lv_obj_t *child=lv_obj_get_child(sample,i);inside(child,sample);
@@ -91,17 +99,19 @@ lv_obj_t *background=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(b
 for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
  viewport_width=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport_width,size==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();unsigned before=changed_calls,calls=selected_calls;
  open_theme();builtin_layout();scroll_occlusion();if(!size&&density==1&&large)snapshot(theme,"builtins");click(lv_obj_get_child(previews(),0));assert(!s_theme_popup&&changed_calls==before&&selected_calls==calls);
- open_theme();fail_select=true;click(lv_obj_get_child(previews(),1));assert(s_theme_popup&&!s_theme_change_pending);fail_select=false;calls=selected_calls;click(lv_obj_get_child(previews(),1));assert(s_theme_popup&&s_theme_change_pending&&changed_calls==before);click(lv_obj_get_child(previews(),2));assert(selected_calls==calls+1);pump();assert(!s_theme_popup&&!s_theme_change_pending&&changed_calls==before+1);
+ open_theme();reject_theme_async=true;calls=selected_calls;click(lv_obj_get_child(previews(),1));assert(selected_calls==calls&&s_theme_popup&&!s_theme_change_pending&&strstr(lv_label_get_text(s_theme_status),"not saved"));reject_theme_async=false;fail_select=true;click(lv_obj_get_child(previews(),1));assert(s_theme_popup&&!s_theme_change_pending);fail_select=false;calls=selected_calls;theme_backend_hook=nested_theme;click(lv_obj_get_child(previews(),1));assert(s_theme_popup&&s_theme_change_pending&&changed_calls==before);click(lv_obj_get_child(previews(),2));assert(selected_calls==calls+1);pump();assert(!s_theme_popup&&!s_theme_change_pending&&changed_calls==before+1);
  open_theme();lv_obj_t *shell=lv_obj_get_child(previews(),3);lv_obj_send_event(shell,LV_EVENT_PRESSED,NULL);assert(!s_theme_change_pending);assert(!lv_obj_has_flag(previews(),LV_OBJ_FLAG_SCROLLABLE));assert(lv_obj_get_style_bg_opa(lv_obj_get_child(s_theme_popup,1),0)==LV_OPA_COVER);click(shell);assert(s_theme_change_pending);pump();assert(active_theme==UI_THEME_OPERATOR_SHELL&&changed_calls==before+2);
- open_theme();custom_theme_manager_show_cb(NULL);custom_layout();if(!size&&density==1&&large)snapshot(theme,"custom");assert(lv_obj_has_state(s_custom_apply_action,LV_STATE_DISABLED));calls=selected_calls;click(s_custom_rows[2]);custom_layout();assert(selected_calls==calls&&!lv_obj_has_state(s_custom_apply_action,LV_STATE_DISABLED));fail_select=true;click(s_custom_apply_action);assert(s_custom_theme_popup&&!s_theme_change_pending);fail_select=false;click(s_custom_apply_action);assert(s_theme_change_pending&&selected_custom==2);pump();assert(!s_theme_popup&&!s_custom_theme_popup&&changed_calls==before+3);
+ open_theme();custom_theme_manager_show_cb(NULL);custom_layout();if(!size&&density==1&&large)snapshot(theme,"custom");assert(lv_obj_has_state(s_custom_apply_action,LV_STATE_DISABLED));calls=selected_calls;click(s_custom_rows[2]);custom_layout();assert(selected_calls==calls&&!lv_obj_has_state(s_custom_apply_action,LV_STATE_DISABLED));reject_theme_async=true;click(s_custom_apply_action);assert(selected_calls==calls&&!s_theme_change_pending);reject_theme_async=false;fail_select=true;click(s_custom_apply_action);assert(s_custom_theme_popup&&!s_theme_change_pending);fail_select=false;click(s_custom_apply_action);assert(s_theme_change_pending&&selected_custom==2);pump();assert(!s_theme_popup&&!s_custom_theme_popup&&changed_calls==before+3);
  open_theme();custom_theme_manager_show_cb(NULL);click(s_custom_rows[1]);unsigned removals=removed_calls;click(s_custom_remove_action);assert(s_custom_remove_popup);layout(s_custom_remove_popup);assert(strstr(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,1),0)),summaries[1].name));if(!size&&density==1&&large)snapshot(theme,"remove");click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),0));assert(!s_custom_remove_popup&&removed_calls==removals);
- click(s_custom_remove_action);fail_remove=true;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(s_custom_remove_popup);fail_remove=false;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(removed_index==1&&!s_custom_theme_popup&&s_theme_popup&&!s_theme_change_pending);theme_popup_close();
- open_theme();custom_theme_manager_show_cb(NULL);click(s_custom_rows[2]);click(s_custom_remove_action);click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(s_theme_change_pending);pump();assert(changed_calls==before+4&&!s_theme_popup);
+ click(s_custom_remove_action);fail_remove=true;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(s_custom_remove_popup&&strstr(lv_label_get_text(s_remove_status),"Could not remove"));fail_remove=false;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(removed_index==1&&!s_custom_theme_popup&&s_theme_popup&&!s_theme_change_pending);theme_popup_close();
+ open_theme();custom_theme_manager_show_cb(NULL);click(s_custom_rows[2]);click(s_custom_remove_action);reject_theme_async=true;removals=removed_calls;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(removed_calls==removals&&!s_theme_change_pending&&s_custom_remove_popup);reject_theme_async=false;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(s_theme_change_pending);pump();assert(changed_calls==before+4&&!s_theme_popup);
  open_theme();custom_theme_manager_show_cb(NULL);click(s_custom_rows[1]);click(s_custom_remove_action);strcpy(summaries[1].id,"replaced_id");removals=removed_calls;click(lv_obj_get_child(lv_obj_get_child(s_custom_remove_popup,-1),1));assert(removed_calls==removals);lv_obj_delete(s_theme_popup);assert(!s_custom_remove_popup&&!s_custom_theme_popup&&!s_custom_rows[1]);
  ui_settings_popups_show_theme(changed);assert(s_theme_open_pending&&!s_theme_popup);ui_settings_popups_close_all();pump();assert(!s_theme_popup&&!s_theme_open_pending&&!s_theme_changed_cb);
  reset();count=0;open_theme();custom_theme_manager_show_cb(NULL);layout(s_custom_theme_popup);assert(lv_obj_has_state(s_custom_apply_action,LV_STATE_DISABLED));click(lv_obj_get_child(lv_obj_get_child(s_custom_theme_popup,-1),0));assert(!s_custom_theme_popup);lv_obj_delete(s_theme_popup);assert(!s_theme_popup&&!s_theme_changed_cb);
 }
 assert(preview_allocations==0);
+reset();open_theme();unsigned replaced_calls=changed_calls;theme_backend_hook=replace_theme;click(lv_obj_get_child(previews(),1));ui_settings_popups_show_theme(changed);pump();assert(s_theme_popup&&!s_theme_change_pending&&changed_calls==replaced_calls);theme_popup_close();
+reset();open_theme();custom_theme_manager_show_cb(NULL);click(s_custom_rows[1]);unsigned retired_calls=selected_calls;lv_obj_delete(s_custom_rows[1]);assert(!s_custom_rows[1]);click(s_custom_apply_action);assert(selected_calls==retired_calls&&!s_theme_change_pending);theme_popup_close();
 miniature_checks(d);
 fail_preview_alloc=true;reset();open_theme();builtin_layout();theme_popup_close();assert(preview_allocations==0);fail_preview_alloc=false;
 puts("PASS: no underlying page draws during chooser scroll; cached preview cleanup/fallback and all theme/custom dialogs, long names/authors/descriptions, preview bounds and scrolling/pinned actions across themes/densities/text sizes/widths; deferred/deduplicated switching, select/Apply, Keep/Remove, active removal, failed/stale operations, empty list and teardown");return 0;}

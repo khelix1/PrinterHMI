@@ -33,8 +33,50 @@ static bool s_export_progress_is_restore_verify = false;
 static int s_export_progress_pulse = 0;
 static bool s_secret_is_restore = false;
 static bool s_pending_encrypted_restore = false;
-static lv_obj_t *s_secret_status,*s_restore_status;
-static bool s_preserve_secret_on_close;
+static lv_obj_t *s_secret_status,*s_restore_status,*s_remove_status;
+static void set_status(const char *text);
+static bool s_backup_dispatching;
+static uint32_t s_backup_epoch;
+
+static bool backup_operation_begin(void)
+{
+    if (!s_popup || s_backup_dispatching) return false;
+    s_backup_dispatching = true;
+    uint32_t epoch = s_backup_epoch;
+    settings_backup_encrypted_worker_state_t state = settings_backup_encrypted_worker_state();
+    if (epoch != s_backup_epoch || !s_popup) {s_backup_dispatching=false;return false;}
+    if (state >= SETTINGS_BACKUP_ENCRYPTED_WORKER_PREPARING && state <= SETTINGS_BACKUP_ENCRYPTED_WORKER_WRITING) {
+        set_status("A backup operation is still running. Wait for it to finish before trying again.");
+        s_backup_dispatching=false;
+        return false;
+    }
+    return true;
+}
+
+static void backup_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    if (target == s_secret_input) {
+        s_secret_input = NULL;
+        if (s_secret_keyboard) lv_keyboard_set_textarea(s_secret_keyboard, NULL);
+    } else if (target == s_secret_confirm) {
+        s_secret_confirm = NULL;
+        if (s_secret_keyboard) lv_keyboard_set_textarea(s_secret_keyboard, NULL);
+    } else if (target == s_secret_keyboard) s_secret_keyboard = NULL;
+    else if (target == s_status) s_status = NULL;
+    else if (target == s_secret_status) s_secret_status = NULL;
+    else if (target == s_restore_status) s_restore_status = NULL;
+    else if (target == s_remove_status) s_remove_status = NULL;
+    else if (target == s_export_progress_status) s_export_progress_status = NULL;
+    else if (target == s_export_progress_value) s_export_progress_value = NULL;
+    else if (target == s_export_progress_bar) s_export_progress_bar = NULL;
+    else return;
+    ++s_backup_epoch;
+}
+static void backup_field_own(lv_obj_t *field)
+{
+    if (field) lv_obj_add_event_cb(field, backup_field_deleted, LV_EVENT_DELETE, NULL);
+}
 
 static void close_export_progress_popup(void);
 static char s_restore_passphrase[BACKUP_PASSPHRASE_MAX + 1];
@@ -58,6 +100,7 @@ static void close_secret_popup(bool preserve_restore_passphrase);
 static void backup_dialog_deleted(lv_event_t *event)
 {
     lv_obj_t *popup=lv_event_get_target_obj(event);
+    ++s_backup_epoch;
     if(popup==s_popup) {
         s_popup=NULL;s_status=NULL;close_restore_confirmation();close_remove_confirmation();
         close_secret_popup(false);close_export_progress_popup();
@@ -66,11 +109,11 @@ static void backup_dialog_deleted(lv_event_t *event)
         s_restore_confirmation=NULL;s_restore_status=NULL;s_pending_encrypted_restore=false;
         secure_clear(s_restore_passphrase,sizeof(s_restore_passphrase));
     }
-    if(popup==s_remove_confirmation)s_remove_confirmation=NULL;
+    if(popup==s_remove_confirmation)s_remove_confirmation=s_remove_status=NULL;
     if(popup==s_secret_popup) {
         s_secret_popup=NULL;s_secret_input=NULL;s_secret_confirm=NULL;s_secret_keyboard=NULL;s_secret_status=NULL;
         s_secret_is_restore=false;
-        if(!s_preserve_secret_on_close)secure_clear(s_restore_passphrase,sizeof(s_restore_passphrase));
+        secure_clear(s_restore_passphrase,sizeof(s_restore_passphrase));
     }
     if(popup==s_export_progress_popup) {
         if(s_export_progress_timer)lv_timer_delete(s_export_progress_timer);
@@ -81,7 +124,7 @@ static void backup_dialog_deleted(lv_event_t *event)
     }
 }
 static void backup_dialog_own(lv_obj_t *popup)
-{lv_obj_add_event_cb(popup,backup_dialog_deleted,LV_EVENT_DELETE,NULL);}
+{++s_backup_epoch;lv_obj_add_event_cb(popup,backup_dialog_deleted,LV_EVENT_DELETE,NULL);}
 static void secret_status(const char *text)
 {
     if(s_secret_status){ui_value_set_text(s_secret_status,text);lv_obj_scroll_to_view(s_secret_status,LV_ANIM_OFF);}
@@ -99,59 +142,42 @@ static void set_status(const char *text)
 
 static void close_restore_confirmation(void)
 {
-    if (s_restore_confirmation) {
-        lv_obj_delete(s_restore_confirmation);
-    }
-    s_restore_confirmation = NULL;
+    lv_obj_t *popup = s_restore_confirmation;
+    s_restore_confirmation = s_restore_status = NULL;
     s_pending_encrypted_restore = false;
     secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
+    if (popup) lv_obj_delete(popup);
 }
 
 
 static void close_remove_confirmation(void)
 {
-    if (s_remove_confirmation) {
-        lv_obj_delete(s_remove_confirmation);
-    }
-    s_remove_confirmation = NULL;
+    lv_obj_t *popup = s_remove_confirmation;
+    s_remove_confirmation = s_remove_status = NULL;
+    if (popup) lv_obj_delete(popup);
 }
 
 
 static void close_secret_popup(bool preserve_restore_passphrase)
 {
-    if (!preserve_restore_passphrase) {
-        secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
-    }
-
-    s_preserve_secret_on_close=preserve_restore_passphrase;
-    if (s_secret_popup) {
-        lv_obj_delete(s_secret_popup);
-    }
-
-    s_secret_popup = NULL;
-    s_secret_input = NULL;
-    s_secret_confirm = NULL;
-    s_secret_keyboard = NULL;
+    lv_obj_t *popup = s_secret_popup;
+    s_secret_popup = s_secret_input = s_secret_confirm = s_secret_keyboard = s_secret_status = NULL;
     s_secret_is_restore = false;
-    s_preserve_secret_on_close=false;
+    if (!preserve_restore_passphrase) secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
+    if (popup) lv_obj_delete(popup);
 }
 
 
 void ui_settings_backup_popup_close(void)
 {
+    lv_obj_t *popup=s_popup;
+    s_popup=s_status=NULL;
     close_restore_confirmation();
     close_remove_confirmation();
     close_secret_popup(false);
     close_export_progress_popup();
-
-    if (s_popup) {
-        lv_obj_delete(s_popup);
-    }
-
-    s_popup = NULL;
-    s_status = NULL;
+    if(popup)lv_obj_delete(popup);
 }
-
 
 static void close_cb(lv_event_t *event)
 {
@@ -163,9 +189,12 @@ static void close_cb(lv_event_t *event)
 static void backup_cb(lv_event_t *event)
 {
     (void)event;
+    if (!backup_operation_begin()) return;
+    uint32_t epoch = s_backup_epoch;
     char status[192];
     (void)settings_backup_export(status, sizeof(status));
-    set_status(status);
+    s_backup_dispatching = false;
+    if (epoch == s_backup_epoch) set_status(status);
 }
 
 
@@ -178,9 +207,17 @@ static void restore_cancel_cb(lv_event_t *event)
 
 static void restore_confirm_cb(lv_event_t *event)
 {
-    (void)event;char status[256];
-    bool restored=s_pending_encrypted_restore ? settings_backup_restore_encrypted(s_restore_passphrase,status,sizeof(status)) : settings_backup_restore(status,sizeof(status));
-    if(restored){close_restore_confirmation();set_status(status);}
+    (void)event;
+    if (!s_restore_confirmation || !backup_operation_begin()) return;
+    uint32_t epoch = s_backup_epoch;
+    lv_obj_t *parent = s_popup;
+    char status[256], passphrase[sizeof(s_restore_passphrase)];
+    snprintf(passphrase, sizeof(passphrase), "%s", s_restore_passphrase);
+    bool restored=s_pending_encrypted_restore ? settings_backup_restore_encrypted(passphrase,status,sizeof(status)) : settings_backup_restore(status,sizeof(status));
+    secure_clear(passphrase, sizeof(passphrase));
+    s_backup_dispatching = false;
+    if (epoch != s_backup_epoch) return;
+    if(restored){close_restore_confirmation();if(s_backup_epoch==epoch+1 && s_popup==parent)set_status(status);}
     else if(s_restore_status){ui_value_set_text(s_restore_status,status);lv_obj_scroll_to_view(s_restore_status,LV_ANIM_OFF);}
 }
 
@@ -197,6 +234,7 @@ static void show_restore_confirmation(const char *preflight,bool encrypted)
     s_restore_status=ui_form_text(body,"",UI_FONT_BODY,UI_DANGER_BRIGHT);
     ui_form_action(s_restore_confirmation,UI_BUTTON_CANCEL,"CANCEL",restore_cancel_cb,NULL);
     ui_form_action(s_restore_confirmation,UI_BUTTON_DANGER,"RESTORE",restore_confirm_cb,NULL);
+    backup_field_own(s_restore_status);
     ui_form_finish(s_restore_confirmation);
 }
 
@@ -204,11 +242,13 @@ static void show_restore_confirmation(const char *preflight,bool encrypted)
 static void restore_request_cb(lv_event_t *event)
 {
     (void)event;
+    if (!backup_operation_begin()) return;
+    uint32_t epoch = s_backup_epoch;
     char preflight[256];
-    if (!settings_backup_preflight(preflight, sizeof(preflight))) {
-        set_status(preflight);
-        return;
-    }
+    bool verified = settings_backup_preflight(preflight, sizeof(preflight));
+    s_backup_dispatching = false;
+    if (epoch != s_backup_epoch) return;
+    if (!verified) {set_status(preflight);return;}
     show_restore_confirmation(preflight, false);
 }
 
@@ -233,34 +273,34 @@ static void secret_cancel_cb(lv_event_t *event)
 
 static void close_export_progress_popup(void)
 {
-    if (s_export_progress_timer) {
-        lv_timer_delete(s_export_progress_timer);
-    }
+    lv_timer_t *timer = s_export_progress_timer;
+    lv_obj_t *popup = s_export_progress_popup;
+    bool clear_secret = s_export_progress_is_restore_verify;
     s_export_progress_timer = NULL;
-    if (s_export_progress_popup) {
-        lv_obj_delete(s_export_progress_popup);
-    }
-    s_export_progress_popup = NULL;
-    s_export_progress_status = NULL;
-    s_export_progress_value = NULL;
-    s_export_progress_bar = NULL;
-    s_export_progress_complete_pending = false;
-    s_export_progress_is_restore_verify = false;
+    s_export_progress_popup = s_export_progress_status = s_export_progress_value = s_export_progress_bar = NULL;
+    s_export_progress_complete_pending = s_export_progress_is_restore_verify = false;
+    if (clear_secret) secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
+    if (timer) lv_timer_delete(timer);
+    if (popup) lv_obj_delete(popup);
 }
 
 
 static void export_progress_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
+    if (!s_popup || !s_export_progress_popup || timer != s_export_progress_timer) return;
+    uint32_t epoch = s_backup_epoch;
     settings_backup_encrypted_worker_state_t state =
         settings_backup_encrypted_worker_state();
+    if (epoch != s_backup_epoch) return;
     char status[256];
     settings_backup_encrypted_worker_status(status, sizeof(status));
+    if (epoch != s_backup_epoch) return;
 
     if (s_export_progress_complete_pending) {
         bool restore_verify = s_export_progress_is_restore_verify;
         s_export_progress_is_restore_verify=false;
         close_export_progress_popup();
+        if (s_backup_epoch != epoch + 1 || !s_popup) return;
         if (restore_verify) {
             show_restore_confirmation(status, true);
         } else {
@@ -281,6 +321,7 @@ static void export_progress_timer_cb(lv_timer_t *timer)
         bool restore_verify = s_export_progress_is_restore_verify;
         s_export_progress_is_restore_verify=false;
         close_export_progress_popup();
+        if (s_backup_epoch != epoch + 1 || !s_popup) return;
         if (restore_verify) {
             show_restore_confirmation(status, true);
         } else {
@@ -292,6 +333,7 @@ static void export_progress_timer_cb(lv_timer_t *timer)
             secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
         }
         close_export_progress_popup();
+        if (s_backup_epoch != epoch + 1 || !s_popup) return;
         set_status(status);
         return;
     }
@@ -321,6 +363,7 @@ static void show_export_progress_popup(bool restore_verify)
     lv_bar_set_range(s_export_progress_bar,0,100);lv_bar_set_value(s_export_progress_bar,10,LV_ANIM_OFF);
     ui_form_text(body,"Keep power connected until the backup operation finishes.",UI_FONT_CAPTION,UI_TEXT_DIM);
     s_export_progress_pulse=0;s_export_progress_timer=lv_timer_create(export_progress_timer_cb,150,NULL);
+    backup_field_own(s_export_progress_status);backup_field_own(s_export_progress_value);backup_field_own(s_export_progress_bar);
     ui_form_finish(s_export_progress_popup);
 }
 
@@ -328,54 +371,32 @@ static void show_export_progress_popup(bool restore_verify)
 static void secret_submit_cb(lv_event_t *event)
 {
     (void)event;
-    const char *passphrase = s_secret_input
-        ? lv_textarea_get_text(s_secret_input)
-        : "";
-
-    if (strnlen(passphrase, BACKUP_PASSPHRASE_MAX + 1) <
-        SETTINGS_BACKUP_CRYPTO_MIN_PASSPHRASE_LENGTH) {
+    if (!s_secret_popup || !s_secret_input ||
+        (!s_secret_is_restore && !s_secret_confirm) || !backup_operation_begin()) return;
+    uint32_t epoch = s_backup_epoch;
+    bool restore = s_secret_is_restore;
+    char passphrase[BACKUP_PASSPHRASE_MAX + 1], status[256];
+    snprintf(passphrase, sizeof(passphrase), "%s", lv_textarea_get_text(s_secret_input));
+    if (strlen(passphrase) < SETTINGS_BACKUP_CRYPTO_MIN_PASSPHRASE_LENGTH) {
         secret_status("Use a passphrase of at least 12 characters.");
-        return;
+        goto done;
     }
-
-    if (!s_secret_is_restore) {
-        const char *confirmation = s_secret_confirm
-            ? lv_textarea_get_text(s_secret_confirm)
-            : "";
-        if (strcmp(passphrase, confirmation) != 0) {
-            secret_status("The two passphrases do not match.");
-            return;
-        }
-
-        char status[256];
-        if (!settings_backup_encrypted_worker_start_export(
-                passphrase,
-                status,
-                sizeof(status))) {
-            secret_status(status);
-            return;
-        }
-        close_secret_popup(false);
-        show_export_progress_popup(false);
-        return;
+    if (!restore && strcmp(passphrase, lv_textarea_get_text(s_secret_confirm))) {
+        secret_status("The two passphrases do not match.");
+        goto done;
     }
-
-    snprintf(s_restore_passphrase,sizeof(s_restore_passphrase),"%s",passphrase);
-
-    char status[256];
-    if (!settings_backup_encrypted_worker_start_verify(
-            s_restore_passphrase,
-            status,
-            sizeof(status))) {
-        secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
-        secret_status(status);
-        return;
-    }
-
-    close_secret_popup(true);
-    show_export_progress_popup(true);
+    bool started = restore
+        ? settings_backup_encrypted_worker_start_verify(passphrase, status, sizeof(status))
+        : settings_backup_encrypted_worker_start_export(passphrase, status, sizeof(status));
+    if (epoch != s_backup_epoch) goto done;
+    if (!started) {secret_status(status);goto done;}
+    if (restore) snprintf(s_restore_passphrase, sizeof(s_restore_passphrase), "%s", passphrase);
+    close_secret_popup(restore);
+    if (s_backup_epoch == epoch + 1 && s_popup) show_export_progress_popup(restore);
+ done:
+    secure_clear(passphrase, sizeof(passphrase));
+    s_backup_dispatching = false;
 }
-
 
 static void show_secret_popup(bool restore)
 {
@@ -398,6 +419,7 @@ static void show_secret_popup(bool restore)
     ui_popup_keyboard_actions(s_secret_keyboard,secret_submit_cb,secret_cancel_cb);
     ui_form_action(s_secret_popup,UI_BUTTON_CANCEL,"CANCEL",secret_cancel_cb,NULL);
     ui_form_action(s_secret_popup,UI_BUTTON_PRIMARY,restore?"VERIFY":"SAVE",secret_submit_cb,NULL);
+    backup_field_own(s_secret_input);backup_field_own(s_secret_confirm);backup_field_own(s_secret_keyboard);backup_field_own(s_secret_status);
     ui_form_finish(s_secret_popup);
     lv_obj_scroll_to_view(s_secret_input,LV_ANIM_OFF);
 }
@@ -406,6 +428,8 @@ static void show_secret_popup(bool restore)
 static void encrypted_backup_request_cb(lv_event_t *event)
 {
     (void)event;
+    if (!backup_operation_begin()) return;
+    s_backup_dispatching = false;
     show_secret_popup(false);
 }
 
@@ -413,6 +437,8 @@ static void encrypted_backup_request_cb(lv_event_t *event)
 static void encrypted_restore_request_cb(lv_event_t *event)
 {
     (void)event;
+    if (!backup_operation_begin()) return;
+    s_backup_dispatching = false;
     show_secret_popup(true);
 }
 
@@ -427,20 +453,34 @@ static void remove_cancel_cb(lv_event_t *event)
 static void remove_confirm_cb(lv_event_t *event)
 {
     (void)event;
+    if (!s_remove_confirmation || !backup_operation_begin()) return;
+    uint32_t epoch = s_backup_epoch;
+    lv_obj_t *parent = s_popup;
     char status[192];
-    (void)settings_backup_remove_all(status, sizeof(status));
-    close_remove_confirmation();
-    set_status(status);
+    bool removed = settings_backup_remove_all(status, sizeof(status));
+    s_backup_dispatching = false;
+    if (epoch != s_backup_epoch) return;
+    if (removed) {
+        close_remove_confirmation();
+        if (s_backup_epoch == epoch + 1 && parent == s_popup) set_status(status);
+    } else if(s_remove_status) {
+        ui_value_set_text(s_remove_status,status);
+        lv_obj_scroll_to_view(s_remove_status,LV_ANIM_OFF);
+    }
 }
 
 
 static void remove_request_cb(lv_event_t *event)
 {
-    (void)event;if(s_remove_confirmation){lv_obj_move_foreground(s_remove_confirmation);return;}
+    (void)event;if(!backup_operation_begin())return;
+    s_backup_dispatching=false;
+    if(s_remove_confirmation){lv_obj_move_foreground(s_remove_confirmation);return;}
     s_remove_confirmation=ui_form_dialog("REMOVE ALL BACKUPS?",720,400,UI_POPUP_DANGER);
     if(!s_remove_confirmation)return;
     backup_dialog_own(s_remove_confirmation);
     ui_form_text(ui_form_body(s_remove_confirmation),"This permanently removes plain and encrypted configuration backups, including temporary recovery copies, from the SD card. Live printer profiles and interface settings are not changed.",UI_FONT_BODY,UI_TEXT);
+    s_remove_status=ui_form_text(ui_form_body(s_remove_confirmation),"",UI_FONT_BODY,UI_DANGER_BRIGHT);
+    backup_field_own(s_remove_status);
     ui_form_action(s_remove_confirmation,UI_BUTTON_CANCEL,"CANCEL",remove_cancel_cb,NULL);
     ui_form_action(s_remove_confirmation,UI_BUTTON_DANGER,"REMOVE",remove_confirm_cb,NULL);
     ui_form_finish(s_remove_confirmation);
@@ -475,5 +515,6 @@ void ui_settings_backup_popup_show(void)
     backup_action(actions,UI_BUTTON_DANGER,"RESTORE PLAIN",restore_request_cb);
     backup_action(actions,UI_BUTTON_DANGER,"RESTORE ENCRYPTED",encrypted_restore_request_cb);
     backup_action(actions,UI_BUTTON_DANGER,"REMOVE BACKUPS",remove_request_cb);
+    backup_field_own(s_status);
     ui_form_action(s_popup,UI_BUTTON_CLOSE,"CLOSE",close_cb,NULL);ui_form_finish(s_popup);
 }

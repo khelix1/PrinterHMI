@@ -2,6 +2,7 @@
 #include "ui_text.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "esp_app_desc.h"
 #include "firmware_identity.h"
@@ -9,14 +10,17 @@
 #include "ui_form_dialog.h"
 
 static lv_obj_t *s_popup;
+static uint32_t s_about_epoch;
+static bool s_about_building;
 
 static void about_deleted(lv_event_t *event)
 {
-    if (lv_event_get_target_obj(event) == s_popup) s_popup = NULL;
+    if (lv_event_get_target_obj(event) == s_popup){s_popup=NULL;++s_about_epoch;}
 }
 
 void ui_about_popup_close(void)
 {
+    ++s_about_epoch;
     lv_obj_t *popup = s_popup;
     s_popup = NULL;
     if (popup) lv_obj_delete(popup);
@@ -49,12 +53,21 @@ static void about_field(lv_obj_t *parent, const char *name, const char *value)
     ui_form_text(parent, text, UI_FONT_BODY, UI_TEXT_DIM);
 }
 
-void ui_about_popup_show(void)
+static void about_build(void)
 {
     if (s_popup) {
         lv_obj_move_foreground(s_popup);
         return;
     }
+    uint32_t epoch=s_about_epoch;
+    firmware_identity_t identity;
+    firmware_identity_get(&identity);
+    if(epoch!=s_about_epoch)return;
+    const esp_app_desc_t *description=esp_app_get_description();
+    if(epoch!=s_about_epoch)return;
+    esp_app_desc_t snapshot;
+    if(description)memcpy(&snapshot,description,sizeof(snapshot));
+    const esp_app_desc_t *app=description?&snapshot:NULL;
     s_popup = ui_form_dialog(ui_text("ABOUT PRINTERHMI"), 760, 520, UI_POPUP_STANDARD);
     if (!s_popup) return;
     lv_obj_add_event_cb(s_popup, about_deleted, LV_EVENT_DELETE, NULL);
@@ -67,9 +80,6 @@ void ui_about_popup_show(void)
         "Live printer status, multi-printer management and operator tools in a dedicated ESP32-P4 appliance.",
         UI_FONT_BODY, UI_TEXT_DIM);
 
-    firmware_identity_t identity;
-    firmware_identity_get(&identity);
-    const esp_app_desc_t *app = esp_app_get_description();
     lv_obj_t *software = about_section(body, ui_text("INSTALLED FIRMWARE"));
     ui_form_text(software, identity.version, UI_FONT_HEADING, UI_ACCENT_BRIGHT);
     about_field(software, "Channel", firmware_identity_channel_name(identity.channel));
@@ -100,4 +110,12 @@ void ui_about_popup_show(void)
     ui_form_action(s_popup, UI_BUTTON_OUTLINED, "CLOSE", close_cb, NULL);
     ui_form_finish(s_popup);
     lv_obj_move_foreground(s_popup);
+}
+
+void ui_about_popup_show(void)
+{
+    if(s_about_building)return;
+    s_about_building=true;
+    about_build();
+    s_about_building=false;
 }

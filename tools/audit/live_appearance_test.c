@@ -9,6 +9,8 @@ static lv_result_t queue_apply(lv_async_cb_t cb,void *data){return fail_async?LV
 #include "ui_appearance_popups.c"
 #undef lv_async_call
 static unsigned changes,saves,background_draws;
+static void(*appearance_save_hook)(void);
+static void run_save_hook(void){if(appearance_save_hook){void(*hook)(void)=appearance_save_hook;appearance_save_hook=NULL;hook();}}
 static void (*s_theme_rebuild_cb)(void);
 static lv_obj_t *s_settings_content;
 #include "settings_scroll_owner.inc"
@@ -22,10 +24,15 @@ ui_density_id_t theme_manager_density(void){return ui_theme_get_density();}
 ui_accessibility_t theme_manager_accessibility(void){return ui_theme_get_accessibility();}
 const char *theme_manager_accent_name(ui_accent_id_t a){(void)a;return "Accent color option";}
 const char *theme_manager_density_name(ui_density_id_t d){return (const char*[]){"Compact","Comfortable","Spacious"}[d];}
-bool theme_manager_select_accent(ui_accent_id_t a){saves++;if(fail_save)return false;ui_theme_set_accent(a);return true;}
-bool theme_manager_select_density(ui_density_id_t d){saves++;if(fail_save)return false;ui_theme_set_density(d);return true;}
-bool theme_manager_set_accessibility(ui_accessibility_t a){saves++;if(fail_save)return false;ui_theme_set_accessibility(a);return true;}
+bool theme_manager_select_accent(ui_accent_id_t a){saves++;run_save_hook();if(fail_save)return false;ui_theme_set_accent(a);return true;}
+bool theme_manager_select_density(ui_density_id_t d){saves++;run_save_hook();if(fail_save)return false;ui_theme_set_density(d);return true;}
+bool theme_manager_set_accessibility(ui_accessibility_t a){saves++;run_save_hook();if(fail_save)return false;ui_theme_set_accessibility(a);return true;}
 static void changed(void){assert(!s_popup&&!s_body&&!s_change_pending);changes++;ui_apply_root_style(lv_screen_active());}
+static void replacement_changed(void){changes++;ui_appearance_popups_show_density(changed);lv_obj_update_layout(s_popup);}
+static void transient_changed(void){changes++;ui_appearance_popups_show_density(changed);ui_appearance_popups_close_all();}
+static void other_changed(void){assert(!"Displayed callback replaced by a repeated show");}
+static void close_during_save(void){ui_appearance_popups_close_all();}
+static void nested_during_save(void){lv_obj_send_event(s_rows[2],LV_EVENT_CLICKED,NULL);}
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t*p){(void)a;(void)p;lv_display_flush_ready(d);}
 static void pump(void){lv_tick_inc(20);lv_timer_handler();}
 static void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
@@ -41,20 +48,35 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
 for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned size=0;size<3;size++){
  lv_display_set_resolution(d,(int[]){1024,640,480}[size],(int[]){600,480,320}[size]);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});ui_theme_set_accent(UI_ACCENT_DEFAULT);
  unsigned objs=objects(lv_screen_active())+objects(lv_layer_top()),ts=timers(),before=changes;
- ui_appearance_popups_show_accessibility(changed);layout();lv_obj_t*popup=s_popup;ui_appearance_popups_show_accessibility(changed);assert(s_popup==popup);
+ ui_appearance_popups_show_accessibility(changed);layout();lv_obj_t*popup=s_popup;ui_appearance_popups_show_accessibility(other_changed);assert(s_popup==popup);
  lv_obj_t*row=lv_obj_get_child(s_body,1);click(row);click(row);assert(s_change_pending && theme_manager_accessibility().large_text!=large);pump();assert(changes==before+1&&s_popup&&s_kind==APPEARANCE_ACCESSIBILITY);layout();assert(strstr(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(s_body,1),0)),large?"OFF":"ON"));
  click(lv_obj_get_child(s_body,2));pump();assert(theme_manager_accessibility().high_contrast);layout();
  click(lv_obj_get_child(s_body,3));pump();assert(theme_manager_accessibility().reduced_transparency);layout();
  click(lv_obj_get_child(s_body,4));pump();assert(theme_manager_accessibility().reduced_motion);layout();
  lv_obj_delete(s_popup);assert(!s_popup&&!s_body&&!s_changed_cb);ui_appearance_popups_show_density(changed);layout();unsigned next=(density+1)%3;click(lv_obj_get_child(s_body,next+1));pump();assert(ui_theme_get_density()==next&&s_kind==APPEARANCE_DENSITY);layout();before=changes;click(lv_obj_get_child(s_body,next+1));pump();assert(changes==before);ui_appearance_popups_close_all();
- ui_appearance_popups_show_accent(changed);layout();fail_save=true;before=saves;click(lv_obj_get_child(s_body,2));pump();assert(saves==before+1&&!s_change_pending&&ui_theme_get_accent()==UI_ACCENT_DEFAULT);fail_save=false;
- fail_async=true;before=saves;click(lv_obj_get_child(s_body,2));assert(saves==before&&!s_change_pending);fail_async=false;click(lv_obj_get_child(s_body,2));pump();assert(ui_theme_get_accent()==1&&s_kind==APPEARANCE_ACCENT);layout();
+ ui_appearance_popups_show_accent(changed);layout();fail_save=true;before=saves;click(lv_obj_get_child(s_body,2));pump();assert(saves==before+1&&!s_change_pending&&ui_theme_get_accent()==UI_ACCENT_DEFAULT&&strstr(lv_label_get_text(s_feedback),"Could not save"));fail_save=false;
+ fail_async=true;before=saves;click(lv_obj_get_child(s_body,2));assert(saves==before&&!s_change_pending&&strstr(lv_label_get_text(s_feedback),"not saved"));fail_async=false;click(lv_obj_get_child(s_body,2));pump();assert(ui_theme_get_accent()==1&&s_kind==APPEARANCE_ACCENT);layout();
  click(lv_obj_get_child(lv_obj_get_child(s_popup,-1),0));pump();assert(!s_popup&&!s_body&&!s_change_pending&&objects(lv_screen_active())+objects(lv_layer_top())==objs&&timers()==ts);
 }
 /* Deleting a chooser while its change is queued must not revive it or
  * accidentally retire a newly requested chooser. */
 ui_appearance_popups_show_accessibility(changed);unsigned before=changes;
 click(lv_obj_get_child(s_body,1));lv_obj_delete(s_popup);ui_appearance_popups_show_density(changed);assert(!s_popup);pump();assert(!s_popup&&!s_change_pending&&changes==before+1);
+/* Callback-created UI must keep its own kind, callback and scroll position. */
+ui_appearance_popups_show_accessibility(replacement_changed);before=changes;
+click(s_rows[0]);pump();assert(changes==before+1&&s_popup&&s_kind==APPEARANCE_DENSITY&&s_changed_cb==changed&&lv_obj_get_scroll_y(s_body)==0);ui_appearance_popups_close_all();
+ui_appearance_popups_show_accessibility(transient_changed);before=changes;
+click(s_rows[0]);pump();assert(changes==before+1&&!s_popup&&!s_body);
+/* Deletion and stale action delivery cannot persist a control of another kind. */
+ui_appearance_popups_show_accent(changed);ui_appearance_popups_show_density(changed);assert(s_kind==APPEARANCE_DENSITY);
+before=saves;lv_obj_t *target=s_rows[ui_theme_get_density()];lv_obj_add_event_cb(target,accent_select_cb,LV_EVENT_CLICKED,(void *)(uintptr_t)1);
+click(target);assert(saves==before);pump();ui_appearance_popups_close_all();
+ui_appearance_popups_show_accessibility(changed);target=s_rows[0];lv_obj_delete(target);assert(!s_rows[0]);before=saves;accessibility_toggle_cb(NULL);assert(saves==before);
+lv_obj_delete(s_body);assert(!s_body&&!s_rows[1]&&!s_rows[2]&&!s_rows[3]&&!s_feedback);appearance_apply_async(NULL);assert(saves==before);ui_appearance_popups_close_all();
+ui_appearance_popups_show_accent(changed);ui_theme_set_accent(UI_ACCENT_DEFAULT);before=saves;appearance_save_hook=nested_during_save;click(s_rows[1]);pump();assert(saves==before+1);ui_appearance_popups_close_all();
+ui_appearance_popups_show_density(changed);unsigned requested=(ui_theme_get_density()+1)%UI_DENSITY_COUNT;before=changes;appearance_save_hook=close_during_save;click(s_rows[requested]);pump();assert(changes==before+1&&!s_popup&&!s_change_pending);
+ui_appearance_popups_show_accessibility(changed);before=changes;click(s_rows[0]);lv_obj_delete(s_body);pump();assert(changes==before+1&&!s_popup&&!s_body&&!s_change_pending);
+ui_appearance_popups_show_density(changed);requested=(ui_theme_get_density()+1)%UI_DENSITY_COUNT;before=changes;fail_save=true;appearance_save_hook=close_during_save;click(s_rows[requested]);pump();assert(changes==before&&!s_popup&&!s_change_pending);fail_save=false;
 /* Preserve section identity when Studio and other themes order cards differently. */
 lv_obj_t*body=sections(false);lv_obj_scroll_to_y(body,230,LV_ANIM_OFF);ui_scroll_anchor_t saved=ui_scroll_anchor_capture(body);assert(!strcmp(saved.title,"Connections")&&saved.offset==30);lv_obj_delete(body);body=sections(true);ui_scroll_anchor_restore(body,saved);assert(lv_obj_get_scroll_y(body)==30);lv_obj_delete(body);
 s_settings_content=sections(false);lv_obj_scroll_to_y(s_settings_content,230,LV_ANIM_OFF);s_theme_rebuild_cb=rebuild_sections;settings_rebuild_preserving_scroll();assert(lv_obj_get_scroll_y(s_settings_content)==30);lv_obj_delete(s_settings_content);s_settings_content=NULL;s_theme_rebuild_cb=NULL;settings_rebuild_preserving_scroll();

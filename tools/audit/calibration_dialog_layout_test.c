@@ -142,11 +142,12 @@ static lv_result_t reserve_async(lv_async_cb_t cb,void *data){return async_rejec
 static ota_release_catalog_snapshot_t catalog;
 static unsigned catalog_fetches,chosen_updates,cancel_updates,catalog_reads;
 static bool catalog_start_loading;
+static void (*catalog_hook)(void);
 static char chosen_url[256];
 void ota_release_catalog_snapshot(ota_release_catalog_snapshot_t *out){*out=catalog;}
 bool ota_release_catalog_start(void){catalog_fetches++;if(catalog_start_loading)catalog.state=OTA_RELEASE_CATALOG_LOADING;return true;}
 bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
- catalog_reads++;
+ catalog_reads++;if(catalog_hook){void(*hook)(void)=catalog_hook;catalog_hook=NULL;hook();}
  if(index>=4)return false;
  memset(out,0,sizeof(*out));out->channel=index<2?OTA_RELEASE_CHANNEL_STABLE:OTA_RELEASE_CHANNEL_NIGHTLY;
  out->relation=index==1?OTA_RELEASE_OLDER:OTA_RELEASE_NEWER;
@@ -158,6 +159,8 @@ bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
 #undef lv_async_call
 static void chosen_update(const char *url){chosen_updates++;snprintf(chosen_url,sizeof(chosen_url),"%s",url);}
 static void cancel_update(void){cancel_updates++;}
+static void retire_catalog(void){browser_close();}
+static void replace_catalog(void){browser_close();ui_ota_release_browser_show(chosen_update,NULL);}
 static void run(void){
  running=false;update_accept=false;update_starts=0;
  s_ota_popup=ui_popup_create(lv_layer_top(),300,200,UI_POPUP_STANDARD);
@@ -188,9 +191,14 @@ static void run(void){
  ui_ota_progress_pump("Downloading firmware\nKeep power connected",40,1000000,2500000,true);layout(s_progress_popup);
  assert(strstr(lv_label_get_text(s_progress_label),"Keep power connected"));
  unsigned cancelled=cancel_updates;click(s_progress_cancel_btn);assert(cancel_updates==cancelled+1&&lv_obj_has_state(s_progress_cancel_btn,LV_STATE_DISABLED));
+ progress_cancel_cb(NULL);ui_ota_progress_show(cancel_update);progress_cancel_cb(NULL);assert(cancel_updates==cancelled+1);
  ui_ota_progress_pump("Cancelling update...",40,1000000,2500000,true);assert(lv_obj_has_state(s_progress_cancel_btn,LV_STATE_DISABLED));
  running=false;ui_ota_progress_pump("Download failed. Check connection and retry.",40,1000000,2500000,false);
  assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_progress_cancel_btn,0)),"CLOSE"));click(s_progress_cancel_btn);assert(!s_progress_popup);
+ ui_ota_popup_show("https://fixture/fw.bin","fixture",255,chosen_update,NULL);
+ lv_obj_delete(s_ota_url_ta);assert(!s_ota_url_ta&&lv_keyboard_get_textarea(s_ota_kb)==NULL);before_updates=chosen_updates;start_cb(NULL);assert(chosen_updates==before_updates);ui_ota_popup_close();
+ running=true;ui_ota_progress_show(cancel_update);lv_obj_delete(s_progress_cancel_btn);assert(!s_progress_cancel_btn);progress_cancel_cb(NULL);ui_ota_progress_pump("Working",20,1,2,true);
+ lv_obj_delete(s_progress_bar);assert(!s_progress_bar);ui_ota_progress_pump("Working",30,1,2,true);ui_ota_progress_close();running=false;ui_ota_popup_resume_camera();
  catalog=(ota_release_catalog_snapshot_t){.state=OTA_RELEASE_CATALOG_READY,.count=4};
  ui_ota_release_browser_show(chosen_update,NULL);layout(s_popup);assert(lv_obj_get_child_count(s_list)==4);
  lv_obj_t *rows[4];for(unsigned i=0;i<4;i++)rows[i]=lv_obj_get_child(s_list,i);
@@ -214,10 +222,10 @@ static void run(void){
  click(lv_obj_get_child(s_list,2));layout(s_confirm);before_updates=chosen_updates;click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),1));
  assert(chosen_updates==before_updates+1&&!strcmp(chosen_url,"https://fixture/fw2.bin")&&!s_popup&&!s_confirm&&!s_timer);
  ui_ota_release_browser_show(chosen_update,NULL);lv_obj_delete(s_popup);assert(!s_popup&&!s_list&&!s_timer&&!s_selected);
- ui_ota_release_browser_show(chosen_update,NULL);catalog.state=OTA_RELEASE_CATALOG_ERROR;strcpy(catalog.error,"Could not retrieve releases. Check the network.");timer_cb(NULL);assert(strstr(lv_label_get_text(s_status),"network"));assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_refresh_button,0)),"RETRY"));
+ ui_ota_release_browser_show(chosen_update,NULL);catalog.state=OTA_RELEASE_CATALOG_ERROR;strcpy(catalog.error,"Could not retrieve releases. Check the network.");timer_cb(s_timer);assert(strstr(lv_label_get_text(s_status),"network"));assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_refresh_button,0)),"RETRY"));
  catalog_start_loading=true;unsigned fetches=catalog_fetches;click(s_refresh_button);assert(catalog_fetches==fetches+1&&lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&!lv_obj_get_child_count(s_list));refresh_cb(NULL);assert(catalog_fetches==fetches+1);
- catalog.state=OTA_RELEASE_CATALOG_READY;catalog.count=0;timer_cb(NULL);assert(!lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&strstr(lv_label_get_text(s_status),"No compatible"));
- catalog.state=OTA_RELEASE_CATALOG_IDLE;timer_cb(NULL);assert(strstr(lv_label_get_text(s_status),"idle"));browser_close();catalog_start_loading=false;
+ catalog.state=OTA_RELEASE_CATALOG_READY;catalog.count=0;timer_cb(s_timer);assert(!lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&strstr(lv_label_get_text(s_status),"No compatible"));
+ catalog.state=OTA_RELEASE_CATALOG_IDLE;timer_cb(s_timer);assert(strstr(lv_label_get_text(s_status),"idle"));browser_close();catalog_start_loading=false;
  for(unsigned cycle=0;cycle<12;cycle++){
   ui_ota_release_browser_show(chosen_update,ota_open_custom_url_bridge);
   assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_popup),0)),"Installed: Custom"));
@@ -246,6 +254,11 @@ static void run(void){
  ui_ota_popup_show("https://fixture/fw.bin","Update information",255,chosen_update,NULL);
  before_updates=chosen_updates;start_cb(NULL);assert(s_deferred_start_popup);ui_ota_popup_close();
  lv_tick_inc(1);lv_timer_handler();assert(!s_deferred_start_popup&&chosen_updates==before_updates);
+ catalog=(ota_release_catalog_snapshot_t){.state=OTA_RELEASE_CATALOG_READY,.count=4};
+ ui_ota_release_browser_show(chosen_update,NULL);catalog_hook=retire_catalog;click(lv_obj_get_child(s_list,0));assert(!s_popup&&!s_confirm&&!s_selected);
+ ui_ota_release_browser_show(chosen_update,NULL);catalog_hook=replace_catalog;s_rendered_count=SIZE_MAX;timer_cb(s_timer);assert(s_popup&&s_list&&!s_confirm);timer_cb(s_timer);assert(lv_obj_get_child_count(s_list)==4);
+ lv_obj_delete(s_stable_tab);assert(!s_stable_tab);select_tab(OTA_RELEASE_CHANNEL_NIGHTLY);timer_cb(s_timer);
+ lv_obj_delete(s_list);assert(!s_list&&!s_timer);timer_cb(NULL);browser_close();
  assert(!strcmp(relation_text(&(ota_release_entry_t){.channel=OTA_RELEASE_CHANNEL_NIGHTLY,.relation=OTA_RELEASE_NEWER}),"UPDATE AVAILABLE"));
  assert(!strcmp(relation_text(&(ota_release_entry_t){.channel=OTA_RELEASE_CHANNEL_STABLE,.relation=OTA_RELEASE_SWITCH_CHANNEL}),"SWITCH TO STABLE"));
 

@@ -14,6 +14,7 @@
 #include "timezone_config.h"
 #include "theme_manager.h"
 #include "ui_appearance_popups.h"
+#include "ui_value_update.h"
 
 #include "bsp/display.h"
 #include "esp_err.h"
@@ -51,6 +52,34 @@ static lv_obj_t *s_theme_label = NULL;
 static lv_obj_t *s_notifications_label;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
 static lv_obj_t *s_settings_content;
+static lv_obj_t *s_brightness_slider,*s_brightness_value,*s_sleep_action;
+static uint32_t s_settings_page_epoch;
+static bool s_display_io_dispatching,s_wake_pending;
+static void settings_display_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **fields[]={&s_brightness_slider,&s_brightness_value,&s_sleep_action,&settings_sleep_label,&s_timezone_label,&s_theme_label,&s_notifications_label,&s_settings_content};
+    for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(*fields[i]==target)*fields[i]=NULL;
+}
+static void settings_display_field_own(lv_obj_t *field)
+{if(field)lv_obj_add_event_cb(field,settings_display_field_deleted,LV_EVENT_DELETE,NULL);}
+static void settings_page_retire(void)
+{
+    ++s_settings_page_epoch;
+    settings_panel=s_settings_content=s_brightness_slider=s_brightness_value=s_sleep_action=NULL;
+    settings_sleep_label=s_timezone_label=s_theme_label=s_notifications_label=NULL;
+    s_theme_rebuild_cb=NULL;
+    settings_system_info_unbind();
+    ui_toast_preferences_close();ui_appearance_popups_close_all();ui_settings_popups_close_all();ui_settings_backup_popup_close();ui_about_popup_close();
+}
+static void settings_page_deleted(lv_event_t *event)
+{if(lv_event_get_target_obj(event)==settings_panel)settings_page_retire();}
+static bool settings_brightness_event(lv_event_t *event,lv_event_code_t code)
+{
+    return event && settings_panel && s_brightness_slider && lv_event_get_code(event)==code &&
+        lv_event_get_target_obj(event)==s_brightness_slider && !s_display_io_dispatching &&
+        !lv_obj_has_state(s_brightness_slider,LV_STATE_DISABLED) && !s_display_sleeping;
+}
 static void settings_rebuild_preserving_scroll(void)
 {
     if(!s_theme_rebuild_cb)return;
@@ -149,98 +178,40 @@ static void settings_backup_cb(lv_event_t *event)
 
 static void settings_brightness_changed_cb(lv_event_t *e)
 {
-    lv_obj_t *slider = lv_event_get_target(e);
-
-    if (!slider) {
-        return;
+    if(!settings_brightness_event(e,LV_EVENT_VALUE_CHANGED))return;
+    int requested=lv_slider_get_value(s_brightness_slider);
+    if(requested<10 || requested>100)return;
+    uint32_t epoch=s_settings_page_epoch;
+    s_display_io_dispatching=true;
+    esp_err_t error=bsp_display_brightness_set(requested);
+    if(error==ESP_OK)s_display_brightness_percent=requested;
+    if(epoch==s_settings_page_epoch && s_brightness_slider){
+        if(error!=ESP_OK)lv_slider_set_value(s_brightness_slider,s_display_brightness_percent,LV_ANIM_OFF);
+        char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
+        ui_value_set_text(s_brightness_value,value);
+        if(error!=ESP_OK)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT APPLIED","The previous brightness is retained. Try the slider again.");
     }
-
-    int brightness =
-        lv_slider_get_value(slider);
-
-    lv_obj_t *value_label =
-        lv_obj_get_user_data(slider);
-
-    if (value_label) {
-        char text[16];
-
-        lv_snprintf(
-            text,
-            sizeof(text),
-            "%d%%",
-            brightness);
-
-        lv_label_set_text(
-            value_label,
-            text);
-    }
-
-    esp_err_t err =
-        bsp_display_brightness_set(brightness);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Brightness update failed: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    s_display_brightness_percent = brightness;
+    s_display_io_dispatching=false;
 }
 
 
 static void settings_brightness_save_cb(lv_event_t *e)
 {
-    (void)e;
-
-    if (s_display_brightness_percent ==
-        s_saved_display_brightness_percent) {
-        return;
-    }
-
+    if(!settings_brightness_event(e,LV_EVENT_RELEASED))return;
+    int requested=s_display_brightness_percent;
+    if(requested==s_saved_display_brightness_percent)return;
+    uint32_t epoch=s_settings_page_epoch;
+    s_display_io_dispatching=true;
     nvs_handle_t handle;
-
-    esp_err_t err =
-        nvs_open(
-            SETTINGS_NVS_NAMESPACE,
-            NVS_READWRITE,
-            &handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not open brightness storage: %s",
-            esp_err_to_name(err));
-        return;
+    esp_err_t error=nvs_open(SETTINGS_NVS_NAMESPACE,NVS_READWRITE,&handle);
+    if(error==ESP_OK){
+        error=nvs_set_u8(handle,SETTINGS_NVS_BRIGHTNESS_KEY,(uint8_t)requested);
+        if(error==ESP_OK)error=nvs_commit(handle);
+        nvs_close(handle);
     }
-
-    err = nvs_set_u8(
-        handle,
-        SETTINGS_NVS_BRIGHTNESS_KEY,
-        (uint8_t)s_display_brightness_percent);
-
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
-
-    nvs_close(handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not save display brightness: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    s_saved_display_brightness_percent =
-        s_display_brightness_percent;
-
-    ESP_LOGI(
-        TAG,
-        "Saved display brightness: %d%%",
-        s_saved_display_brightness_percent);
+    if(error==ESP_OK)s_saved_display_brightness_percent=requested;
+    else if(epoch==s_settings_page_epoch)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT SAVED","The live brightness is retained. Release the slider again to retry saving it.");
+    s_display_io_dispatching=false;
 }
 
 
@@ -263,190 +234,81 @@ static const char *settings_sleep_timeout_text(void)
 }
 
 
-static void settings_wake_display_cb(lv_event_t *e)
+static void settings_wake_display_cb(lv_event_t *event);
+static bool settings_create_wake_overlay(void);
+static void settings_wake_overlay_deleted(lv_event_t *event)
 {
-    (void)e;
-
-    if (!s_display_sleeping) {
+    if(lv_event_get_target_obj(event)!=s_sleep_wake_overlay)return;
+    s_sleep_wake_overlay=NULL;
+    if(s_display_sleeping){
+        s_wake_pending=true;
+        if(!s_display_io_dispatching)settings_wake_display_cb(NULL);
+    }
+}
+static bool settings_create_wake_overlay(void)
+{
+    if(s_sleep_wake_overlay)return true;
+    s_sleep_wake_overlay=lv_obj_create(lv_layer_top());
+    if(!s_sleep_wake_overlay)return false;
+    lv_obj_set_size(s_sleep_wake_overlay,LV_PCT(100),LV_PCT(100));
+    lv_obj_set_pos(s_sleep_wake_overlay,0,0);
+    lv_obj_clear_flag(s_sleep_wake_overlay,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_sleep_wake_overlay,LV_OBJ_FLAG_CLICKABLE);
+    ui_apply_surface_role(s_sleep_wake_overlay,UI_SURFACE_TRANSPARENT);
+    lv_obj_add_event_cb(s_sleep_wake_overlay,settings_wake_display_cb,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(s_sleep_wake_overlay,settings_wake_overlay_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_move_foreground(s_sleep_wake_overlay);
+    return true;
+}
+static void settings_wake_display_cb(lv_event_t *event)
+{
+    if(!s_display_sleeping || s_display_io_dispatching ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_PRESSED || lv_event_get_target_obj(event)!=s_sleep_wake_overlay)))return;
+    s_display_io_dispatching=true;s_wake_pending=false;
+    esp_err_t error=bsp_display_brightness_set(s_display_brightness_percent);
+    if(error!=ESP_OK){
+        /* Keep the first-touch shield for another wake attempt. */
+        (void)settings_create_wake_overlay();
+        s_wake_pending=false;s_display_io_dispatching=false;
+        ESP_LOGE(TAG,"Display wake failed: %s",esp_err_to_name(error));
         return;
     }
-
-    s_display_sleeping = false;
-
-    esp_err_t err =
-        bsp_display_brightness_set(
-            s_display_brightness_percent);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Display wake failed: %s",
-            esp_err_to_name(err));
-    }
-
-    lv_display_trigger_activity(
-        lv_display_get_default());
-
-    if (s_sleep_wake_overlay) {
-        lv_obj_delete_async(
-            s_sleep_wake_overlay);
-
-        s_sleep_wake_overlay = NULL;
-    }
-
-    ESP_LOGI(
-        TAG,
-        "Display awake at %d%%",
-        s_display_brightness_percent);
+    s_display_sleeping=false;s_wake_pending=false;
+    lv_display_trigger_activity(lv_display_get_default());
+    lv_obj_t *overlay=s_sleep_wake_overlay;s_sleep_wake_overlay=NULL;
+    if(overlay)lv_obj_delete_async(overlay);
+    s_display_io_dispatching=false;
 }
-
-
 static void settings_enter_display_sleep(void)
 {
-    if (s_display_sleeping ||
-        s_sleep_timeout_minutes == 0) {
-        return;
+    if(s_display_sleeping || !s_sleep_timeout_minutes || s_display_io_dispatching || !settings_create_wake_overlay())return;
+    s_display_io_dispatching=true;s_display_sleeping=true;
+    esp_err_t error=bsp_display_backlight_off();
+    if(error!=ESP_OK){
+        s_display_sleeping=false;s_wake_pending=false;
+        lv_obj_t *overlay=s_sleep_wake_overlay;s_sleep_wake_overlay=NULL;
+        if(overlay)lv_obj_delete(overlay);
+        ESP_LOGE(TAG,"Display sleep failed: %s",esp_err_to_name(error));
     }
-
-    /*
-     * This transparent top-layer object consumes the first touch.
-     * That touch wakes the display without activating a hidden control.
-     */
-    s_sleep_wake_overlay =
-        lv_obj_create(lv_layer_top());
-
-    if (!s_sleep_wake_overlay) {
-        ESP_LOGE(TAG, "Could not create display wake overlay");
-        return;
-    }
-
-    lv_obj_set_size(
-        s_sleep_wake_overlay,
-        LV_PCT(100),
-        LV_PCT(100));
-
-    lv_obj_set_pos(
-        s_sleep_wake_overlay,
-        0,
-        0);
-
-    lv_obj_clear_flag(
-        s_sleep_wake_overlay,
-        LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_add_flag(
-        s_sleep_wake_overlay,
-        LV_OBJ_FLAG_CLICKABLE);
-
-    ui_apply_surface_role(s_sleep_wake_overlay, UI_SURFACE_TRANSPARENT);
-
-    lv_obj_add_event_cb(
-        s_sleep_wake_overlay,
-        settings_wake_display_cb,
-        LV_EVENT_PRESSED,
-        NULL);
-
-    lv_obj_move_foreground(
-        s_sleep_wake_overlay);
-
-    s_display_sleeping = true;
-
-    esp_err_t err =
-        bsp_display_backlight_off();
-
-    if (err != ESP_OK) {
-        s_display_sleeping = false;
-
-        lv_obj_delete(
-            s_sleep_wake_overlay);
-
-        s_sleep_wake_overlay = NULL;
-
-        ESP_LOGE(
-            TAG,
-            "Display sleep failed: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    ESP_LOGI(
-        TAG,
-        "Display sleeping after %u minutes",
-        (unsigned)s_sleep_timeout_minutes);
+    s_display_io_dispatching=false;
+    if(s_wake_pending && s_display_sleeping)settings_wake_display_cb(NULL);
 }
-
-
 static void settings_sleep_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (s_display_sleeping ||
-        s_sleep_timeout_minutes == 0) {
-        return;
-    }
-
-    lv_display_t *display =
-        lv_display_get_default();
-
-    if (!display) {
-        return;
-    }
-
-    uint32_t timeout_ms =
-        (uint32_t)s_sleep_timeout_minutes *
-        60U *
-        1000U;
-
-    if (lv_display_get_inactive_time(display) >=
-        timeout_ms) {
-        settings_enter_display_sleep();
-    }
+    if(timer!=s_sleep_timer || !s_sleep_timer || s_display_sleeping || !s_sleep_timeout_minutes || s_display_io_dispatching)return;
+    lv_display_t *display=lv_display_get_default();
+    if(display && lv_display_get_inactive_time(display)>=(uint32_t)s_sleep_timeout_minutes*60U*1000U)settings_enter_display_sleep();
 }
-
-
-static void settings_save_sleep_timeout(void)
+static bool settings_save_sleep_timeout(uint8_t requested)
 {
     nvs_handle_t handle;
-
-    esp_err_t err =
-        nvs_open(
-            SETTINGS_NVS_NAMESPACE,
-            NVS_READWRITE,
-            &handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not open sleep-timeout storage: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    err = nvs_set_u8(
-        handle,
-        SETTINGS_NVS_SLEEP_KEY,
-        s_sleep_timeout_minutes);
-
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
-
+    esp_err_t error=nvs_open(SETTINGS_NVS_NAMESPACE,NVS_READWRITE,&handle);
+    if(error!=ESP_OK)return false;
+    error=nvs_set_u8(handle,SETTINGS_NVS_SLEEP_KEY,requested);
+    if(error==ESP_OK)error=nvs_commit(handle);
     nvs_close(handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not save sleep timeout: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    ESP_LOGI(
-        TAG,
-        "Saved sleep timeout: %s",
-        settings_sleep_timeout_text());
+    return error==ESP_OK;
 }
-
 
 void ui_settings_module_init(void)
 {
@@ -615,6 +477,8 @@ void ui_settings_show_page(
     }
 
     settings_panel = lv_obj_create(lv_screen_active());
+    ++s_settings_page_epoch;
+    lv_obj_add_event_cb(settings_panel,settings_page_deleted,LV_EVENT_DELETE,NULL);
 
     lv_obj_set_size(settings_panel,
                     UI_PAGE_ROOT_WIDTH,
@@ -679,6 +543,7 @@ void ui_settings_show_page(
      * Scrollable Settings body
      */
     lv_obj_t *content = lv_obj_create(settings_panel);
+    settings_display_field_own(content);
     s_settings_content = content;
 
     lv_obj_set_size(
@@ -859,6 +724,8 @@ void ui_settings_show_page(
         device_row_3,
         settings_sleep_card_cb);
 
+    s_sleep_action=settings_sleep_label?lv_obj_get_parent(settings_sleep_label):NULL;
+    settings_display_field_own(settings_sleep_label);settings_display_field_own(s_sleep_action);
     ui_settings_section_add_divider(
         device, device_row_3 + row_height);
 
@@ -1055,6 +922,9 @@ void ui_settings_show_page(
             display_row_1,
             settings_brightness_changed_cb);
 
+    s_brightness_slider=brightness_slider;
+    s_brightness_value=brightness_slider?lv_obj_get_user_data(brightness_slider):NULL;
+    settings_display_field_own(s_brightness_slider);settings_display_field_own(s_brightness_value);
     if (brightness_slider) {
         lv_obj_add_event_cb(
             brightness_slider,
@@ -1142,6 +1012,7 @@ void ui_settings_show_page(
             lv_obj_set_pos(sections[i],0,y);y+=lv_obj_get_height(sections[i])+20;
         }
     }
+    settings_display_field_own(s_timezone_label);settings_display_field_own(s_theme_label);settings_display_field_own(s_notifications_label);
     ui_settings_refresh();
 }
 
@@ -1156,7 +1027,14 @@ void ui_settings_refresh(void)
         return;
     }
 
+    uint32_t epoch=s_settings_page_epoch;
     settings_system_info_refresh();
+    if(epoch!=s_settings_page_epoch || !settings_panel || s_display_io_dispatching)return;
+    if(s_brightness_slider && lv_slider_get_value(s_brightness_slider)!=s_display_brightness_percent)
+        lv_slider_set_value(s_brightness_slider,s_display_brightness_percent,LV_ANIM_OFF);
+    char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
+    ui_value_set_text(s_brightness_value,value);
+    ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
 }
 
 int ui_settings_brightness_percent(void)
@@ -1175,7 +1053,7 @@ bool ui_settings_restore_display_preferences(
     int brightness_percent,
     uint8_t sleep_timeout_minutes)
 {
-    if (brightness_percent < 10 ||
+    if (s_display_io_dispatching || brightness_percent < 10 ||
         brightness_percent > 100 ||
         (sleep_timeout_minutes != 0 &&
          sleep_timeout_minutes != 5 &&
@@ -1184,6 +1062,8 @@ bool ui_settings_restore_display_preferences(
         return false;
     }
 
+    s_display_io_dispatching=true;
+    uint32_t epoch=s_settings_page_epoch;
     nvs_handle_t handle;
 
     esp_err_t error = nvs_open(
@@ -1192,7 +1072,7 @@ bool ui_settings_restore_display_preferences(
         &handle);
 
     if (error != ESP_OK) {
-        return false;
+        s_display_io_dispatching=false;return false;
     }
 
     error = nvs_set_u8(
@@ -1214,7 +1094,7 @@ bool ui_settings_restore_display_preferences(
     nvs_close(handle);
 
     if (error != ESP_OK) {
-        return false;
+        s_display_io_dispatching=false;return false;
     }
 
     s_display_brightness_percent =
@@ -1226,39 +1106,24 @@ bool ui_settings_restore_display_preferences(
     s_sleep_timeout_minutes =
         sleep_timeout_minutes;
 
-    (void)bsp_display_brightness_set(
-        brightness_percent);
+    if(!s_display_sleeping)(void)bsp_display_brightness_set(brightness_percent);
 
-    if (settings_sleep_label) {
+    if (epoch==s_settings_page_epoch && settings_sleep_label) {
         lv_label_set_text(
             settings_sleep_label,
             settings_sleep_timeout_text());
     }
 
+    s_display_io_dispatching=false;
+    if(s_display_sleeping && (s_wake_pending || sleep_timeout_minutes==0))settings_wake_display_cb(NULL);
     return true;
 }
 
 
 void hide_settings_tab(void)
 {
-    if (settings_panel) {
-        lv_obj_delete(settings_panel);
-        settings_panel = NULL;
-        s_settings_content = NULL;
-
-        settings_sleep_label = NULL;
-        s_timezone_label = NULL;
-        s_theme_label = NULL;
-        s_notifications_label = NULL;
-        ui_toast_preferences_close();
-        s_theme_rebuild_cb = NULL;
-        settings_system_info_unbind();
-        ui_appearance_popups_close_all();
-        ui_settings_popups_close_all();
-        ui_settings_backup_popup_close();
-    }
-
-
+    lv_obj_t *panel=settings_panel;
+    if(panel){settings_page_retire();lv_obj_delete(panel);}
     ui_shell_raise();
 }
 
@@ -1278,35 +1143,17 @@ void settings_reboot_cb(lv_event_t *e)
 
 void settings_sleep_card_cb(lv_event_t *e)
 {
-    (void)e;
-
-    switch (s_sleep_timeout_minutes) {
-        case 0:
-            s_sleep_timeout_minutes = 5;
-            break;
-
-        case 5:
-            s_sleep_timeout_minutes = 15;
-            break;
-
-        case 15:
-            s_sleep_timeout_minutes = 30;
-            break;
-
-        case 30:
-        default:
-            s_sleep_timeout_minutes = 0;
-            break;
+    if(!settings_panel || !settings_sleep_label || !s_sleep_action || s_display_io_dispatching || s_display_sleeping ||
+        (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_sleep_action)))return;
+    uint8_t requested=s_sleep_timeout_minutes==0?5:s_sleep_timeout_minutes==5?15:s_sleep_timeout_minutes==15?30:0;
+    uint32_t epoch=s_settings_page_epoch;
+    s_display_io_dispatching=true;
+    bool saved=settings_save_sleep_timeout(requested);
+    if(saved)s_sleep_timeout_minutes=requested;
+    if(epoch==s_settings_page_epoch){
+        ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
+        if(!saved)ui_toast_show(UI_STATUS_WARNING,"SLEEP TIMEOUT NOT SAVED","The previous sleep timeout is unchanged. Tap again to retry.");
     }
-
-    lv_display_trigger_activity(
-        lv_display_get_default());
-
-    if (settings_sleep_label) {
-        lv_label_set_text(
-            settings_sleep_label,
-            settings_sleep_timeout_text());
-    }
-
-    settings_save_sleep_timeout();
+    if(saved)lv_display_trigger_activity(lv_display_get_default());
+    s_display_io_dispatching=false;
 }

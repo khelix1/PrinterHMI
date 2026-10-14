@@ -9,6 +9,7 @@
 #include "ui_popup.h"
 #include "ui_text_fit.h"
 #include "printer_profile_health.h"
+#include "ui_value_update.h"
 
 #define NOTICE_CAPACITY 4
 #define NOTICE_OPEN_PRINTERS (-2)
@@ -29,7 +30,22 @@ static unsigned s_notice_count, s_overflow;
 static ui_notification_level_t s_level; /* Quiet default; errors are never disabled. */
 static lv_obj_t *s_toast, *s_preference_popup, *s_preference_value, *s_preference_status;
 static lv_timer_t *s_timer;
-static lv_obj_t *s_level_buttons[3];
+static lv_obj_t *s_level_buttons[3], *s_preference_save, *s_notice_open, *s_notice_dismiss, *s_notice_body;
+static uint32_t s_surface_epoch,s_notice_epoch,s_preference_epoch;
+static bool s_notice_dispatching,s_preference_dispatching;
+static void notification_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_preference_value)s_preference_value=NULL;
+    if(target==s_preference_status)s_preference_status=NULL;
+    if(target==s_preference_save)s_preference_save=NULL;
+    if(target==s_notice_body)s_notice_body=NULL;
+    if(target==s_notice_open)s_notice_open=NULL;
+    if(target==s_notice_dismiss)s_notice_dismiss=NULL;
+    for(unsigned i=0;i<3;i++)if(target==s_level_buttons[i])s_level_buttons[i]=NULL;
+}
+static void notification_field_own(lv_obj_t *field)
+{if(field)lv_obj_add_event_cb(field,notification_field_deleted,LV_EVENT_DELETE,NULL);}
 static ui_notification_level_t s_pending_level;
 static void (*s_preference_changed)(void);
 static void render_notice(void);
@@ -38,20 +54,28 @@ void ui_toast_set_printer_chooser_action(void (*action)(void)){s_printer_chooser
 
 static void surface_deleted(lv_event_t *event)
 {
-    (void)event;
-    s_toast = NULL;
-    if (s_timer) { lv_timer_delete(s_timer); s_timer = NULL; }
+    if(lv_event_get_target_obj(event)!=s_toast)return;
+    ++s_surface_epoch;
+    s_toast=s_notice_open=s_notice_dismiss=s_notice_body=NULL;
+    lv_timer_t *timer=s_timer;s_timer=NULL;
+    if(timer)lv_timer_delete(timer);
 }
 static void close_surface(void)
 {
-    if (s_timer) { lv_timer_delete(s_timer); s_timer = NULL; }
-    if (s_toast) { lv_obj_t *object = s_toast; s_toast = NULL; lv_obj_delete(object); }
+    ++s_surface_epoch;
+    lv_timer_t *timer=s_timer;
+    lv_obj_t *object=s_toast;
+    s_timer=NULL;s_toast=s_notice_open=s_notice_dismiss=s_notice_body=NULL;
+    if(timer)lv_timer_delete(timer);
+    if(object)lv_obj_delete(object);
 }
 void ui_toast_close(void)
 {
+    ++s_notice_epoch;
+    s_notice_count=s_overflow=0;
     close_surface();
-    s_notice_count = s_overflow = 0;
 }
+
 void ui_toast_init(void)
 {
     nvs_handle_t handle;
@@ -84,7 +108,7 @@ bool ui_toast_set_level(ui_notification_level_t level)
             if(s_notices[i].kind!=UI_STATUS_INFO || s_notices[i].essential)
                 s_notices[kept++]=s_notices[i];
         }
-        s_notice_count=kept;
+        ++s_notice_epoch;s_notice_count=kept;
         if(!kept)s_overflow=0;
         render_notice();
     } else if(level!=UI_NOTIFY_DETAILED && !s_notice_count)close_surface();
@@ -114,50 +138,63 @@ static lv_obj_t *text(lv_obj_t *parent, const char *value, const lv_font_t *font
     ui_apply_custom_label_style(label, font, color);
     return label;
 }
-static void dismiss_notice(lv_event_t *event);
+static void dismiss_current_notice(void)
+{
+    if(s_notice_count){
+        --s_notice_count;memmove(s_notices,s_notices+1,s_notice_count*sizeof(s_notices[0]));
+        ++s_notice_epoch;
+    }
+    if(!s_notice_count)s_overflow=0;
+    uint32_t expected=s_surface_epoch+1;
+    close_surface();
+    if(expected==s_surface_epoch && s_notice_count && !s_toast)render_notice();
+}
 static void open_notice(lv_event_t *event)
 {
-    (void)event;
-    if(!s_notice_count)return;
+    if(!s_toast || !s_notice_body || !s_notice_open || !s_notice_count || s_notice_dispatching || lv_obj_has_state(s_notice_open,LV_STATE_DISABLED) ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_CLICKED || lv_event_get_target_obj(event)!=s_notice_open)))return;
     notice_t notice=s_notices[0];
-    if (notice.destination == NOTICE_OPEN_PRINTERS) {
-        if (s_printer_chooser_action) {
-            dismiss_notice(NULL);
-            s_printer_chooser_action();
-        }
+    void(*chooser)(void)=s_printer_chooser_action;
+    if(notice.destination==NOTICE_OPEN_PRINTERS){
+        if(!chooser)return;
+        s_notice_dispatching=true;dismiss_current_notice();chooser();s_notice_dispatching=false;return;
+    }
+    if(notice.owner!=moonraker_config_generation() || notice.destination<0 || notice.destination>=UI_SHELL_PAGE_COUNT){
+        lv_obj_t *body=s_notice_body;
+        if(body)ui_popup_feedback(body,UI_STATUS_WARNING,"PRINTER CHANGED","Printer context changed. Open Console from the sidebar for the printer named in this notice.");
         return;
     }
-    if(notice.owner!=moonraker_config_generation() || notice.destination<0 || notice.destination>=UI_SHELL_PAGE_COUNT) {
-        lv_obj_t *body=lv_obj_get_child(s_toast,0);
-        ui_popup_feedback(body,UI_STATUS_WARNING,"PRINTER CHANGED","Printer context changed. Open Console from the sidebar for the printer named in this notice.");
-        return;
+    s_notice_dispatching=true;
+    dismiss_current_notice();
+    if(notice.owner==moonraker_config_generation()){
+        uint32_t epoch=s_surface_epoch;
+        ui_shell_page_action((ui_shell_page_t)notice.destination);
+        if(epoch==s_surface_epoch && notice.owner==moonraker_config_generation())
+            ui_shell_set_active_nav(notice.destination>=UI_SHELL_PAGE_BED_MESH?UI_SHELL_PAGE_TOOLS:notice.destination);
     }
-    dismiss_notice(NULL);
-    ui_shell_page_action((ui_shell_page_t)notice.destination);
-    ui_shell_set_active_nav(notice.destination>=UI_SHELL_PAGE_BED_MESH ? UI_SHELL_PAGE_TOOLS : notice.destination);
+    s_notice_dispatching=false;
 }
-
 static void dismiss_notice(lv_event_t *event)
 {
-    (void)event;
-    close_surface();
-    if (s_notice_count) {
-        --s_notice_count;
-        memmove(s_notices, s_notices + 1, s_notice_count * sizeof(s_notices[0]));
-    }
-    if (s_notice_count) render_notice();
-    else s_overflow = 0;
+    if(!s_toast || !s_notice_dismiss || !s_notice_count || s_notice_dispatching || lv_obj_has_state(s_notice_dismiss,LV_STATE_DISABLED) ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_CLICKED || lv_event_get_target_obj(event)!=s_notice_dismiss)))return;
+    s_notice_dispatching=true;dismiss_current_notice();s_notice_dispatching=false;
 }
+
 static void render_notice(void)
 {
+    uint32_t expected=s_surface_epoch+1;
     close_surface();
-    if (!s_notice_count) return;
-    const notice_t *notice = &s_notices[0];
+    if(expected!=s_surface_epoch || s_toast || !s_notice_count)return;
+    notice_t displayed=s_notices[0];
+    const notice_t *notice=&displayed;
     int width = lv_display_get_horizontal_resolution(NULL) - 32;
     int height = lv_display_get_vertical_resolution(NULL) - 32;
     if (width > 520) width = 520;
     if (height > 260) height = 260;
     s_toast = lv_obj_create(lv_layer_top());
+    if(!s_toast)return;
+    ++s_surface_epoch;
     ui_apply_popup_style(s_toast);
     lv_obj_set_size(s_toast, width, height);
     lv_obj_align(s_toast, LV_ALIGN_BOTTOM_RIGHT, -16, -16);
@@ -168,6 +205,7 @@ static void render_notice(void)
     lv_obj_remove_flag(s_toast, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_toast, surface_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = column(s_toast);
+    s_notice_body=body;notification_field_own(body);
     lv_obj_set_height(body, 0);
     lv_obj_set_flex_grow(body, 1);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
@@ -188,17 +226,20 @@ static void render_notice(void)
         lv_obj_t *open=ui_button_create(footer,UI_BUTTON_OUTLINED,name);
         lv_obj_set_size(open,144,48);
         ui_text_fit_single_line(lv_obj_get_child(open,0),UI_FONT_BODY);
+        s_notice_open=open;notification_field_own(open);
         lv_obj_add_event_cb(open,open_notice,LV_EVENT_CLICKED,NULL);
     }
     lv_obj_t *close = ui_button_create(footer, UI_BUTTON_CLOSE, "DISMISS");
     lv_obj_set_size(close, 128, 48);
+    s_notice_dismiss=close;notification_field_own(close);
     lv_obj_add_event_cb(close, dismiss_notice, LV_EVENT_CLICKED, NULL);
     ui_text_fit_single_line(lv_obj_get_child(close, 0), UI_FONT_BODY_LARGE);
     lv_label_set_long_mode(lv_obj_get_child(close, 0), LV_LABEL_LONG_CLIP);
 }
 static void toast_timer_cb(lv_timer_t *timer)
 {
-    (void)timer; close_surface();
+    if(timer!=s_timer || !s_timer || !s_toast)return;
+    close_surface();
 }
 static bool optional(ui_status_kind_t kind)
 {
@@ -209,10 +250,14 @@ static void toast_show_named(ui_status_kind_t kind, const char *title, const cha
     if (!printer || !printer[0]) printer = "PrinterHMI";
     if (optional(kind)) {
         if (s_level!=UI_NOTIFY_DETAILED || s_notice_count) return;
+        uint32_t expected=s_surface_epoch+1;
         close_surface();
+        if(expected!=s_surface_epoch || s_toast || s_notice_count)return;
         int width = lv_display_get_horizontal_resolution(NULL) - 32;
         if (width > 520) width = 520;
         s_toast = lv_obj_create(lv_layer_top());
+        if(!s_toast)return;
+        ++s_surface_epoch;
         ui_apply_popup_style(s_toast);
         lv_obj_set_width(s_toast, width);
         lv_obj_set_height(s_toast, LV_SIZE_CONTENT);
@@ -238,9 +283,11 @@ static void toast_show_named(ui_status_kind_t kind, const char *title, const cha
             return;
         }
     }
+    uint32_t epoch=s_notice_epoch;
     operator_event_log_add(kind == UI_STATUS_DANGER ? OPERATOR_EVENT_ERROR :
         kind == UI_STATUS_WARNING ? OPERATOR_EVENT_WARNING : OPERATOR_EVENT_INFO,
         "%s: %s | %s", printer, notice.title, notice.detail);
+    if(epoch!=s_notice_epoch || notice.owner!=moonraker_config_generation())return;
     /* Quiet suppresses routine event cards, not their Event History record. */
     if(kind==UI_STATUS_INFO && s_level==UI_NOTIFY_QUIET && !essential)return;
     unsigned priority=kind==UI_STATUS_DANGER?2:kind==UI_STATUS_WARNING?1:0;
@@ -268,7 +315,7 @@ static void toast_show_named(ui_status_kind_t kind, const char *title, const cha
     }
     memmove(s_notices + position + 1, s_notices + position,
         (s_notice_count - position) * sizeof(s_notices[0]));
-    s_notices[position] = notice; ++s_notice_count;
+    s_notices[position] = notice; ++s_notice_count;++s_notice_epoch;
     render_notice();
 }
 static void toast_show(ui_status_kind_t kind, const char *title, const char *detail, int destination, bool essential)
@@ -287,38 +334,54 @@ void ui_toast_show_link(ui_status_kind_t kind,const char *title,const char *deta
 }
 static void preferences_deleted(lv_event_t *event)
 {
-    (void)event;
-    s_preference_popup = s_preference_value = s_preference_status = NULL;
-    s_preference_changed = NULL;
-    memset(s_level_buttons,0,sizeof(s_level_buttons));
+    if(lv_event_get_target_obj(event)!=s_preference_popup)return;
+    ++s_preference_epoch;
+    s_preference_popup=s_preference_value=s_preference_status=s_preference_save=NULL;
+    s_preference_changed=NULL;memset(s_level_buttons,0,sizeof(s_level_buttons));
 }
 void ui_toast_preferences_close(void)
 {
-    if (s_preference_popup) lv_obj_delete(s_preference_popup);
+    lv_obj_t *popup=s_preference_popup;
+    if(popup)++s_preference_epoch;
+    s_preference_popup=s_preference_value=s_preference_status=s_preference_save=NULL;
+    s_preference_changed=NULL;memset(s_level_buttons,0,sizeof(s_level_buttons));
+    if(popup)lv_obj_delete(popup);
 }
-static void preference_close(lv_event_t *event) { (void)event; ui_toast_preferences_close(); }
+static void preference_close(lv_event_t *event){(void)event;ui_toast_preferences_close();}
 static void preference_toggle(lv_event_t *event)
 {
-    s_pending_level=event ? (ui_notification_level_t)(uintptr_t)lv_event_get_user_data(event) :
-                           (ui_notification_level_t)((s_pending_level+1)%3);
-    for(unsigned i=0;i<3;i++) {
-        if(i==(unsigned)s_pending_level)lv_obj_add_state(s_level_buttons[i],LV_STATE_CHECKED);
+    if(!s_preference_popup || s_preference_dispatching)return;
+    unsigned level=event?(unsigned)(uintptr_t)lv_event_get_user_data(event):((unsigned)s_pending_level+1)%3;
+    if(level>=3 || !s_level_buttons[level] ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_CLICKED || lv_event_get_target_obj(event)!=s_level_buttons[level])))return;
+    s_pending_level=(ui_notification_level_t)level;
+    for(unsigned i=0;i<3;i++){
+        if(!s_level_buttons[i])continue;
+        if(i==level)lv_obj_add_state(s_level_buttons[i],LV_STATE_CHECKED);
         else lv_obj_remove_state(s_level_buttons[i],LV_STATE_CHECKED);
-        char text[32];snprintf(text,sizeof(text),"%s%s",i==(unsigned)s_pending_level ? LV_SYMBOL_OK " " : "",(const char *[]){"QUIET","STANDARD","DETAILED"}[i]);
-        lv_label_set_text(lv_obj_get_child(s_level_buttons[i],0),text);
+        char text[32];snprintf(text,sizeof(text),"%s%s",i==level?LV_SYMBOL_OK " ":"",(const char*[]){"QUIET","STANDARD","DETAILED"}[i]);
+        ui_value_set_text(lv_obj_get_child(s_level_buttons[i],0),text);
     }
 }
 static void preference_save(lv_event_t *event)
 {
-    (void)event;
-    if (!ui_toast_set_level(s_pending_level)) {
-        lv_label_set_text(s_preference_status, "Could not save. Your previous setting is unchanged.");
-        return;
+    if(!s_preference_popup || !s_preference_save || s_preference_dispatching || (unsigned)s_pending_level>=3 || !s_level_buttons[s_pending_level] ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_CLICKED || lv_event_get_target_obj(event)!=s_preference_save)))return;
+    uint32_t epoch=s_preference_epoch;
+    ui_notification_level_t level=s_pending_level;
+    void(*changed)(void)=s_preference_changed;
+    s_preference_dispatching=true;
+    bool saved=ui_toast_set_level(level);
+    if(epoch!=s_preference_epoch){s_preference_dispatching=false;return;}
+    if(!saved){
+        if(s_preference_status){ui_value_set_text(s_preference_status,"Could not save. Your previous setting is unchanged.");lv_obj_scroll_to_view(s_preference_status,LV_ANIM_OFF);}
+        s_preference_dispatching=false;return;
     }
-    void (*changed)(void) = s_preference_changed;
     ui_toast_preferences_close();
-    if (changed) changed();
+    if(s_preference_epoch==epoch+1 && changed)changed();
+    s_preference_dispatching=false;
 }
+
 void ui_toast_preferences_show(void (*changed)(void))
 {
     if (s_preference_popup) { lv_obj_move_foreground(s_preference_popup); return; }
@@ -328,6 +391,7 @@ void ui_toast_preferences_show(void (*changed)(void))
     if (height > 360) height = 360;
     s_preference_popup = ui_popup_create(lv_layer_top(), width, height, UI_POPUP_STANDARD);
     if (!s_preference_popup) return;
+    ++s_preference_epoch;
     s_preference_changed = changed; s_pending_level = s_level;
     lv_obj_add_event_cb(s_preference_popup, preferences_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_flex_flow(s_preference_popup, LV_FLEX_FLOW_COLUMN);
@@ -341,6 +405,7 @@ void ui_toast_preferences_show(void (*changed)(void))
     text(body, "Quiet: connection loss/recovery, paused prints, warnings and errors. Standard: adds routine print events. Detailed: adds routine confirmations. Applies to every printer, page and theme. Local validation and progress remain visible at every level.", UI_FONT_BODY, UI_TEXT);
     for(unsigned i=0;i<3;i++) {
         s_level_buttons[i]=ui_button_create(body,UI_BUTTON_OUTLINED,(const char *[]){"QUIET","STANDARD","DETAILED"}[i]);
+        notification_field_own(s_level_buttons[i]);
         lv_obj_set_size(s_level_buttons[i],LV_PCT(100),48);
         ui_text_fit_single_line(lv_obj_get_child(s_level_buttons[i],0),UI_FONT_BODY_LARGE);
         lv_obj_add_event_cb(s_level_buttons[i],preference_toggle,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
@@ -350,13 +415,16 @@ void ui_toast_preferences_show(void (*changed)(void))
         }
     }
     s_preference_value=lv_obj_get_child(s_level_buttons[s_pending_level],0);
+    notification_field_own(s_preference_value);
     s_preference_status = text(body, "Dismiss acknowledges a notice; it does not clear a printer fault.", UI_FONT_CAPTION, UI_TEXT_DIM);
+    notification_field_own(s_preference_status);
     lv_obj_t *footer = column(s_preference_popup);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(footer, 8, 0);
     lv_obj_t *cancel = ui_button_create(footer, UI_BUTTON_CANCEL, "CANCEL");
     lv_obj_set_size(cancel, 128, 48); lv_obj_add_event_cb(cancel, preference_close, LV_EVENT_CLICKED, NULL);
     lv_obj_t *save = ui_button_create(footer, UI_BUTTON_PRIMARY, "SAVE");
+    s_preference_save=save;notification_field_own(save);
     lv_obj_set_size(save, 128, 48); lv_obj_add_event_cb(save, preference_save, LV_EVENT_CLICKED, NULL);
 }
 
@@ -397,7 +465,7 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
                      !strcmp(s_notices[i].title,"PRINTER RECONNECTED"));
                 if(!connection)s_notices[kept++]=s_notices[i];
             }
-            s_notice_count=kept;
+            ++s_notice_epoch;s_notice_count=kept;
             if(live) {
                 toast_show(UI_STATUS_INFO,"PRINTER RECONNECTED",
                     "Live status is available again. Review the printer before resuming work.",UI_SHELL_PAGE_PRINTER,true);
@@ -485,7 +553,7 @@ void ui_toast_observe_profiles(const moonraker_state_t *active_state)
                  !strcmp(s_notices[i].title, "PRINTER RECONNECTED"));
             if (!connection) s_notices[kept++] = s_notices[i];
         }
-        s_notice_count = kept;
+        ++s_notice_epoch;s_notice_count = kept;
         toast_show_named(online ? UI_STATUS_INFO : UI_STATUS_WARNING,
             online ? "PRINTER RECONNECTED" : "PRINTER OFFLINE",
             online ? "Live status is available again. Open Printers to review this printer."

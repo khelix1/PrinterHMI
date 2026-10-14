@@ -11,6 +11,7 @@
 #include "ui_about_popup.c"
 static esp_app_desc_t app;
 static bool missing_app;
+static void(*about_read_hook)(void);
 static uint16_t raster[1024*600];
 static lv_point_t touch;
 static bool pressed;
@@ -18,7 +19,10 @@ bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
-const esp_app_desc_t *esp_app_get_description(void){return missing_app?NULL:&app;}
+const esp_app_desc_t *esp_app_get_description(void){if(about_read_hook){void(*hook)(void)=about_read_hook;about_read_hook=NULL;hook();}return missing_app?NULL:&app;}
+static void cancel_about_read(void){ui_about_popup_close();ui_about_popup_show();}
+static void nested_about_read(void){ui_about_popup_show();}
+static void reopen_about_deleted(lv_event_t *event){(void)event;ui_about_popup_show();}
 static void read_touch(lv_indev_t*i,lv_indev_data_t*d){(void)i;d->point=touch;d->state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;}
 static void tap(lv_indev_t*i,lv_obj_t*b){lv_area_t a;lv_obj_get_coords(b,&a);touch=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*1024+x]=*v++;lv_display_flush_ready(d);}
@@ -39,6 +43,8 @@ int main(void){
   if(!narrow&&density==1&&large)capture(theme,PRINTERHMI_FIRMWARE_CHANNEL);
   lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(s_popup);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));inside(lv_obj_get_child(lv_obj_get_child(body,-1),-1),body);assert(has_text(lv_obj_get_child(body,-1),"Designed and developed by khelix."));tap(pointer,button);assert(!s_popup&&!lv_obj_get_child_count(lv_layer_top()));
   for(unsigned i=0;i<10;i++){ui_about_popup_show();lv_obj_delete(s_popup);assert(!s_popup);ui_about_popup_close();}
+  about_read_hook=cancel_about_read;ui_about_popup_show();assert(!s_popup&&!s_about_building);about_read_hook=nested_about_read;ui_about_popup_show();assert(s_popup&&!s_about_building);ui_about_popup_close();
+  ui_about_popup_show();lv_obj_add_event_cb(s_popup,reopen_about_deleted,LV_EVENT_DELETE,NULL);ui_about_popup_close();assert(s_popup);ui_about_popup_close();
   missing_app=true;ui_about_popup_show();assert(s_popup&&has_text(s_popup,"unknown")&&has_text(s_popup,"Built  --"));ui_about_popup_close();assert(!lv_obj_get_child_count(lv_layer_top()));
  }
  lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();puts("PASS: About native layout, build identity, pinned Close, scroll reach, actual pointer closure and delete/reopen across all themes/densities/text/viewports");

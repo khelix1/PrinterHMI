@@ -52,13 +52,13 @@ static lv_obj_t *s_theme_label = NULL;
 static lv_obj_t *s_notifications_label;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
 static lv_obj_t *s_settings_content;
-static lv_obj_t *s_brightness_slider,*s_brightness_value,*s_sleep_action;
+static lv_obj_t *s_brightness_slider,*s_brightness_value,*s_sleep_action,*s_reboot_action;
 static uint32_t s_settings_page_epoch;
 static bool s_display_io_dispatching,s_wake_pending;
 static void settings_display_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
-    lv_obj_t **fields[]={&s_brightness_slider,&s_brightness_value,&s_sleep_action,&settings_sleep_label,&s_timezone_label,&s_theme_label,&s_notifications_label,&s_settings_content};
+    lv_obj_t **fields[]={&s_brightness_slider,&s_brightness_value,&s_sleep_action,&settings_sleep_label,&s_timezone_label,&s_theme_label,&s_notifications_label,&s_settings_content,&s_reboot_action};
     for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(*fields[i]==target)*fields[i]=NULL;
 }
 static void settings_display_field_own(lv_obj_t *field)
@@ -66,7 +66,7 @@ static void settings_display_field_own(lv_obj_t *field)
 static void settings_page_retire(void)
 {
     ++s_settings_page_epoch;
-    settings_panel=s_settings_content=s_brightness_slider=s_brightness_value=s_sleep_action=NULL;
+    settings_panel=s_settings_content=s_brightness_slider=s_brightness_value=s_sleep_action=s_reboot_action=NULL;
     settings_sleep_label=s_timezone_label=s_theme_label=s_notifications_label=NULL;
     s_theme_rebuild_cb=NULL;
     settings_system_info_unbind();
@@ -692,7 +692,7 @@ void ui_settings_show_page(
         section_y,
         device_height);
 
-    ui_settings_section_add_action_row(
+    s_reboot_action=ui_settings_section_add_action_row(
         device,
         "Reboot Controller",
         "Restart the ESP32-P4 controller",
@@ -701,6 +701,7 @@ void ui_settings_show_page(
         settings_reboot_cb,
         false);
 
+    settings_display_field_own(s_reboot_action);
     ui_settings_section_add_divider(
         device, device_row_1 + action_height);
 
@@ -1136,8 +1137,9 @@ static void settings_klipper_restart_cb(lv_event_t *e)
 
 void settings_reboot_cb(lv_event_t *e)
 {
-    (void)e;
-    esp_restart();
+    if(!settings_panel || !s_reboot_action || s_display_io_dispatching || lv_obj_has_state(s_reboot_action,LV_STATE_DISABLED) ||
+        (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_reboot_action)))return;
+    ui_settings_popups_show_reboot();
 }
 
 

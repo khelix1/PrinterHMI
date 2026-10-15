@@ -4,6 +4,8 @@
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
+#include "moonraker_config_controller.h"
+#include "ui_value_update.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -17,15 +19,43 @@ typedef struct {
     ui_global_estop_send_gcode_cb_t send_gcode;
     lv_obj_t *button;
     lv_obj_t *popup;
-    lv_obj_t *message, *title;
+    lv_obj_t *message, *title, *restart;
+    ui_global_estop_send_gcode_cb_t popup_send;
+    uint32_t popup_owner;
     char printer_name[64];
 } ui_global_estop_state_t;
 
 static ui_global_estop_state_t *s_estop;
+static uint32_t s_estop_epoch,s_restart_owner,s_restart_tick;
+static bool s_restart_pending,s_restart_dispatching,s_stop_dispatching;
+static bool restart_waiting(uint32_t owner)
+{
+    return s_restart_pending && s_restart_owner==owner && (uint32_t)(lv_tick_get()-s_restart_tick)<5000U;
+}
+static void estop_close_popup(void)
+{
+    if(!s_estop)return;
+    ++s_estop_epoch;
+    lv_obj_t *popup=s_estop->popup;
+    s_estop->popup=s_estop->message=s_estop->title=s_estop->restart=NULL;s_estop->popup_send=NULL;
+    if(popup)lv_obj_delete(popup);
+}
+static void estop_field_deleted(lv_event_t *event)
+{
+    if(!s_estop)return;
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_estop->message)s_estop->message=NULL;
+    else if(target==s_estop->title)s_estop->title=NULL;
+    else if(target==s_estop->restart)s_estop->restart=NULL;
+    else return;
+    ++s_estop_epoch;
+}
 
 static void estop_popup_deleted(lv_event_t *event)
 {
-    (void)event;if(s_estop)s_estop->popup=s_estop->message=s_estop->title=NULL;
+    if(s_estop && lv_event_get_target_obj(event)==s_estop->popup){
+        ++s_estop_epoch;s_estop->popup=s_estop->message=s_estop->title=s_estop->restart=NULL;s_estop->popup_send=NULL;
+    }
 }
 
 bool ui_global_estop_init(ui_global_estop_send_gcode_cb_t send_gcode)
@@ -47,6 +77,7 @@ bool ui_global_estop_init(ui_global_estop_send_gcode_cb_t send_gcode)
                     ? "PSRAM" : "internal RAM");
     }
 
+    if(s_estop->send_gcode!=send_gcode)++s_estop_epoch;
     s_estop->send_gcode = send_gcode;
     return true;
 }
@@ -56,37 +87,57 @@ void ui_global_estop_set_printer_name(const char *printer_name)
     if (!s_estop) return;
     char next[sizeof(s_estop->printer_name)];
     snprintf(next,sizeof(next),"%s",printer_name && printer_name[0]?printer_name:"ACTIVE PRINTER");
-    if(strcmp(next,s_estop->printer_name) && s_estop->popup)lv_obj_delete(s_estop->popup);
+    if(strcmp(next,s_estop->printer_name)){++s_estop_epoch;estop_close_popup();}
     snprintf(s_estop->printer_name,sizeof(s_estop->printer_name),"%s",next);
 }
 
 static void close_popup_cb(lv_event_t *event)
 {
     (void)event;
-    if (s_estop && s_estop->popup) { lv_obj_delete(s_estop->popup); s_estop->popup = NULL; }
+    estop_close_popup();
 }
 
 static void firmware_restart_cb(lv_event_t *event)
 {
-    (void)event;
-    if(!s_estop || !s_estop->send_gcode)return;
-    bool sent=s_estop->send_gcode("FIRMWARE_RESTART");
-    lv_label_set_text(s_estop->message, sent
-        ? "Restart requested. Wait for the printer to reconnect before continuing."
-        : "RESTART NOT SENT. Check the printer connection and try again.");
-    if(sent)lv_obj_add_state(lv_event_get_target_obj(event),LV_STATE_DISABLED);
+    if(!event || lv_event_get_code(event)!=LV_EVENT_CLICKED || !s_estop || !s_estop->popup ||
+        !s_estop->restart || lv_event_get_target_obj(event)!=s_estop->restart || !s_estop->message ||
+        s_restart_dispatching || lv_obj_has_state(s_estop->restart,LV_STATE_DISABLED))return;
+    uint32_t owner=s_estop->popup_owner,epoch=s_estop_epoch;
+    if(owner!=moonraker_config_generation()){
+        ui_value_set_text(s_estop->message,"Printer changed. Close and reopen this review before restarting.");return;
+    }
+    if(restart_waiting(owner)){
+        ui_value_set_text(s_estop->message,"Restart already requested. Wait for the printer to reconnect before continuing.");return;
+    }
+    ui_global_estop_send_gcode_cb_t send=s_estop->popup_send;
+    if(!send)return;
+    s_restart_dispatching=true;
+    bool sent=send("FIRMWARE_RESTART");
+    if(sent){s_restart_pending=true;s_restart_owner=owner;s_restart_tick=lv_tick_get();}
+    if(epoch==s_estop_epoch && owner==moonraker_config_generation() && s_estop->popup){
+        ui_value_set_text(s_estop->message,sent?
+            "Restart requested. Wait for the printer to reconnect before continuing.":
+            "RESTART NOT SENT. Check the printer connection and try again.");
+        if(sent && s_estop->restart)lv_obj_add_state(s_estop->restart,LV_STATE_DISABLED);
+    }
+    s_restart_dispatching=false;
 }
 
 /* Native modal layout: text scrolls independently from the pinned actions. */
-static void estop_show_dialog(bool restart_only)
+static bool estop_show_dialog(bool restart_only)
 {
-    if(s_estop->popup)lv_obj_delete(s_estop->popup);
+    uint32_t owner=moonraker_config_generation();
+    uint32_t expected=s_estop_epoch+1;
+    estop_close_popup();
+    if(s_estop_epoch!=expected || s_estop->popup || owner!=moonraker_config_generation())return false;
     int32_t width=lv_display_get_horizontal_resolution(NULL)-32;
     int32_t height=lv_display_get_vertical_resolution(NULL)-32;
     if(width>680)width=680;
     if(height>400)height=400;
     s_estop->popup=ui_popup_create(lv_layer_top(),width,height,UI_POPUP_DANGER);
-    if(!s_estop->popup)return;
+    if(!s_estop->popup)return false;
+    ++s_estop_epoch;
+    s_estop->popup_owner=moonraker_config_generation();s_estop->popup_send=s_estop->send_gcode;
     lv_obj_t *popup=s_estop->popup;
     lv_obj_add_event_cb(popup,estop_popup_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(popup,LV_FLEX_FLOW_COLUMN);
@@ -128,8 +179,14 @@ static void estop_show_dialog(bool restart_only)
     ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,
         restart_only?LV_SYMBOL_CLOSE " CANCEL":LV_SYMBOL_CLOSE " CLOSE",
         0,0,LV_SIZE_CONTENT,52,close_popup_cb,NULL,NULL);
-    ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,LV_SYMBOL_REFRESH " RESTART KLIPPER",
+    s_estop->restart=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,LV_SYMBOL_REFRESH " RESTART KLIPPER",
         0,0,LV_SIZE_CONTENT,52,firmware_restart_cb,NULL,NULL);
+    lv_obj_t *fields[]={s_estop->title,s_estop->message,s_estop->restart};
+    for(size_t i=0;i<3;i++)if(fields[i])lv_obj_add_event_cb(fields[i],estop_field_deleted,LV_EVENT_DELETE,NULL);
+    if(restart_waiting(s_estop->popup_owner)){
+        if(restart_only)ui_value_set_text(s_estop->message,"Restart already requested. Wait for the printer to reconnect before continuing.");
+        if(s_estop->restart)lv_obj_add_state(s_estop->restart,LV_STATE_DISABLED);
+    }
     for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++) {
         lv_obj_t *button=lv_obj_get_child(footer,i);
         lv_obj_t *label=lv_obj_get_child(button,0);
@@ -141,17 +198,26 @@ static void estop_show_dialog(bool restart_only)
         lv_obj_set_style_min_width(button,action_width,0);
         lv_obj_center(label);
     }
+    return true;
 }
 
 static void estop_event_cb(lv_event_t *event)
 {
-    if(lv_event_get_code(event)!=LV_EVENT_CLICKED || !s_estop || !s_estop->send_gcode)return;
-    bool sent=s_estop->send_gcode("M112");
-    estop_show_dialog(false);
-    if(!sent && s_estop->popup) {
-        lv_label_set_text(s_estop->title,"STOP NOT CONFIRMED");
-        lv_label_set_text(s_estop->message,"Stop request could not be sent. Use the printer power switch if needed. Verify the printer has halted before recovery.");
+    if(!event || lv_event_get_code(event)!=LV_EVENT_CLICKED || !s_estop || !s_estop->button ||
+        lv_event_get_target_obj(event)!=s_estop->button || !s_estop->send_gcode || s_stop_dispatching)return;
+    uint32_t epoch=s_estop_epoch,owner=moonraker_config_generation();
+    ui_global_estop_send_gcode_cb_t send=s_estop->send_gcode;
+    s_stop_dispatching=true;
+    /* Dispatch immediately, before constructing any feedback UI. */
+    bool sent=send("M112");
+    if(epoch==s_estop_epoch && owner==moonraker_config_generation()){
+        bool reviewed=estop_show_dialog(false);
+        if(reviewed && !sent && s_estop->popup && s_estop->popup_owner==owner){
+            ui_value_set_text(s_estop->title,"STOP NOT CONFIRMED");
+            ui_value_set_text(s_estop->message,"Stop request could not be sent. Use the printer power switch if needed. Verify the printer has halted before recovery.");
+        }
     }
+    s_stop_dispatching=false;
 }
 
 void ui_global_estop_show_restart_confirmation(void)
@@ -162,7 +228,7 @@ void ui_global_estop_show_restart_confirmation(void)
 
 static void estop_button_deleted(lv_event_t *event)
 {
-    if (s_estop && lv_event_get_target(event) == s_estop->button) s_estop->button = NULL;
+    if (s_estop && lv_event_get_target(event) == s_estop->button){s_estop->button=NULL;++s_estop_epoch;}
 }
 
 void ui_global_estop_create(lv_obj_t *parent)

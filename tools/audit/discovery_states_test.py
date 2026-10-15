@@ -53,3 +53,8 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
                         str(root/"tools/audit/discovery_states_test.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/s) for s in sources],
                         str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
         subprocess.run([str(executable)],check=True)
+
+    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror",*flags,
+        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-c",str(root/"main/moonraker_discovery.c"),"-o",str(tmp/"printer_discovery.o")],check=True)
+    print("PASS: standalone Moonraker discovery compilation with warnings treated as errors")

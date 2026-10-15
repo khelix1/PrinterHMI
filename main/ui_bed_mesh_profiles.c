@@ -17,13 +17,14 @@ typedef struct {
     uint32_t owner_generation;
     lv_obj_t *actions[4], *connection_label, *confirm_connection_label;
     lv_obj_t *profile_popup, *profile_list, *profile_editor;
-    lv_obj_t *profile_name_input, *profile_confirm, *editor_feedback;
+    lv_obj_t *profile_name_input, *profile_confirm, *editor_feedback, *editor_continue;
+    lv_obj_t *rows[BED_MESH_MAX_PROFILES];
     char pending_profile_name[BED_MESH_PROFILE_NAME_MAX];
     bed_mesh_profile_name_t reported_names[BED_MESH_MAX_PROFILES];
     bed_mesh_profile_name_t displayed_names[BED_MESH_MAX_PROFILES];
     size_t reported_count, displayed_count;
     int16_t selected_profile;
-    bool mesh_valid, connection_blocked, confirmation_blocked;
+    bool mesh_valid, connection_blocked, confirmation_blocked, confirmation_removing;
     char active_name[BED_MESH_PROFILE_NAME_MAX];
     ui_bed_mesh_profiles_command_cb_t command;
 } ui_bed_mesh_profiles_state_t;
@@ -107,12 +108,33 @@ static bool profile_command_ready(lv_obj_t *feedback)
 static void profile_ref_deleted(lv_event_t *event)
 {
     lv_obj_t *object = lv_event_get_target_obj(event);
-    for (unsigned i = 0; i < 4; ++i) if (s.actions[i] == object) s.actions[i] = NULL;
+    bool retired = false;
+    for (unsigned i = 0; i < 4; ++i) if (s.actions[i] == object) {
+        s.actions[i] = NULL;
+        retired = true;
+    }
+    for (unsigned i = 0; i < BED_MESH_MAX_PROFILES; ++i) if (s.rows[i] == object) {
+        s.rows[i] = NULL;
+        if (s.selected_profile == (int16_t)i) s.selected_profile = -1;
+        retired = true;
+    }
+    lv_obj_t **fields[] = {&s.profile_list, &s.connection_label, &s.confirm_connection_label,
+        &s.profile_name_input, &s.editor_feedback, &s.editor_continue};
+    for (unsigned i = 0; i < sizeof(fields) / sizeof(fields[0]); ++i)
+        if (*fields[i] == object) { *fields[i] = NULL; retired = true; }
+    if (retired) ++s_epoch;
 }
 
 static void watch_profile_ref(lv_obj_t *object)
 {
     if (object) lv_obj_add_event_cb(object, profile_ref_deleted, LV_EVENT_DELETE, NULL);
+}
+
+static bool profile_action_event(lv_event_t *event, lv_obj_t *button)
+{
+    if (!button || lv_obj_has_state(button, LV_STATE_DISABLED)) return false;
+    return !event || (lv_event_get_code(event) == LV_EVENT_CLICKED &&
+        lv_event_get_target_obj(event) == button && lv_event_get_current_target_obj(event) == button);
 }
 
 static void retire_editor(void)
@@ -121,6 +143,7 @@ static void retire_editor(void)
     s.profile_editor = NULL;
     s.profile_name_input = NULL;
     s.editor_feedback = NULL;
+    s.editor_continue = NULL;
 }
 
 static void retire_confirmation(void)
@@ -129,6 +152,7 @@ static void retire_confirmation(void)
     s.profile_confirm = NULL;
     s.confirm_connection_label = NULL;
     s.confirmation_blocked = false;
+    s.confirmation_removing = false;
     s.actions[3] = NULL;
     s.pending_profile_name[0] = '\0';
 }
@@ -154,14 +178,20 @@ static void close_profile_popup_cb(lv_event_t *event)
     (void)event;
     ++s_epoch;
     lv_obj_t *popup = s.profile_popup;
+    lv_obj_t *editor = s.profile_editor;
+    lv_obj_t *confirm = s.profile_confirm;
     s.profile_popup = NULL;
     s.profile_list = NULL;
     s.connection_label = NULL;
     s.connection_blocked = false;
     s.selected_profile = -1;
     memset(s.actions, 0, sizeof(s.actions));
-    close_profile_editor_cb(NULL);
-    close_profile_confirm_cb(NULL);
+    memset(s.rows, 0, sizeof(s.rows));
+    /* Retire the complete old session before any DELETE callback can reopen it. */
+    retire_editor();
+    retire_confirmation();
+    if (editor) lv_obj_delete(editor);
+    if (confirm) lv_obj_delete(confirm);
     if (popup) lv_obj_delete(popup);
 }
 
@@ -184,11 +214,16 @@ static void owner_deleted(lv_event_t *event)
 
 static void profile_row_cb(lv_event_t *event)
 {
-    if (!s.profile_popup || s_dispatching) return;
+    if (!event || !s.profile_popup || !s.profile_list || s_dispatching ||
+        lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     uintptr_t encoded = (uintptr_t)lv_event_get_user_data(event);
     if (!encoded || encoded - 1 >= s.displayed_count) return;
-    s.selected_profile = (int16_t)(encoded - 1);
     lv_obj_t *selected = lv_event_get_target_obj(event);
+    if (lv_event_get_current_target_obj(event) != selected ||
+        lv_obj_get_parent(selected) != s.profile_list ||
+        s.rows[encoded - 1] != selected ||
+        lv_obj_has_state(selected, LV_STATE_DISABLED)) return;
+    s.selected_profile = (int16_t)(encoded - 1);
     for (unsigned i = 0; s.profile_list && i < lv_obj_get_child_count(s.profile_list); ++i) {
         lv_obj_t *row = lv_obj_get_child(s.profile_list, i);
         ui_popup_set_selectable_row_selected(row, row == selected);
@@ -217,8 +252,7 @@ static bool dispatch_profile_command(lv_obj_t *popup, lv_obj_t *feedback, const 
 
 static void load_selected_profile_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!s.profile_popup || s_dispatching) return;
+    if (!s.profile_popup || s_dispatching || !profile_action_event(event, s.actions[1])) return;
     const char *name = selected_profile_name();
     if (!valid_profile_name_ui(name) || !reported_profile(name)) {
         ui_value_set_text(s.connection_label, "Select a reported profile. Close and reopen to refresh the list.");
@@ -229,9 +263,11 @@ static void load_selected_profile_cb(lv_event_t *event)
     if (dispatch_profile_command(s.profile_popup, s.connection_label, command)) close_profile_popup_cb(NULL);
 }
 
-static void confirmed_profile_command(const char *operation)
+static void confirmed_profile_command(lv_event_t *event, bool removing)
 {
-    if (!s.profile_confirm || s_dispatching || !valid_profile_name_ui(s.pending_profile_name)) return;
+    if (!s.profile_confirm || s_dispatching || s.confirmation_removing != removing ||
+        !profile_action_event(event, s.actions[3]) || !valid_profile_name_ui(s.pending_profile_name)) return;
+    const char *operation = removing ? "REMOVE" : "SAVE";
     if ((!strcmp(operation, "REMOVE") && !reported_profile(s.pending_profile_name)) ||
         (!strcmp(operation, "SAVE") && !s.mesh_valid)) {
         ui_value_set_text(s.confirm_connection_label, "The reviewed profile or mesh is no longer available. Go Back and review again.");
@@ -243,8 +279,8 @@ static void confirmed_profile_command(const char *operation)
     if (dispatch_profile_command(s.profile_confirm, s.confirm_connection_label, command)) close_profile_popup_cb(NULL);
 }
 
-static void confirm_save_profile_cb(lv_event_t *event) { (void)event; confirmed_profile_command("SAVE"); }
-static void confirm_remove_profile_cb(lv_event_t *event) { (void)event; confirmed_profile_command("REMOVE"); }
+static void confirm_save_profile_cb(lv_event_t *event) { confirmed_profile_command(event, false); }
+static void confirm_remove_profile_cb(lv_event_t *event) { confirmed_profile_command(event, true); }
 
 static void show_profile_confirmation(bool removing)
 {
@@ -259,8 +295,10 @@ static void show_profile_confirmation(bool removing)
         620, 370, removing ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
     if (!s.profile_confirm) { s.pending_profile_name[0] = '\0'; return; }
     lv_obj_add_event_cb(s.profile_confirm, profile_popup_deleted, LV_EVENT_DELETE, NULL);
+    s.confirmation_removing = removing;
     ui_form_text(ui_form_body(s.profile_confirm), message, UI_FONT_BODY, UI_TEXT);
     s.confirm_connection_label = ui_form_text(ui_form_body(s.profile_confirm), "", UI_FONT_BODY, UI_TEXT_DIM);
+    watch_profile_ref(s.confirm_connection_label);
     ui_form_action(s.profile_confirm, UI_BUTTON_SECONDARY, LV_SYMBOL_LEFT " BACK", close_profile_confirm_cb, NULL);
     s.actions[3] = ui_form_action(s.profile_confirm, removing ? UI_BUTTON_DANGER : UI_BUTTON_PRIMARY,
         removing ? LV_SYMBOL_TRASH " REMOVE & RESTART" : LV_SYMBOL_SAVE " SAVE & RESTART",
@@ -272,8 +310,8 @@ static void show_profile_confirmation(bool removing)
 
 static void save_name_continue_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!s.profile_editor || !s.profile_name_input || s_dispatching) return;
+    if (!s.profile_editor || !s.profile_name_input || s_dispatching ||
+        !profile_action_event(event, s.editor_continue)) return;
     if (!profile_command_ready(s.editor_feedback)) return;
     const char *name = lv_textarea_get_text(s.profile_name_input);
     if (!valid_profile_name_ui(name)) {
@@ -281,14 +319,15 @@ static void save_name_continue_cb(lv_event_t *event)
         return;
     }
     memcpy(s.pending_profile_name, name, strlen(name) + 1);
+    uint32_t epoch = s_epoch;
     close_profile_editor_cb(NULL);
+    if (s_epoch != epoch + 1U || !s.profile_popup || s.profile_editor || s.profile_confirm) return;
     show_profile_confirmation(false);
 }
 
 static void save_as_profile_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!s.profile_popup || s_dispatching) return;
+    if (!s.profile_popup || s_dispatching || !profile_action_event(event, s.actions[0])) return;
     if (s.profile_confirm) { lv_obj_move_foreground(s.profile_confirm); return; }
     if (s.profile_editor) { lv_obj_move_foreground(s.profile_editor); return; }
     if (!profile_command_ready(s.connection_label)) return;
@@ -300,16 +339,18 @@ static void save_as_profile_cb(lv_event_t *event)
     s.profile_name_input = ui_form_input(ui_form_body(s.profile_editor), "example: textured_plate", "", false, BED_MESH_PROFILE_NAME_MAX - 1);
     lv_textarea_set_accepted_chars(s.profile_name_input, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-");
     s.editor_feedback = ui_form_text(ui_form_body(s.profile_editor), "", UI_FONT_CAPTION, UI_TEXT_DIM);
+    watch_profile_ref(s.profile_name_input);
+    watch_profile_ref(s.editor_feedback);
     ui_form_keyboard(s.profile_editor, s.profile_name_input, LV_KEYBOARD_MODE_TEXT_LOWER);
     ui_form_action(s.profile_editor, UI_BUTTON_SECONDARY, LV_SYMBOL_CLOSE " CANCEL", close_profile_editor_cb, NULL);
-    ui_form_action(s.profile_editor, UI_BUTTON_PRIMARY, "CONTINUE", save_name_continue_cb, NULL);
+    s.editor_continue = ui_form_action(s.profile_editor, UI_BUTTON_PRIMARY, "CONTINUE", save_name_continue_cb, NULL);
+    watch_profile_ref(s.editor_continue);
     ui_form_finish(s.profile_editor);
 }
 
 static void remove_selected_profile_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!s.profile_popup || s_dispatching) return;
+    if (!s.profile_popup || s_dispatching || !profile_action_event(event, s.actions[2])) return;
     if (s.profile_confirm) { lv_obj_move_foreground(s.profile_confirm); return; }
     if (s.profile_editor) { lv_obj_move_foreground(s.profile_editor); return; }
     if (!profile_command_ready(s.connection_label)) return;
@@ -337,7 +378,9 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
     s.displayed_count = s.reported_count;
     memcpy(s.displayed_names, s.reported_names, sizeof(s.displayed_names));
     s.connection_label = ui_form_text(ui_form_body(s.profile_popup), "", UI_FONT_CAPTION, UI_TEXT_DIM);
+    watch_profile_ref(s.connection_label);
     s.profile_list = lv_obj_create(ui_form_body(s.profile_popup));
+    watch_profile_ref(s.profile_list);
     lv_obj_remove_style_all(s.profile_list);
     lv_obj_set_size(s.profile_list, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(s.profile_list, LV_FLEX_FLOW_COLUMN);
@@ -353,6 +396,8 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
         lv_obj_t *row = ui_popup_add_selectable_row(s.profile_list, row_text, 0, 0, 1, 52,
             profile_row_cb, (void *)(uintptr_t)(i + 1));
         if (row) {
+            s.rows[i] = row;
+            watch_profile_ref(row);
             lv_obj_set_width(row, LV_PCT(100));
             lv_obj_set_style_min_height(row, UI_FONT_BODY_LARGE->line_height + 20, 0);
             lv_obj_set_style_pad_hor(row, 16, 0);
@@ -401,7 +446,11 @@ void ui_bed_mesh_profiles_update(const bed_mesh_snapshot_t *mesh)
 void ui_bed_mesh_profiles_close(void)
 {
     if (s.owner) lv_obj_remove_event_cb(s.owner, owner_deleted);
-    close_profile_popup_cb(NULL);
+    lv_obj_t *popup = s.profile_popup, *editor = s.profile_editor, *confirm = s.profile_confirm;
+    ++s_epoch;
     memset(&s, 0, sizeof(s));
     s.selected_profile = -1;
+    if (editor) lv_obj_delete(editor);
+    if (confirm) lv_obj_delete(confirm);
+    if (popup) lv_obj_delete(popup);
 }

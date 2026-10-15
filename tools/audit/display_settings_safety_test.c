@@ -3,7 +3,7 @@
 #include <string.h>
 #include "ui_settings.c"
 static bool fail_brightness,fail_off,fail_open,fail_set,fail_commit;
-static unsigned hardware_sets,hardware_offs,commits,warnings;
+static unsigned hardware_sets,hardware_offs,commits,warnings,reboot_reviews;
 static int hardware_brightness=100;
 static uint8_t stored_brightness=100,stored_sleep,staged_brightness,staged_sleep;
 static void (*hardware_hook)(void),(*storage_hook)(void);
@@ -21,6 +21,7 @@ void ui_apply_surface_role(lv_obj_t *object,ui_surface_role_t role){(void)object
 void ui_toast_preferences_close(void){}
 void ui_appearance_popups_close_all(void){}
 void ui_settings_popups_close_all(void){}
+void ui_settings_popups_show_reboot(void){reboot_reviews++;}
 void ui_settings_backup_popup_close(void){}
 void ui_about_popup_close(void){}
 void settings_system_info_unbind(void){}
@@ -38,6 +39,7 @@ static void build_controls(void)
     lv_obj_add_event_cb(s_brightness_slider,settings_brightness_changed_cb,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(s_brightness_slider,settings_brightness_save_cb,LV_EVENT_RELEASED,NULL);
     settings_display_field_own(s_brightness_slider);settings_display_field_own(s_brightness_value);
+    s_reboot_action=lv_button_create(settings_panel);settings_display_field_own(s_reboot_action);lv_obj_add_event_cb(s_reboot_action,settings_reboot_cb,LV_EVENT_CLICKED,NULL);
     s_sleep_action=lv_obj_create(settings_panel);settings_sleep_label=lv_label_create(s_sleep_action);
     lv_label_set_text(settings_sleep_label,settings_sleep_timeout_text());
     settings_display_field_own(s_sleep_action);settings_display_field_own(settings_sleep_label);
@@ -58,7 +60,7 @@ int main(void)
     ui_settings_module_init();lv_timer_t *timer=s_sleep_timer;ui_settings_module_init();assert(s_sleep_timer==timer&&hardware_brightness==100);
     for(unsigned width=0;width<3;width++){
         lv_display_set_resolution(display,(int[]){1024,640,480}[width],width==2?400:600);
-        assert(ui_settings_restore_display_preferences(100,0));build_controls();
+        assert(ui_settings_restore_display_preferences(100,0));build_controls();unsigned reviews=reboot_reviews;lv_obj_add_state(s_reboot_action,LV_STATE_DISABLED);lv_obj_send_event(s_reboot_action,LV_EVENT_CLICKED,NULL);assert(reboot_reviews==reviews);lv_obj_remove_state(s_reboot_action,LV_STATE_DISABLED);lv_obj_send_event(s_reboot_action,LV_EVENT_CLICKED,NULL);assert(reboot_reviews==reviews+1);lv_obj_delete(s_reboot_action);assert(!s_reboot_action);settings_reboot_cb(NULL);assert(reboot_reviews==reviews+1);
         fail_brightness=true;unsigned before=warnings;preview(40);assert(s_display_brightness_percent==100&&hardware_brightness==100&&lv_slider_get_value(s_brightness_slider)==100&&warnings==before+1);fail_brightness=false;
         unsigned sets=hardware_sets;hardware_hook=nested_preview;preview(40);assert(hardware_sets==sets+1&&s_display_brightness_percent==40&&s_sleep_timeout_minutes==0);
         fail_open=true;before=commits;release();assert(commits==before&&s_saved_display_brightness_percent==100);fail_open=false;

@@ -34,6 +34,103 @@ static void retire_send(void){lv_obj_delete(s.profile_popup);}
 static void switch_send(void){generation++;}
 static void reenter_save(void){confirm_save_profile_cb(NULL);}
 static void reenter_remove(void){confirm_remove_profile_cb(NULL);}
+static void delete_load_feedback(void){lv_obj_delete(s.connection_label);}
+static void delete_confirm_feedback(void){lv_obj_delete(s.confirm_connection_label);}
+static void replacement_on_delete(lv_event_t *event)
+{
+ (void)event;ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_textarea_set_text(s.profile_name_input,"replacement_kept");save_name_continue_cb(NULL);
+}
+static void replacement_owner_on_delete(lv_event_t *event)
+{
+ lv_obj_t *owner=lv_event_get_user_data(event);
+ bed_mesh_profile_name_t name="new_owner";
+ bed_mesh_snapshot_t mesh={.valid=true,.profile_count=1,.profile_names=&name};
+ strcpy(mesh.profile_name,name);
+ ui_bed_mesh_profiles_init(owner,send_command);ui_bed_mesh_profiles_update(&mesh);
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+}
+static void replacement_editor_on_delete(lv_event_t *event)
+{
+ (void)event;save_as_profile_cb(NULL);lv_textarea_set_text(s.profile_name_input,"new_editor_kept");
+}
+static void click(lv_obj_t *object){lv_obj_send_event(object,LV_EVENT_CLICKED,NULL);}
+static void field_safety_checks(const bed_mesh_snapshot_t *mesh)
+{
+ accept=false;send_hook=NULL;unsigned before=sends;
+ ui_bed_mesh_profiles_show_cb(NULL);
+ lv_obj_t *fake=lv_button_create(s.profile_list);
+ lv_obj_add_event_cb(fake,profile_row_cb,LV_EVENT_CLICKED,(void *)(uintptr_t)2);
+ int16_t selected=s.selected_profile;click(fake);assert(s.selected_profile==selected);lv_obj_delete(fake);
+ lv_obj_t *selected_row=s.rows[selected];lv_obj_delete(selected_row);
+ assert(s.selected_profile==-1&&!s.rows[selected]);load_selected_profile_cb(NULL);assert(sends==before);
+ close_profile_popup_cb(NULL);ui_bed_mesh_profiles_show_cb(NULL);
+ fake=lv_button_create(s.profile_popup);
+ lv_obj_add_event_cb(fake,load_selected_profile_cb,LV_EVENT_CLICKED,NULL);
+ lv_obj_add_event_cb(fake,save_as_profile_cb,LV_EVENT_CLICKED,NULL);
+ lv_obj_add_event_cb(fake,remove_selected_profile_cb,LV_EVENT_CLICKED,NULL);
+ click(fake);assert(sends==before&&!s.profile_editor&&!s.profile_confirm);lv_obj_delete(fake);
+ for(unsigned i=0;i<3;++i) {
+  lv_obj_add_state(s.actions[i],LV_STATE_DISABLED);
+  if(i==0)save_as_profile_cb(NULL);else if(i==1)load_selected_profile_cb(NULL);else remove_selected_profile_cb(NULL);
+  assert(sends==before&&!s.profile_editor&&!s.profile_confirm);
+  lv_obj_remove_state(s.actions[i],LV_STATE_DISABLED);
+ }
+ send_hook=delete_load_feedback;load_selected_profile_cb(NULL);send_hook=NULL;
+ assert(sends==++before&&s.profile_popup&&!s.connection_label);
+ ui_bed_mesh_profiles_refresh_availability();load_selected_profile_cb(NULL);assert(sends==++before);
+ close_profile_popup_cb(NULL);
+ for(unsigned field=0;field<3;++field) {
+  ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+  lv_textarea_set_text(s.profile_name_input,"field_deleted");
+  if(field==0) {
+   lv_obj_t *keyboard=lv_obj_get_child(s.profile_editor,2);lv_obj_delete(s.profile_name_input);
+   assert(!s.profile_name_input&&!lv_keyboard_get_textarea(keyboard));
+  } else if(field==1)lv_obj_delete(s.editor_continue);
+  else lv_obj_delete(s.editor_feedback);
+  save_name_continue_cb(NULL);
+  if(field<2)assert(s.profile_editor&&!s.profile_confirm);
+  else assert(s.profile_confirm&&!s.profile_editor);
+  assert(sends==before);close_profile_popup_cb(NULL);
+ }
+ for(unsigned action=0;action<4;++action) {
+  ui_bed_mesh_profiles_show_cb(NULL);
+  if(action==3)remove_selected_profile_cb(NULL);
+  lv_obj_delete(s.actions[action]);assert(!s.actions[action]);
+  if(action==0)save_as_profile_cb(NULL);else if(action==1)load_selected_profile_cb(NULL);
+  else if(action==2)remove_selected_profile_cb(NULL);else confirm_remove_profile_cb(NULL);
+  assert(sends==before);close_profile_popup_cb(NULL);
+ }
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_textarea_set_text(s.profile_name_input,"reviewed_save");save_name_continue_cb(NULL);
+ confirm_remove_profile_cb(NULL);assert(sends==before); /* Wrong review operation. */
+ send_hook=delete_confirm_feedback;confirm_save_profile_cb(NULL);send_hook=NULL;
+ assert(sends==++before&&s.profile_confirm&&!s.confirm_connection_label);
+ ui_bed_mesh_profiles_refresh_availability();close_profile_popup_cb(NULL);
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_textarea_set_text(s.profile_name_input,"retired_editor_value");
+ lv_obj_add_event_cb(s.profile_editor,replacement_editor_on_delete,LV_EVENT_DELETE,NULL);
+ save_name_continue_cb(NULL);
+ assert(s.profile_editor&&!s.profile_confirm&&!strcmp(lv_textarea_get_text(s.profile_name_input),"new_editor_kept"));
+ close_profile_popup_cb(NULL);
+ ui_bed_mesh_profiles_show_cb(NULL);lv_obj_delete(s.profile_list);assert(!s.profile_list);
+ ui_bed_mesh_profiles_refresh_availability();close_profile_popup_cb(NULL);
+ /* Old editor teardown can open a complete replacement review. */
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_obj_add_event_cb(s.profile_editor,replacement_on_delete,LV_EVENT_DELETE,NULL);
+ close_profile_popup_cb(NULL);
+ assert(s.profile_popup&&s.profile_confirm&&!strcmp(s.pending_profile_name,"replacement_kept"));
+ assert(s.confirm_connection_label&&s.actions[3]);close_profile_popup_cb(NULL);
+ /* Full owner retirement must finish before callbacks initialize a new owner. */
+ lv_obj_t *original_owner=s.owner,*replacement_owner=lv_obj_create(lv_screen_active());
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_obj_add_event_cb(s.profile_editor,replacement_owner_on_delete,LV_EVENT_DELETE,replacement_owner);
+ ui_bed_mesh_profiles_close();
+ assert(s.owner==replacement_owner&&s.profile_popup&&s.profile_editor&&s.command==send_command);
+ lv_obj_delete(replacement_owner);assert(!s.owner&&!s.profile_popup&&!s.profile_editor);
+ ui_bed_mesh_profiles_init(original_owner,send_command);ui_bed_mesh_profiles_update(mesh);
+ assert(sends==before);
+}
 int main(void){
  lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(d,flush);lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned narrow=0;narrow<3;narrow++){
@@ -77,7 +174,7 @@ int main(void){
   }
   ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);lv_textarea_set_text(s.profile_name_input,"retire_during_send");save_name_continue_cb(NULL);before=sends;send_hook=retire_send;confirm_save_profile_cb(NULL);assert(sends==before+1&&!s.profile_popup&&!s.profile_confirm);send_hook=NULL;
   ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);lv_textarea_set_text(s.profile_name_input,"printer_changed");save_name_continue_cb(NULL);before=sends;send_hook=switch_send;confirm_save_profile_cb(NULL);assert(sends==before+1&&s.profile_confirm);send_hook=NULL;confirm_save_profile_cb(NULL);assert(sends==before+1);ui_bed_mesh_profiles_close();
-  ui_bed_mesh_profiles_init(owner,send_command);ui_bed_mesh_profiles_update(&mesh);ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);lv_obj_delete(owner);assert(!s.owner&&!s.profile_popup&&!s.profile_editor&&!lv_obj_get_child_count(lv_layer_top()));
+  ui_bed_mesh_profiles_init(owner,send_command);ui_bed_mesh_profiles_update(&mesh);field_safety_checks(&mesh);ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);lv_obj_delete(owner);assert(!s.owner&&!s.profile_popup&&!s.profile_editor&&!lv_obj_get_child_count(lv_layer_top()));
  }
- lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();puts("PASS: Bed Mesh profile native layouts, keyboard/footer bounds, exact command/retry, copied row ownership, deletion and printer changes across five themes/densities/text/viewports");
+ lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();puts("PASS: Bed Mesh profile native layouts, exact command/retry, owned/disabled/deleted actions and rows, retired inputs/feedback, wrong-operation rejection, replacement teardown and printer changes across five themes/densities/text/viewports");
 }

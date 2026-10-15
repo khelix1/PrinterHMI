@@ -8,6 +8,7 @@
 #include "ui_theme.h"
 #include "bsp/esp-bsp.h"
 #include "moonraker_probe.h"
+#include "moonraker_config_controller.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,12 +21,16 @@ static lv_obj_t *s_popup = NULL;
 static lv_obj_t *s_status_label = NULL;
 static lv_obj_t *s_results_list = NULL;
 static size_t s_candidate_count = 0;
+static lv_obj_t *s_retry_action, *s_close_action;
+static uint32_t s_discovery_epoch, s_scan_epoch, s_owner_generation;
+static bool s_discovery_dispatching, s_close_dispatching;
 
 typedef struct {
     char host[32];
     char identity[MOONRAKER_PROBE_IDENTITY_LENGTH];
     bool klippy_ready;
     int port;
+    lv_obj_t *button;
 } moonraker_discovery_endpoint_t;
 
 static char s_status[512] = "Moonraker scan: not run";
@@ -37,6 +42,25 @@ static bool s_has_scan_ip;
 
 static moonraker_discovery_close_cb_t s_close_cb = NULL;
 static moonraker_discovery_select_cb_t s_select_cb = NULL;
+
+static bool discovery_control_event(lv_event_t *event,lv_obj_t *button)
+{
+    if(!s_popup || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
+    return !event || (lv_event_get_code(event)==LV_EVENT_CLICKED &&
+        lv_event_get_target_obj(event)==button && lv_event_get_current_target_obj(event)==button);
+}
+static void discovery_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *object=lv_event_get_target_obj(event);
+    if(object==s_status_label)s_status_label=NULL;
+    if(object==s_results_list){s_results_list=NULL;s_candidate_count=0;s_cancelled=true;}
+    if(object==s_retry_action)s_retry_action=NULL;
+    if(object==s_close_action)s_close_action=NULL;
+}
+static void discovery_watch(lv_obj_t *object)
+{
+    if(object)lv_obj_add_event_cb(object,discovery_field_deleted,LV_EVENT_DELETE,NULL);
+}
 
 
 static void copy_text(char *dst,
@@ -52,31 +76,34 @@ static void copy_text(char *dst,
 
 static void close_event_cb(lv_event_t *e)
 {
-    (void)e;
-    moonraker_discovery_close();
+    if(discovery_control_event(e,s_close_action))moonraker_discovery_close();
 }
 
 
 static void candidate_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    if (!e || s_discovery_dispatching || lv_event_get_code(e) != LV_EVENT_CLICKED ||
+        s_owner_generation!=moonraker_config_generation()) return;
 
     const moonraker_discovery_endpoint_t *endpoint =
         (const moonraker_discovery_endpoint_t *)
             lv_event_get_user_data(e);
 
-    if (endpoint && s_select_cb) {
-        s_select_cb(
-            endpoint->host,
-            endpoint->port,
-            endpoint->identity);
+    if (endpoint && s_select_cb && discovery_control_event(e,endpoint->button) &&
+        s_results_list && lv_obj_get_parent(endpoint->button)==s_results_list) {
+        moonraker_discovery_endpoint_t reviewed=*endpoint;
+        moonraker_discovery_select_cb_t select=s_select_cb;
+        s_discovery_dispatching=true;
+        select(reviewed.host,reviewed.port,reviewed.identity);
+        s_discovery_dispatching=false;
     }
 }
 
 
 static void candidate_data_deleted_cb(lv_event_t *e)
 {
-    if (!e || lv_event_get_code(e) != LV_EVENT_DELETE) return;
+    if (!e || lv_event_get_code(e) != LV_EVENT_DELETE ||
+        lv_event_get_target_obj(e)!=lv_event_get_current_target_obj(e)) return;
 
     free(lv_event_get_user_data(e));
 }
@@ -91,6 +118,20 @@ static bool moonraker_discovery_add_candidate(
 
 
 #define DISCOVERY_HOST_BATCH_SIZE 1
+
+static void discovery_scan_set_status(const char *text)
+{
+    while(!moonraker_discovery_is_cancelled() && moonraker_discovery_is_open()) {
+        if(bsp_display_lock(50)) {
+            if(!moonraker_discovery_is_cancelled() && s_popup) {
+                copy_text(s_status,sizeof(s_status),text);
+                if(s_status_label)lv_label_set_text(s_status_label,s_status);
+            }
+            bsp_display_unlock();return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 
 static void discovery_add_candidate_address(
     int *candidates,
@@ -168,7 +209,7 @@ static void scan_task(void *arg)
         a,
         b,
         c);
-    moonraker_discovery_set_status(msg);
+    discovery_scan_set_status(msg);
 
     size_t found_count = 0;
     size_t next_candidate = 0;
@@ -201,7 +242,7 @@ static void scan_task(void *arg)
             (unsigned)next_candidate,
             (unsigned)candidate_count,
             (unsigned)found_count);
-        moonraker_discovery_set_status(msg);
+        discovery_scan_set_status(msg);
 
         bool open_ports[
             DISCOVERY_HOST_BATCH_SIZE *
@@ -269,7 +310,7 @@ static void scan_task(void *arg)
                         while (!moonraker_discovery_is_cancelled() &&
                                moonraker_discovery_is_open()) {
                             if (bsp_display_lock(100)) {
-                                published = moonraker_discovery_add_candidate(
+                                published = !moonraker_discovery_is_cancelled() && moonraker_discovery_add_candidate(
                                     host_refs[host_index], port, &probe);
                                 bsp_display_unlock();
                                 break;
@@ -289,7 +330,7 @@ static void scan_task(void *arg)
                 while (!moonraker_discovery_is_cancelled() &&
                        moonraker_discovery_is_open()) {
                     if (bsp_display_lock(100)) {
-                        published = moonraker_discovery_add_candidate(
+                        published = !moonraker_discovery_is_cancelled() && moonraker_discovery_add_candidate(
                             host_refs[host_index],
                             port,
                             &probe);
@@ -327,7 +368,7 @@ static void scan_task(void *arg)
                 (unsigned)found_count,
                 found_count == 1 ? "" : "s");
         }
-        moonraker_discovery_set_status(msg);
+        discovery_scan_set_status(msg);
     }
 
     s_scan_task_handle = NULL;
@@ -338,13 +379,19 @@ static void discovery_deleted(lv_event_t *event)
 {
     if (lv_event_get_target_obj(event) != s_popup) return;
     s_cancelled = true;
+    __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_popup = s_status_label = s_results_list = NULL;
     s_candidate_count = 0;
+    s_retry_action=s_close_action=NULL;
+    s_close_cb=NULL;s_select_cb=NULL;
 }
 
 static void discovery_retry_cb(lv_event_t *event)
 {
-    (void)event;
+    if(s_discovery_dispatching || !s_results_list || !discovery_control_event(event,s_retry_action))return;
+    if(s_owner_generation!=moonraker_config_generation()) {
+        moonraker_discovery_set_status("Printer changed. Close and reopen discovery.");return;
+    }
     if (!s_has_scan_ip) {
         moonraker_discovery_set_status("Connect to Wi-Fi and reopen discovery to scan this network.");
         return;
@@ -353,7 +400,11 @@ static void discovery_retry_cb(lv_event_t *event)
         moonraker_discovery_set_status("Previous scan is still finishing. Tap Retry when it completes.");
         return;
     }
-    if (s_results_list) lv_obj_clean(s_results_list);
+    uint32_t epoch=s_discovery_epoch;
+    s_discovery_dispatching=true;
+    lv_obj_clean(s_results_list);
+    s_discovery_dispatching=false;
+    if(s_discovery_epoch!=epoch || !s_popup || !s_results_list)return;
     s_candidate_count = 0;
     (void)moonraker_discovery_start(&s_retry_ip);
 }
@@ -366,6 +417,7 @@ static void moonraker_discovery_show_internal(
     moonraker_discovery_close_cb_t close_cb,
     moonraker_discovery_select_cb_t select_cb)
 {
+    if(s_popup){lv_obj_move_foreground(s_popup);return;}
     s_close_cb = close_cb;
     s_select_cb = select_cb;
 
@@ -373,11 +425,6 @@ static void moonraker_discovery_show_internal(
         copy_text(s_status, sizeof(s_status), status_text);
     }
 
-    if (s_popup) {
-        lv_obj_move_foreground(s_popup);
-        if (s_status_label) lv_label_set_text(s_status_label, s_status);
-        return;
-    }
 
     lv_obj_update_layout(parent);
     if (parent != lv_layer_top() && parent != lv_screen_active()) {
@@ -387,15 +434,19 @@ static void moonraker_discovery_show_internal(
         if (available > 32 && popup_height > available) popup_height = available;
     }
     s_popup = ui_form_dialog("DISCOVER MOONRAKER", popup_width, popup_height, UI_POPUP_STANDARD);
-    if (!s_popup) return;
+    if (!s_popup) {s_close_cb=NULL;s_select_cb=NULL;return;}
+    __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
+    s_owner_generation=moonraker_config_generation();
     /* The popup must stay above its top-layer blocker to receive touches. */
     ui_popup_set_owner(s_popup, parent);
     lv_obj_center(s_popup);
     lv_obj_add_event_cb(s_popup, discovery_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = ui_form_body(s_popup);
     s_status_label = ui_form_text(body, s_status, UI_FONT_BODY, UI_TEXT);
+    discovery_watch(s_status_label);
     ui_form_text(body, "Select a verified printer. READY means Klipper responded.", UI_FONT_CAPTION, UI_TEXT_DIM);
     s_results_list = lv_obj_create(body);
+    discovery_watch(s_results_list);
     lv_obj_remove_style_all(s_results_list);
     lv_obj_set_size(s_results_list, LV_PCT(100), 160);
     lv_obj_set_flex_flow(s_results_list, LV_FLEX_FLOW_COLUMN);
@@ -403,8 +454,8 @@ static void moonraker_discovery_show_internal(
     lv_obj_set_scroll_dir(s_results_list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_results_list, LV_SCROLLBAR_MODE_AUTO);
     s_candidate_count = 0;
-    ui_form_action(s_popup, UI_BUTTON_SECONDARY, "RETRY", discovery_retry_cb, NULL);
-    ui_form_action(s_popup, UI_BUTTON_OUTLINED, "CLOSE", close_event_cb, NULL);
+    s_retry_action=ui_form_action(s_popup, UI_BUTTON_SECONDARY, "RETRY", discovery_retry_cb, NULL);discovery_watch(s_retry_action);
+    s_close_action=ui_form_action(s_popup, UI_BUTTON_OUTLINED, "CLOSE", close_event_cb, NULL);discovery_watch(s_close_action);
     ui_form_finish(s_popup);
 }
 
@@ -434,12 +485,12 @@ void moonraker_discovery_set_status(const char *status_text)
 {
     if (!status_text) return;
 
+    uint32_t epoch=__atomic_load_n(&s_discovery_epoch,__ATOMIC_ACQUIRE);
+    if(!bsp_display_lock(50))return;
+    if(epoch!=s_discovery_epoch){bsp_display_unlock();return;}
     copy_text(s_status, sizeof(s_status), status_text);
-
-    if (s_status_label && bsp_display_lock(50)) {
-        lv_label_set_text(s_status_label, s_status);
-        bsp_display_unlock();
-    }
+    if(s_status_label)lv_label_set_text(s_status_label,s_status);
+    bsp_display_unlock();
 }
 
 
@@ -449,6 +500,7 @@ static bool moonraker_discovery_add_candidate(
     const moonraker_probe_result_t *probe)
 {
     if (!s_results_list ||
+        !s_popup || s_owner_generation!=moonraker_config_generation() ||
         !host ||
         !host[0] ||
         port <= 0 ||
@@ -496,6 +548,7 @@ static bool moonraker_discovery_add_candidate(
         free(endpoint);
         return false;
     }
+    endpoint->button=button;
 
     lv_obj_add_event_cb(
         button,
@@ -509,6 +562,8 @@ static bool moonraker_discovery_add_candidate(
 
 bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
 {
+    if(!s_popup || !s_results_list || s_discovery_dispatching ||
+        s_owner_generation!=moonraker_config_generation())return false;
     s_has_scan_ip = ip != NULL;
     if (ip) s_retry_ip = *ip;
     if (!ip || s_scan_task_handle) {
@@ -521,11 +576,16 @@ bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
     s_scan_ip = *ip;
     s_has_scan_ip = true;
     s_cancelled = false;
+    s_scan_epoch=__atomic_load_n(&s_discovery_epoch,__ATOMIC_ACQUIRE);
 
-    if (xTaskCreate(scan_task, "moon_scan", 8192, NULL, 4,
-                    &s_scan_task_handle) != pdPASS) {
+    uint32_t epoch=s_discovery_epoch;
+    s_discovery_dispatching=true;
+    bool created=xTaskCreate(scan_task,"moon_scan",8192,NULL,4,&s_scan_task_handle)==pdPASS;
+    s_discovery_dispatching=false;
+    if (!created) {
         s_scan_task_handle = NULL;
-        moonraker_discovery_set_status("Could not start discovery. Tap Retry to try again.");
+        if(s_discovery_epoch==epoch && s_popup)
+            moonraker_discovery_set_status("Could not start discovery. Tap Retry to try again.");
         return false;
     }
 
@@ -539,7 +599,8 @@ bool moonraker_discovery_is_running(void)
 
 bool moonraker_discovery_is_cancelled(void)
 {
-    return s_cancelled;
+    return s_cancelled || s_scan_epoch!=__atomic_load_n(&s_discovery_epoch,__ATOMIC_ACQUIRE) ||
+        s_owner_generation!=moonraker_config_generation();
 }
 
 
@@ -551,17 +612,15 @@ bool moonraker_discovery_is_open(void)
 
 void moonraker_discovery_close(void)
 {
+    if(s_close_dispatching)return;
+    lv_obj_t *popup=s_popup;
+    moonraker_discovery_close_cb_t close=s_close_cb;
+    s_close_dispatching=true;
     s_cancelled = true;
-
-    if (s_popup) {
-        lv_obj_delete(s_popup);
-        s_popup = NULL;
-        s_status_label = NULL;
-        s_results_list = NULL;
-        s_candidate_count = 0;
-    }
-
-    if (s_close_cb) {
-        s_close_cb();
-    }
+    __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
+    s_popup=s_status_label=s_results_list=s_retry_action=s_close_action=NULL;
+    s_candidate_count=0;s_close_cb=NULL;s_select_cb=NULL;
+    if(popup)lv_obj_delete(popup);
+    if(close)close();
+    s_close_dispatching=false;
 }

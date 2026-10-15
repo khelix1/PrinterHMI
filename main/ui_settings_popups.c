@@ -7,6 +7,8 @@
 #include "ui_theme_preview.h"
 #include "timezone_config.h"
 #include "theme_manager.h"
+#include "ota_manager.h"
+#include "settings_backup_encrypted_worker.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -22,6 +24,8 @@
 static const char *TAG = "ui_settings_popups";
 
 static lv_obj_t *s_reset_settings_popup = NULL;
+static lv_obj_t *s_reboot_popup,*s_reboot_status,*s_reboot_confirm,*s_reset_confirm;
+static bool s_controller_restart_accepted;
 static lv_obj_t *s_timezone_popup = NULL;
 static ui_settings_timezone_changed_cb_t s_timezone_changed_cb = NULL;
 static lv_obj_t *s_theme_popup = NULL;
@@ -46,7 +50,8 @@ static void theme_changed_async_cb(void *user_data);
 static void preference_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
-    lv_obj_t **fields[]={&s_reset_status,&s_timezone_status,&s_theme_status,&s_custom_status,&s_remove_status,&s_custom_apply_action,&s_custom_remove_action};
+    if(target==s_reboot_status || target==s_reboot_confirm || target==s_reset_confirm)++s_settings_epoch;
+    lv_obj_t **fields[]={&s_reset_status,&s_timezone_status,&s_theme_status,&s_custom_status,&s_remove_status,&s_custom_apply_action,&s_custom_remove_action,&s_reboot_status,&s_reboot_confirm,&s_reset_confirm};
     for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(*fields[i]==target)*fields[i]=NULL;
     for(size_t i=0;i<CUSTOM_THEME_MAX_COUNT;i++)if(s_custom_rows[i]==target)s_custom_rows[i]=NULL;
     for(size_t i=0;i<5;i++)if(s_theme_previews[i]==target)s_theme_previews[i]=NULL;
@@ -164,7 +169,8 @@ static void settings_dialog_deleted(lv_event_t *event)
         settings_popup_delete(&s_custom_theme_popup);
         settings_popup_delete(&s_custom_remove_popup);
     }
-    if (popup == s_reset_settings_popup){s_reset_settings_popup=s_reset_status=NULL;}
+    if (popup == s_reset_settings_popup){s_reset_settings_popup=s_reset_status=s_reset_confirm=NULL;}
+    if (popup == s_reboot_popup){s_reboot_popup=s_reboot_status=s_reboot_confirm=NULL;}
     if (popup == s_timezone_popup) {
         s_timezone_popup = s_timezone_status = NULL;
         s_timezone_changed_cb = NULL;
@@ -182,19 +188,31 @@ static void reset_settings_cancel_cb(lv_event_t *e)
     settings_popup_delete(&s_reset_settings_popup);
 }
 
+static bool controller_restart_ready(uint32_t epoch,lv_obj_t **status)
+{
+    bool updating=ota_manager_is_running();
+    if(epoch!=s_settings_epoch)return false;
+    settings_backup_encrypted_worker_state_t backup=settings_backup_encrypted_worker_state();
+    if(epoch!=s_settings_epoch)return false;
+    const char *reason=updating?"A firmware update is running. Wait for it to finish before restarting or resetting.":
+        (backup>=SETTINGS_BACKUP_ENCRYPTED_WORKER_PREPARING && backup<=SETTINGS_BACKUP_ENCRYPTED_WORKER_WRITING)?
+        "A backup operation is running. Wait for it to finish before restarting or resetting.":NULL;
+    if(reason){if(*status)ui_value_set_text(*status,reason);if(*status)lv_obj_scroll_to_view(*status,LV_ANIM_OFF);return false;}
+    return true;
+}
 static void reset_settings_confirm_cb(lv_event_t *e)
 {
-    (void)e;
-    if(!s_reset_settings_popup || s_preferences_dispatching || s_reset_accepted)return;
+    if(!s_reset_settings_popup || !s_reset_confirm || s_preferences_dispatching || s_reset_accepted || s_controller_restart_accepted ||
+        (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_reset_confirm)))return;
     uint32_t epoch=s_settings_epoch;
     s_preferences_dispatching=true;
+    if(!controller_restart_ready(epoch,&s_reset_status) || !s_reset_confirm){s_preferences_dispatching=false;return;}
     esp_err_t result=nvs_flash_erase();
     if(result!=ESP_OK){
         if(epoch==s_settings_epoch)ui_value_set_text(s_reset_status,"Could not erase settings. Restart was not requested; try again or Cancel.");
-        s_preferences_dispatching=false;
-        return;
+        s_preferences_dispatching=false;return;
     }
-    s_reset_accepted=true;
+    s_reset_accepted=true;s_controller_restart_accepted=true;
     vTaskDelay(pdMS_TO_TICKS(300));
     esp_restart();
     s_preferences_dispatching=false;
@@ -231,7 +249,45 @@ void reset_settings_cb(lv_event_t *e)
         0, 0, 160, 48, reset_settings_cancel_cb, NULL, NULL);
     lv_obj_t *erase = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " ERASE",
         0, 0, 160, 48, reset_settings_confirm_cb, NULL, NULL);
+    s_reset_confirm=erase;preference_field_own(erase);
     lv_obj_set_flex_grow(cancel, 1); lv_obj_set_flex_grow(erase, 1);
+}
+
+static void reboot_cancel_cb(lv_event_t *event)
+{
+    (void)event;settings_popup_delete(&s_reboot_popup);
+}
+static void reboot_confirm_cb(lv_event_t *event)
+{
+    if(!s_reboot_popup || !s_reboot_confirm || s_preferences_dispatching || s_controller_restart_accepted ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_CLICKED || lv_event_get_target_obj(event)!=s_reboot_confirm)))return;
+    uint32_t epoch=s_settings_epoch;
+    s_preferences_dispatching=true;
+    if(!controller_restart_ready(epoch,&s_reboot_status) || !s_reboot_confirm){s_preferences_dispatching=false;return;}
+    s_controller_restart_accepted=true;
+    lv_obj_add_state(s_reboot_confirm,LV_STATE_DISABLED);
+    esp_restart();
+    s_preferences_dispatching=false;
+}
+void ui_settings_popups_show_reboot(void)
+{
+    if(s_reboot_popup){lv_obj_move_foreground(s_reboot_popup);return;}
+    s_reboot_popup=ui_popup_create(lv_layer_top(),settings_dialog_width(680),settings_dialog_height(330),UI_POPUP_DANGER);
+    if(!s_reboot_popup)return;
+    ++s_settings_epoch;
+    lv_obj_add_event_cb(s_reboot_popup,settings_dialog_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_t *body=settings_dialog_layout(s_reboot_popup,"REBOOT CONTROLLER?");
+    lv_obj_t *warning=lv_label_create(body);
+    lv_label_set_text(warning,"Restart the PrinterHMI touchscreen controller? Its connections and services will be interrupted while it restarts.");
+    ui_apply_custom_label_style(warning,UI_FONT_BODY,UI_TEXT);lv_obj_set_width(warning,LV_PCT(100));
+    s_reboot_status=lv_label_create(body);lv_label_set_text(s_reboot_status,"");
+    ui_apply_custom_label_style(s_reboot_status,UI_FONT_BODY,UI_DANGER_BRIGHT);lv_obj_set_width(s_reboot_status,LV_PCT(100));preference_field_own(s_reboot_status);
+    lv_obj_t *footer=settings_dialog_footer(s_reboot_popup);
+    lv_obj_t *cancel=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,LV_SYMBOL_CLOSE " CANCEL",0,0,160,48,reboot_cancel_cb,NULL,NULL);
+    s_reboot_confirm=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,"REBOOT",0,0,160,48,reboot_confirm_cb,NULL,NULL);
+    preference_field_own(s_reboot_confirm);
+    lv_obj_set_flex_grow(cancel,1);lv_obj_set_flex_grow(s_reboot_confirm,1);
+    if(s_controller_restart_accepted)lv_obj_add_state(s_reboot_confirm,LV_STATE_DISABLED);
 }
 
 /* -------------------------------------------------------------------------
@@ -736,6 +792,7 @@ static void theme_popup_create_async(void *user_data)
 
 void ui_settings_popups_close_all(void)
 {
+    settings_popup_delete(&s_reboot_popup);
     settings_popup_delete(&s_reset_settings_popup);
     timezone_popup_close();
     theme_popup_close();

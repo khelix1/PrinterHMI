@@ -83,6 +83,64 @@ static void drag_metadata(lv_obj_t *body){
 static void reenter_start(void){print_confirm_accept(NULL);detail_start_event_cb(NULL);}
 static void retire_print(void){lv_obj_delete(s_file_detail_popup);}
 static void retire_files_page(void){lv_obj_delete(s_printer_file_popup);}
+static unsigned browser_searches,browser_sorts,browser_folders,browser_previews;
+static void browser_click(lv_obj_t *object){lv_obj_send_event(object,LV_EVENT_CLICKED,NULL);}
+static void nested_sort(void){browser_sorts++;browser_click(s_sort_button);ui_files_refresh();}
+static void browser_search(const char *query){assert(!strcmp(query,"safe query"));browser_searches++;ui_files_hide();ui_files_show();assert(!strcmp(query,"safe query"));}
+static void browser_folder(const char *path){browser_folders++;ui_files_clear_rows();assert(!strcmp(path,"safe/folder"));}
+static void browser_preview(const char *path){browser_previews++;ui_files_clear_rows();assert(!strcmp(path,"safe.gcode"));}
+static void browser_preview_reopen(const char *path){browser_previews++;ui_files_hide();ui_files_show();assert(!strcmp(path,"safe.gcode"));}
+static void browser_select(const char *path){ui_files_clear_rows();assert(!strcmp(path,"safe.gcode"));selections++;}
+static void replace_page_on_search_delete(lv_event_t *event){(void)event;ui_files_hide();ui_files_show();}
+static void browser_safety_checks(void)
+{
+ ui_files_set_callbacks(NULL,browser_select,NULL);ui_files_set_browser_callbacks(browser_search,nested_sort,browser_folder,up_fixture);
+ ui_files_show();unsigned sorted=browser_sorts,searches=browser_searches;
+ lv_obj_t *fake=lv_button_create(s_printer_file_popup);
+ lv_obj_add_event_cb(fake,search_button_cb,LV_EVENT_CLICKED,NULL);lv_obj_add_event_cb(fake,sort_button_cb,LV_EVENT_CLICKED,NULL);
+ lv_obj_add_event_cb(fake,files_refresh_event_cb,LV_EVENT_CLICKED,NULL);browser_click(fake);
+ assert(!s_search_popup&&browser_sorts==sorted&&!s_files_refresh_timer);lv_obj_delete(fake);
+ browser_click(s_sort_button);assert(browser_sorts==sorted+1);
+ lv_obj_add_state(s_sort_button,LV_STATE_DISABLED);browser_click(s_sort_button);assert(browser_sorts==sorted+1);
+ lv_obj_remove_state(s_sort_button,LV_STATE_DISABLED);
+ browser_click(s_search_button);lv_obj_t *keyboard=s_search_keyboard;lv_obj_delete(s_search_textarea);
+ assert(!s_search_textarea&&!lv_keyboard_get_textarea(keyboard));browser_click(s_search_apply);assert(browser_searches==searches);close_search_popup();
+ browser_click(s_search_button);lv_obj_delete(s_search_apply);assert(!s_search_apply);
+ lv_obj_send_event(s_search_keyboard,LV_EVENT_READY,NULL);assert(browser_searches==searches);close_search_popup();
+ browser_click(s_search_button);lv_textarea_set_text(s_search_textarea,"safe query");
+ browser_click(s_search_apply);assert(browser_searches==searches+1&&s_printer_file_popup&&!s_search_popup);
+ browser_click(s_search_button);lv_textarea_set_text(s_search_textarea,"safe query");
+ lv_obj_add_event_cb(s_search_popup,replace_page_on_search_delete,LV_EVENT_DELETE,NULL);
+ browser_click(s_search_apply);assert(browser_searches==searches+1&&s_printer_file_popup&&!s_search_popup);
+ ui_files_add_folder_button("Folder","safe/folder",0);unsigned folders=browser_folders;
+ browser_click(lv_obj_get_child(s_printer_file_list,0));assert(browser_folders==folders+1&&!lv_obj_get_child_count(s_printer_file_list));
+ ui_files_add_file_entry("safe.gcode",1,0,0);unsigned selected=selections;
+ browser_click(s_file_rows->button);assert(selections==selected+1&&!s_file_rows);
+ ui_files_add_file_entry("safe.gcode",1,0,500);ui_files_add_file_entry("safe.gcode",1,0,620);
+ lv_obj_update_layout(s_printer_file_popup);lv_obj_scroll_to_y(s_printer_file_list,500,LV_ANIM_OFF);
+ ui_files_set_callbacks(NULL,browser_select,browser_preview);unsigned previews=browser_previews;
+ request_visible_file_previews();assert(browser_previews==previews+1&&!s_file_rows);
+ ui_files_set_callbacks(NULL,browser_select,NULL);
+ ui_files_add_file_entry("safe.gcode",1,0,0);lv_obj_update_layout(s_printer_file_popup);
+ ui_files_set_callbacks(NULL,browser_select,browser_preview_reopen);previews=browser_previews;
+ request_visible_file_previews();assert(browser_previews==previews+1&&s_printer_file_popup&&!s_file_rows);
+ ui_files_set_callbacks(NULL,browser_select,NULL);ui_files_add_file_entry("safe.gcode",1,0,0);
+ file_row_context_t *row=s_file_rows;lv_obj_delete(row->preview_frame);
+ assert(!row->preview_frame&&!row->file_icon&&!row->preview_image);
+ lv_image_dsc_t unused={0};ui_files_set_file_thumbnail("safe.gcode",&unused);ui_files_clear_rows();
+ ui_files_add_folder_button("Folder","safe/folder",0);lv_obj_t *folder=lv_obj_get_child(s_printer_file_list,0);
+ lv_obj_add_flag(lv_obj_get_child(folder,0),LV_OBJ_FLAG_EVENT_BUBBLE);lv_obj_delete(folder);
+ ui_files_add_file_entry("safe.gcode",1,0,0);lv_obj_delete(s_printer_file_list);assert(!s_printer_file_list&&!s_file_rows);
+ request_visible_file_previews();
+ lv_obj_delete(s_breadcrumb_label);lv_obj_delete(s_sort_label);lv_obj_delete(s_search_label);
+ ui_files_set_breadcrumb("test");ui_files_set_sort_text("Newest");ui_files_set_search_text("safe query");
+ lv_obj_delete(s_search_button);lv_obj_delete(s_sort_button);lv_obj_delete(s_refresh_button);
+ assert(!s_search_button&&!s_sort_button&&!s_refresh_button);
+ lv_obj_delete(s_files_state->root);assert(!s_files_state);
+ ui_files_set_status("Loading files...");ui_files_set_status("Moonraker offline");ui_files_set_status("");
+ ui_files_hide();assert(!s_file_rows&&!s_search_popup);
+ ui_files_set_browser_callbacks(NULL,NULL,NULL,up_fixture);
+}
 static void run(int width){
  ui_files_show();ui_files_set_browser_callbacks(NULL,NULL,NULL,up_fixture);ui_files_set_breadcrumb(NULL);ui_files_set_search_text("");assert(s_up_button&&lv_obj_has_state(s_up_button,LV_STATE_DISABLED));unsigned before_up=up_calls;lv_obj_send_event(s_up_button,LV_EVENT_CLICKED,NULL);assert(up_calls==before_up);
  ui_files_set_breadcrumb("parts/subfolder");assert(!lv_obj_has_state(s_up_button,LV_STATE_DISABLED));lv_obj_send_event(s_up_button,LV_EVENT_CLICKED,NULL);assert(up_calls==before_up+1);ui_files_set_breadcrumb(NULL);ui_files_set_search_text("needle");assert(!lv_obj_has_state(s_up_button,LV_STATE_DISABLED));
@@ -178,10 +236,11 @@ static void run(int width){
  for(unsigned i=0;i<5;i++){
   ui_files_show_detail_popup("retire-during-print.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);detail_start_event_cb(NULL);attempts=start_attempts;start_hook=retire_print;print_confirm_accept(NULL);start_hook=NULL;assert(start_attempts==attempts+1&&!s_file_detail_popup&&!s_print_confirm_popup&&!s_detail_start_cb&&!s_detail_connection_timer);detail_connection_refresh(NULL);print_confirm_accept(NULL);detail_start_event_cb(NULL);
  }
- lv_obj_t *event_source=lv_button_create(lv_screen_active());lv_obj_add_event_cb(event_source,search_button_cb,LV_EVENT_CLICKED,NULL);lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);
+ lv_obj_t *event_source=s_search_button;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);assert(!s_search_popup); /* Old printer page cannot launch an editor. */
+ ui_files_hide();ui_files_show();event_source=s_search_button;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);
  assert(s_search_popup);keyboard_layout_check(s_search_popup,lv_obj_get_child(s_search_popup,2),s_search_textarea);
  lv_textarea_set_text(s_search_textarea,"test query");lv_obj_t*search_owner=s_search_popup;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);assert(s_search_popup==search_owner&&!strcmp(lv_textarea_get_text(s_search_textarea),"test query"));lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_CANCEL,NULL);lv_timer_handler();assert(!s_search_popup);
- lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_READY,NULL);lv_timer_handler();assert(!s_search_popup);lv_obj_delete(event_source);
+ lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_READY,NULL);lv_timer_handler();assert(!s_search_popup);
  snapshot(s_printer_file_popup);ui_files_hide();assert(!s_file_detail_popup && !s_studio_metadata_popup);assert(!s_printer_file_popup);
  unsigned objects_before=live_objects(lv_screen_active())+live_objects(lv_layer_top()),timers_before=live_timers();
  for(unsigned repeat=0;repeat<4;repeat++){ui_files_show();ui_files_add_file_entry("cycle.gcode",100,0,0);ui_files_hide();assert(!s_file_rows && !s_files_refresh_timer && !s_files_refresh_pending);assert(live_objects(lv_screen_active())+live_objects(lv_layer_top())==objects_before && live_timers()==timers_before);}
@@ -191,7 +250,7 @@ static void run(int width){
   unsigned before_refresh=refreshes;ui_files_refresh();files_refresh_deferred_cb(NULL);apply_search_and_close(false);search_button_cb(NULL);search_apply_button_cb(NULL);search_cancel_button_cb(NULL);sort_button_cb(NULL);up_button_cb(NULL);print_confirm_accept(NULL);detail_connection_refresh(NULL);ui_files_update_detail_metadata("late result",true);assert(refreshes==before_refresh);
   assert(live_objects(lv_screen_active())+live_objects(lv_layer_top())==objects_before&&live_timers()==timers_before);
  }
-
+ browser_safety_checks();
 }
 #elif defined(TEST_NETWORK)
 #include "ui_network.c"
@@ -293,6 +352,8 @@ static void run(int width){
  macro_popup_bounds(s_confirm,width);
  unsigned before=macro_sends;config_generation++;run_macro_cb(NULL);
  assert(macro_sends==before && s_confirm);close_confirm();
+ /* Simulate the page rebuild after changing the selected printer. */
+ ui_macros_hide();ui_macros_show(send_macro);
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);
  lv_textarea_set_text(s_macros->parameter_fields[0],"205");review_macro_cb(NULL);
  connected=false;refresh_timer_cb(NULL);assert(lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED));macro_popup_bounds(s_confirm,width);run_macro_cb(NULL);assert(macro_sends==before);
@@ -305,9 +366,12 @@ static void run(int width){
   lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);assert(s_macros->editor);lv_obj_delete(s_confirm);assert(!s_confirm&&!s_macros->editor&&!s_macros->parameter_fields[0]&&!s_pending_macro[0]);review_macro_cb(NULL);run_macro_cb(NULL);editor_done_cb(NULL);
  }
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);lv_textarea_set_text(s_macros->editor_value,"draft-value");config_generation++;editor_done_cb(NULL);assert(s_macros->editor&&!lv_textarea_get_text(s_macros->parameter_fields[0])[0]);review_macro_cb(NULL);assert(!s_macros->reviewed);close_confirm();
+ ui_macros_hide();ui_macros_show(send_macro);
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);review_macro_cb(NULL);lv_obj_t*reviewed=s_confirm;char saved[MACRO_COMMAND_MAX];snprintf(saved,sizeof(saved),"%s",s_macros->pending_command);review_macro_cb(NULL);assert(s_confirm==reviewed&&!strcmp(saved,s_macros->pending_command));
  before=macro_sends;macro_send_hook=macro_retire;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&!s_confirm&&!s_macros->run_action);
+ lv_tick_inc(5001); /* A separate dispatch case, outside accepted-command suppression. */
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);review_macro_cb(NULL);before=macro_sends;macro_send_hook=macro_switch;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&s_confirm);run_macro_cb(NULL);assert(macro_sends==before+1);close_confirm();
+ ui_macros_hide();ui_macros_show(send_macro);
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);review_macro_cb(NULL);before=macro_sends;macro_send_hook=macro_retire_root;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&!s_root&&!s_list&&!s_status&&!s_confirm&&!s_refresh_timer&&macro_timer_count()==baseline_timers);
  editor_done_cb(NULL);review_macro_cb(NULL);run_macro_cb(NULL);refresh_timer_cb(NULL);clear_search_cb(NULL);field_cb(NULL);
  for(unsigned i=0;i<5;i++){

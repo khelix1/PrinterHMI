@@ -17,13 +17,16 @@ size_t strlcpy(char*d,const char*s,size_t n){size_t z=strlen(s);if(n){size_t k=z
 static bool wifi_ready,configured,camera_ready,storage_ok=true;
 static bool camera_result,discovery_result;
 static unsigned editor_opened,connections,completions;
+static unsigned default_saves,url_saves,camera_starts;
+static bool wifi_accept=true,default_ok=true,url_ok=true;
+static void (*connect_hook)(void),(*default_hook)(void),(*url_hook)(void),(*completion_hook)(void);
 static void (*scan_task)(void*);
 static moonraker_profile_t profile={.host="printer.local",.port=7125};
 const moonraker_profile_t *moonraker_config_profile(int i){(void)i;profile.configured=configured;return &profile;}
 int moonraker_config_active_profile_index(void){return 0;}
 const char *moonraker_config_camera_stream_url(int i){(void)i;return camera_ready?"http://camera.local/stream":"";}
-bool moonraker_config_set_camera_stream_url(int i,const char*u){(void)i;assert(u[0]);camera_ready=true;return true;}
-bool onboarding_controller_mark_complete(void){if(storage_ok)completions++;return storage_ok;}
+bool moonraker_config_set_camera_stream_url(int i,const char*u){(void)i;assert(u[0]);url_saves++;if(url_hook)url_hook();if(url_ok)camera_ready=true;return url_ok;}
+bool onboarding_controller_mark_complete(void){if(completion_hook)completion_hook();if(storage_ok)completions++;return storage_ok;}
 void ui_printer_profiles_show_for_slot(int slot,void(*changed)(void),void(*discover)(void)){assert(slot==0&&changed&&discover);editor_opened++;}
 void ui_printer_profiles_set_discovered_endpoint(const char*h,int p,const char*i){(void)h;(void)p;(void)i;}
 void moonraker_discovery_show_in_parent(lv_obj_t*p,const char*t,moonraker_discovery_close_cb_t c,moonraker_discovery_select_cb_t s){(void)p;(void)t;(void)c;(void)s;}
@@ -41,13 +44,89 @@ void vTaskDelay(unsigned n){(void)n;}
 void vTaskDelete(void*p){(void)p;}
 int xTaskCreate(void(*f)(void*),const char*n,unsigned z,void*p,unsigned pr,void*h){(void)n;(void)z;(void)p;(void)pr;(void)h;scan_task=f;return pdPASS;}
 bool camera_catalog_get(int p,size_t i,camera_catalog_entry_t*e){(void)p;*e=(camera_catalog_entry_t){.configured=true};snprintf(e->name,sizeof(e->name),"Workshop camera %zu",i);strlcpy(e->stream_url,"http://camera.local/stream",sizeof(e->stream_url));return true;}
-bool camera_catalog_set_default(int p,size_t i){(void)p;assert(i<4);return true;}
+bool camera_catalog_set_default(int p,size_t i){(void)p;assert(i<4);default_saves++;if(default_hook)default_hook();return default_ok;}
 bool camera_discovery_start(const char*h,int p,const char*k){(void)h;(void)p;(void)k;return true;}
 bool camera_discovery_busy(void){return false;}
 bool camera_discovery_take_result(moonraker_webcam_t*w,bool*f,size_t*n){(void)w;*f=discovery_result;*n=discovery_result?4:0;if(discovery_result)config_generation++;return true;}
-bool camera_test_start(const char*u){assert(u[0]);return true;}
+bool camera_test_start(const char*u){assert(u[0]);camera_starts++;return true;}
 bool camera_test_take_result(bool*o,int*w,int*h,size_t*b){*o=camera_result;*w=900;*h=520;*b=4096;return true;}
-static bool connect_wifi(const char*s,const char*p){assert(s[0]);assert(!strcmp(p,"test-password"));connections++;return true;}
+static bool connect_wifi(const char*s,const char*p){assert(s[0]);assert(!strcmp(p,"test-password"));connections++;if(connect_hook)connect_hook();assert(s[0]&&!strcmp(p,"test-password"));return wifi_accept;}
+static bool wrong_connect(const char*s,const char*p){(void)s;(void)p;assert(!"Repeated Show replaced the original sender");return false;}
+static void click(lv_obj_t *object){lv_obj_send_event(object,LV_EVENT_CLICKED,NULL);}
+static void open_password(void)
+{
+ setup_select_wifi_cb(NULL);center_wifi_cb(NULL);scan_task(NULL);wifi_scan_ready(s_poll);
+ click(s_wifi_rows[0]);lv_textarea_set_text(s_password,"test-password");
+}
+static void open_verified_camera(void)
+{
+ configured=true;setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=true;
+ camera_discovery_poll(s_poll);click(s_camera_rows[0]);camera_result=true;camera_test_poll(s_poll);
+ assert(s_camera_use_action&&s_camera_verified);
+}
+static void nested_connect(void){wifi_save_cb(NULL);setup_select_complete_cb(NULL);}
+static void delete_password(void){lv_obj_delete(s_password);}
+static void reopen_setup(void){ui_setup_wizard_close();ui_setup_wizard_show(connect_wifi);}
+static void nested_camera_save(void){camera_save_cb(NULL);setup_select_wifi_cb(NULL);}
+static void nested_finish(void){finish_cb(NULL);}
+static void reopen_on_delete(lv_event_t *event){(void)event;ui_setup_wizard_show(connect_wifi);}
+static void unrelated_timer(lv_timer_t *timer){(void)timer;}
+static void safety_checks(void)
+{
+ wifi_ready=configured=camera_ready=false;wifi_accept=true;default_ok=url_ok=true;
+ ui_setup_wizard_show(connect_wifi);open_password();
+ ui_setup_wizard_show(wrong_connect); /* Existing credentials keep their sender. */
+ unsigned before=connections;connect_hook=nested_connect;wifi_accept=false;wifi_save_cb(NULL);
+ connect_hook=NULL;assert(connections==before+1&&!s_poll&&s_password&&s_setup_step==SETUP_STEP_WIFI);
+ assert(strstr(lv_label_get_text(s_status),"Could not start"));
+ lv_obj_add_state(s_wifi_connect_action,LV_STATE_DISABLED);wifi_save_cb(NULL);assert(connections==before+1);
+ lv_obj_remove_state(s_wifi_connect_action,LV_STATE_DISABLED);
+ lv_obj_t *fake=lv_button_create(s_actions);lv_obj_add_event_cb(fake,wifi_save_cb,LV_EVENT_CLICKED,NULL);
+ click(fake);assert(connections==before+1);lv_obj_delete(fake);
+ lv_obj_delete(s_status);assert(!s_status);wifi_save_cb(NULL);assert(connections==before+2&&!s_poll);
+ wifi_accept=true;connect_hook=delete_password;wifi_save_cb(NULL);connect_hook=NULL;
+ assert(connections==before+3&&!s_password&&!s_poll&&!lv_keyboard_get_textarea(s_keyboard));
+ wifi_save_cb(NULL);assert(connections==before+3);
+ open_password();connect_hook=reopen_setup;wifi_save_cb(NULL);connect_hook=NULL;
+ assert(s_center&&s_stage&&s_setup_step==SETUP_STEP_WELCOME&&!s_poll&&!s_password);
+ open_password();lv_obj_delete(s_wifi_connect_action);before=connections;wifi_save_cb(NULL);assert(connections==before);
+ open_password();wifi_save_cb(NULL);assert(s_poll);
+ lv_timer_t *unrelated=lv_timer_create(unrelated_timer,60000,NULL),*current=s_poll;
+ wifi_return_timer(unrelated);wifi_verify(unrelated);wifi_scan_ready(unrelated);
+ assert(s_poll==current);lv_timer_delete(unrelated);
+ lv_obj_delete(s_setup_content);assert(!s_setup_content&&!s_poll);ui_setup_wizard_close();
+ ui_setup_wizard_show(connect_wifi);open_verified_camera();
+ unsigned defaults=default_saves,urls=url_saves;
+ lv_obj_add_state(s_camera_use_action,LV_STATE_DISABLED);camera_save_cb(NULL);assert(default_saves==defaults);
+ lv_obj_remove_state(s_camera_use_action,LV_STATE_DISABLED);
+ default_ok=false;camera_save_cb(NULL);assert(default_saves==defaults+1&&url_saves==urls&&s_camera_use_action);
+ assert(strstr(lv_label_get_text(s_status),"default camera"));default_ok=true;url_ok=false;
+ default_hook=nested_camera_save;camera_save_cb(NULL);default_hook=NULL;
+ assert(default_saves==defaults+2&&url_saves==urls+1&&s_camera_use_action&&s_setup_step==SETUP_STEP_CAMERA);
+ assert(strstr(lv_label_get_text(s_status),"stream URL"));url_ok=true;
+ default_hook=reopen_setup;camera_save_cb(NULL);default_hook=NULL;
+ assert(s_center&&s_setup_step==SETUP_STEP_WELCOME&&!s_poll&&url_saves==urls+1);
+ open_verified_camera();lv_obj_delete(s_camera_use_action);defaults=default_saves;camera_save_cb(NULL);
+ assert(default_saves==defaults);open_verified_camera();url_hook=reopen_setup;camera_save_cb(NULL);url_hook=NULL;
+ assert(s_center&&s_setup_step==SETUP_STEP_WELCOME&&!s_poll);
+ setup_select_camera_cb(NULL);center_camera_cb(NULL);camera_discovery_poll(s_poll);
+ click(s_camera_rows[0]);unsigned starts=camera_starts;int selected=s_selected_camera;
+ click(s_camera_rows[1]);assert(s_selected_camera==selected&&camera_starts==starts);
+ camera_result=false;camera_test_poll(s_poll);assert(!s_camera_verified&&!s_camera_use_action);
+ camera_save_cb(NULL);assert(default_saves==defaults+1);
+ wifi_ready=configured=true;setup_select_complete_cb(NULL);before=completions;
+ completion_hook=nested_finish;finish_cb(NULL);completion_hook=NULL;
+ assert(completions==before+1&&!s_center&&s_complete_popup);setup_completion_done_cb(NULL);
+ ui_setup_wizard_show(connect_wifi);setup_select_complete_cb(NULL);before=completions;
+ completion_hook=reopen_setup;finish_cb(NULL);completion_hook=NULL;
+ assert(completions==before+1&&s_center&&!s_complete_popup&&s_setup_step==SETUP_STEP_WELCOME);
+ setup_select_complete_cb(NULL);lv_obj_delete(s_finish_action);before=completions;finish_cb(NULL);assert(completions==before);
+ lv_obj_add_event_cb(s_center,reopen_on_delete,LV_EVENT_DELETE,NULL);ui_setup_wizard_close();
+ assert(s_center&&s_setup_content&&s_stage&&s_wifi_connect==connect_wifi);
+ ui_setup_wizard_close();assert(!s_center&&!s_poll);
+ wifi_save_cb(NULL);camera_save_cb(NULL);finish_cb(NULL);wifi_scan_open();camera_open();
+ assert(!s_center&&!s_poll&&!lv_obj_get_child_count(lv_layer_top()));
+}
 static void inside(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void check(void){lv_obj_update_layout(s_center);inside(s_center,lv_screen_active());inside(s_setup_content,s_center);inside(s_stage,s_setup_content);inside(s_actions,s_setup_content);assert(lv_obj_get_height(s_stage)>0);for(unsigned i=0;i<lv_obj_get_child_count(s_actions);i++){lv_obj_t*b=lv_obj_get_child(s_actions,i);inside(b,s_actions);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t a,b;lv_obj_get_coords(s_actions,&a);lv_obj_scroll_to_y(s_stage,2000,LV_ANIM_OFF);lv_obj_update_layout(s_center);lv_obj_get_coords(s_actions,&b);assert(!memcmp(&a,&b,sizeof(a)));lv_obj_scroll_to_y(s_stage,0,LV_ANIM_OFF);}
 static unsigned width=1024;static uint16_t raster[1024*600];
@@ -69,6 +148,6 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  ui_setup_wizard_show(connect_wifi);setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=true;camera_discovery_poll(NULL);check();assert(lv_obj_get_child_count(s_camera_list)==4);lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=false;camera_test_poll(NULL);assert(s_center);lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=true;camera_test_poll(NULL);check();camera_save_cb(NULL);assert(camera_ready);check();
  setup_select_camera_cb(NULL);center_camera_cb(NULL);config_generation++;camera_discovery_poll(NULL);assert(!s_poll&&strstr(lv_label_get_text(s_status),"Printer changed")&&!lv_obj_get_child_count(s_camera_list));center_camera_cb(NULL);camera_discovery_poll(NULL);assert(lv_obj_get_child_count(s_camera_list)==4);
  setup_select_complete_cb(NULL);check();if(density==1&&large)snapshot(t,"review");storage_ok=false;finish_cb(NULL);assert(s_center);storage_ok=true;finish_cb(NULL);assert(!s_center&&!s_setup_content&&!s_status&&!s_poll&&s_complete_popup);lv_obj_update_layout(s_complete_popup);inside(s_complete_popup,lv_screen_active());setup_completion_done_cb(NULL);
- ui_setup_wizard_show(connect_wifi);lv_obj_delete(s_center);assert(!s_center&&!s_setup_content&&!s_status&&!s_keyboard);ui_setup_wizard_show(connect_wifi);later_cb(NULL);assert(!s_center);
+ ui_setup_wizard_show(connect_wifi);lv_obj_delete(s_center);assert(!s_center&&!s_setup_content&&!s_status&&!s_keyboard);ui_setup_wizard_show(connect_wifi);later_cb(NULL);assert(!s_center);safety_checks();
  }
- lv_display_delete(d);lv_deinit();puts("PASS: Setup Center layout, five themes, density/text variants, navigation, scan/password, profile routing, camera verification, completion gates and teardown");return 0;}
+ lv_display_delete(d);lv_deinit();puts("PASS: Setup Center layout and safety across five themes/densities/text/viewports; Wi-Fi nested dispatch/retry/captured credentials, camera verification ownership/save failures, retired fields/actions/timers, completion and replacement teardown");return 0;}

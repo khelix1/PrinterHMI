@@ -75,13 +75,12 @@ static inline lv_obj_t *ui_form_input(lv_obj_t *parent,const char *placeholder,c
 }
 static inline lv_obj_t *ui_form_keyboard(lv_obj_t *popup,lv_obj_t *input,lv_keyboard_mode_t mode)
 {
-    lv_obj_t *keyboard=lv_keyboard_create(popup);
-    lv_obj_move_to_index(keyboard,2);
     int height=lv_display_get_vertical_resolution(NULL)/3;
     if(height<140)height=140;
     if(height>200)height=200;
-    lv_obj_set_size(keyboard,LV_PCT(100),height);
-    lv_keyboard_set_mode(keyboard,mode);lv_keyboard_set_textarea(keyboard,input);
-    ui_apply_surface_role(keyboard,UI_SURFACE_KEYBOARD);
+    lv_obj_t *keyboard=ui_popup_add_keyboard(popup,input,LV_PCT(100),height,
+        LV_ALIGN_TOP_LEFT,0,0,mode);
+    if (!keyboard) return NULL;
+    lv_obj_move_to_index(keyboard,2);
     return keyboard;
 }

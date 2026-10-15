@@ -47,3 +47,9 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
                         str(root/"tools/audit/setup_center_layout_test.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/s) for s in sources],
                         str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
         subprocess.run([str(executable)],check=True)
+
+    (tmp/"audit_compat.h").write_text("#include <stddef.h>\nsize_t strlcpy(char *,const char *,size_t);\n")
+    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict",*flags,
+        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-include",str(tmp/"audit_compat.h"),"-c",str(root/"main/ui_setup_wizard.c"),"-o",str(tmp/"setup_owner.o")],check=True)
+    print("PASS: standalone Setup owner compilation with warnings treated as errors")

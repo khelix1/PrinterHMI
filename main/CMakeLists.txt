@@ -3,6 +3,7 @@ idf_component_register(
         "dashboard_runtime_controller.c"
         # Application entry point
         "main.c"
+        "ui_graphics_diagnostics.c"
 
         # Theme and shared UI components
         "ui_theme.c"

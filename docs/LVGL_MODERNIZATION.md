@@ -1671,3 +1671,33 @@ The profile host audit adds main-form visibility, host/port alignment, five-digi
 `apply_profile_camera_visual_polish.py` follows the accepted grouped editor. Camera slots have static, single-line ellipsized names and a separate Default/Available slot caption; selection uses the current theme accent and remains selected on repeated native taps. The slot grid keeps four columns at panel width and two at narrow viewports. Name/URL captions are grouped with their fields, action labels use sentence case, and the main camera popup uses the same opaque, screen-local scroll path as Edit printer. Keyboard and removal review remain top-layer nested modals.
 
 The host profile audit checks slot geometry, marker separation, Default versus selection, full action-label fit, camera viewport redraw culling and native modal input/order alongside the existing camera save/default/remove/discovery/test lifetime scenarios. Hardware acceleration was reviewed during this batch; findings and the proposed separate PPA experiment are recorded in GRAPHICS_ACCELERATION.md. This camera patch retains the current accelerator configuration.
+
+## Files scroll redraw containment
+
+`apply_files_scroll_redraw_performance.py` follows the PPA fill trial. Files scrolling was reported laggy with PPA enabled; physical Camera performance is untested because no camera is connected. The Files list itself was transparent in all five themes. Actual LVGL host rendering reproduced 21–33 parent-page and viewport draw callbacks across six 18-pixel scroll steps. Making only the scrolling list opaque with UI_BG, no gradient and square corners reduced both parent counts to zero; visible list draws remained 21–33. This is redraw containment evidence, not a device FPS or latency measurement.
+
+Both Studio and the responsive themes use the same list-surface helper. Rows, thumbnail requests/ownership, workers, sort/search, detail/print review and input callbacks are unchanged. The Glass theme's list area becomes a solid UI_BG surface rather than exposing the page gradient; the surrounding page retains its theme. The existing Files fixture now tests actual scroll drawing and native drag cancellation in every theme/density/text setting before its responsive/lifecycle matrix.
+
+## Accepted fill-only PPA default
+
+Following the cache handoff correction, the user confirmed the Dashboard blocks were gone and scrolling was fast and smooth. The supported IDF6/Hosted3 wrapper now defaults to that exact fill-only PPA renderer and its two guarded LVGL backports. Explicit `PRINTERHMI_PPA_TRIAL=0` retains software rendering. Optional wrapper `flash monitor` actions use the same selected SDKCONFIG as the build so normal commands cannot silently flash the software seed instead. PPA images/rotation remain disabled, LCD/buffer architecture and version pins are unchanged, and physical Camera performance is not yet accepted. See GRAPHICS_ACCELERATION.md for current commands and historical results.
+
+## Files list metadata polish
+
+`apply_files_metadata_visual_polish.py` follows the accepted PPA/diagnostic cleanup. File rows use the theme/density/accessibility caption font instead of a fixed 12-pixel metadata font. Size units now scale from bytes through KiB/MiB/GiB so small files no longer display as 0.0 MB. Available dates remain visible; unavailable dates omit the DATE -- placeholder, and unknown size uses G-code file. The repeated HOLD FOR DETAILS instruction is removed because both row tap and hold already open details. The non-Studio page title uses sentence case; Studio's Job library title remains.
+
+The opaque list, row geometry, filename ellipsis, previews, input callbacks and asynchronous workers are retained. The Files fixture covers actual size captions, metadata/filename separation, accessibility caption sizing and responsive bounds alongside its redraw containment and lifetime checks.
+
+## Inline Files inspector details
+
+`apply_inline_file_details.py` follows the Files metadata polish. The Studio inspector preview is 352x176 instead of 352x228. Filename and metadata move up, and the metadata viewport grows from 54 to 128 pixels. Standard ETA/filament/layer-height/object-height/size fields fit directly, including large text, with two wider Print/Cancel actions. Details is hidden unless formatted metadata actually exceeds the inline viewport; extra fields remain scrollable inline and accessible in the existing expanded view. Updates back to short metadata hide the action again.
+
+Both theme paths omit the duplicate filename, Thumbnail status/path diagnostics and redundant Confirm to start instruction from the metadata display while retaining actual named fields, including unfamiliar extra fields. The separate print review remains. Exact source/ownership/generation checks, Print readiness and commands are unchanged. Metadata viewport opacity retains redraw containment. The host Files matrix and full-LVGL AddressSanitizer run cover short/long/update transitions, action widths, complete extra data, metadata pointer scrolling and popup/print lifetimes. Native Studio large-text rendering was also inspected.
+
+## Content-sized Files preview
+
+`apply_adaptive_file_preview.py` follows inline file details. Studio measures the actual filename and wrapped metadata before allocating the remaining vertical space to the preview. Common metadata keeps every line visible without an expanded Details action, with a larger preview than the previous fixed 176-pixel box. Sparse metadata allows more image space; long extra metadata keeps a usable 128-pixel preview and the existing scroll/Details path. Print/Cancel remain pinned. Measured caption height respects density and large text.
+
+A local preview-box size observer refits an already loaded image proportionally and recenters an empty placeholder, so late metadata updates do not leave the image clipped or scaled for an obsolete box. New box/filename pointers are retired on deletion with the inspector owner. Rendering settings and printer actions are unchanged. The Files fixture checks common-data fit, spacing, preview growth/shrink/restoration and loaded-image fit, plus all existing ownership/print/redraw cases.
+
+Release follow-up: tools/audit/firmware_size_audit.sh enforces a 3 MiB CI/release budget; both app slots are 7 MiB in partitions.csv. The user reports an image near 2.98 MB. Check exact bytes and growth before release; this visual patch does not change that budget or the partition table.

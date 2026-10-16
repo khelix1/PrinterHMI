@@ -39,6 +39,7 @@
 #include "esp_heap_caps.h"
 
 #include "lvgl.h"
+#include "ui_graphics_diagnostics.h"
 #include "bsp/esp-bsp.h"
 #include "bsp/display.h"
 #include "bsp_board_extra.h"
@@ -3874,6 +3875,9 @@ void app_main(void)
      */
     bsp_display_lock(0);
     ui_settings_module_init();
+    if (!ui_graphics_diagnostics_start(lv_display_get_default())) {
+        ESP_LOGW(TAG, "Graphics diagnostics unavailable");
+    }
     bsp_display_unlock();
 
     /* A solid backlight eliminates low-duty PWM flicker while the

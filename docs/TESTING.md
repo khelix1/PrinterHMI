@@ -1417,3 +1417,67 @@ Apply `apply_profile_camera_visual_polish.py` after `apply_profile_editor_visual
 Check name/URL field keyboard behavior, Find cameras, Test stream, Make default, Remove > Keep camera, Cancel and Use camera. The selected full name remains editable in the field even when its slot caption is ellipsized. Verify stream/navigation suspension and resumption remain normal, and scroll smoothly through small viewports. Confirm keyboard/removal review are above the camera modal and outside taps remain blocked. Repeat theme, density and large-text checks.
 
 The actual profile matrix covers four-/two-column geometry, single-line name clipping, separate default markers, exclusive selected state, action text fit, zero parent redraws for opaque viewport scrolling/repainting, native repeated-slot taps and nested modal ordering, plus prior camera persistence/worker/replacement regressions. Physical camera transport, rendering speed and device acceptance remain panel steps.
+
+## Graphics baseline before hardware acceleration
+
+Apply `apply_graphics_baseline_diagnostics.py` after b4d4c40, build using `tools/build_idf6_hosted3.sh`, then flash the resulting firmware. Confirm unchanged boot/splash, chooser, editor scrolling, nested dialogs, page transitions and camera streaming. Capture `graphics_diag` startup, distinct buffer and active-window reports. Use the interaction sequence and timing interpretation in GRAPHICS_ACCELERATION.md. No accelerator flags are changed by this patch.
+
+`tools/audit/graphics_diagnostics_test.py` compiles the actual observer against real LVGL 9.5 with warnings as errors and deterministic ESP clock/heap/log stubs. It checks zero-time starts, idle exclusion, exact elapsed accounting, buffer deduplication/alignment reports, duplicate attachment, second-display rejection and display-delete/timer cleanup. Host timing is synthetic; device firmware build and panel comparison remain required.
+
+## Fill-only PPA hardware trial
+
+Follow GRAPHICS_ACCELERATION.md. Enable only for an explicit build with `PRINTERHMI_PPA_TRIAL=1 ./tools/build_idf6_hosted3.sh`; normal/rollback builds use `PRINTERHMI_PPA_TRIAL=0`. The canonical sdkconfig.idf6 is not edited. Trial configuration is generated under the ignored build directory and verified after IDF reconfigure. PPA images and port rotation remain disabled. Apply the exact pinned-source upstream LVGL length fix before compiling the trial; never round up a PPA request beyond an existing allocation.
+
+Host audit `tools/audit/ppa_trial_test.py` checks isolated config generation/verification, unknown-option preservation and mismatch refusal, exact-source patch apply/no-op/refusal, actual LVGL allocations at odd dimensions and indexed/alpha formats with 64-byte starts and lengths, plus software/trial/rollback wrapper order with fake IDF tools. Actual PPA driver initialization, cache coherency, panel appearance and speed require the ESP-IDF device build and panel logs; host checks do not establish those results.
+
+## Files scroll redraw performance
+
+Apply `apply_files_scroll_redraw_performance.py` after the PPA trial patch. Rebuild with `PRINTERHMI_PPA_TRIAL=1 ./tools/build_idf6_hosted3.sh` to compare against the same PPA-enabled firmware, then flash using the trial SDKCONFIG or install that new image by OTA. Confirm `ppa=1 draw_align=64` in diagnostics. Scroll Files repeatedly for 15–20 seconds, pause, and repeat with the same folder, theme, density and text setting used before. Return graphics_diag activity lines and perceived responsiveness. Camera performance remains untested without a camera.
+
+Verify thumbnails still arrive, preview/detail taps work, a drag opens no file, and folder navigation/search/sort/refresh still work. Check the empty/offline status, metadata/print review and theme switching. The list stays flat and borderless; Glass now uses a solid page-colored list surface. Do not issue a print command merely to test scrolling.
+
+Host: `python3 tools/audit/responsive_layout_test.py --variant FILES --lvgl-dir PATH --lvgl-lib ARCHIVE` runs the real Files fixture with redraw containment, fixed breadcrumb position, native scroll cancellation and lifecycle checks. Set `FILES_SCROLL_DIAGNOSTIC=1` to print the five-theme native-panel draw counts. Six scroll steps must draw the list but cause zero parent-page/viewport DRAW_MAIN callbacks. This fixture uses software LVGL; actual PPA performance and device appearance remain panel acceptance steps. The file-load worker audit also remains required.
+
+## PPA cache handoff artifact regression
+
+After `apply_ppa_cache_handoff_fix.py`, run the opt-in PPA build wrapper and check its new cache handoff/serialization PASS line. Flash the trial configuration. Confirm ppa=1/draw_align=64, then inspect live Dashboard speed, flow, fan, drybox, air/humidity, tool and bed updates for black blocks over 30–60 seconds. Repeat theme changes and Dashboard/Printer/Files navigation; compare Files scroll behavior. A physical Camera test remains pending until a camera is connected. No printer action or target change is required. Keep software rendering as the default; rollback and flash if artifacts recur.
+
+Run `tools/audit/ppa_cache_coherency_test.py --lvgl-dir PATH --lvgl-lib ARCHIVE` and the existing `ppa_trial_test.py` with the same arguments. The cache fixture compiles the actual guarded backport with warnings as errors, checks cache directions/order, clipped layer-relative alignment/bounds and adjacent CPU data preservation, and proves the original code fails. The wrapper audit checks both fixes precede the trial build while normal/rollback configs remain isolated. Device cache timing, visual correctness and performance are not proven by the host stubs.
+
+## Accepted PPA default build and fallback
+
+Apply `apply_ppa_default_build.py` after the cache handoff fix. With no PRINTERHMI_PPA_TRIAL override, `./tools/build_idf6_hosted3.sh` must select PPA fills, verify 64-byte alignment/images-off/rotation-off, and apply/check both LVGL dependency corrections. `./tools/build_idf6_hosted3.sh flash monitor` carries the exact same generated SDKCONFIG through the build, flash and monitor actions. Check ppa=1/draw_align=64 after boot and repeat Dashboard redraw and Files scrolling checks.
+
+`PRINTERHMI_PPA_TRIAL=0 ./tools/build_idf6_hosted3.sh flash monitor` explicitly builds/flashes software rendering and should report ppa=0/draw_align=4. Running the wrapper again with the variable unset must restore the PPA default. A value already exported as 0 intentionally keeps software selected; use `unset PRINTERHMI_PPA_TRIAL` to restore the default. Baseline sdkconfig.idf6 remains unchanged; the generated config's legacy .ppa-trial name is retained for compatibility. Do not use an explicit SDKCONFIG=sdkconfig.idf6 command to flash a PPA build.
+
+The updated ppa_trial_test.py checks default mode, explicit fallback, explicit legacy mode 1, default restoration and combined build/flash/monitor configuration identity with fake IDF commands, plus invalid option/action refusal. Real LVGL buffer/cache regression tests remain required. Device build/boot confirmation after promotion is still part of acceptance; physical Camera testing remains pending.
+
+## Graphics diagnostics cleanup
+
+Apply `apply_graphics_diagnostics_cleanup.py` after the PPA default-build patch, then use the normal `./tools/build_idf6_hosted3.sh flash monitor`. Confirm the startup renderer line reports ppa=1/draw_align=64/reports=0, both framebuffer alignment lines are available, and no ten-second cycles/heap lines appear while navigating. Dashboard and Files must retain the accepted clean rendering and smooth scrolling. The new project Kconfig option defaults off; no renderer or buffer configuration changes.
+
+For opt-in timing, enable PrinterHMI diagnostics > Periodic graphics timing and heap reports in the software seed's menuconfig, then rebuild through the wrapper as described in GRAPHICS_ACCELERATION.md. Startup must say reports=1 and active ten-second windows must report cycles. Disable and rebuild to return to default behavior.
+
+The actual LVGL graphics_diagnostics_test.py compiles both modes with warnings as errors: default mode checks no timer, no ESP clock reads and no timing reports while preserving buffer logging, deduplication and deletion; opt-in mode retains the existing exact timing/idle/lifetime checks. Physical performance remains verified on the panel.
+
+## Files metadata visual acceptance
+
+Apply `apply_files_metadata_visual_polish.py` after graphics diagnostic cleanup and build/flash normally with `./tools/build_idf6_hosted3.sh flash monitor`. Inspect file rows in all themes/densities and large text: filename above a readable size/date caption, no overlaps, no repeated HOLD FOR DETAILS or DATE -- text, and small files shown in bytes/KiB instead of 0.0 MB. Known timestamps still use the existing local date formatting. Missing metadata uses G-code file. Long names/captions stay one-line ellipsized.
+
+Verify thumbnails, preview/detail taps, drag cancellation, folder/search/sort/refresh behavior and smooth scrolling remain accepted. The updated responsive Files host fixture checks actual byte/KiB/MiB/GiB/fallback captions, theme/accessibility caption sizing and filename/metadata separation, followed by existing responsive, ownership and redraw checks. Device appearance and interaction remain build/flash acceptance.
+
+The host pointer fixture explicitly retires a synthetic scroll-throw animation before deleting its temporary input device; AddressSanitizer exposed the previous fixture cleanup error at LVGL deinitialization. Production touch initialization/lifetime is unchanged.
+
+## Inline Files detail acceptance
+
+Apply `apply_inline_file_details.py` after Files metadata polish, build with `./tools/build_idf6_hosted3.sh`, then install the resulting firmware through the existing OTA server. On Studio, select a normal G-code file: the preview should be slightly shorter, common file values readable directly, and only Print/Cancel actions visible. No thumbnail storage path or duplicate print instruction should consume the inspector. With extra metadata beyond the inline height, Details should appear and expose the complete scrollable text; short updates hide it again. Inline scrolling remains available for long content.
+
+Verify all themes, large text/density, thumbnail/fullscreen behavior, page changes, Cancel and Print > Cancel review. Do not start a print just to test layout. Readiness/profile-change safeguards must remain. The actual Files host fixture checks the standard five fields fit Studio without scroll or Details, correct two-/three-action widths, long metadata expansion, short/long transitions, unknown named-field preservation, and the existing print and lifetime regression matrix. AddressSanitizer with the full pinned LVGL source and visual inspection of the native Studio large-text inspector also pass; device/OTA appearance remains the user's acceptance step.
+
+## Content-sized preview acceptance
+
+Apply `apply_adaptive_file_preview.py` after inline file details, run `./tools/build_idf6_hosted3.sh`, and update through the existing OTA server. Studio should use a larger preview while preserving all normal metadata and pinned actions. Check files with shorter/more metadata, density and large-text settings. Extra overflowing details must remain accessible; no text should be hidden behind the preview or footer.
+
+Verify both orders: metadata arrives before the thumbnail, and metadata changes after an image is already displayed. The image must remain centered, proportional and within the preview after box resizing. Fullscreen preview, Cancel, and Print > Cancel review remain unchanged. Do not start a print solely for this check.
+
+The actual Files matrix covers common metadata without scroll, preview height greater than the old 176-pixel box, non-overlap, long-data minimum height and restored height after short updates. A real LVGL image child checks transformed image bounds across resizing. Run the normal and full-LVGL AddressSanitizer fixtures; inspect the native Studio large-text rendering as well. Actual OTA/panel rendering remains acceptance.

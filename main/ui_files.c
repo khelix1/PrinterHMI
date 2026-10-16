@@ -273,6 +273,16 @@ static void request_visible_file_previews(void)
     }
 }
 
+/* An opaque list bounds scroll damage to the browser surface. A transparent
+ * list forces LVGL to repaint the parent page under every scrolled row. */
+static void files_style_scroll_surface(lv_obj_t *list)
+{
+    lv_obj_set_style_bg_color(list, UI_BG, 0);
+    lv_obj_set_style_bg_grad_dir(list, LV_GRAD_DIR_NONE, 0);
+    lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(list, 0, 0);
+}
+
 static void file_list_scroll_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -527,8 +537,8 @@ void ui_files_add_file_entry(const char *path,
         ui_theme_density_metric(-10, -13, -15));
 
     /*
-     * Secondary action hint. Metadata is not added here because the
-     * current file-list API supplies only the path.
+     * Secondary file metadata. Keep it compact; both tap and hold already
+     * open details, so the row does not need a repeated gesture instruction.
      */
     lv_obj_t *meta =
         lv_label_create(btn);
@@ -542,14 +552,20 @@ void ui_files_add_file_entry(const char *path,
             strftime(date_text, sizeof(date_text), "%b %d  %I:%M %p", &local_time);
         }
     }
-    if (size > 0.0) {
-        snprintf(meta_text,
-                 sizeof(meta_text),
-                 "%.1f MB  |  %s  |  HOLD FOR DETAILS",
-                 size / (1024.0 * 1024.0),
-                 date_text[0] ? date_text : "DATE --");
+    char size_text[32] = "G-code file";
+    if (size >= 1024.0 * 1024.0 * 1024.0) {
+        snprintf(size_text, sizeof(size_text), "%.1f GiB", size / (1024.0 * 1024.0 * 1024.0));
+    } else if (size >= 1024.0 * 1024.0) {
+        snprintf(size_text, sizeof(size_text), "%.1f MiB", size / (1024.0 * 1024.0));
+    } else if (size >= 1024.0) {
+        snprintf(size_text, sizeof(size_text), "%.1f KiB", size / 1024.0);
+    } else if (size > 0.0) {
+        snprintf(size_text, sizeof(size_text), "%.0f B", size);
+    }
+    if (date_text[0]) {
+        snprintf(meta_text, sizeof(meta_text), "%s  |  %s", size_text, date_text);
     } else {
-        snprintf(meta_text, sizeof(meta_text), "G-CODE FILE  |  HOLD FOR DETAILS");
+        snprintf(meta_text, sizeof(meta_text), "%s", size_text);
     }
     lv_label_set_text(meta, meta_text);
 
@@ -562,7 +578,7 @@ void ui_files_add_file_entry(const char *path,
         LV_LABEL_LONG_DOT);
 
     ui_apply_custom_label_style(meta,
-                                &lv_font_montserrat_12,
+                                UI_FONT_CAPTION,
                                 UI_TEXT_DIM);
     lv_obj_set_height(meta, lv_font_get_line_height(lv_obj_get_style_text_font(meta, 0)));
 
@@ -879,6 +895,7 @@ void ui_files_show(void)
         ui_files_set_breadcrumb(NULL);ui_files_set_search_text(s_search_text);
         lv_obj_t *viewport=studio_plane(s_printer_file_popup,0,150,576,274);
         s_printer_file_list=studio_plane(viewport,0,0,576,274);
+        files_style_scroll_surface(s_printer_file_list);
         lv_obj_add_flag(s_printer_file_list,LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scroll_dir(s_printer_file_list,LV_DIR_VER);
         lv_obj_set_scrollbar_mode(s_printer_file_list,LV_SCROLLBAR_MODE_AUTO);
@@ -931,7 +948,7 @@ void ui_files_show(void)
     lv_obj_t *header = lv_obj_create(s_printer_file_popup);
     ui_responsive_column(header);
     lv_obj_t *title = lv_label_create(header);
-    lv_label_set_text(title, LV_SYMBOL_FILE " FILES");
+    lv_label_set_text(title, LV_SYMBOL_FILE " Files");
     ui_apply_text_title(title);
     ui_apply_label_bright(title);
     lv_obj_t *subtitle = lv_label_create(header);
@@ -1024,7 +1041,7 @@ void ui_files_show(void)
      * TEST73_FILES_FULL_PAGE_LIST
      *
      * Files is a full-page browser, not a bordered card.
-     * Keep the list surface transparent and explicitly scrollable.
+     * Keep the flat list opaque so scroll damage skips the parent page.
      */
     s_printer_file_list =
         lv_obj_create(
@@ -1042,6 +1059,7 @@ void ui_files_show(void)
     lv_obj_set_pos(s_printer_file_list, 0, 0);
 
     ui_apply_surface_role(s_printer_file_list, UI_SURFACE_TRANSPARENT);
+    files_style_scroll_surface(s_printer_file_list);
     lv_obj_set_style_pad_all(s_printer_file_list, 0, 0);
 
     lv_obj_set_style_pad_row(
@@ -1146,6 +1164,8 @@ static ui_files_detail_cb_t s_detail_cancel_cb = NULL;
 static ui_files_detail_cb_t s_detail_start_cb = NULL;
 static lv_obj_t *s_detail_info_label = NULL;
 static lv_obj_t *s_detail_start_button = NULL;
+static lv_obj_t *s_detail_more_button, *s_detail_cancel_button;
+static lv_obj_t *s_detail_preview_box, *s_detail_filename_label;
 static lv_obj_t *s_print_confirm_popup;
 static lv_obj_t *s_print_accept_button;
 static lv_obj_t *s_print_connection_label;
@@ -1233,6 +1253,8 @@ void ui_files_close_detail_popup(void)
     lv_timer_t *timer=s_detail_connection_timer;
     s_file_detail_popup=s_detail_info_label=s_detail_start_button=NULL;
     s_studio_metadata_popup=s_studio_metadata_label=NULL;
+    s_detail_more_button=s_detail_cancel_button=NULL;
+    s_detail_preview_box=s_detail_filename_label=NULL;
     s_detail_connection_timer=NULL;s_detail_connection_label=NULL;s_detail_metadata_ready=false;
     s_detail_cancel_cb=s_detail_start_cb=NULL;
     free(s_detail_filename);s_detail_filename=NULL;
@@ -1365,10 +1387,116 @@ static void studio_metadata_deleted(lv_event_t *event)
     if(lv_event_get_target_obj(event)==s_studio_metadata_popup)
         s_studio_metadata_popup=s_studio_metadata_label=NULL;
 }
+/* The standard metadata builder includes a duplicate filename, preview
+ * transport diagnostics and a print instruction. Keep all actual fields. */
+static char *file_detail_display_text(const char *metadata)
+{
+    const char *text=metadata && metadata[0]?metadata:"Metadata unavailable.";
+    if(strncmp(text,"File:\n",6)==0) {
+        const char *end=strstr(text,"\n\n");
+        if(end && end[2])text=end+2;
+    }
+    char *display=malloc(strlen(text)+1);
+    if(!display)return NULL;
+    char *out=display;
+    bool thumbnail_path=false;
+    for(const char *line=text;*line;) {
+        const char *end=strchr(line,'\n');
+        size_t length=end?(size_t)(end-line):strlen(line);
+        if(length && line[length-1]=='\r')--length;
+        bool skip=length==0;
+        if(thumbnail_path) {
+            /* The generated next line is a path; preserve any named field. */
+            if(!memchr(line,':',length))skip=true;
+            thumbnail_path=false;
+        }
+        if(length>=10 && strncmp(line,"Thumbnail:",10)==0) {
+            skip=true;thumbnail_path=true;
+        }
+        if(length==strlen("Confirm to start this print.") &&
+           strncmp(line,"Confirm to start this print.",length)==0)skip=true;
+        if(!skip) {
+            if(out!=display)*out++='\n';
+            memcpy(out,line,length);out+=length;
+        }
+        line=end?end+1:line+strlen(line);
+    }
+    *out='\0';
+    return display;
+}
+
+static void detail_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *object=lv_event_get_target_obj(event);
+    if(object==s_detail_more_button)s_detail_more_button=NULL;
+    if(object==s_detail_cancel_button)s_detail_cancel_button=NULL;
+    if(object==s_detail_preview_box)s_detail_preview_box=NULL;
+    if(object==s_detail_filename_label)s_detail_filename_label=NULL;
+}
+
+static void detail_preview_resized(lv_event_t *event)
+{
+    lv_obj_t *box=lv_event_get_target_obj(event);
+    if(box!=s_detail_preview_box)return;
+    for(uint32_t i=0;i<lv_obj_get_child_count(box);++i) {
+        lv_obj_t *child=lv_obj_get_child(box,i);
+        if(lv_obj_check_type(child,&lv_image_class)) {
+            ui_thumbnail_fit_object(child,box,lv_image_get_src_width(child),lv_image_get_src_height(child),0);
+            return; /* Fitting may invoke owner callbacks; do not reuse pointers. */
+        }
+    }
+    for(uint32_t i=0;i<lv_obj_get_child_count(box);++i) {
+        lv_obj_t *child=lv_obj_get_child(box,i);
+        if(lv_obj_check_type(child,&lv_label_class)) {
+            lv_obj_center(child);
+            return;
+        }
+    }
+}
+
+static void detail_update_more_action(void)
+{
+    if(!s_detail_more_button || !s_file_detail_popup || !s_detail_info_label)return;
+    lv_obj_t *owner=s_file_detail_popup,*label=s_detail_info_label,*more=s_detail_more_button;
+    lv_obj_update_layout(owner);
+    if(owner!=s_file_detail_popup || label!=s_detail_info_label || more!=s_detail_more_button)return;
+    lv_obj_t *viewport=lv_obj_get_parent(label);
+    if(s_detail_preview_box && s_detail_filename_label && s_detail_start_button) {
+        /* Leave room for every measured metadata line before allocating the
+         * remaining height to the preview. Long extras retain a usable preview. */
+        int32_t bottom=lv_obj_get_y(s_detail_start_button)-16;
+        int32_t filename_height=lv_obj_get_height(s_detail_filename_label);
+        int32_t metadata_height=lv_obj_get_height(label);
+        int32_t metadata_capacity=bottom-filename_height-20-128;
+        if(metadata_capacity<1)metadata_capacity=1;
+        if(metadata_height>metadata_capacity)metadata_height=metadata_capacity;
+        if(metadata_height<1)metadata_height=1;
+        int32_t preview_height=bottom-filename_height-20-metadata_height;
+        if(preview_height<1)preview_height=1;
+        lv_obj_set_height(s_detail_preview_box,preview_height);
+        if(owner!=s_file_detail_popup || label!=s_detail_info_label)return;
+        if(s_detail_filename_label)lv_obj_set_y(s_detail_filename_label,preview_height+12);
+        if(owner!=s_file_detail_popup || label!=s_detail_info_label)return;
+        lv_obj_set_y(viewport,preview_height+12+filename_height+8);
+        lv_obj_set_height(viewport,metadata_height);
+        lv_obj_update_layout(owner);
+        if(owner!=s_file_detail_popup || label!=s_detail_info_label || more!=s_detail_more_button)return;
+    }
+    bool overflow=lv_obj_get_height(label)>lv_obj_get_content_height(viewport);
+    if(overflow)lv_obj_remove_flag(more,LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(more,LV_OBJ_FLAG_HIDDEN);
+    if(s_detail_start_button)lv_obj_set_width(s_detail_start_button,overflow?128:168);
+    if(s_detail_cancel_button) {
+        lv_obj_set_x(s_detail_cancel_button,overflow?252:184);
+        lv_obj_set_width(s_detail_cancel_button,overflow?100:168);
+    }
+}
+
 static void studio_metadata_open(lv_event_t *e)
 {
     (void)e;
-    if(s_studio_metadata_popup || !s_detail_info_label)return;
+    if(s_studio_metadata_popup || !s_detail_info_label || !s_detail_more_button ||
+       lv_obj_has_flag(s_detail_more_button,LV_OBJ_FLAG_HIDDEN))return;
     int width = lv_display_get_horizontal_resolution(NULL) - 32;
     int height = lv_display_get_vertical_resolution(NULL) - 32;
     if (width > 640) width = 640;
@@ -1426,25 +1554,35 @@ void ui_files_show_detail_popup(const char *filename_text,
     if(ui_theme_is_studio() && s_printer_file_popup) {
         if(s_studio_file_hint)lv_obj_add_flag(s_studio_file_hint,LV_OBJ_FLAG_HIDDEN);
         s_file_detail_popup=studio_plane(s_printer_file_popup,624,0,352,424);
-        ui_thumbnail_t *view=ui_thumbnail_create(s_file_detail_popup,0,0,352,228);
+        ui_thumbnail_t *view=ui_thumbnail_create(s_file_detail_popup,0,0,352,176);
         if(!view){ui_files_close_detail_popup();return;}
         ui_thumbnail_set_placeholder(view,"PRINT\nTHUMBNAIL");
         if(thumb_box_out)*thumb_box_out=ui_thumbnail_box(view);
         if(thumb_view_out)*thumb_view_out=view;
-        lv_obj_t *filename=studio_text(s_file_detail_popup,filename_text && filename_text[0] ? filename_text : "Unnamed file",0,240,352,UI_FONT_TITLE,UI_TEXT);
+        s_detail_preview_box=ui_thumbnail_box(view);
+        lv_obj_add_event_cb(s_detail_preview_box,detail_field_deleted,LV_EVENT_DELETE,NULL);
+        lv_obj_add_event_cb(s_detail_preview_box,detail_preview_resized,LV_EVENT_SIZE_CHANGED,NULL);
+        lv_obj_t *filename=studio_text(s_file_detail_popup,filename_text && filename_text[0] ? filename_text : "Unnamed file",0,188,352,UI_FONT_TITLE,UI_TEXT);
+        s_detail_filename_label=filename;
+        lv_obj_add_event_cb(filename,detail_field_deleted,LV_EVENT_DELETE,NULL);
         lv_label_set_long_mode(filename,LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_t *metadata=studio_plane(s_file_detail_popup,0,282,352,54);
+        lv_obj_t *metadata=studio_plane(s_file_detail_popup,0,228,352,128);
         file_metadata_scroll_style(metadata);
+        lv_obj_set_style_bg_color(metadata,UI_BG,0);
+        lv_obj_set_style_bg_opa(metadata,LV_OPA_COVER,0);
         s_detail_info_label=studio_text(metadata,metadata_text,0,0,344,UI_FONT_CAPTION,UI_TEXT_DIM);
         lv_label_set_long_mode(s_detail_info_label,LV_LABEL_LONG_WRAP);
         lv_obj_set_height(s_detail_info_label,LV_SIZE_CONTENT);
         s_detail_start_button=studio_action(s_file_detail_popup,"Print",0,372,128,52,detail_start_event_cb,NULL);
         lv_obj_add_state(s_detail_start_button,LV_STATE_DISABLED);
-        studio_action(s_file_detail_popup,"Details",140,372,100,52,studio_metadata_open,NULL);
-        studio_action(s_file_detail_popup,"Cancel",252,372,100,52,detail_cancel_event_cb,NULL);
+        s_detail_more_button=studio_action(s_file_detail_popup,"Details",140,372,100,52,studio_metadata_open,NULL);
+        s_detail_cancel_button=studio_action(s_file_detail_popup,"Cancel",252,372,100,52,detail_cancel_event_cb,NULL);
+        lv_obj_add_event_cb(s_detail_more_button,detail_field_deleted,LV_EVENT_DELETE,NULL);
+        lv_obj_add_event_cb(s_detail_cancel_button,detail_field_deleted,LV_EVENT_DELETE,NULL);
         lv_obj_t *connection=studio_text(s_file_detail_popup,"",0,344,352,UI_FONT_CAPTION,UI_WARN);
         lv_label_set_long_mode(connection,LV_LABEL_LONG_WRAP);
         detail_watch(connection);
+        ui_files_update_detail_metadata(metadata_text,false);
         return;
     }
 
@@ -1480,8 +1618,8 @@ void ui_files_show_detail_popup(const char *filename_text,
     lv_obj_set_width(box,LV_PCT(40));
     if(thumb_box_out)*thumb_box_out=box;
     if(thumb_view_out)*thumb_view_out=view;
-    const char *detail=metadata_text && metadata_text[0] ? metadata_text : "--";
-    if(strncmp(detail,"File:\n",6)==0){const char *end=strstr(detail,"\n\n");if(end && end[2])detail=end+2;}
+    char *display_metadata=file_detail_display_text(metadata_text);
+    const char *detail=display_metadata?display_metadata:(metadata_text?metadata_text:"Metadata unavailable.");
     lv_obj_t *info_panel=lv_obj_create(body);
     ui_apply_card_style(info_panel);
     lv_obj_set_size(info_panel,LV_PCT(56),250);lv_obj_set_flex_grow(info_panel,1);
@@ -1495,6 +1633,7 @@ void ui_files_show_detail_popup(const char *filename_text,
     lv_obj_set_width(heading,LV_PCT(100));
     s_detail_info_label=lv_label_create(info_panel);
     ui_value_set_text(s_detail_info_label,detail);
+    free(display_metadata);
     ui_apply_custom_label_style(s_detail_info_label,UI_FONT_BODY,UI_TEXT);
     lv_obj_set_width(s_detail_info_label,LV_PCT(100));
     lv_label_set_long_mode(s_detail_info_label,LV_LABEL_LONG_WRAP);
@@ -1524,17 +1663,12 @@ void ui_files_update_detail_metadata(
     if (!s_file_detail_popup || !s_detail_info_label ||
         s_detail_generation!=moonraker_config_generation()) return;
 
-    const char *detail = metadata_text && metadata_text[0]
-        ? metadata_text
-        : "Metadata unavailable.";
-
-    if (strncmp(detail, "File:\n", 6) == 0) {
-        const char *section_end = strstr(detail, "\n\n");
-        if (section_end && section_end[2]) detail = section_end + 2;
-    }
-
-    ui_value_set_text(s_detail_info_label, detail);
+    char *display_metadata=file_detail_display_text(metadata_text);
+    const char *detail=display_metadata?display_metadata:(metadata_text && metadata_text[0]?metadata_text:"Metadata unavailable.");
+    ui_value_set_text(s_detail_info_label,detail);
     if(s_studio_metadata_label)ui_value_set_text(s_studio_metadata_label,detail);
+    free(display_metadata);
+    detail_update_more_action();
 
     if (s_detail_start_button) {
         s_detail_metadata_ready=ready;

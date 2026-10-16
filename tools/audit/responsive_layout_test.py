@@ -9,6 +9,7 @@ root=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--lvgl-dir",type=Path)
 parser.add_argument("--lvgl-lib",type=Path,help="Optional host LVGL archive built with these font/stdlib flags")
+parser.add_argument('--variant',choices=['TOOLS','FILES','MACROS','NETWORK'],action='append',help='Run selected page fixtures only; default all')
 args=parser.parse_args()
 candidates=[args.lvgl_dir] if args.lvgl_dir else list((root/"managed_components").glob("*lvgl*"))
 lvgl=next((p for p in candidates if p and (p/"src/core/lv_obj.c").is_file()),None)
@@ -35,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"esp_wifi_types.h").write_text("#pragma once\n#include <stdint.h>\ntypedef struct { uint8_t ssid[33]; int8_t rssi; } wifi_ap_record_t;\n")
     (tmp/"esp_wifi.h").write_text("#pragma once\n#include \"esp_wifi_types.h\"\n")
     sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","ui_thumbnail.c","ui_status_banner.c"]
-    for variant in ["TOOLS","FILES","MACROS","NETWORK"]:
+    for variant in (args.variant or ["TOOLS","FILES","MACROS","NETWORK"]):
         executable=tmp/variant.lower()
         subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,"-DTEST_"+variant,
                         "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),

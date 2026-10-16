@@ -52,6 +52,7 @@ void ui_dashboard_status_popup_close(void);
 
 
 lv_obj_t *ui_dashboard_thumb_box(void);
+uint32_t ui_dashboard_thumb_generation(void);
 bool ui_dashboard_thumb_ready(void);
 void ui_dashboard_thumb_set_placeholder(const char *text);
 void ui_dashboard_thumb_clear_placeholder(void);

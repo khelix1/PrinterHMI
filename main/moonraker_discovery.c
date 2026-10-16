@@ -42,6 +42,9 @@ static bool s_has_scan_ip;
 
 static moonraker_discovery_close_cb_t s_close_cb = NULL;
 static moonraker_discovery_select_cb_t s_select_cb = NULL;
+static moonraker_discovery_select_request_cb_t s_select_request_cb;
+static moonraker_discovery_close_request_cb_t s_close_request_cb;
+static uint32_t s_select_request;
 
 static bool discovery_control_event(lv_event_t *event,lv_obj_t *button)
 {
@@ -89,12 +92,15 @@ static void candidate_event_cb(lv_event_t *e)
         (const moonraker_discovery_endpoint_t *)
             lv_event_get_user_data(e);
 
-    if (endpoint && s_select_cb && discovery_control_event(e,endpoint->button) &&
+    if (endpoint && (s_select_cb || s_select_request_cb) && discovery_control_event(e,endpoint->button) &&
         s_results_list && lv_obj_get_parent(endpoint->button)==s_results_list) {
         moonraker_discovery_endpoint_t reviewed=*endpoint;
         moonraker_discovery_select_cb_t select=s_select_cb;
+        moonraker_discovery_select_request_cb_t select_request=s_select_request_cb;
+        uint32_t request=s_select_request;
         s_discovery_dispatching=true;
-        select(reviewed.host,reviewed.port,reviewed.identity);
+        if(select_request)select_request(reviewed.host,reviewed.port,reviewed.identity,request);
+        else select(reviewed.host,reviewed.port,reviewed.identity);
         s_discovery_dispatching=false;
     }
 }
@@ -378,12 +384,15 @@ static void scan_task(void *arg)
 static void discovery_deleted(lv_event_t *event)
 {
     if (lv_event_get_target_obj(event) != s_popup) return;
+    moonraker_discovery_close_request_cb_t close_request=s_close_request_cb;
+    uint32_t request=s_select_request;
     s_cancelled = true;
     __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_popup = s_status_label = s_results_list = NULL;
     s_candidate_count = 0;
     s_retry_action=s_close_action=NULL;
-    s_close_cb=NULL;s_select_cb=NULL;
+    s_close_cb=NULL;s_select_cb=NULL;s_select_request_cb=NULL;s_close_request_cb=NULL;s_select_request=0;
+    if(close_request)close_request(request);
 }
 
 static void discovery_retry_cb(lv_event_t *event)
@@ -415,11 +424,13 @@ static void moonraker_discovery_show_internal(
     int popup_height,
     const char *status_text,
     moonraker_discovery_close_cb_t close_cb,
-    moonraker_discovery_select_cb_t select_cb)
+    moonraker_discovery_select_cb_t select_cb,
+    moonraker_discovery_select_request_cb_t request_cb,uint32_t request,
+    moonraker_discovery_close_request_cb_t close_request_cb)
 {
     if(s_popup){lv_obj_move_foreground(s_popup);return;}
     s_close_cb = close_cb;
-    s_select_cb = select_cb;
+    s_select_cb = select_cb;s_select_request_cb=request_cb;s_select_request=request;s_close_request_cb=close_request_cb;
 
     if (status_text) {
         copy_text(s_status, sizeof(s_status), status_text);
@@ -434,7 +445,7 @@ static void moonraker_discovery_show_internal(
         if (available > 32 && popup_height > available) popup_height = available;
     }
     s_popup = ui_form_dialog("DISCOVER MOONRAKER", popup_width, popup_height, UI_POPUP_STANDARD);
-    if (!s_popup) {s_close_cb=NULL;s_select_cb=NULL;return;}
+    if (!s_popup) {s_close_cb=NULL;s_select_cb=NULL;s_select_request_cb=NULL;s_close_request_cb=NULL;s_select_request=0;return;}
     __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_owner_generation=moonraker_config_generation();
     /* The popup must stay above its top-layer blocker to receive touches. */
@@ -465,7 +476,7 @@ void moonraker_discovery_show(
     moonraker_discovery_select_cb_t select_cb)
 {
     moonraker_discovery_show_internal(
-        lv_layer_top(), 860, 540, status_text, close_cb, select_cb);
+        lv_layer_top(), 860, 540, status_text, close_cb, select_cb,NULL,0,NULL);
 }
 
 void moonraker_discovery_show_in_parent(
@@ -478,7 +489,33 @@ void moonraker_discovery_show_in_parent(
     /* The setup card is 720x440; leave a small inset so every discovery
      * result, status message, and CLOSE action remains inside that card. */
     moonraker_discovery_show_internal(
-        parent, 704, 424, status_text, close_cb, select_cb);
+        parent, 704, 424, status_text, close_cb, select_cb,NULL,0,NULL);
+}
+
+static bool discovery_show_request(lv_obj_t *parent,int width,int height,const char *status_text,
+    moonraker_discovery_close_request_cb_t close_cb,moonraker_discovery_select_request_cb_t select_cb,uint32_t request)
+{
+    if(!parent || !request || !select_cb)return false;
+    if(s_popup && (s_select_request!=request || s_select_request_cb!=select_cb)){
+        moonraker_discovery_close();
+        if(s_popup)return false;
+    }
+    moonraker_discovery_show_internal(parent,width,height,status_text,NULL,NULL,select_cb,request,close_cb);
+    return s_popup && s_select_request==request && s_select_request_cb==select_cb;
+}
+bool moonraker_discovery_show_for_request(const char *status_text,moonraker_discovery_close_request_cb_t close_cb,
+    moonraker_discovery_select_request_cb_t select_cb,uint32_t request)
+{
+    return discovery_show_request(lv_layer_top(),860,540,status_text,close_cb,select_cb,request);
+}
+bool moonraker_discovery_show_in_parent_for_request(lv_obj_t *parent,const char *status_text,
+    moonraker_discovery_close_request_cb_t close_cb,moonraker_discovery_select_request_cb_t select_cb,uint32_t request)
+{
+    return discovery_show_request(parent,704,424,status_text,close_cb,select_cb,request);
+}
+void moonraker_discovery_close_request(uint32_t request)
+{
+    if(request && s_popup && s_select_request_cb && request==s_select_request)moonraker_discovery_close();
 }
 
 void moonraker_discovery_set_status(const char *status_text)
@@ -615,12 +652,15 @@ void moonraker_discovery_close(void)
     if(s_close_dispatching)return;
     lv_obj_t *popup=s_popup;
     moonraker_discovery_close_cb_t close=s_close_cb;
+    moonraker_discovery_close_request_cb_t close_request=s_close_request_cb;
+    uint32_t request=s_select_request;
     s_close_dispatching=true;
     s_cancelled = true;
     __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_popup=s_status_label=s_results_list=s_retry_action=s_close_action=NULL;
-    s_candidate_count=0;s_close_cb=NULL;s_select_cb=NULL;
+    s_candidate_count=0;s_close_cb=NULL;s_select_cb=NULL;s_select_request_cb=NULL;s_close_request_cb=NULL;s_select_request=0;
     if(popup)lv_obj_delete(popup);
+    if(close_request)close_request(request);
     if(close)close();
     s_close_dispatching=false;
 }

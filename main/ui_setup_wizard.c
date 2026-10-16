@@ -593,28 +593,31 @@ static void printer_editor_changed_cb(void)
     setup_render_step(SETUP_STEP_PRINTER);
 }
 
-static void printer_editor_discover_selected(const char *host, int port, const char *identity)
+static void printer_editor_discover_selected(const char *host,int port,const char *identity,uint32_t request)
 {
-    ui_printer_profiles_set_discovered_endpoint(host, port, identity);
+    (void)ui_printer_profiles_apply_discovered_endpoint(request,host,port,identity);
+    moonraker_discovery_close_request(request);
 }
 
-static void printer_editor_discover_closed(void)
+static void printer_editor_discover_closed(uint32_t request)
 {
-    /* The shared editor remains open while the discovery popup closes. */
+    ui_printer_profiles_cancel_discovery_request(request);
 }
 
 static void printer_editor_discover_cb(void)
 {
+    uint32_t request=ui_printer_profiles_discovery_request();
+    if(!request)return;
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_ip_info_t ip = {0};
     if (!netif || esp_netif_get_ip_info(netif, &ip) != ESP_OK || ip.ip.addr == 0) {
         set_status("Connect to Wi-Fi before discovering printers.");
         return;
     }
-    moonraker_discovery_show_in_parent(s_setup_content,
-                                 "SETUP: searching for Moonraker printers...",
-                             printer_editor_discover_closed,
-                             printer_editor_discover_selected);
+    if(!moonraker_discovery_show_in_parent_for_request(s_setup_content,
+        "SETUP: searching for Moonraker printers...",printer_editor_discover_closed,
+        printer_editor_discover_selected,request))return;
+    if(request!=ui_printer_profiles_discovery_request()){moonraker_discovery_close_request(request);return;}
     (void)moonraker_discovery_start(&ip.ip);
 }
 

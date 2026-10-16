@@ -9,6 +9,7 @@ root=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--lvgl-dir",type=Path)
 parser.add_argument("--lvgl-lib",type=Path,help="Optional host LVGL archive built with these font/stdlib flags")
+parser.add_argument("--variant",action="append",choices=["PROFILE","ROWS","LIGHTBOX","SAFETY"],help="Run only selected fixture(s); default runs all")
 args=parser.parse_args()
 candidates=[args.lvgl_dir] if args.lvgl_dir else list((root/"managed_components").glob("*lvgl*"))
 lvgl=next((p for p in candidates if p and (p/"src/core/lv_obj.c").is_file()),None)
@@ -41,10 +42,15 @@ with tempfile.TemporaryDirectory(prefix="preview-ownership-") as directory:
         library=tmp/"liblvgl.a"
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
     sources=["thumbnail_render.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c"]
-    for variant in ["PROFILE","ROWS","LIGHTBOX"]:
+    for variant in args.variant or ["PROFILE","ROWS","LIGHTBOX","SAFETY"]:
         executable=tmp/variant.lower()
         subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,"-DTEST_"+variant,
                         "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
-                        str(root/"tools/audit/preview_cache_ownership_test.c"),*[str(root/"main"/p) for p in sources],
+                        str(root/"tools/audit"/("lightbox_safety_test.c" if variant=="SAFETY" else "preview_cache_ownership_test.c")),*[str(root/"main"/p) for p in sources],
                         str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
         subprocess.run([str(executable)],check=True)
+
+    subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror",*flags,
+        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-c",str(root/"main/ui_preview_lightbox.c"),"-o",str(tmp/"lightbox_owner.o")],check=True)
+    print("PASS: standalone fullscreen preview compilation with warnings treated as errors")

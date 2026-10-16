@@ -18,6 +18,7 @@ lv_obj_t *ui_active_print_create_profile(
     const ui_dashboard_rect_t *rect,
     const ui_dashboard_active_print_layout_t *layout);
 
+uint32_t ui_active_print_thumb_generation(void);
 lv_obj_t *ui_active_print_thumb_box(lv_obj_t *card);
 
 lv_obj_t **ui_active_print_thumb_canvas_ref(void);

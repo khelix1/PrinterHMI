@@ -14,22 +14,26 @@ static bool known[4],online[4],fresh[4];
 static char health[4][32];
 static int active;
 static bool preview_ready;
-static uint32_t revision;
+static uint32_t revision,generation=1;
+static unsigned profile_reads,select_calls,manage_calls;
+static void (*read_hook)(void),(*snapshot_hook)(void),(*health_hook)(void),(*preview_hook)(void),(*select_hook)(void),(*manage_hook)(void);
+uint32_t moonraker_config_generation(void){return generation;}
 static uint16_t pixels[16];
 static lv_image_dsc_t image={.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,.w=4,.h=4,.stride=8},.data_size=32,.data=(const uint8_t*)pixels};
-const moonraker_profile_t *moonraker_config_profile(int i){return &profiles[i];}
+const moonraker_profile_t *moonraker_config_profile(int i){profile_reads++;if(read_hook){void(*hook)(void)=read_hook;read_hook=NULL;hook();}return &profiles[i];}
 int moonraker_config_active_profile_index(void){return active;}
-void moonraker_state_snapshot(moonraker_state_t *out){*out=state;}
-bool printer_profile_health_get(int i,bool *out){*out=known[i];return online[i];}
+void moonraker_state_snapshot(moonraker_state_t *out){if(snapshot_hook){void(*hook)(void)=snapshot_hook;snapshot_hook=NULL;hook();}*out=state;}
+bool printer_profile_health_get(int i,bool *out){if(health_hook){void(*hook)(void)=health_hook;health_hook=NULL;hook();}*out=known[i];return online[i];}
 bool printer_profile_health_get_live_state(int i,char *out,size_t n){snprintf(out,n,"%.31s",health[i]);return health[i][0]!=0;}
 bool printer_profile_health_live_state_fresh(int i,int64_t age){assert(age==5000000LL);return fresh[i];}
 const lv_image_dsc_t *printer_preview_cache_image(int i,const char **file,uint32_t *rev){
+ if(preview_hook){void(*hook)(void)=preview_hook;preview_hook=NULL;hook();}
  if(i!=0 || !preview_ready)return NULL;
  *file="print.gcode";*rev=revision;return &image;
 }
 static int selected_index=-1,managed_index=-1;
-static void selected(int index){selected_index=index;}
-static void managed(int index){managed_index=index;}
+static void selected(int index){select_calls++;selected_index=index;if(select_hook)select_hook();}
+static void managed(int index){manage_calls++;managed_index=index;if(manage_hook)manage_hook();}
 static unsigned flushes,invalidations,notifications;
 static void notified(lv_observer_t *o,lv_subject_t *subject){(void)o;(void)subject;notifications++;}
 static uint16_t raster[1024*600];
@@ -43,12 +47,98 @@ static void contained(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&
 static bool overlapping(lv_obj_t*a,lv_obj_t*b){lv_area_t x,y;lv_obj_get_coords(a,&x);lv_obj_get_coords(b,&y);return x.x1<=y.x2&&y.x1<=x.x2&&x.y1<=y.y2&&y.y1<=x.y2;}
 static void geometry(void){lv_obj_update_layout(s_root);for(int i=0;i<4;i++){chooser_card_t*c=&s_cards[i];contained(c->root,s_root);lv_obj_t*labels[]={c->name,c->endpoint,c->status,c->active,c->hint};for(unsigned j=0;j<5;j++){contained(labels[j],c->root);assert(lv_obj_get_height(labels[j])==lv_obj_get_style_text_font(labels[j],0)->line_height);if(j>=2){lv_point_t n;lv_text_get_size(&n,lv_label_get_text(labels[j]),lv_obj_get_style_text_font(labels[j],0),lv_obj_get_style_text_letter_space(labels[j],0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(n.x<=lv_obj_get_width(labels[j]));}}assert(!overlapping(c->hint,c->active));assert(!overlapping(c->name,c->active));assert(!overlapping(c->name,c->endpoint));assert(!overlapping(c->endpoint,c->status));contained(c->preview,c->preview_box);contained(c->preview_icon,c->preview_box);assert(!overlapping(c->preview,c->preview_icon));}}
 
+static lv_indev_t *pointer;
+static lv_point_t touch;
+static bool pressed;
+static void read_touch(lv_indev_t *input,lv_indev_data_t *data){(void)input;data->point=touch;data->state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;}
+static void tap(lv_obj_t *object){lv_obj_update_layout(s_root);lv_area_t area;lv_obj_get_coords(object,&area);touch=(lv_point_t){(area.x1+area.x2)/2,(area.y1+area.y2)/2};pressed=true;lv_indev_read(pointer);pressed=false;lv_indev_read(pointer);}
+static void native_card_taps(void)
+{
+ unsigned before=select_calls,managed_before=manage_calls;
+ lv_obj_t *targets[]={s_cards[0].preview_box,s_cards[0].preview,s_cards[0].name,s_cards[0].endpoint,s_cards[0].status,s_cards[0].root};
+ for(unsigned i=0;i<sizeof(targets)/sizeof(targets[0]);++i){tap(targets[i]);assert(select_calls==++before&&selected_index==0);}
+ preview_ready=true;ui_printer_chooser_refresh();assert(s_cards[0].preview_image);tap(s_cards[0].preview_image);assert(select_calls==++before&&selected_index==0);
+ preview_ready=false;ui_printer_chooser_refresh();
+ tap(s_cards[2].preview_box);assert(manage_calls==++managed_before&&managed_index==2);
+ tap(s_manage_action);assert(manage_calls==++managed_before&&managed_index==-1);
+}
+
+static void click(lv_obj_t *object){lv_obj_send_event(object,LV_EVENT_CLICKED,NULL);}
+static void wrong_selected(int index){(void)index;assert(!"Repeated Show replaced Select");}
+static void wrong_managed(int index){(void)index;assert(!"Repeated Show replaced Manage");}
+static void nested_actions(void){click(s_cards[0].root);manage_clicked_cb(NULL);}
+static void reopen_chooser(void){ui_printer_chooser_hide();ui_printer_chooser_show(selected,managed);}
+static void reopen_deleted(lv_event_t *event){(void)event;ui_printer_chooser_show(selected,managed);}
+static void change_generation(void){generation++;}
+static void delete_status(void){lv_obj_delete(s_cards[0].status);}
+static bool arm_replace_observer,arm_delete_observer;
+static void replacing_observer(lv_observer_t *observer,lv_subject_t *subject)
+{
+ (void)observer;(void)subject;
+ static bool in_callback;
+ if(arm_replace_observer&&!in_callback){arm_replace_observer=false;in_callback=true;reopen_chooser();in_callback=false;}
+}
+static void deleting_observer(lv_observer_t *observer,lv_subject_t *subject)
+{
+ (void)observer;(void)subject;if(arm_delete_observer&&s_cards[0].status){arm_delete_observer=false;lv_obj_delete(s_cards[0].status);}
+}
+static void chooser_safety(void)
+{
+ ui_printer_chooser_show(selected,managed);ui_printer_chooser_show(wrong_selected,wrong_managed);
+ assert(s_select_cb==selected&&s_manage_cb==managed);
+ native_card_taps();
+ unsigned before=select_calls,managed_before=manage_calls;
+ lv_obj_add_state(s_cards[0].root,LV_STATE_DISABLED);click(s_cards[0].root);assert(select_calls==before);lv_obj_remove_state(s_cards[0].root,LV_STATE_DISABLED);
+ lv_obj_t *fake=lv_button_create(s_root);lv_obj_add_event_cb(fake,card_clicked_cb,LV_EVENT_CLICKED,(void*)0);click(fake);assert(select_calls==before);lv_obj_delete(fake);
+ fake=lv_obj_create(s_cards[0].root);lv_obj_add_flag(fake,LV_OBJ_FLAG_EVENT_BUBBLE);click(fake);assert(select_calls==before);lv_obj_delete(fake);
+ lv_obj_add_state(s_manage_action,LV_STATE_DISABLED);manage_clicked_cb(NULL);assert(manage_calls==managed_before);lv_obj_remove_state(s_manage_action,LV_STATE_DISABLED);
+ fake=lv_button_create(s_root);lv_obj_add_event_cb(fake,manage_clicked_cb,LV_EVENT_CLICKED,NULL);click(fake);assert(manage_calls==managed_before);lv_obj_delete(fake);
+ select_hook=nested_actions;click(s_cards[0].root);select_hook=NULL;assert(select_calls==before+1&&manage_calls==managed_before);
+ manage_hook=nested_actions;manage_clicked_cb(NULL);manage_hook=NULL;assert(manage_calls==managed_before+1&&select_calls==before+1);
+ before=select_calls;read_hook=reopen_chooser;click(s_cards[0].root);assert(s_root&&s_timer&&select_calls==before);
+ select_hook=reopen_chooser;click(s_cards[0].root);select_hook=NULL;assert(s_root&&s_timer&&select_calls==before+1);
+ lv_timer_t *timer=s_timer,*other=lv_timer_create(chooser_timer_cb,60000,NULL);unsigned reads=profile_reads;
+ chooser_timer_cb(NULL);chooser_timer_cb(other);assert(s_timer==timer&&profile_reads==reads);lv_timer_delete(other);
+ lv_obj_delete(s_manage_action);manage_clicked_cb(NULL);assert(!s_manage_action&&s_root);
+ ui_printer_chooser_hide();ui_printer_chooser_show(selected,managed);
+ lv_obj_t **fields[]={&s_cards[0].name,&s_cards[0].endpoint,&s_cards[0].status,&s_cards[0].hint,&s_cards[0].active,&s_cards[0].preview,&s_cards[0].preview_icon};
+ for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);++i){lv_obj_delete(*fields[i]);assert(!*fields[i]);ui_printer_chooser_refresh();}
+ preview_ready=true;ui_printer_chooser_refresh();assert(s_cards[0].preview_image);
+ lv_obj_delete(s_cards[0].preview_image);assert(!s_cards[0].preview_image);revision=0;ui_printer_chooser_refresh();assert(s_cards[0].preview_image&&lv_image_get_src(s_cards[0].preview_image)==&image);
+ lv_obj_delete(s_cards[0].preview_box);ui_printer_chooser_refresh();assert(!s_cards[0].preview_box&&!s_cards[0].preview_image);
+ ui_printer_chooser_hide();ui_printer_chooser_show(selected,managed);
+ image.header.w=0;ui_printer_chooser_refresh();image.header.w=4;ui_printer_chooser_refresh();assert(s_cards[0].preview_image);
+ for(unsigned phase=0;phase<4;++phase){
+  if(phase==0)snapshot_hook=reopen_chooser;
+  if(phase==1)read_hook=reopen_chooser;
+  if(phase==2)health_hook=reopen_chooser;
+  if(phase==3)preview_hook=reopen_chooser;
+  ui_printer_chooser_refresh();assert(s_root&&s_timer&&s_cards[0].status);
+ }
+ snapshot_hook=reopen_chooser;read_hook=reopen_chooser;ui_printer_chooser_refresh();
+ lv_timer_handler();assert(s_root&&s_timer&&!s_show_pending&&!s_flush_queued);
+ snapshot_hook=reopen_chooser;read_hook=reopen_chooser;ui_printer_chooser_refresh();ui_printer_chooser_hide();
+ lv_timer_handler();assert(!s_root&&!s_timer&&!s_show_pending&&!s_flush_queued);ui_printer_chooser_show(selected,managed);
+ read_hook=change_generation;ui_printer_chooser_refresh();assert(s_root&&s_timer);ui_printer_chooser_refresh();
+ health_hook=delete_status;ui_printer_chooser_refresh();assert(!s_cards[0].status);ui_printer_chooser_hide();
+ ui_printer_chooser_show(selected,managed);lv_obj_add_event_cb(s_root,reopen_deleted,LV_EVENT_DELETE,NULL);ui_printer_chooser_hide();assert(s_root&&s_timer&&s_cards[0].name&&s_cards[0].name_bound);
+ lv_obj_delete(s_root);assert(!s_root&&!s_timer&&!s_select_cb&&!s_manage_cb&&!s_cards[0].root&&!s_cards[0].subjects_ready);
+ ui_printer_chooser_show(selected,managed);
+ lv_subject_add_observer(&s_cards[0].status_subject,replacing_observer,NULL);
+ arm_replace_observer=true;set_status_text(&s_cards[0],"Replace from observer");assert(s_root&&s_timer&&s_cards[0].status_bound&&!s_show_pending);
+ lv_subject_add_observer(&s_cards[0].status_subject,deleting_observer,NULL);
+ arm_delete_observer=true;set_status_text(&s_cards[0],"Delete feedback");assert(!s_cards[0].status&&!s_cards[0].status_bound);
+ ui_printer_chooser_hide();assert(!s_root&&!s_timer&&!s_show_pending);
+ preview_ready=false;revision=1;
+}
+
 int main(void){
  lv_init();lv_display_t *d=lv_display_create(1024,600);
  static uint8_t buffers[2][1024*600*2];
  lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);
  lv_display_set_buffers(d,buffers[0],buffers[1],sizeof(buffers[0]),LV_DISPLAY_RENDER_MODE_DIRECT);
  lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
+ pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
  profiles[0]=(moonraker_profile_t){.configured=true,.name="Printer A",.host="printer-a.local",.port=7125};
  profiles[1]=(moonraker_profile_t){.configured=true,.name="Printer B",.host="printer-b.local",.port=7126};
  known[1]=online[1]=fresh[1]=true;snprintf(health[1],32,"printing");
@@ -164,7 +254,8 @@ int main(void){
   ui_printer_chooser_refresh();
   ui_printer_chooser_hide();assert(!s_root && !s_timer && !s_cards[0].root && !s_cards[0].status_bound);
   assert(lv_display_get_event_count(d)==events);
+  chooser_safety();assert(lv_display_get_event_count(d)==events);
  }
- lv_display_delete(d);lv_deinit();
+ lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();
  puts("PASS: 500ms chooser timers stay redraw-free when unchanged, all five themes/densities/text sizes, card/label bounds and active/inactive state lifetime, live status/preview/revision/profile updates, silent name/endpoint/status subjects, profile edits/empty slots/click routing, fallback repair and card/chooser teardown");
 }

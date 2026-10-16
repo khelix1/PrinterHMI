@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix="camera-pipeline-") as directory:
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
     # Compile the production Dashboard retirement function alongside Camera.
     dashboard=(root/"main/ui_dashboard.c").read_text()
-    start=dashboard.index("static void dashboard_camera_release_frame(void)")
+    start=dashboard.index("static void dashboard_camera_release_owned(")
     end=dashboard.index("\nstatic void dashboard_camera_set_status",start)
     (tmp/"dashboard_camera_retirement.inc").write_text(
         "static lv_obj_t *dash32_camera_image;\nstatic uint8_t *dash32_camera_frame;\nstatic lv_image_dsc_t dash32_camera_dsc;\n"+dashboard[start:end])
@@ -53,3 +53,8 @@ with tempfile.TemporaryDirectory(prefix="camera-pipeline-") as directory:
                     str(root/"tools/audit/camera_pipeline_test.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/p) for p in sources],
                     str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
+
+    subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror",*flags,
+        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-c",str(root/"main/ui_camera.c"),"-o",str(tmp/"camera_owner.o")],check=True)
+    print("PASS: standalone Camera owner compilation with warnings treated as errors")

@@ -35,14 +35,16 @@ static void copy_text(char *destination,
     snprintf(destination, destination_size, "%s", source);
 }
 
-static void delete_object(lv_obj_t **object)
+/* Capture all old targets before any DELETE callback can install replacements. */
+static void retire_preview_objects(thumbnail_preview_coordinator_context_t *context)
 {
-    if (!object || !*object) {
-        return;
+    lv_obj_t **slots[]={context->dashboard_canvas,context->dashboard_image,context->printer_canvas,context->printer_image};
+    lv_obj_t *old[4]={0};
+    for(unsigned i=0;i<4;i++)if(slots[i]){old[i]=*slots[i];*slots[i]=NULL;}
+    for(unsigned i=0;i<4;i++)if(old[i]){
+        bool duplicate=false;for(unsigned j=0;j<i;j++)if(old[j]==old[i])duplicate=true;
+        if(!duplicate)lv_obj_delete(old[i]);
     }
-
-    lv_obj_delete(*object);
-    *object = NULL;
 }
 
 void thumbnail_preview_coordinator_reset(void)
@@ -139,10 +141,7 @@ void thumbnail_preview_coordinator_update(
 
     thumbnail_manager_set_force_refresh(true);
 
-    delete_object(context->dashboard_canvas);
-    delete_object(context->dashboard_image);
-    delete_object(context->printer_canvas);
-    delete_object(context->printer_image);
+    retire_preview_objects(context);
 
     if (context->free_thumbnail) {
         context->free_thumbnail();

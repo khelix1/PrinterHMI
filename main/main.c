@@ -1365,7 +1365,7 @@ static void scan_moonraker_now(void);
 static void moonraker_discovery_selected_bridge(
     const char *host,
     int port,
-    const char *identity);
+    const char *identity,uint32_t request);
 
 static void ui_network_tools_open_wifi_scan_cb(lv_event_t *e)
 {
@@ -1424,28 +1424,19 @@ static void ui_network_tools_open_printer_profiles_cb(
 
 static void scan_moonraker_now(void)
 {
-    if (!s_got_ip) {
-        moonraker_discovery_set_status("WiFi is not connected.");
-        moonraker_discovery_show(
-            NULL, NULL, moonraker_discovery_selected_bridge);
-        return;
+    uint32_t request=ui_printer_profiles_discovery_request();
+    if(!request)return;
+    if(!s_got_ip){
+        moonraker_discovery_show_for_request("WiFi is not connected.",ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request);return;
     }
-
-    if (moonraker_discovery_is_running()) {
-        moonraker_discovery_show(
-            NULL, NULL, moonraker_discovery_selected_bridge);
-        return;
+    if(moonraker_discovery_is_running()){
+        moonraker_discovery_show_for_request("Previous scan is finishing. Tap Retry after it stops.",
+            ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request);return;
     }
-
-    moonraker_discovery_show(
-        "Starting Moonraker discovery...\nClose cancels discovery.",
-        NULL,
-        moonraker_discovery_selected_bridge);
-
-    if (!moonraker_discovery_start(&s_ip)) {
-        moonraker_discovery_set_status(
-            "Unable to start Moonraker discovery task.");
-    }
+    if(!moonraker_discovery_show_for_request("Starting Moonraker discovery...\nClose cancels discovery.",
+        ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request))return;
+    if(request!=ui_printer_profiles_discovery_request()){moonraker_discovery_close_request(request);return;}
+    if(!moonraker_discovery_start(&s_ip))moonraker_discovery_set_status("Unable to start Moonraker discovery task.");
 }
 
 static void moon_port_popup_save_bridge(int port)
@@ -1847,7 +1838,6 @@ static void printer_thumb_cleanup_for_popup_close(void)
         thumb_poll_timer = NULL;
     }
 
-    dash_thumb_img = NULL;
     printer_thumb_box = NULL;
     printer_thumb_view = NULL;
 }
@@ -2462,7 +2452,7 @@ scan_finished:
 static void moonraker_discovery_selected_bridge(
     const char *host,
     int port,
-    const char *identity)
+    const char *identity,uint32_t request)
 {
     if (!host || !host[0] || port <= 0 || port >= 65536) {
         return;
@@ -2472,12 +2462,8 @@ static void moonraker_discovery_selected_bridge(
      * Discovery edits the open profile draft only. The operator remains
      * responsible for reviewing the result and pressing SAVE.
      */
-    ui_printer_profiles_set_discovered_endpoint(
-        host,
-        port,
-        identity);
-
-    moonraker_discovery_close();
+    (void)ui_printer_profiles_apply_discovered_endpoint(request,host,port,identity);
+    moonraker_discovery_close_request(request);
 }
 
 
@@ -2768,273 +2754,93 @@ static bool printer_publish_selected_preview_cache(void)
 }
 
 
-static void dashboard_show_loaded_thumbnail(void)
+static bool dashboard_preview_current(uint32_t epoch,uint32_t generation,int profile,const char *file)
 {
-    if (!ui_dashboard_thumb_ready() ||
-        !thumbnail_manager_has_png()) {
-        return;
-    }
-
-    if (dash_thumb_canvas &&
-        thumbnail_session_selected_file()[0] &&
-        strcmp(ui_dashboard_thumb_canvas_file(),
-               thumbnail_session_selected_file()) == 0) {
-        return;
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        dash_thumb_canvas_buf = heap_caps_malloc(
-            DASH_THUMB_CANVAS_W *
-                DASH_THUMB_CANVAS_H *
-                sizeof(uint16_t),
-            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-        if (!dash_thumb_canvas_buf) {
-            dash_thumb_canvas_buf = heap_caps_malloc(
-                DASH_THUMB_CANVAS_W *
-                    DASH_THUMB_CANVAS_H *
-                    sizeof(uint16_t),
-                MALLOC_CAP_8BIT);
-        }
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        ESP_LOGW(TAG, "DASH_CANVAS malloc failed");
-        return;
-    }
-
-    int width = 0, height = 0;
-    if (!thumbnail_render_to_rgb565_aspect(
-            thumbnail_manager_image_dsc(),
-            dash_thumb_canvas_buf,
-            DASH_THUMB_CANVAS_W,
-            DASH_THUMB_CANVAS_H, &width, &height)) {
-        ESP_LOGW(TAG, "DASH_CANVAS shared render failed");
-        return;
-    }
-
-
-    dash_thumb_packed_width = width;
-    dash_thumb_packed_height = height;
-    /* CACHE_PUBLISH_SYNC: PREVIEW_PROFILE_OWNERSHIP_COMPLETE */
-    const char *cache_file =
-        thumbnail_session_selected_file();
-
-    if (cache_file && cache_file[0]) {
-        bool cache_published =
-            printer_preview_cache_publish_active(
-                cache_file,
-                dash_thumb_canvas_buf,
-                width,
-                height);
-
-        if (cache_published &&
-            thumbnail_manager_has_png()) {
-            printer_preview_store_store_active(
-                cache_file,
-                thumbnail_manager_png_data(),
-                thumbnail_manager_png_size());
-        }
-    }
-
-    if (dash_thumb_img) {
-        lv_obj_delete(dash_thumb_img);
-        dash_thumb_img = NULL;
-    }
-
-    if (!dash_thumb_canvas) {
-        dash_thumb_canvas =
-            lv_canvas_create(ui_dashboard_thumb_box());
-    }
-
-    lv_canvas_set_buffer(
-        dash_thumb_canvas,
-        dash_thumb_canvas_buf,
-        width,
-        height,
-        LV_COLOR_FORMAT_RGB565);
-
-    ui_thumbnail_fit_object(
-        dash_thumb_canvas,
-        ui_dashboard_thumb_box(),
-        width,
-        height, 0);
-    lv_obj_move_foreground(dash_thumb_canvas);
-
-    ui_dashboard_thumb_clear_placeholder();
-
-    safe_copy(
-        ui_dashboard_thumb_canvas_file(),
-        ui_dashboard_thumb_canvas_file_size(),
-        thumbnail_session_selected_file());
-
+    return epoch==ui_dashboard_thumb_generation() && generation==moonraker_config_generation() &&
+        profile==moonraker_config_active_profile_index() && (!file || (file[0] && !strcmp(file,thumbnail_session_selected_file())));
 }
 
+static void dashboard_show_loaded_thumbnail(void)
+{
+    if(!ui_dashboard_thumb_ready() || !thumbnail_manager_has_png())return;
+    uint32_t epoch=ui_dashboard_thumb_generation(),generation=moonraker_config_generation();
+    int profile=moonraker_config_active_profile_index();char file[160];
+    safe_copy(file,sizeof(file),thumbnail_session_selected_file());
+    if(ui_dashboard_thumb_canvas_matches(file))return;
+    uint16_t *candidate=heap_caps_malloc(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H*sizeof(uint16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!candidate)return;
+    int w=0,h=0;
+    bool rendered=thumbnail_render_to_rgb565_aspect(thumbnail_manager_image_dsc(),candidate,DASH_THUMB_CANVAS_W,DASH_THUMB_CANVAS_H,&w,&h);
+    if(rendered && dashboard_preview_current(epoch,generation,profile,file) && ui_dashboard_thumb_ensure_canvas_buffer(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H)){
+        memcpy(dash_thumb_canvas_buf,candidate,(size_t)w*h*sizeof(uint16_t));
+        dash_thumb_packed_width=w;dash_thumb_packed_height=h;
+        bool published=printer_preview_cache_publish_active(file,candidate,w,h);
+        if(dashboard_preview_current(epoch,generation,profile,file))ui_dashboard_thumb_show_canvas_from_buffer(w,h,file);
+        if(published && dashboard_preview_current(epoch,generation,profile,file) && thumbnail_manager_has_png())
+            printer_preview_store_store_active(file,thumbnail_manager_png_data(),thumbnail_manager_png_size());
+    }
+    heap_caps_free(candidate);
+}
 
 static void dashboard_apply_rendered_thumbnail(void)
 {
-    if (!ui_dashboard_thumb_ready() || !dash_thumb_canvas_buf) return;
-
-    /*
-     * Minimal LVGL apply:
-     * - Do not delete labels/images here.
-     * - Do not recreate canvas if it already exists.
-     * - Worker already rendered pixels into dash_thumb_canvas_buf.
-     */
-    if (!dash_thumb_canvas) {
-        dash_thumb_canvas = lv_canvas_create(ui_dashboard_thumb_box());
-        lv_obj_move_foreground(dash_thumb_canvas);
-    }
-    /* Rebind even on reuse: a new file can have a different packed stride. */
-    lv_canvas_set_buffer(dash_thumb_canvas, dash_thumb_canvas_buf,
-        dash_thumb_packed_width, dash_thumb_packed_height, LV_COLOR_FORMAT_RGB565);
-    ui_thumbnail_fit_object(dash_thumb_canvas, ui_dashboard_thumb_box(),
-        dash_thumb_packed_width, dash_thumb_packed_height, 0);
-
-    ui_dashboard_thumb_clear_placeholder();
-
-    if (dash_thumb_img) {
-        lv_obj_add_flag(dash_thumb_img, LV_OBJ_FLAG_HIDDEN);
-    }
-
-    safe_copy(ui_dashboard_thumb_canvas_file(), ui_dashboard_thumb_canvas_file_size(), dash_thumb_render_file);
-
+    if(!ui_dashboard_thumb_ready() || !dash_thumb_canvas_buf ||
+        dash_thumb_render_generation!=moonraker_config_generation() ||
+        dash_thumb_render_profile_index!=moonraker_config_active_profile_index() ||
+        strcmp(dash_thumb_render_file,thumbnail_session_selected_file()))return;
+    ui_dashboard_thumb_apply_canvas_from_buffer(dash_thumb_packed_width,dash_thumb_packed_height,dash_thumb_render_file);
 }
-
-
 
 static void dashboard_restore_active_profile_preview(void)
 {
-    const char *file = NULL;
-    uint32_t revision = 0;
-
-    const lv_image_dsc_t *image =
-        printer_preview_cache_image(
-            moonraker_config_active_profile_index(),
-            &file,
-            &revision);
-
-    (void)revision;
-
-    if (!image ||
-        !file || !file[0] ||
-        image->header.cf != LV_COLOR_FORMAT_RGB565 ||
-        image->header.w == 0 || image->header.w > DASH_THUMB_CANVAS_W ||
-        image->header.h == 0 || image->header.h > DASH_THUMB_CANVAS_H ||
-        image->header.stride != image->header.w * sizeof(uint16_t) ||
-        image->data_size <
-            image->header.w * image->header.h * sizeof(uint16_t)) {
+    uint32_t epoch=ui_dashboard_thumb_generation(),generation=moonraker_config_generation();
+    int profile=moonraker_config_active_profile_index();const char *file=NULL;uint32_t revision=0;
+    const lv_image_dsc_t *image=printer_preview_cache_image(profile,&file,&revision);
+    if(!dashboard_preview_current(epoch,generation,profile,NULL))return;
+    if(!image || !image->data || !file || !file[0] || image->header.cf!=LV_COLOR_FORMAT_RGB565 ||
+        !image->header.w || image->header.w>DASH_THUMB_CANVAS_W || !image->header.h || image->header.h>DASH_THUMB_CANVAS_H ||
+        image->header.stride!=image->header.w*sizeof(uint16_t) || image->data_size<(size_t)image->header.w*image->header.h*sizeof(uint16_t)){
+        bool had_canvas=dash_thumb_canvas!=NULL;
         ui_dashboard_thumb_delete_canvas();
-        ui_dashboard_thumb_set_placeholder(
-            "PRINT\nTHUMBNAIL\n\nNo preview loaded");
+        if(dashboard_preview_current(epoch+(had_canvas?1U:0U),generation,profile,NULL))ui_dashboard_thumb_set_placeholder("PRINT\nTHUMBNAIL\n\nNo preview loaded");
         return;
     }
-
-    if (!ui_dashboard_thumb_ensure_canvas_buffer(
-            DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H)) {
-        return;
-    }
-
-    memcpy(
-        dash_thumb_canvas_buf,
-        image->data,
-        image->header.w * image->header.h * sizeof(uint16_t));
-
-    dash_thumb_packed_width = image->header.w;
-    dash_thumb_packed_height = image->header.h;
-    ui_dashboard_thumb_show_canvas_from_buffer(
-        image->header.w,
-        image->header.h,
-        file);
+    char copied[160]="";if(strlen(file)<sizeof(copied))safe_copy(copied,sizeof(copied),file);
+    if(!ui_dashboard_thumb_ensure_canvas_buffer(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H))return;
+    memcpy(dash_thumb_canvas_buf,image->data,(size_t)image->header.w*image->header.h*sizeof(uint16_t));
+    dash_thumb_packed_width=image->header.w;dash_thumb_packed_height=image->header.h;
+    if(dashboard_preview_current(epoch,generation,profile,NULL))ui_dashboard_thumb_show_canvas_from_buffer(image->header.w,image->header.h,copied);
 }
-
 
 static void dash_thumb_render_task(void *arg)
 {
-    (void)arg;
-
-    dash_thumb_render_ready = false;
-    dash_thumb_render_failed = false;
-
-    if (!thumbnail_manager_has_png()) {
-        dash_thumb_render_failed = true;
-        dash_thumb_render_running = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        dash_thumb_canvas_buf = heap_caps_malloc(
-            DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H * sizeof(uint16_t),
-            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-        );
-
-        if (!dash_thumb_canvas_buf) {
-            dash_thumb_canvas_buf = heap_caps_malloc(
-                DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H * sizeof(uint16_t),
-                MALLOC_CAP_8BIT
-            );
+    (void)arg;dash_thumb_render_ready=false;dash_thumb_render_failed=false;
+    bool ok=false,published=false;int width=0,height=0;
+    uint32_t generation=dash_thumb_render_generation;int profile=dash_thumb_render_profile_index;
+    char file[160];safe_copy(file,sizeof(file),dash_thumb_render_file);
+    uint16_t *candidate=heap_caps_malloc(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H*sizeof(uint16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(candidate && thumbnail_manager_has_png() && bsp_display_lock(1000)){
+        uint32_t epoch=ui_dashboard_thumb_generation();
+        if(dashboard_preview_current(epoch,generation,profile,file))ok=thumbnail_render_to_rgb565_aspect(thumbnail_manager_image_dsc(),candidate,DASH_THUMB_CANVAS_W,DASH_THUMB_CANVAS_H,&width,&height);
+        ok=ok && dashboard_preview_current(epoch,generation,profile,file) && ui_dashboard_thumb_ensure_canvas_buffer(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H);
+        if(ok){
+            memcpy(dash_thumb_canvas_buf,candidate,(size_t)width*height*sizeof(uint16_t));
+            dash_thumb_packed_width=width;dash_thumb_packed_height=height;
+            if(ui_dashboard_thumb_ready())ui_dashboard_thumb_apply_canvas_from_buffer(width,height,file);
+            if(dashboard_preview_current(epoch,generation,profile,file))published=printer_preview_cache_publish_active(file,candidate,width,height);
         }
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        ESP_LOGW(TAG, "DASH_WORKER canvas malloc failed");
-        dash_thumb_render_failed = true;
-        dash_thumb_render_running = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    bool ok = false, cache_published = false;
-    int width = 0, height = 0;
-
-    if (bsp_display_lock(1000)) {
-        bool same_profile =
-            dash_thumb_render_generation == moonraker_config_generation() &&
-            dash_thumb_render_profile_index == moonraker_config_active_profile_index();
-        if (same_profile) {
-            ok = thumbnail_render_to_rgb565_aspect(
-                thumbnail_manager_image_dsc(), dash_thumb_canvas_buf,
-                DASH_THUMB_CANVAS_W, DASH_THUMB_CANVAS_H, &width, &height);
-        }
-        if (ok) {
-            dash_thumb_packed_width = width;
-            dash_thumb_packed_height = height;
-            /* Keep the visible descriptor and packed stride consistent before
-             * releasing the display lock. A stale job never writes the buffer. */
-            if (dash_thumb_canvas) {
-                lv_canvas_set_buffer(dash_thumb_canvas, dash_thumb_canvas_buf,
-                    width, height, LV_COLOR_FORMAT_RGB565);
-                ui_thumbnail_fit_object(dash_thumb_canvas, ui_dashboard_thumb_box(),
-                    width, height, 0);
-            }
-            if (dash_thumb_render_file[0]) {
-                cache_published = printer_preview_cache_publish_active(
-                    dash_thumb_render_file, dash_thumb_canvas_buf, width, height);
-            }
-        } else {
-            ESP_LOGW(TAG, "%s", same_profile ? "DASH_WORKER shared render failed" :
-                     "Discarded stale Dashboard preview render");
-        }
+        ok=ok && dashboard_preview_current(epoch,generation,profile,file);
         bsp_display_unlock();
-        if (cache_published && thumbnail_manager_has_png() &&
-            dash_thumb_render_generation == moonraker_config_generation() &&
-            dash_thumb_render_profile_index == moonraker_config_active_profile_index()) {
-            printer_preview_store_store_active(dash_thumb_render_file,
-                thumbnail_manager_png_data(), thumbnail_manager_png_size());
-        }
-    } else {
-        ESP_LOGW(TAG, "DASH_WORKER display lock timeout");
+        if(published && generation==moonraker_config_generation() && profile==moonraker_config_active_profile_index() &&
+            !strcmp(file,thumbnail_session_selected_file()) && thumbnail_manager_has_png())printer_preview_store_store_active(file,thumbnail_manager_png_data(),thumbnail_manager_png_size());
     }
-
-    dash_thumb_render_ready = ok;
-    dash_thumb_render_failed = !ok;
-    dash_thumb_render_running = false;
-    vTaskDelete(NULL);
+    heap_caps_free(candidate);
+    dash_thumb_render_ready=ok;dash_thumb_render_failed=!ok;dash_thumb_render_running=false;vTaskDelete(NULL);
 }
 
 static void dash_thumb_render_ui_poll_cb(lv_timer_t *t)
 {
+    if(!t || t!=dash_thumb_render_timer)return;
     if (dash_thumb_render_running) return;
 
     lv_timer_delete(t);
@@ -3149,10 +2955,10 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
         return;
     }
 
-    ui_thumbnail_show_image(
+    ui_thumbnail_show_file_image(
         printer_thumb_view,
         thumbnail_manager_image_dsc(),
-        0);
+        0, thumbnail_session_selected_file());
 
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
@@ -3303,6 +3109,7 @@ static void show_printer_file_detail_popup(void)
         &printer_thumb_view,
         close_printer_file_detail_popup,
         printer_file_detail_start_bridge);
+    ui_thumbnail_bind_owner(printer_thumb_view, &printer_thumb_view);
     printer_thumb_set_label("LOADING...");
 
     if (!file_detail_loader_start(

@@ -47,3 +47,8 @@ with tempfile.TemporaryDirectory(prefix="chooser-refresh-") as directory:
                     str(root/"tools/audit/chooser_refresh_test.c"),*[str(root/"main"/p) for p in sources],
                     str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
+
+    subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror",*flags,
+        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-c",str(root/"main/ui_printer_chooser.c"),"-o",str(tmp/"chooser_owner.o")],check=True)
+    print("PASS: standalone chooser owner compilation with warnings treated as errors")

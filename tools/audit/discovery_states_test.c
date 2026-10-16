@@ -101,6 +101,39 @@ static void safety_checks(const esp_ip4_addr_t *ip)
  moonraker_discovery_close();closes=closed;assert(!moonraker_discovery_start(ip));moonraker_discovery_close();assert(closed==closes);
 }
 static uint16_t raster[1024*600];
+static uint32_t selected_request,closed_request;
+static void on_request_close(uint32_t request){closed_request=request;closed++;if(close_hook)close_hook();}
+static void wrong_request_close(uint32_t request){(void)request;assert(!"Repeated Show replaced request Close");}
+static void (*request_select_hook)(void);
+static void on_request_select(const char *host,int port,const char *identity,uint32_t request)
+{
+ assert(host[0]&&port==7125&&identity[0]);selected_request=request;selected++;
+ if(request_select_hook)request_select_hook();
+ moonraker_discovery_close_request(request);
+ assert(host[0]&&identity[0]);
+}
+static void request_replace(void){assert(moonraker_discovery_show_for_request("New request",on_request_close,on_request_select,22));}
+static void request_safety(const esp_ip4_addr_t *ip)
+{
+ assert(!moonraker_discovery_show_for_request("Invalid",on_request_close,on_request_select,0));
+ assert(!moonraker_discovery_show_in_parent_for_request(NULL,"Invalid",on_request_close,on_request_select,1));assert(!s_popup);
+ assert(moonraker_discovery_show_for_request("Request one",on_request_close,on_request_select,11));
+ assert(moonraker_discovery_show_for_request("Do not replace",wrong_request_close,on_request_select,11));assert(!strcmp(s_status,"Request one"));
+ moonraker_probe_result_t probe={.klippy_ready=true};strcpy(probe.identity,"Request identity");
+ assert(moonraker_discovery_add_candidate("192.0.2.126",7125,&probe));
+ request_select_hook=request_replace;click(lv_obj_get_child(s_results_list,0));request_select_hook=NULL;
+ assert(selected_request==11&&s_popup&&s_select_request==22&&!strcmp(s_status,"New request"));
+ moonraker_discovery_close_request(0);moonraker_discovery_close_request(11);assert(s_popup&&s_select_request==22);
+ moonraker_discovery_close_request(22);assert(closed_request==22);assert(!s_popup&&!s_select_request_cb&&!s_select_request);
+ assert(moonraker_discovery_show_for_request("Close replacement",on_request_close,on_request_select,33));
+ close_hook=reopen_close;assert(!moonraker_discovery_show_for_request("Must not replace",on_request_close,on_request_select,44));close_hook=NULL;
+ assert(s_popup&&!s_select_request_cb&&!strcmp(s_status,"Replacement"));moonraker_discovery_close_request(44);assert(s_popup);moonraker_discovery_close();
+ assert(moonraker_discovery_show_for_request("Deleted",on_request_close,on_request_select,44));lv_obj_delete(s_popup);assert(closed_request==44);assert(!s_popup&&!s_select_request_cb&&!s_select_request);
+ assert(moonraker_discovery_show_for_request("Old worker",on_request_close,on_request_select,55));assert(moonraker_discovery_start(ip));
+ assert(moonraker_discovery_show_for_request("Keep request 66",on_request_close,on_request_select,66));
+ worker();assert(s_popup&&s_select_request==66&&!s_candidate_count&&!strcmp(s_status,"Keep request 66"));
+ discovery_retry_cb(NULL);assert(s_scan_task_handle);worker();assert(!s_scan_task_handle&&s_select_request==66);moonraker_discovery_close_request(66);
+}
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){int w=lv_display_get_horizontal_resolution(d);uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*w+x]=*v++;lv_display_flush_ready(d);}
 static void snapshot(void){const char*path=getenv("DISCOVERY_SCREENSHOT");if(!path)return;lv_refr_now(NULL);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 static void inside(lv_obj_t*a,lv_obj_t*b){lv_area_t x,y;lv_obj_get_coords(a,&x);lv_obj_get_coords(b,&y);assert(x.x1>=y.x1&&x.y1>=y.y1&&x.x2<=y.x2&&x.y2<=y.y2);}
@@ -113,7 +146,7 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
   fail_task=true;assert(!moonraker_discovery_start(&ip)&&strstr(s_status,"Could not start"));fail_task=false;tap(pointer,lv_obj_get_child(footer,0));assert(s_scan_task_handle);discovery_retry_cb(NULL);assert(strstr(s_status,"still finishing"));in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle&&strstr(s_status,"No Moonraker"));if(theme==4&&density==1&&large&&!size)snapshot();
   moonraker_probe_result_t probe={.klippy_ready=true};strcpy(probe.identity,"Workshop printer with a long descriptive name");assert(moonraker_discovery_add_candidate("192.0.2.126",7125,&probe));lv_obj_update_layout(s_popup);lv_obj_t*row=lv_obj_get_child(s_results_list,0);lv_obj_scroll_to_view_recursive(row,LV_ANIM_OFF);lv_obj_update_layout(s_popup);unsigned selections=selected;tap(pointer,row);assert(selected==selections+1);
   discovery_retry_cb(NULL);assert(!s_candidate_count&&!lv_obj_get_child_count(s_results_list));lv_obj_delete(page);assert(s_cancelled&&!s_popup&&!s_status_label&&!s_results_list);in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle);
-  moonraker_discovery_show("Retry after cancellation",on_close,on_select);unsigned before=closed;tap(pointer,lv_obj_get_child(lv_obj_get_child(s_popup,-1),1));assert(closed==before+1&&!s_popup);safety_checks(&ip);
+  moonraker_discovery_show("Retry after cancellation",on_close,on_select);unsigned before=closed;tap(pointer,lv_obj_get_child(lv_obj_get_child(s_popup,-1),1));assert(closed==before+1&&!s_popup);safety_checks(&ip);request_safety(&ip);
  }
  (void)saved;lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();puts("PASS: Moonraker discovery retry/select/close ownership, captured endpoint/callbacks, deleted fields, printer changes, late-worker/under-lock publication fences and replacement teardown across all themes/densities/text/viewports");return 0;}
 #endif

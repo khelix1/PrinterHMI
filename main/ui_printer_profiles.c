@@ -84,6 +84,18 @@ static uint32_t s_profile_epoch;
 static bool s_profile_dispatching;
 static lv_obj_t *s_editor_test_action,*s_editor_auth_use,*s_editor_key_done;
 static lv_obj_t *s_editor_save_action,*s_manager_select_action,*s_manager_remove_action;
+static lv_obj_t *s_manager_edit_action,*s_manager_close_action;
+static lv_obj_t *s_editor_cancel_action,*s_editor_discover_action,*s_editor_auth_action,*s_editor_camera_action;
+static lv_obj_t *s_auth_cancel_action,*s_key_cancel_action;
+static bool s_profile_discovery_dispatching;
+typedef struct {
+    lv_obj_t *editor;
+    uint32_t request,epoch,generation;
+    int profile,active;
+    char host[MOONRAKER_CONFIG_HOST_LENGTH],port[6],name[MOONRAKER_CONFIG_NAME_LENGTH];
+} profile_discovery_request_t;
+static profile_discovery_request_t s_profile_discovery_request;
+static uint32_t s_profile_discovery_serial;
 static lv_obj_t *s_delete_apply,*s_delete_status;
 static int s_delete_profile=-1;
 static uint32_t s_delete_generation;
@@ -105,6 +117,13 @@ static lv_obj_t *s_editor_security_popup = NULL;
 #define EDITOR_PEM_MAX_FILES 6
 static lv_obj_t *s_editor_pem_picker = NULL;
 static char s_editor_pem_paths[EDITOR_PEM_MAX_FILES][128];
+static lv_obj_t *s_security_opener,*s_security_standard,*s_security_select,*s_security_cancel,*s_security_status;
+static lv_obj_t *s_pem_close,*s_pem_status,*s_pem_body,*s_pem_rows[EDITOR_PEM_MAX_FILES];
+static lv_obj_t *s_security_editor;
+static int s_security_profile=-1,s_security_active=-1;
+static uint32_t s_security_generation;
+static void editor_security_retire(void);
+static void editor_pem_picker_close(void);
 
 static ui_printer_profiles_active_changed_cb_t
     s_active_changed_cb = NULL;
@@ -152,7 +171,11 @@ static void profiles_field_deleted(lv_event_t *event)
         &s_editor_camera_status,&s_editor_camera_keyboard,&s_editor_test_action,&s_editor_auth_use,&s_editor_key_done,
         &s_editor_save_action,&s_manager_select_action,&s_manager_remove_action,&s_delete_apply,&s_delete_status,
         &s_camera_remove_action,&s_camera_remove_apply,&s_camera_remove_cancel,&s_camera_remove_status,
-        &s_camera_save,&s_camera_default,&s_camera_find,&s_camera_test,&s_camera_cancel};
+        &s_camera_save,&s_camera_default,&s_camera_find,&s_camera_test,&s_camera_cancel,
+        &s_security_opener,&s_security_standard,&s_security_select,&s_security_cancel,&s_security_status,
+        &s_pem_close,&s_pem_status,&s_pem_body,&s_manager_edit_action,&s_manager_close_action,
+        &s_editor_cancel_action,&s_editor_discover_action,&s_editor_auth_action,&s_editor_camera_action,
+        &s_auth_cancel_action,&s_key_cancel_action};
     bool retired=false;
     for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);++i)
         if(*fields[i]==object){*fields[i]=NULL;retired=true;}
@@ -162,6 +185,9 @@ static void profiles_field_deleted(lv_event_t *event)
     for(size_t i=0;i<CAMERA_CATALOG_MAX_CAMERAS;++i)if(s_editor_camera_slot_buttons[i]==object){
         s_editor_camera_slot_buttons[i]=NULL;retired=true;
     }
+    for(size_t i=0;i<EDITOR_PEM_MAX_FILES;++i)if(s_pem_rows[i]==object){
+        s_pem_rows[i]=NULL;s_editor_pem_paths[i][0]='\0';retired=true;
+    }
     if(retired){++s_profile_epoch;camera_jobs_retire();}
 }
 static void profiles_watch(lv_obj_t *object)
@@ -170,7 +196,7 @@ static void profiles_watch(lv_obj_t *object)
 }
 static bool profiles_action_current(lv_event_t *event,lv_obj_t *button,bool keyboard)
 {
-    if(s_profile_dispatching || !s_editor_popup || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
+    if(s_profile_dispatching || s_profile_discovery_dispatching || !s_editor_popup || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
     if(!event)return true;
     lv_obj_t *target=lv_event_get_target_obj(event);
     return target==lv_event_get_current_target_obj(event) &&
@@ -180,7 +206,7 @@ static bool profiles_action_current(lv_event_t *event,lv_obj_t *button,bool keyb
 }
 static bool manager_action_current(lv_event_t *event,lv_obj_t *button)
 {
-    if(s_profile_dispatching || !s_manager_popup || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
+    if(s_profile_dispatching || s_profile_discovery_dispatching || !s_manager_popup || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
     return !event || (lv_event_get_code(event)==LV_EVENT_CLICKED &&
         lv_event_get_target_obj(event)==button && lv_event_get_current_target_obj(event)==button);
 }
@@ -280,14 +306,16 @@ static void editor_close(void)
         s_editor_camera_popup,s_editor_pem_picker,s_editor_security_popup,s_editor_popup};
     lv_timer_t *camera_discovery=s_editor_camera_discovery_timer,*camera_test=s_editor_camera_test_timer;
     ++s_profile_epoch;editor_test_retire();
+    memset(&s_profile_discovery_request,0,sizeof(s_profile_discovery_request));
     s_editor_popup=s_editor_name=s_editor_host=s_editor_port=s_editor_status=NULL;
     s_editor_keyboard_popup=s_editor_keyboard=s_editor_keyboard_value=s_editor_keyboard_target=NULL;
-    s_editor_auth_popup=s_editor_auth_key=s_editor_auth_keyboard=NULL;
+    s_editor_auth_popup=s_editor_auth_key=s_editor_auth_keyboard=s_auth_cancel_action=NULL;
+    s_editor_cancel_action=s_editor_discover_action=s_editor_auth_action=s_editor_camera_action=s_key_cancel_action=NULL;
     s_editor_camera_remove_popup=s_editor_camera_popup=s_editor_camera_stream=s_editor_camera_name=NULL;
     s_editor_camera_keyboard=s_editor_camera_status=NULL;
     s_camera_remove_action=s_camera_remove_apply=s_camera_remove_cancel=s_camera_remove_status=NULL;
     s_camera_remove_profile=-1;
-    s_editor_pem_picker=s_editor_security_popup=NULL;
+    editor_security_retire();s_security_opener=NULL;
     s_editor_test_action=s_editor_auth_use=s_editor_key_done=s_editor_save_action=NULL;
     s_camera_save=s_camera_default=s_camera_find=s_camera_test=s_camera_cancel=NULL;
     profiles_clear_secret(&s_camera_find_job,sizeof(s_camera_find_job));
@@ -307,6 +335,7 @@ void ui_printer_profiles_close_all(void)
     lv_obj_t *manager=s_manager_popup,*confirmation=s_delete_popup;
     s_delete_popup=s_manager_popup=s_manager_list=s_manager_status=NULL;
     s_manager_select_action=s_manager_remove_action=s_delete_apply=s_delete_status=NULL;
+    s_manager_edit_action=s_manager_close_action=NULL;
     s_delete_profile=-1;
     memset(s_profile_rows,0,sizeof(s_profile_rows));
     s_active_changed_cb=NULL;s_discover_cb=NULL;
@@ -332,7 +361,7 @@ static void profiles_dialog_deleted(lv_event_t *event)
         s_editor_keyboard = NULL;
         s_editor_keyboard_value = NULL;
         s_editor_keyboard_target = NULL;
-        s_editor_key_done=NULL;
+        s_editor_key_done=s_key_cancel_action=NULL;
     } else if (popup == s_editor_auth_popup) {
         s_editor_auth_popup = NULL;
         editor_auth_close();
@@ -342,7 +371,9 @@ static void profiles_dialog_deleted(lv_event_t *event)
     } else if (popup == s_editor_security_popup) {
         s_editor_security_popup = NULL;
         editor_security_close();
-    } else if (popup == s_editor_pem_picker) s_editor_pem_picker = NULL;
+    } else if (popup == s_editor_pem_picker) {
+        s_editor_pem_picker=NULL;editor_pem_picker_close();
+    }
     else if (popup == s_editor_camera_remove_popup) {
         s_editor_camera_remove_popup=NULL;editor_camera_remove_close();
     }
@@ -350,124 +381,215 @@ static void profiles_dialog_deleted(lv_event_t *event)
 
 static void manager_close_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!manager_action_current(event,s_manager_close_action))return;
     ui_printer_profiles_close_all();
 }
 
 static void editor_cancel_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!profiles_action_current(event,s_editor_cancel_action,false))return;
     editor_close();
 }
 
+static void editor_pem_picker_retire(void)
+{
+    s_editor_pem_picker=s_pem_close=s_pem_status=s_pem_body=NULL;
+    memset(s_pem_rows,0,sizeof(s_pem_rows));
+    memset(s_editor_pem_paths,0,sizeof(s_editor_pem_paths));
+}
+static void editor_security_retire(void)
+{
+    s_editor_security_popup=s_security_editor=NULL;
+    s_security_standard=s_security_select=s_security_cancel=s_security_status=NULL;
+    s_security_profile=s_security_active=-1;
+    editor_pem_picker_retire();
+}
 static void editor_pem_picker_close(void)
 {
-    if (s_editor_pem_picker) lv_obj_delete(s_editor_pem_picker);
-    s_editor_pem_picker = NULL;
+    lv_obj_t *popup=s_editor_pem_picker;
+    ++s_profile_epoch;editor_pem_picker_retire();
+    if(popup)lv_obj_delete(popup);
 }
-
 static void editor_pem_picker_close_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!s_editor_pem_picker || !profiles_action_current(event,s_pem_close,false))return;
     editor_pem_picker_close();
 }
-
 static void editor_security_close(void)
 {
-    editor_pem_picker_close();
-    if (s_editor_security_popup) lv_obj_delete(s_editor_security_popup);
-    s_editor_security_popup = NULL;
+    lv_obj_t *popup=s_editor_security_popup,*picker=s_editor_pem_picker;
+    ++s_profile_epoch;editor_security_retire();
+    if(picker)lv_obj_delete(picker);
+    if(popup)lv_obj_delete(popup);
 }
-
+static bool editor_security_current(void)
+{
+    return s_editor_security_popup && s_security_editor==s_editor_popup && s_security_profile>=0 &&
+        s_security_profile==s_editor_profile && s_security_active==moonraker_config_active_profile_index() &&
+        s_security_generation==moonraker_config_generation();
+}
+static bool editor_security_action(lv_event_t *event,lv_obj_t *button)
+{
+    if(!s_editor_security_popup || !profiles_action_current(event,button,false))return false;
+    if(editor_security_current())return true;
+    if(s_security_status)lv_label_set_text(s_security_status,"Printer configuration changed. Close and reopen Security.");
+    return false;
+}
 static void editor_security_standard_cb(lv_event_t *event)
 {
-    (void)event;
-    s_editor_secure = false;
+    if(!editor_security_action(event,s_security_standard) || s_editor_pem_picker)return;
+    lv_obj_t *editor=s_editor_popup;int profile=s_editor_profile;uint32_t epoch=s_profile_epoch;
+    s_profile_dispatching=true;editor_test_retire();camera_jobs_retire();
+    s_editor_secure=false;
     editor_security_close();
-    editor_set_status("Standard HTTP selected. API-key behavior is unchanged.");
+    if(editor==s_editor_popup && profile==s_editor_profile && s_profile_epoch==epoch+1)
+        editor_set_status("Standard HTTP selected. Save the profile to apply this draft.");
+    s_profile_dispatching=false;
 }
-
 static bool editor_pem_name(const char *name)
 {
-    size_t length = name ? strlen(name) : 0;
-    return length > 4 && strcasecmp(name + length - 4, ".pem") == 0;
+    size_t length=name?strlen(name):0;
+    return length>4 && length+strlen("/sdcard/")<sizeof(s_editor_pem_paths[0]) &&
+        !strchr(name,'/') && !strchr(name,'\\') && strcasecmp(name+length-4,".pem")==0;
 }
-
 static void editor_security_pem_selected_cb(lv_event_t *event)
 {
-    const char *path = lv_event_get_user_data(event);
-    if (!path || s_editor_profile < 0 ||
-        !moonraker_transport_security_import_ca_file_for_profile(s_editor_profile, path)) {
-        editor_set_status("CA import failed for selected PEM file.");
+    if(!event || !s_editor_pem_picker)return;
+    size_t row=(size_t)(uintptr_t)lv_event_get_user_data(event);
+    if(row>=EDITOR_PEM_MAX_FILES || !profiles_action_current(event,s_pem_rows[row],false))return;
+    if(!editor_security_current()){
+        if(s_pem_status)lv_label_set_text(s_pem_status,"Printer configuration changed. Close and reopen Security.");
         return;
     }
-    s_editor_secure = true;
-    if (s_editor_port && atoi(lv_textarea_get_text(s_editor_port)) == 7125) {
-        lv_textarea_set_text(s_editor_port, "443");
+    if(!s_editor_port || !s_editor_pem_paths[row][0]){
+        if(s_pem_status)lv_label_set_text(s_pem_status,"Connection fields are unavailable. Reopen the profile editor.");
+        return;
     }
-    editor_security_close();
-    editor_set_status("Secure HTTPS/WSS selected. Set the TLS proxy port (443-446).");
+    char path[sizeof(s_editor_pem_paths[0])],port[6];
+    strlcpy(path,s_editor_pem_paths[row],sizeof(path));strlcpy(port,lv_textarea_get_text(s_editor_port),sizeof(port));
+    lv_obj_t *editor=s_editor_popup,*security=s_editor_security_popup,*picker=s_editor_pem_picker;
+    int profile=s_editor_profile;uint32_t epoch=s_profile_epoch;
+    s_profile_dispatching=true;editor_test_retire();camera_jobs_retire();
+    bool imported=moonraker_transport_security_import_ca_file_for_profile(profile,path);
+    if(epoch!=s_profile_epoch || editor!=s_editor_popup || security!=s_editor_security_popup ||
+        picker!=s_editor_pem_picker || !editor_security_current()){
+        s_profile_dispatching=false;return;
+    }
+    if(!imported){
+        if(s_pem_status)lv_label_set_text(s_pem_status,"CA import failed. Check the PEM file and SD card, then select it again.");
+        s_profile_dispatching=false;return;
+    }
+    s_editor_secure=true;
+    if(s_editor_port && !strcmp(port,"7125") && !strcmp(lv_textarea_get_text(s_editor_port),port))
+        lv_textarea_set_text(s_editor_port,"443");
+    if(epoch==s_profile_epoch && editor==s_editor_popup && security==s_editor_security_popup &&
+        picker==s_editor_pem_picker && editor_security_current()){
+        editor_security_close();
+        if(editor==s_editor_popup && profile==s_editor_profile && s_profile_epoch==epoch+1)
+            editor_set_status("CA imported. Secure draft selected; check the TLS port (443-446) and save the profile.");
+    }
+    s_profile_dispatching=false;
 }
-
+static bool editor_pem_scan_current(lv_obj_t *popup,lv_obj_t *body,uint32_t epoch)
+{
+    return popup==s_editor_pem_picker && body==s_pem_body && epoch==s_profile_epoch && editor_security_current();
+}
 static void editor_security_pem_picker_open_cb(lv_event_t *event)
 {
-    (void)event;
-    if (s_editor_pem_picker) { lv_obj_move_foreground(s_editor_pem_picker); return; }
-    s_editor_pem_picker = ui_popup_create(lv_layer_top(), profiles_width(700), profiles_height(500), UI_POPUP_STANDARD);
-    if (!s_editor_pem_picker) return;
-    lv_obj_add_event_cb(s_editor_pem_picker, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = profiles_body(s_editor_pem_picker, "SELECT CA CERTIFICATE");
-    profiles_label(body, "SD-card root .pem files only", false);
-    DIR *directory = opendir("/sdcard");
-    size_t count = 0;
-    struct dirent *entry;
-    while (directory && count < EDITOR_PEM_MAX_FILES && (entry = readdir(directory))) {
-        if (!editor_pem_name(entry->d_name)) continue;
-        snprintf(s_editor_pem_paths[count], sizeof(s_editor_pem_paths[count]), "/sdcard/%s", entry->d_name);
-        lv_obj_t *button = profiles_action_data(body, UI_POPUP_ACTION_SECONDARY,
-            entry->d_name, editor_security_pem_selected_cb, s_editor_pem_paths[count]);
-        lv_obj_set_width(button, LV_PCT(100));
-        lv_obj_set_style_min_width(button, 0, 0);
-        lv_obj_t *label = lv_obj_get_child(button, 0);
-        lv_obj_set_width(label, LV_PCT(100));
-        lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        ++count;
+    if(!editor_security_action(event,s_security_select))return;
+    if(s_editor_pem_picker){lv_obj_move_foreground(s_editor_pem_picker);return;}
+    s_editor_pem_picker=ui_popup_create(lv_layer_top(),profiles_width(700),profiles_height(500),UI_POPUP_STANDARD);
+    if(!s_editor_pem_picker)return;
+    lv_obj_add_event_cb(s_editor_pem_picker,profiles_dialog_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_t *popup=s_editor_pem_picker;
+    s_pem_body=profiles_body(popup,"SELECT CA CERTIFICATE");profiles_watch(s_pem_body);
+    lv_obj_t *body=s_pem_body;
+    s_pem_status=profiles_label(body,"SD-card root .pem files only",false);
+    s_pem_close=profiles_action(profiles_footer(popup),UI_POPUP_ACTION_CLOSE,"CLOSE",editor_pem_picker_close_cb);
+    uint32_t epoch=s_profile_epoch;
+    s_profile_dispatching=true;
+    DIR *directory=opendir("/sdcard");
+    size_t count=0;
+    while(directory && count<EDITOR_PEM_MAX_FILES && editor_pem_scan_current(popup,body,epoch)){
+        struct dirent *entry=readdir(directory);
+        if(!editor_pem_scan_current(popup,body,epoch) || !entry)break;
+        if(!editor_pem_name(entry->d_name))continue;
+        snprintf(s_editor_pem_paths[count],sizeof(s_editor_pem_paths[count]),"/sdcard/%.*s",
+            (int)(sizeof(s_editor_pem_paths[0])-sizeof("/sdcard/")),entry->d_name);
+        lv_obj_t *button=profiles_action_data(body,UI_POPUP_ACTION_SECONDARY,entry->d_name,
+            editor_security_pem_selected_cb,(void *)(uintptr_t)count);
+        s_pem_rows[count]=button;
+        lv_obj_set_width(button,LV_PCT(100));lv_obj_set_style_min_width(button,0,0);
+        lv_obj_t *label=lv_obj_get_child(button,0);lv_obj_set_width(label,LV_PCT(100));
+        lv_label_set_long_mode(label,LV_LABEL_LONG_SCROLL_CIRCULAR);++count;
     }
-    if (directory) closedir(directory);
-    if (count == 0) profiles_label(body, "No .pem files found in SD-card root.", false);
-    profiles_action(profiles_footer(s_editor_pem_picker), UI_POPUP_ACTION_CLOSE,
-        "CLOSE", editor_pem_picker_close_cb);
+    if(directory)closedir(directory);
+    if(editor_pem_scan_current(popup,body,epoch)){
+        if(count==0)profiles_label(body,"No .pem files found in SD-card root.",false);
+    }else if(popup==s_editor_pem_picker && s_pem_status)
+        lv_label_set_text(s_pem_status,"Certificate listing interrupted. Close and reopen Security.");
+    s_profile_dispatching=false;
 }
-
 static void editor_security_cancel_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!s_editor_security_popup || !profiles_action_current(event,s_security_cancel,false))return;
     editor_security_close();
 }
-
 static void editor_security_open_cb(lv_event_t *event)
 {
-    (void)event;
-    if (s_editor_security_popup) { lv_obj_move_foreground(s_editor_security_popup); return; }
-    s_editor_security_popup = ui_popup_create(lv_layer_top(), profiles_width(700), profiles_height(400), UI_POPUP_STANDARD);
-    if (!s_editor_security_popup) return;
-    lv_obj_add_event_cb(s_editor_security_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = profiles_body(s_editor_security_popup, "CONNECTION SECURITY");
-    profiles_label(body,
-        "Standard keeps current HTTP behavior. Secure lets this printer profile use an approved SD-card PEM certificate.", false);
-    lv_obj_t *footer = profiles_footer(s_editor_security_popup);
-    profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_security_cancel_cb);
-    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, "STANDARD HTTP", editor_security_standard_cb);
-    profiles_action(footer, UI_POPUP_ACTION_CONFIRM, "SELECT .PEM", editor_security_pem_picker_open_cb);
+    if(!profiles_action_current(event,s_security_opener,false))return;
+    if(s_editor_security_popup){lv_obj_move_foreground(s_editor_security_popup);return;}
+    s_editor_security_popup=ui_popup_create(lv_layer_top(),profiles_width(700),profiles_height(400),UI_POPUP_STANDARD);
+    if(!s_editor_security_popup)return;
+    s_security_editor=s_editor_popup;s_security_profile=s_editor_profile;
+    s_security_active=moonraker_config_active_profile_index();s_security_generation=moonraker_config_generation();
+    lv_obj_add_event_cb(s_editor_security_popup,profiles_dialog_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_t *body=profiles_body(s_editor_security_popup,"CONNECTION SECURITY");
+    s_security_status=profiles_label(body,
+        "Standard keeps current HTTP behavior. Secure lets this printer profile use an approved SD-card PEM certificate.",false);
+    lv_obj_t *footer=profiles_footer(s_editor_security_popup);
+    s_security_cancel=profiles_action(footer,UI_POPUP_ACTION_CANCEL,"CANCEL",editor_security_cancel_cb);
+    s_security_standard=profiles_action(footer,UI_POPUP_ACTION_SECONDARY,"STANDARD HTTP",editor_security_standard_cb);
+    s_security_select=profiles_action(footer,UI_POPUP_ACTION_CONFIRM,"SELECT .PEM",editor_security_pem_picker_open_cb);
 }
 
+static bool profile_discovery_request_current(void)
+{
+    const profile_discovery_request_t *request=&s_profile_discovery_request;
+    return request->request && request->editor==s_editor_popup && request->epoch==s_profile_epoch &&
+        request->profile==s_editor_profile && request->active==moonraker_config_active_profile_index() &&
+        request->generation==moonraker_config_generation() && s_editor_host && s_editor_port && s_editor_name &&
+        !strcmp(request->host,lv_textarea_get_text(s_editor_host)) &&
+        !strcmp(request->port,lv_textarea_get_text(s_editor_port)) &&
+        !strcmp(request->name,lv_textarea_get_text(s_editor_name));
+}
+uint32_t ui_printer_profiles_discovery_request(void)
+{
+    if(profile_discovery_request_current())return s_profile_discovery_request.request;
+    memset(&s_profile_discovery_request,0,sizeof(s_profile_discovery_request));return 0;
+}
+void ui_printer_profiles_cancel_discovery_request(uint32_t request)
+{
+    if(request && request==s_profile_discovery_request.request)
+        memset(&s_profile_discovery_request,0,sizeof(s_profile_discovery_request));
+}
 static void editor_discover_cb(lv_event_t *event)
 {
-    (void)event;
-
-    if (s_discover_cb) {
-        s_discover_cb();
-    }
+    if(!profiles_action_current(event,s_editor_discover_action,false) || s_profile_discovery_dispatching)return;
+    ui_printer_profiles_discover_cb_t callback=s_discover_cb;
+    if(!callback || !s_editor_host || !s_editor_port || !s_editor_name)return;
+    if(++s_profile_discovery_serial==0)++s_profile_discovery_serial;
+    s_profile_discovery_request=(profile_discovery_request_t){.editor=s_editor_popup,
+        .request=s_profile_discovery_serial,.epoch=s_profile_epoch,.generation=moonraker_config_generation(),
+        .profile=s_editor_profile,.active=moonraker_config_active_profile_index()};
+    strlcpy(s_profile_discovery_request.host,lv_textarea_get_text(s_editor_host),sizeof(s_profile_discovery_request.host));
+    strlcpy(s_profile_discovery_request.port,lv_textarea_get_text(s_editor_port),sizeof(s_profile_discovery_request.port));
+    strlcpy(s_profile_discovery_request.name,lv_textarea_get_text(s_editor_name),sizeof(s_profile_discovery_request.name));
+    /* The callback may deliver a selected endpoint synchronously. Keep the
+     * launcher fenced without blocking that normal handoff. */
+    s_profile_discovery_dispatching=true;
+    callback();
+    s_profile_discovery_dispatching=false;
 }
 
 
@@ -495,9 +617,11 @@ static void editor_set_status(
 
 static void manager_refresh_selection(void)
 {
+    lv_obj_t *popup=s_manager_popup;uint32_t epoch=s_profile_epoch;int selected=s_selected_profile;
     for (int index = 0;
          index < MOONRAKER_CONFIG_MAX_PROFILES;
          ++index) {
+        if(popup!=s_manager_popup || epoch!=s_profile_epoch || selected!=s_selected_profile)return;
         if (s_profile_rows[index]) {
             ui_popup_set_selectable_row_selected(
                 s_profile_rows[index],
@@ -510,7 +634,7 @@ static void manager_refresh_selection(void)
 static void profile_row_clicked_cb(
     lv_event_t *event)
 {
-    if(!event || !s_manager_popup || s_profile_dispatching || s_delete_popup ||
+    if(!event || !s_manager_popup || s_profile_dispatching || s_profile_discovery_dispatching || s_delete_popup ||
         lv_event_get_code(event)!=LV_EVENT_CLICKED)return;
     int profile_index =
         (int)(intptr_t)
@@ -528,11 +652,14 @@ static void profile_row_clicked_cb(
     s_selected_profile =
         profile_index;
 
+    lv_obj_t *popup=s_manager_popup;uint32_t epoch=s_profile_epoch;
     manager_refresh_selection();
+    if(popup!=s_manager_popup || epoch!=s_profile_epoch || profile_index!=s_selected_profile)return;
 
     const moonraker_profile_t *profile =
         moonraker_config_profile(
             profile_index);
+    if(popup!=s_manager_popup || epoch!=s_profile_epoch || profile_index!=s_selected_profile)return;
 
     char status[160];
 
@@ -749,7 +876,7 @@ static void editor_keyboard_discard(void)
     s_editor_keyboard = NULL;
     s_editor_keyboard_value = NULL;
     s_editor_keyboard_target = NULL;
-    s_editor_key_done=NULL;
+    s_editor_key_done=s_key_cancel_action=NULL;
     if (popup) lv_obj_delete(popup);
 }
 
@@ -778,13 +905,21 @@ static void editor_keyboard_popup_done_cb(lv_event_t *event)
 
 static void editor_keyboard_cancel_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!s_editor_keyboard_popup || !s_editor_popup || s_profile_dispatching || s_profile_discovery_dispatching)return;
+    if(!event){
+        if(!s_key_cancel_action || lv_obj_has_state(s_key_cancel_action,LV_STATE_DISABLED))return;
+    }else{
+        lv_obj_t *target=lv_event_get_target_obj(event);
+        if(target!=lv_event_get_current_target_obj(event) || lv_obj_has_state(target,LV_STATE_DISABLED))return;
+        if(!((lv_event_get_code(event)==LV_EVENT_CLICKED && target==s_key_cancel_action) ||
+            (lv_event_get_code(event)==LV_EVENT_CANCEL && target==s_editor_keyboard)))return;
+    }
     editor_keyboard_discard();
 }
 
 static void editor_field_focused_cb(lv_event_t *event)
 {
-    if(!event || !s_editor_popup || s_profile_dispatching)return;
+    if(!event || !s_editor_popup || s_profile_dispatching || s_profile_discovery_dispatching)return;
     lv_obj_t *field = lv_event_get_target_obj(event);
     if(lv_event_get_code(event)!=LV_EVENT_CLICKED || field!=lv_event_get_current_target_obj(event) ||
         lv_obj_has_state(field,LV_STATE_DISABLED))return;
@@ -794,7 +929,11 @@ static void editor_field_focused_cb(lv_event_t *event)
         lv_obj_move_foreground(s_editor_keyboard_popup);
         return;
     }
+    lv_obj_t *editor=s_editor_popup;uint32_t epoch=s_profile_epoch;
     editor_keyboard_discard();
+    if(editor!=s_editor_popup || s_profile_epoch!=epoch+1 || s_editor_keyboard_popup ||
+        (field!=s_editor_name && field!=s_editor_host && field!=s_editor_port &&
+         field!=s_editor_auth_key && field!=s_editor_camera_stream && field!=s_editor_camera_name))return;
     s_editor_keyboard_target = field;
     s_editor_keyboard_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
     if (!s_editor_keyboard_popup) { s_editor_keyboard_target = NULL; return; }
@@ -821,7 +960,7 @@ static void editor_field_focused_cb(lv_event_t *event)
     lv_obj_add_event_cb(s_editor_keyboard, editor_keyboard_popup_done_cb, LV_EVENT_READY, NULL);
     lv_obj_add_event_cb(s_editor_keyboard, editor_keyboard_cancel_cb, LV_EVENT_CANCEL, NULL);
     lv_obj_t *footer = profiles_footer(s_editor_keyboard_popup);
-    profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_keyboard_cancel_cb);
+    s_key_cancel_action=profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_keyboard_cancel_cb);
     s_editor_key_done=profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " DONE", editor_keyboard_popup_done_cb);
     ui_popup_pin_keyboard(s_editor_keyboard_popup,s_editor_keyboard);
     lv_obj_move_foreground(s_editor_keyboard_popup);
@@ -897,7 +1036,7 @@ static void editor_auth_close(void)
 {
     ++s_profile_epoch;
     lv_obj_t *popup=s_editor_auth_popup;
-    s_editor_auth_popup=s_editor_auth_key=s_editor_auth_keyboard=s_editor_auth_use=NULL;
+    s_editor_auth_popup=s_editor_auth_key=s_editor_auth_keyboard=s_editor_auth_use=s_auth_cancel_action=NULL;
     editor_keyboard_discard();
     if(popup)lv_obj_delete(popup);
 }
@@ -905,7 +1044,7 @@ static void editor_auth_close(void)
 
 static void editor_auth_cancel_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!s_editor_auth_popup || !profiles_action_current(event,s_auth_cancel_action,false))return;
     editor_auth_close();
 }
 
@@ -932,8 +1071,7 @@ static void editor_auth_save_cb(lv_event_t *event)
 
 static void editor_auth_open_cb(lv_event_t *event)
 {
-    (void)event;
-    if(!s_editor_popup || s_profile_dispatching)return;
+    if(!profiles_action_current(event,s_editor_auth_action,false))return;
     if (s_editor_auth_popup) { lv_obj_move_foreground(s_editor_auth_popup); return; }
     s_editor_auth_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(380), UI_POPUP_STANDARD);
     if (!s_editor_auth_popup) return;
@@ -946,7 +1084,7 @@ static void editor_auth_open_cb(lv_event_t *event)
     lv_textarea_set_placeholder_text(s_editor_auth_key, "Leave blank for trusted clients");
     lv_obj_add_event_cb(s_editor_auth_key, editor_field_focused_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *footer = profiles_footer(s_editor_auth_popup);
-    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_auth_cancel_cb);
+    s_auth_cancel_action=profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_auth_cancel_cb);
     s_editor_auth_use=profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " USE KEY", editor_auth_save_cb);
     lv_obj_move_foreground(s_editor_auth_popup);
 }
@@ -1468,8 +1606,7 @@ static void editor_camera_field_focused_cb(lv_event_t *event)
 
 static void editor_camera_open_cb(lv_event_t *event)
 {
-    (void)event;
-    if(s_profile_dispatching || !s_editor_popup)return;
+    if(!profiles_action_current(event,s_editor_camera_action,false))return;
     if (s_editor_camera_popup) { lv_obj_move_foreground(s_editor_camera_popup); return; }
     s_editor_camera_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
     if (!s_editor_camera_popup) return;
@@ -1559,41 +1696,46 @@ finished:
 }
 
 
-void ui_printer_profiles_set_discovered_endpoint(
-    const char *host,
-    int port,
-    const char *identity)
+static bool profile_apply_discovered_endpoint(const char *host,int port,const char *identity)
 {
-    if (s_profile_dispatching || !s_editor_popup ||
-        !s_editor_host ||
-        !s_editor_port ||
-        !host ||
-        !host[0] ||
-        port <= 0 ||
-        port >= 65536) {
-        return;
+    if(s_profile_dispatching || !s_editor_popup || !s_editor_host || !s_editor_port ||
+        !host || !host[0] || port<1 || port>65535)return false;
+    memset(&s_profile_discovery_request,0,sizeof(s_profile_discovery_request));
+    bool applied=false;
+    char captured_host[MOONRAKER_CONFIG_HOST_LENGTH],captured_identity[MOONRAKER_CONFIG_NAME_LENGTH],port_text[6];
+    strlcpy(captured_host,host,sizeof(captured_host));
+    strlcpy(captured_identity,identity?identity:"",sizeof(captured_identity));
+    snprintf(port_text,sizeof(port_text),"%d",port);
+    lv_obj_t *popup=s_editor_popup;uint32_t epoch=s_profile_epoch,generation=moonraker_config_generation();
+    int profile=s_editor_profile,active=moonraker_config_active_profile_index();
+    s_profile_dispatching=true;editor_test_retire();camera_jobs_retire();
+    lv_textarea_set_text(s_editor_host,captured_host);
+    if(popup!=s_editor_popup || epoch!=s_profile_epoch || profile!=s_editor_profile ||
+        generation!=moonraker_config_generation() || active!=moonraker_config_active_profile_index())goto finished;
+    lv_textarea_set_text(s_editor_port,port_text);
+    if(popup!=s_editor_popup || epoch!=s_profile_epoch || profile!=s_editor_profile ||
+        generation!=moonraker_config_generation() || active!=moonraker_config_active_profile_index())goto finished;
+    editor_apply_identity_suggestion(captured_identity);
+    if(popup==s_editor_popup && epoch==s_profile_epoch && profile==s_editor_profile &&
+        generation==moonraker_config_generation() && active==moonraker_config_active_profile_index())
+    {
+        editor_set_status("Verified Moonraker endpoint selected. Review the name and press SAVE.");
+        applied=popup==s_editor_popup && epoch==s_profile_epoch;
     }
-
-    char port_text[16];
-
-    snprintf(
-        port_text,
-        sizeof(port_text),
-        "%d",
-        port);
-
-    lv_textarea_set_text(
-        s_editor_host,
-        host);
-
-    lv_textarea_set_text(
-        s_editor_port,
-        port_text);
-
-    editor_apply_identity_suggestion(identity);
-
-    editor_set_status(
-        "Verified Moonraker endpoint selected. Review the name and press SAVE.");
+finished:
+    s_profile_dispatching=false;return applied;
+}
+void ui_printer_profiles_set_discovered_endpoint(const char *host,int port,const char *identity)
+{
+    (void)profile_apply_discovered_endpoint(host,port,identity);
+}
+bool ui_printer_profiles_apply_discovered_endpoint(uint32_t request,const char *host,int port,const char *identity)
+{
+    if(!request || request!=s_profile_discovery_request.request || s_profile_dispatching)return false;
+    if(!profile_discovery_request_current()){
+        memset(&s_profile_discovery_request,0,sizeof(s_profile_discovery_request));return false;
+    }
+    return profile_apply_discovered_endpoint(host,port,identity);
 }
 
 
@@ -1601,6 +1743,7 @@ static void manager_edit_cb(
     lv_event_t *event)
 {
     (void)event;
+    if(!s_manager_popup || s_selected_profile<0 || s_selected_profile>=MOONRAKER_CONFIG_MAX_PROFILES)return;
 
     if (s_editor_popup) {
         lv_obj_move_foreground(
@@ -1608,9 +1751,22 @@ static void manager_edit_cb(
         return;
     }
 
-    const moonraker_profile_t *profile =
-        moonraker_config_profile(
-            s_selected_profile);
+    lv_obj_t *manager=s_manager_popup;uint32_t epoch=s_profile_epoch;int target=s_selected_profile;
+    const moonraker_profile_t *profile=moonraker_config_profile(target);
+    if(manager!=s_manager_popup || epoch!=s_profile_epoch || target!=s_selected_profile || s_editor_popup)return;
+    moonraker_profile_t snapshot={0};
+    if(profile){snapshot=*profile;profile=&snapshot;}
+    char camera_names[CAMERA_CATALOG_MAX_CAMERAS][CAMERA_CATALOG_NAME_LENGTH]={0};
+    for(size_t index=0;index<CAMERA_CATALOG_MAX_CAMERAS;++index){
+        camera_catalog_entry_t entry={0};
+        (void)camera_catalog_get(target,index,&entry);
+        if(manager!=s_manager_popup || epoch!=s_profile_epoch || target!=s_selected_profile || s_editor_popup){
+            profiles_clear_secret(&snapshot,sizeof(snapshot));return;
+        }
+        if(entry.name[0])strlcpy(camera_names[index],entry.name,sizeof(camera_names[index]));
+        else snprintf(camera_names[index],sizeof(camera_names[index]),"Camera %u",(unsigned)(index+1));
+    }
+    memcpy(s_editor_camera_names,camera_names,sizeof(s_editor_camera_names));
 
     char default_name[
         MOONRAKER_CONFIG_NAME_LENGTH];
@@ -1660,17 +1816,18 @@ static void manager_edit_cb(
     s_editor_secure = profile && profile->secure_transport;
 
     s_editor_popup = ui_popup_create(lv_screen_active(), profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
-    if (!s_editor_popup) { s_editor_profile = -1; return; }
+    if (!s_editor_popup) { s_editor_profile = -1; profiles_clear_secret(&snapshot,sizeof(snapshot)); return; }
     ++s_profile_epoch;
     lv_obj_add_event_cb(s_editor_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = profiles_body(s_editor_popup, profile && profile->configured ? "EDIT PRINTER" : "ADD PRINTER");
     s_editor_name = profiles_field(body, "PRINTER NAME", name, MOONRAKER_CONFIG_NAME_LENGTH - 1, NULL);
     s_editor_host = profiles_field(body, "MOONRAKER HOST / IP", host, MOONRAKER_CONFIG_HOST_LENGTH - 1, NULL);
     s_editor_port = profiles_field(body, "MOONRAKER PORT", port_text, 5, "0123456789");
-    profiles_action(body, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " DISCOVER", editor_discover_cb);
+    profiles_clear_secret(&snapshot,sizeof(snapshot));
+    s_editor_discover_action=profiles_action(body, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_REFRESH " DISCOVER", editor_discover_cb);
     profiles_label(body, "SECURITY & ACCESS", true);
-    profiles_action(body, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS" : LV_SYMBOL_SETTINGS " STANDARD HTTP", editor_security_open_cb);
-    profiles_action(body, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SETTINGS " AUTHENTICATION", editor_auth_open_cb);
+    s_security_opener=profiles_action(body, UI_POPUP_ACTION_SECONDARY, s_editor_secure ? LV_SYMBOL_SETTINGS " SECURE HTTPS/WSS" : LV_SYMBOL_SETTINGS " STANDARD HTTP", editor_security_open_cb);
+    s_editor_auth_action=profiles_action(body, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SETTINGS " AUTHENTICATION", editor_auth_open_cb);
     s_editor_status = profiles_label(body, "Configure the printer connection, then test and save.", false);
     if (s_editor_name) {
         lv_obj_add_event_cb(
@@ -1697,13 +1854,20 @@ static void manager_edit_cb(
     }
 
     lv_obj_t *footer = profiles_footer(s_editor_popup);
-    profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_cancel_cb);
-    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_IMAGE " CAMERA", editor_camera_open_cb);
+    s_editor_cancel_action=profiles_action(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL", editor_cancel_cb);
+    s_editor_camera_action=profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_IMAGE " CAMERA", editor_camera_open_cb);
     s_editor_test_action=profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_PLAY " TEST", editor_test_cb);
     s_editor_save_action=profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_SAVE " SAVE", editor_save_cb);
 
     lv_obj_move_foreground(
         s_editor_popup);
+}
+
+
+static void manager_edit_action_cb(lv_event_t *event)
+{
+    if(!manager_action_current(event,s_manager_edit_action) || s_delete_popup)return;
+    manager_edit_cb(NULL);
 }
 
 
@@ -1749,8 +1913,8 @@ void ui_printer_profiles_show(
     s_manager_status = profiles_label(body, "Select a printer profile.", false);
     s_manager_remove_action=profiles_action(body, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE SELECTED", manager_delete_cb);
     lv_obj_t *footer = profiles_footer(s_manager_popup);
-    profiles_action(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE", manager_close_cb);
-    profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_EDIT " EDIT / ADD", manager_edit_cb);
+    s_manager_close_action=profiles_action(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE", manager_close_cb);
+    s_manager_edit_action=profiles_action(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_EDIT " EDIT / ADD", manager_edit_action_cb);
     s_manager_select_action=profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " USE PRINTER", manager_select_cb);
 
     manager_rebuild_rows();

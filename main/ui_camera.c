@@ -39,6 +39,9 @@ static lv_obj_t *s_view_feedback, *s_picker_feedback;
 static uint32_t s_view_owner, s_picker_owner, s_camera_dialog_epoch;
 static size_t s_view_camera;
 static bool s_camera_dialog_dispatching;
+static lv_obj_t *s_view_actions[7], *s_picker_actions[CAMERA_CATALOG_MAX_CAMERAS];
+static lv_obj_t *s_view_close, *s_picker_close;
+static uint32_t s_camera_ui_epoch;
 static char s_view_url[192], s_picker_urls[CAMERA_CATALOG_MAX_CAMERAS][192];
 
 static void camera_dialog_deleted(lv_event_t *event)
@@ -46,12 +49,14 @@ static void camera_dialog_deleted(lv_event_t *event)
     lv_obj_t *target = lv_event_get_target_obj(event);
     if (target == s_view_popup) {
         ++s_camera_dialog_epoch;
-        s_view_popup = s_view_feedback = NULL;
+        s_view_popup = s_view_feedback = s_view_close = NULL;
+        memset(s_view_actions, 0, sizeof(s_view_actions));
         s_view_owner = 0;
         s_view_url[0] = 0;
     } else if (target == s_camera_picker_popup) {
         ++s_camera_dialog_epoch;
-        s_camera_picker_popup = s_picker_feedback = NULL;
+        s_camera_picker_popup = s_picker_feedback = s_picker_close = NULL;
+        memset(s_picker_actions, 0, sizeof(s_picker_actions));
         s_picker_owner = 0;
         memset(s_picker_urls, 0, sizeof(s_picker_urls));
     }
@@ -62,6 +67,9 @@ static void camera_close_popups(void)
     ++s_camera_dialog_epoch;
     lv_obj_t *view = s_view_popup, *picker = s_camera_picker_popup;
     s_view_popup = s_camera_picker_popup = s_view_feedback = s_picker_feedback = NULL;
+    s_view_close = s_picker_close = NULL;
+    memset(s_view_actions, 0, sizeof(s_view_actions));
+    memset(s_picker_actions, 0, sizeof(s_picker_actions));
     s_view_owner = s_picker_owner = 0;
     s_view_url[0] = 0;
     memset(s_picker_urls, 0, sizeof(s_picker_urls));
@@ -72,6 +80,8 @@ static size_t s_camera_index = 0;
 static bool s_fullscreen = false;
 static bool s_setup_active = false;
 static bool s_camera_retiring;
+static bool s_camera_polling;
+static unsigned s_camera_show_depth;
 static int s_view_width = UI_PAGE_ROOT_WIDTH;
 static int s_view_height = UI_PAGE_ROOT_HEIGHT;
 static lv_timer_t *s_refresh_timer = NULL;
@@ -98,21 +108,69 @@ static void camera_set_status(const char *text)
 
 static void camera_release_frame(void)
 {
-    /* Retire LVGL's source/cache while the descriptor and pixels are valid. */
-    if (s_image && lv_image_get_src(s_image) == &s_frame_dsc)
-        lv_image_set_src(s_image, NULL);
-    if (s_frame) lv_image_cache_drop(&s_frame_dsc);
-    if (s_frame) {
-        heap_caps_free(s_frame);
-        s_frame = NULL;
-    }
-    memset(&s_frame_dsc, 0, sizeof(s_frame_dsc));
+    /* Retire ownership before detaching; that update can replace the page. */
+    uint8_t *frame=s_frame;
+    lv_obj_t *image=s_image;
+    bool attached=image && lv_image_get_src(image)==&s_frame_dsc;
+    s_frame=NULL;
+    if(frame)lv_image_cache_drop(&s_frame_dsc);
+    memset(&s_frame_dsc,0,sizeof(s_frame_dsc));
+    if(attached)lv_image_set_src(image,NULL);
+    heap_caps_free(frame);
 }
 
 static bool camera_page_active(void)
 {
     return s_root && s_card && s_image && !s_setup_active && !s_camera_retiring &&
         !lv_obj_has_flag(s_root, LV_OBJ_FLAG_HIDDEN);
+}
+
+typedef struct {lv_obj_t *root;uint32_t epoch,generation;int profile;size_t camera;} camera_ui_context_t;
+static camera_ui_context_t camera_ui_context(void)
+{
+    return (camera_ui_context_t){s_root,s_camera_ui_epoch,moonraker_config_generation(),
+        moonraker_config_active_profile_index(),s_camera_index};
+}
+/* Lifecycle operations also own a hidden or setup-suspended page. */
+static bool camera_ui_same_page(const camera_ui_context_t *context)
+{
+    return context->root && !s_camera_retiring && context->root==s_root &&
+        context->epoch==s_camera_ui_epoch && context->generation==moonraker_config_generation() &&
+        context->profile==moonraker_config_active_profile_index();
+}
+static bool camera_ui_owned(const camera_ui_context_t *context)
+{
+    return camera_ui_same_page(context) && context->camera==s_camera_index;
+}
+static bool camera_ui_current(const camera_ui_context_t *context)
+{
+    return camera_page_active() && camera_ui_owned(context);
+}
+static bool camera_review_current(const camera_ui_context_t *context,lv_obj_t *popup,uint32_t epoch,bool view)
+{
+    return camera_ui_current(context) && epoch==s_camera_dialog_epoch &&
+        popup==(view?s_view_popup:s_camera_picker_popup);
+}
+static bool camera_owned_action(lv_event_t *event,lv_obj_t *button)
+{
+    return camera_page_active() && !s_camera_dialog_dispatching && button &&
+        !lv_obj_has_state(button,LV_STATE_DISABLED) &&
+        (!event || (lv_event_get_code(event)==LV_EVENT_CLICKED && lv_event_get_target_obj(event)==button &&
+            lv_event_get_current_target_obj(event)==button));
+}
+static void camera_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);bool retired=false;
+    lv_obj_t **fields[]={&s_status,&s_fullscreen_button,&s_configure_button,&s_camera_selector,
+        &s_view_button,&s_retry_button,&s_view_feedback,&s_picker_feedback,&s_view_close,&s_picker_close};
+    for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);++i)if(*fields[i]==target){*fields[i]=NULL;retired=true;}
+    for(unsigned i=0;i<7;++i)if(s_view_actions[i]==target){s_view_actions[i]=NULL;retired=true;}
+    for(unsigned i=0;i<CAMERA_CATALOG_MAX_CAMERAS;++i)if(s_picker_actions[i]==target){s_picker_actions[i]=NULL;retired=true;}
+    if(retired){++s_camera_ui_epoch;++s_camera_dialog_epoch;}
+}
+static void camera_watch(lv_obj_t *object)
+{
+    if(object)lv_obj_add_event_cb(object,camera_field_deleted,LV_EVENT_DELETE,NULL);
 }
 
 static void camera_reset_timing(void)
@@ -126,6 +184,7 @@ static void camera_retire_page(bool root_is_deleting)
 {
     if (s_camera_retiring) return;
     s_camera_retiring = true;
+    ++s_camera_ui_epoch;
     lv_obj_t *root = s_root;
     lv_obj_t *detached = s_card && lv_obj_get_parent(s_card) != root ? s_card : NULL;
     lv_timer_t *timer = s_refresh_timer;
@@ -154,6 +213,7 @@ static void camera_surface_deleted(lv_event_t *event)
 {
     lv_obj_t *target = lv_event_get_target_obj(event);
     if (target != s_card && target != s_image) return;
+    ++s_camera_ui_epoch;
     camera_close_popups();
     lv_timer_t *timer = s_refresh_timer;
     s_refresh_timer = NULL;
@@ -173,7 +233,9 @@ static void camera_surface_deleted(lv_event_t *event)
 
 static void camera_mark_unavailable(void)
 {
+    camera_ui_context_t context=camera_ui_context();
     camera_release_frame();
+    if(!camera_ui_current(&context))return;
     s_camera_last_frame_tick = 0;
     camera_set_status("CAMERA UNAVAILABLE | reconnecting");
 }
@@ -215,9 +277,12 @@ static void camera_apply_pixel_mirror(const camera_catalog_entry_t *entry)
 static void camera_apply_view_transform(void)
 {
     if (!s_image || !s_frame_dsc.header.w || !s_frame_dsc.header.h) return;
+    camera_ui_context_t context=camera_ui_context();
+    lv_obj_t *image=s_image;uint8_t *frame=s_frame;
     camera_catalog_entry_t entry = {0};
     (void)camera_catalog_get(moonraker_config_active_profile_index(),
                              s_camera_index, &entry);
+    if(!camera_ui_current(&context) || image!=s_image || frame!=s_frame)return;
     int image_width = (int)s_frame_dsc.header.w;
     int image_height = (int)s_frame_dsc.header.h;
     if (entry.rotation == 90U || entry.rotation == 270U) {
@@ -229,11 +294,14 @@ static void camera_apply_view_transform(void)
     if (scale < 1) scale = 1;
     if (lv_image_get_scale_x(s_image) != scale)
         lv_image_set_scale_x(s_image, scale);
+    if(!camera_ui_current(&context) || image!=s_image || frame!=s_frame)return;
     if (lv_image_get_scale_y(s_image) != scale)
         lv_image_set_scale_y(s_image, scale);
+    if(!camera_ui_current(&context) || image!=s_image || frame!=s_frame)return;
     int32_t rotation = (int32_t)(entry.rotation * 10U);
     if (lv_image_get_rotation(s_image) != rotation)
         lv_image_set_rotation(s_image, rotation);
+    if(!camera_ui_current(&context) || image!=s_image || frame!=s_frame)return;
     if (lv_obj_get_style_align(s_image, 0) != LV_ALIGN_CENTER ||
         lv_obj_get_style_x(s_image, 0) != 0 || lv_obj_get_style_y(s_image, 0) != 0)
         lv_obj_center(s_image);
@@ -241,10 +309,11 @@ static void camera_apply_view_transform(void)
 
 static void camera_view_close_cb(lv_event_t *event)
 {
-    (void)event;
+    if (!s_view_popup || (event && !camera_owned_action(event,s_view_close))) return;
     ++s_camera_dialog_epoch;
     lv_obj_t *popup = s_view_popup;
-    s_view_popup = s_view_feedback = NULL;
+    s_view_popup = s_view_feedback = s_view_close = NULL;
+    memset(s_view_actions, 0, sizeof(s_view_actions));
     s_view_owner = 0;
     s_view_url[0] = 0;
     if (popup) lv_obj_delete(popup);
@@ -252,44 +321,41 @@ static void camera_view_close_cb(lv_event_t *event)
 
 static void camera_view_set_cb(lv_event_t *event)
 {
-    if (!event || !s_root || !s_view_popup || s_camera_dialog_dispatching) return;
-    if (s_view_owner != moonraker_config_generation() || s_view_camera != s_camera_index) {
-        ui_value_set_text(s_view_feedback, "Printer or camera changed. Close and reopen View.");
-        return;
+    if (!event || !s_view_popup) return;
+    unsigned action=(unsigned)(uintptr_t)lv_event_get_user_data(event);
+    if(action>6 || !camera_owned_action(event,s_view_actions[action]))return;
+    if(s_view_owner!=moonraker_config_generation() || s_view_camera!=s_camera_index){
+        ui_value_set_text(s_view_feedback,"Printer or camera changed. Close and reopen View.");return;
     }
-    unsigned action = (unsigned)(uintptr_t)lv_event_get_user_data(event);
-    if (action > 6) return;
-    int profile = moonraker_config_active_profile_index();
-    camera_catalog_entry_t entry = {0};
-    if (!camera_catalog_get(profile, s_camera_index, &entry) || !entry.configured || strcmp(entry.stream_url, s_view_url)) {
-        ui_value_set_text(s_view_feedback, "Camera configuration changed. Close and reopen View.");
-        return;
+    ++s_camera_ui_epoch;
+    camera_ui_context_t context=camera_ui_context();
+    uint32_t epoch=s_camera_dialog_epoch;lv_obj_t *popup=s_view_popup;
+    char url[sizeof(s_view_url)];memcpy(url,s_view_url,sizeof(url));
+    s_camera_dialog_dispatching=true;
+    camera_catalog_entry_t entry={0};
+    bool configured=camera_catalog_get(context.profile,context.camera,&entry);
+    if(!camera_review_current(&context,popup,epoch,true))goto finished;
+    if(!configured || !entry.configured || strcmp(entry.stream_url,url)){
+        ui_value_set_text(s_view_feedback,"Camera configuration changed. Close and reopen View.");goto finished;
     }
-    unsigned rotation = entry.rotation;
-    bool mirror_h = entry.mirror_horizontal, mirror_v = entry.mirror_vertical;
-    if (action <= 3U) rotation = action * 90U;
-    else if (action == 4U) mirror_h = !mirror_h;
-    else if (action == 5U) mirror_v = !mirror_v;
-    else { rotation = 0; mirror_h = false; mirror_v = false; }
-    uint32_t epoch = s_camera_dialog_epoch, owner = s_view_owner;
-    lv_obj_t *popup = s_view_popup;
-    s_camera_dialog_dispatching = true;
-    bool saved = camera_catalog_set_view(profile, s_camera_index, rotation, mirror_h, mirror_v);
-    s_camera_dialog_dispatching = false;
-    if (epoch != s_camera_dialog_epoch || popup != s_view_popup || owner != moonraker_config_generation()) return;
-    if (!saved) {
-        ui_value_set_text(s_view_feedback, "Could not save camera view. Retry or Close.");
-        return;
-    }
-    /* Fetch a fresh frame because the pixel flip is applied once per frame. */
+    unsigned rotation=entry.rotation;
+    bool mirror_h=entry.mirror_horizontal,mirror_v=entry.mirror_vertical;
+    if(action<=3U)rotation=action*90U;
+    else if(action==4U)mirror_h=!mirror_h;
+    else if(action==5U)mirror_v=!mirror_v;
+    else {rotation=0;mirror_h=false;mirror_v=false;}
+    bool saved=camera_catalog_set_view(context.profile,context.camera,rotation,mirror_h,mirror_v);
+    if(!camera_review_current(&context,popup,epoch,true))goto finished;
+    if(!saved){ui_value_set_text(s_view_feedback,"Could not save camera view. Retry or Close.");goto finished;}
     camera_stream_request_stop();
+    if(!camera_review_current(&context,popup,epoch,true))goto finished;
     camera_release_frame();
-    s_camera_last_frame_tick = 0;
-    s_camera_stream_started_tick = 0;
-    s_camera_window_tick = 0;
-    s_camera_frame_count = 0;
+    if(!camera_review_current(&context,popup,epoch,true))goto finished;
+    camera_reset_timing();
     camera_set_status("Updating camera view...");
-    camera_view_close_cb(NULL);
+    if(camera_review_current(&context,popup,epoch,true))camera_view_close_cb(NULL);
+finished:
+    s_camera_dialog_dispatching=false;
 }
 
 static lv_obj_t *camera_view_group(lv_obj_t *body, bool rotations)
@@ -308,6 +374,7 @@ static lv_obj_t *camera_view_group(lv_obj_t *body, bool rotations)
 static void camera_view_option(lv_obj_t *group, const char *text, unsigned action, bool active)
 {
     lv_obj_t *button = ui_button_create(group, active ? UI_BUTTON_PRIMARY : UI_BUTTON_SECONDARY, text);
+    s_view_actions[action] = button;camera_watch(button);
     lv_obj_set_height(button, 48);
     unsigned index = action < 4 ? action : action - 4;
     lv_obj_set_grid_cell(button, LV_GRID_ALIGN_STRETCH, index%2, 1, LV_GRID_ALIGN_STRETCH, index/2, 1);
@@ -318,11 +385,14 @@ static void camera_view_option(lv_obj_t *group, const char *text, unsigned actio
 
 static void camera_view_open_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!camera_page_active() || s_camera_dialog_dispatching || s_camera_generation != moonraker_config_generation()) return;
+    if (!camera_owned_action(event,s_view_button) || s_camera_generation != moonraker_config_generation()) return;
     if (s_view_popup) { lv_obj_move_foreground(s_view_popup); return; }
+    camera_ui_context_t context=camera_ui_context();
+    uint32_t epoch=s_camera_dialog_epoch;
     camera_catalog_entry_t entry;
-    if (!camera_catalog_get(moonraker_config_active_profile_index(), s_camera_index, &entry) || !entry.configured) {
+    bool configured=camera_catalog_get(context.profile,context.camera,&entry);
+    if(!camera_ui_current(&context) || epoch!=s_camera_dialog_epoch || s_view_popup)return;
+    if (!configured || !entry.configured) {
         camera_set_status("No configured camera to adjust.");
         return;
     }
@@ -343,15 +413,15 @@ static void camera_view_open_cb(lv_event_t *event)
     lv_obj_t *mirrors = camera_view_group(body, false);
     camera_view_option(mirrors, ui_text("HORIZONTAL"), 4, entry.mirror_horizontal);
     camera_view_option(mirrors, ui_text("VERTICAL"), 5, entry.mirror_vertical);
-    s_view_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);
-    ui_form_action(s_view_popup, UI_BUTTON_CLOSE, LV_SYMBOL_CLOSE " CLOSE", camera_view_close_cb, NULL);
-    ui_form_action(s_view_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_REFRESH " RESET", camera_view_set_cb, (void *)6);
+    s_view_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);camera_watch(s_view_feedback);
+    s_view_close=ui_form_action(s_view_popup, UI_BUTTON_CLOSE, LV_SYMBOL_CLOSE " CLOSE", camera_view_close_cb, NULL);camera_watch(s_view_close);
+    s_view_actions[6]=ui_form_action(s_view_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_REFRESH " RESET", camera_view_set_cb, (void *)6);camera_watch(s_view_actions[6]);
     ui_form_finish(s_view_popup);
 }
 
 static void camera_set_viewport(bool fullscreen)
 {
-    if (!s_root || !s_card || !s_image || !s_status || !s_fullscreen_button || !s_configure_button || !s_camera_selector || !s_view_button) return;
+    if (!s_root || !s_card || !s_image) return;
     s_fullscreen = fullscreen;
     if (fullscreen) {
         /* Reparent above the shell for a genuine 1024 x 600 display takeover. */
@@ -365,22 +435,22 @@ static void camera_set_viewport(bool fullscreen)
         s_view_height = 600;
         lv_obj_set_pos(s_image, 0, 0);
         lv_obj_set_size(s_image, s_view_width, s_view_height);
-        lv_obj_add_flag(s_configure_button, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(s_status, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(s_fullscreen_button, 728, 536);
-        lv_obj_set_size(s_fullscreen_button, 280, 48);
-        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_CLOSE " EXIT FULLSCREEN"));
+        if(s_configure_button)lv_obj_add_flag(s_configure_button, LV_OBJ_FLAG_HIDDEN);
+        if(s_camera_selector)lv_obj_add_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
+        if(s_status)lv_obj_add_flag(s_status, LV_OBJ_FLAG_HIDDEN);
+        if(s_fullscreen_button)lv_obj_set_pos(s_fullscreen_button, 728, 536);
+        if(s_fullscreen_button)lv_obj_set_size(s_fullscreen_button, 280, 48);
+        if(s_fullscreen_button && lv_obj_get_child(s_fullscreen_button,0))lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_CLOSE " EXIT FULLSCREEN"));
         lv_obj_move_foreground(s_card);
     } else {
         lv_obj_set_parent(s_card, s_root);
         lv_obj_set_style_pad_all(s_card, 8, 0);
         lv_obj_set_style_radius(s_card, UI_RADIUS_CARD, 0);
         lv_obj_set_style_border_width(s_card, UI_BORDER_THIN, 0);
-        lv_obj_clear_flag(s_configure_button, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(s_status, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_size(s_fullscreen_button, 210, 48);
+        if(s_configure_button)lv_obj_clear_flag(s_configure_button, LV_OBJ_FLAG_HIDDEN);
+        if(s_camera_selector)lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
+        if(s_status)lv_obj_clear_flag(s_status, LV_OBJ_FLAG_HIDDEN);
+        if(s_fullscreen_button)lv_obj_set_size(s_fullscreen_button, 210, 48);
         lv_obj_set_pos(s_card, 0, 0);
         lv_obj_set_size(s_card, ui_theme_is_studio() ? 976 : UI_PAGE_ROOT_WIDTH,
             ui_theme_is_studio() ? 424 : UI_PAGE_ROOT_HEIGHT);
@@ -388,25 +458,30 @@ static void camera_set_viewport(bool fullscreen)
         s_view_height = ui_theme_is_studio() ? 424 : UI_PAGE_ROOT_HEIGHT;
         lv_obj_set_pos(s_image, 0, 0);
         lv_obj_set_size(s_image, s_view_width, s_view_height);
-        lv_obj_set_pos(s_configure_button, 20, ui_theme_is_studio() ? 358 : 464);
-        lv_obj_set_pos(s_view_button, 226, ui_theme_is_studio() ? 358 : 464);
-        lv_obj_set_pos(s_camera_selector, 356, ui_theme_is_studio() ? 358 : 464);
-        lv_obj_set_pos(s_fullscreen_button, 624, ui_theme_is_studio() ? 358 : 464);
-        lv_obj_set_pos(s_status, 20, 106);
-        lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 40);
-        lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
+        if(s_configure_button)lv_obj_set_pos(s_configure_button, 20, ui_theme_is_studio() ? 358 : 464);
+        if(s_view_button)lv_obj_set_pos(s_view_button, 226, ui_theme_is_studio() ? 358 : 464);
+        if(s_camera_selector)lv_obj_set_pos(s_camera_selector, 356, ui_theme_is_studio() ? 358 : 464);
+        if(s_fullscreen_button)lv_obj_set_pos(s_fullscreen_button, 624, ui_theme_is_studio() ? 358 : 464);
+        if(s_status)lv_obj_set_pos(s_status, 20, 106);
+        if(s_status)lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 40);
+        if(s_fullscreen_button && lv_obj_get_child(s_fullscreen_button,0))lv_label_set_text(lv_obj_get_child(s_fullscreen_button, 0), ui_text(LV_SYMBOL_IMAGE " FULLSCREEN"));
         if(ui_theme_is_studio()) {
             lv_obj_set_style_pad_all(s_card,0,0);lv_obj_set_style_radius(s_card,0,0);lv_obj_set_style_border_width(s_card,0,0);
-            lv_obj_set_pos(s_status,16,16);lv_obj_set_width(s_status,944);
-            lv_obj_set_style_bg_color(s_status,UI_BG,0);lv_obj_set_style_bg_opa(s_status,LV_OPA_80,0);lv_obj_set_style_pad_all(s_status,6,0);
-            lv_obj_set_pos(s_configure_button,100,356);lv_obj_set_pos(s_view_button,308,356);
-            lv_obj_set_pos(s_camera_selector,448,356);lv_obj_set_pos(s_fullscreen_button,718,356);
+            if(s_status)lv_obj_set_pos(s_status,16,16);
+            if(s_status)lv_obj_set_width(s_status,944);
+            if(s_status)lv_obj_set_style_bg_color(s_status,UI_BG,0);
+            if(s_status)lv_obj_set_style_bg_opa(s_status,LV_OPA_80,0);
+            if(s_status)lv_obj_set_style_pad_all(s_status,6,0);
+            if(s_configure_button)lv_obj_set_pos(s_configure_button,100,356);
+            if(s_view_button)lv_obj_set_pos(s_view_button,308,356);
+            if(s_camera_selector)lv_obj_set_pos(s_camera_selector,448,356);
+            if(s_fullscreen_button)lv_obj_set_pos(s_fullscreen_button,718,356);
         }
         lv_obj_move_background(s_card);
     }
     if (s_retry_button) {
         if (fullscreen) lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
-        else camera_set_status(lv_label_get_text(s_status));
+        else if(s_status)camera_set_status(lv_label_get_text(s_status));
     }
     camera_apply_view_transform();
 }
@@ -414,7 +489,8 @@ static void camera_set_viewport(bool fullscreen)
 
 static void camera_image_tap_cb(lv_event_t *event)
 {
-    if (event && camera_page_active() && lv_event_get_code(event) == LV_EVENT_CLICKED && s_fullscreen) {
+    if (event && camera_owned_action(event,s_image) && s_fullscreen) {
+        ++s_camera_ui_epoch;
         camera_set_viewport(false);
     }
 }
@@ -422,145 +498,163 @@ static void camera_image_tap_cb(lv_event_t *event)
 
 static void camera_fullscreen_cb(lv_event_t *event)
 {
-    (void)event;
-    if (camera_page_active()) camera_set_viewport(!s_fullscreen);
+    if (camera_owned_action(event,s_fullscreen_button)) {++s_camera_ui_epoch;camera_set_viewport(!s_fullscreen);}
 }
 
 
 static void camera_configure_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!camera_page_active()) return;
+    if (!camera_owned_action(event,s_configure_button)) return;
+    ++s_camera_ui_epoch;
+    s_camera_dialog_dispatching = true;
     ui_printer_profiles_open_camera_setup(
         moonraker_config_active_profile_index(), NULL, NULL);
+    s_camera_dialog_dispatching = false;
 }
 
 
 static void camera_poll_cb(lv_timer_t *timer)
 {
-    if (!camera_page_active() || (timer && timer != s_refresh_timer)) return;
-    uint32_t now = lv_tick_get();
-    if (s_camera_generation != moonraker_config_generation()) {
-        s_camera_generation = moonraker_config_generation();
+    if(s_camera_show_depth || s_camera_polling || !camera_page_active() || (timer && timer!=s_refresh_timer))return;
+    s_camera_polling=true;
+    camera_ui_context_t context=camera_ui_context();
+    uint32_t now=lv_tick_get();
+    uint8_t *pixels=NULL;
+    if(s_camera_generation!=context.generation){
+        s_camera_generation=context.generation;
         camera_close_popups();
+        if(!camera_ui_current(&context))goto finished;
         camera_stream_request_stop();
+        if(!camera_ui_current(&context))goto finished;
         camera_release_frame();
-        s_camera_last_frame_tick = s_camera_stream_started_tick = 0;
-        s_camera_window_tick = 0; s_camera_frame_count = 0;
-        s_camera_index = camera_catalog_default(moonraker_config_active_profile_index());
+        if(!camera_ui_current(&context))goto finished;
+        camera_reset_timing();
+        size_t index=camera_catalog_default(context.profile);
+        if(!camera_ui_current(&context))goto finished;
+        s_camera_index=index;context.camera=index;
         camera_update_selector();
+        if(!camera_ui_current(&context))goto finished;
         camera_set_status("CONNECTING | active printer changed");
+        if(!camera_ui_current(&context))goto finished;
     }
-
-    uint8_t *pixels = NULL;
-    size_t pixel_size = 0;
-    int width = 0;
-    int height = 0;
-    bool ok = false;
-    if (camera_stream_take_result(
-            &pixels, &pixel_size, &width, &height, &ok)) {
-        if (!ok || !pixels || width <= 0 || height <= 0 ||
-            width > 65535 || height > 65535 ||
-            (size_t)width > SIZE_MAX / sizeof(uint16_t) / (size_t)height ||
-            pixel_size < (size_t)width * (size_t)height * sizeof(uint16_t)) {
-            if (pixels) heap_caps_free(pixels);
+    size_t pixel_size=0;int width=0,height=0;bool ok=false;
+    bool taken=camera_stream_take_result(&pixels,&pixel_size,&width,&height,&ok);
+    if(!camera_ui_current(&context))goto finished;
+    if(taken){
+        if(!ok || !pixels || width<=0 || height<=0 || width>65535 || height>65535 ||
+            (size_t)width>SIZE_MAX/sizeof(uint16_t)/(size_t)height ||
+            pixel_size<(size_t)width*(size_t)height*sizeof(uint16_t)){
+            heap_caps_free(pixels);pixels=NULL;
             camera_mark_unavailable();
-        } else if (s_image) {
+        }else{
+            camera_catalog_entry_t view={0};
+            (void)camera_catalog_get(context.profile,context.camera,&view);
+            if(!camera_ui_current(&context))goto finished;
             camera_release_frame();
-            s_frame = pixels;
-            memset(&s_frame_dsc, 0, sizeof(s_frame_dsc));
-#if defined(LV_IMAGE_HEADER_MAGIC)
-            s_frame_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-#endif
-            s_frame_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-            s_frame_dsc.header.w = width;
-            s_frame_dsc.header.h = height;
-            s_frame_dsc.header.stride = width * sizeof(uint16_t);
-            s_frame_dsc.data = s_frame;
-            s_frame_dsc.data_size = pixel_size;
-            camera_catalog_entry_t view = {0};
-            (void)camera_catalog_get(moonraker_config_active_profile_index(),
-                                     s_camera_index, &view);
+            if(!camera_ui_current(&context))goto finished;
+            s_frame=pixels;pixels=NULL;
+            memset(&s_frame_dsc,0,sizeof(s_frame_dsc));
+            s_frame_dsc.header.magic=LV_IMAGE_HEADER_MAGIC;
+            s_frame_dsc.header.cf=LV_COLOR_FORMAT_RGB565;
+            s_frame_dsc.header.w=width;s_frame_dsc.header.h=height;
+            s_frame_dsc.header.stride=width*sizeof(uint16_t);
+            s_frame_dsc.data=s_frame;s_frame_dsc.data_size=pixel_size;
             camera_apply_pixel_mirror(&view);
-            lv_image_set_src(s_image, &s_frame_dsc);
+            lv_image_set_src(s_image,&s_frame_dsc);
+            if(!camera_ui_current(&context))goto finished;
             camera_apply_view_transform();
-            if (!s_camera_last_frame_tick) camera_set_status("LIVE | receiving camera frames");
-            s_camera_last_frame_tick = now;
-            if (!s_camera_window_tick) s_camera_window_tick = now;
+            if(!camera_ui_current(&context))goto finished;
+            if(!s_camera_last_frame_tick)camera_set_status("LIVE | receiving camera frames");
+            if(!camera_ui_current(&context))goto finished;
+            s_camera_last_frame_tick=now;
+            if(!s_camera_window_tick)s_camera_window_tick=now;
             ++s_camera_frame_count;
-            uint32_t elapsed = now - s_camera_window_tick;
-            if (elapsed >= 1000) {
-                char status[48];
-                unsigned fps = (s_camera_frame_count * 1000U + elapsed / 2U) / elapsed;
-                snprintf(status, sizeof(status), "LIVE  |  %u FPS", fps);
+            uint32_t elapsed=now-s_camera_window_tick;
+            if(elapsed>=1000){
+                char status[48];unsigned fps=(s_camera_frame_count*1000U+elapsed/2U)/elapsed;
+                snprintf(status,sizeof(status),"LIVE  |  %u FPS",fps);
                 camera_set_status(status);
-                s_camera_window_tick = now;
-                s_camera_frame_count = 0;
+                if(!camera_ui_current(&context))goto finished;
+                s_camera_window_tick=now;s_camera_frame_count=0;
             }
-        } else if (pixels) {
-            heap_caps_free(pixels);
         }
+        if(!camera_ui_current(&context))goto finished;
     }
-
-    uint32_t latest_frame_tick = s_camera_last_frame_tick
-        ? s_camera_last_frame_tick : s_camera_stream_started_tick;
-    if (latest_frame_tick && now - latest_frame_tick > 2000) {
+    uint32_t latest=s_camera_last_frame_tick?s_camera_last_frame_tick:s_camera_stream_started_tick;
+    if(latest && now-latest>2000){
         camera_mark_unavailable();
+        if(!camera_ui_current(&context))goto finished;
     }
-    if (camera_stream_busy()) return;
-    int profile_index = moonraker_config_active_profile_index();
-    camera_catalog_entry_t selected = {0};
-    if (!camera_catalog_get(profile_index, s_camera_index, &selected) || !selected.configured) {
-        s_camera_index = camera_catalog_default(profile_index);
-        if (!camera_catalog_get(profile_index, s_camera_index, &selected) || !selected.configured) {
-            /* Never leave the previous printer's last frame visible. */
+    bool busy=camera_stream_busy();
+    if(!camera_ui_current(&context) || busy)goto finished;
+    camera_catalog_entry_t selected={0};
+    bool configured=camera_catalog_get(context.profile,context.camera,&selected);
+    if(!camera_ui_current(&context))goto finished;
+    if(!configured || !selected.configured){
+        size_t index=camera_catalog_default(context.profile);
+        if(!camera_ui_current(&context))goto finished;
+        s_camera_index=index;context.camera=index;
+        configured=camera_catalog_get(context.profile,index,&selected);
+        if(!camera_ui_current(&context))goto finished;
+        if(!configured || !selected.configured){
             camera_release_frame();
-            s_camera_stream_started_tick = 0;
-            camera_set_status("No camera is configured for the active printer.");
-            return;
+            if(!camera_ui_current(&context))goto finished;
+            s_camera_stream_started_tick=0;
+            camera_set_status("No camera is configured for the active printer.");goto finished;
         }
     }
-    if (!camera_stream_start(selected.stream_url)) {
-        camera_set_status("CAMERA UNAVAILABLE | retrying");
-    } else {
-        s_camera_stream_started_tick = now;
+    bool started=camera_stream_start(selected.stream_url);
+    if(!camera_ui_current(&context))goto finished;
+    if(!started)camera_set_status("CAMERA UNAVAILABLE | retrying");
+    else{
+        s_camera_stream_started_tick=now;
         camera_set_status("CONNECTING | waiting for camera stream");
     }
+finished:
+    heap_caps_free(pixels);
+    s_camera_polling=false;
 }
-
 
 
 static void camera_retry_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!camera_page_active()) return;
+    if(!camera_owned_action(event,s_retry_button))return;
+    ++s_camera_ui_epoch;
+    camera_ui_context_t context=camera_ui_context();
+    s_camera_dialog_dispatching=true;
     camera_stream_request_stop();
+    if(!camera_ui_current(&context))goto finished;
     camera_release_frame();
-    s_camera_last_frame_tick = s_camera_stream_started_tick = 0;
-    s_camera_window_tick = 0; s_camera_frame_count = 0;
+    if(!camera_ui_current(&context))goto finished;
+    camera_reset_timing();
     camera_set_status("CONNECTING | retry requested");
-    camera_poll_cb(NULL);
+    if(camera_ui_current(&context))camera_poll_cb(NULL);
+finished:
+    s_camera_dialog_dispatching=false;
 }
 
 static void camera_start(void)
 {
-    if (!s_root || !s_refresh_timer) {
-        return;
-    }
+    if(!camera_page_active() || !s_refresh_timer)return;
+    camera_ui_context_t context=camera_ui_context();
+    lv_timer_t *timer=s_refresh_timer;
     camera_set_status("CONNECTING | waiting for camera stream");
-    camera_poll_cb(NULL);
+    if(camera_ui_current(&context) && timer==s_refresh_timer)camera_poll_cb(NULL);
 }
-
 
 static void camera_update_selector(void)
 {
     if (!s_camera_selector) return;
-    int profile_index = moonraker_config_active_profile_index();
+    camera_ui_context_t context=camera_ui_context();
+    lv_obj_t *selector=s_camera_selector;
+    int profile_index = context.profile;
     camera_catalog_entry_t entry = {0};
     bool configured = camera_catalog_get(profile_index, s_camera_index, &entry) && entry.configured;
+    if(!camera_ui_owned(&context) || selector!=s_camera_selector)return;
     if (!configured) {
-        s_camera_index = 0;
+        s_camera_index = 0;context.camera=0;
         configured = camera_catalog_get(profile_index, s_camera_index, &entry) && entry.configured;
+        if(!camera_ui_owned(&context) || selector!=s_camera_selector)return;
     }
 
     lv_obj_t *selector_label = lv_obj_get_child(s_camera_selector, 0);
@@ -574,49 +668,53 @@ static void camera_update_selector(void)
         lv_label_set_long_mode(selector_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
         ui_value_set_text(selector_label, text);
     }
+    if(!camera_ui_owned(&context) || selector!=s_camera_selector)return;
     lv_obj_clear_flag(s_camera_selector, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_state(s_camera_selector, LV_STATE_DISABLED);
 }
 
 void ui_camera_set_setup_active(bool active)
 {
-    s_setup_active = active;
-    if (active) {
-        if (s_refresh_timer) {
-            lv_timer_delete(s_refresh_timer);
-            s_refresh_timer = NULL;
-        }
+    ++s_camera_ui_epoch;
+    s_setup_active=active;
+    camera_ui_context_t context=camera_ui_context();
+    if(active){
+        lv_timer_t *timer=s_refresh_timer;s_refresh_timer=NULL;
+        if(timer)lv_timer_delete(timer);
         camera_close_popups();
+        if(context.epoch!=s_camera_ui_epoch || s_setup_active!=active)return;
         camera_stream_stop();
+        if(context.epoch!=s_camera_ui_epoch || s_setup_active!=active)return;
+        if(context.root && !camera_ui_owned(&context))return;
         camera_release_frame();
-        camera_reset_timing();
-        return;
+        if(context.epoch!=s_camera_ui_epoch || s_setup_active!=active)return;
+        camera_reset_timing();return;
     }
-
-    if (camera_page_active() && !s_refresh_timer) {
-        s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
+    if(camera_page_active() && !s_refresh_timer){
+        s_refresh_timer=lv_timer_create(camera_poll_cb,100,NULL);
         camera_start();
     }
 }
 
 void ui_camera_refresh_catalog(void)
 {
-    if (!s_root || !s_camera_selector) return;
-    int profile_index = moonraker_config_active_profile_index();
-    camera_catalog_entry_t entry = {0};
-    if (!camera_catalog_get(profile_index, s_camera_index, &entry) ||
-        !entry.configured) {
-        s_camera_index = 0;
-    }
+    if(!s_root || !s_camera_selector)return;
+    camera_ui_context_t context=camera_ui_context();
+    lv_obj_t *selector=s_camera_selector;
+    camera_catalog_entry_t entry={0};
+    bool configured=camera_catalog_get(context.profile,context.camera,&entry);
+    if(!camera_ui_owned(&context) || selector!=s_camera_selector)return;
+    if(!configured || !entry.configured)s_camera_index=0;
     camera_update_selector();
 }
 
 static void camera_picker_close_cb(lv_event_t *event)
 {
-    (void)event;
+    if (!s_camera_picker_popup || (event && !camera_owned_action(event,s_picker_close))) return;
     ++s_camera_dialog_epoch;
     lv_obj_t *popup = s_camera_picker_popup;
-    s_camera_picker_popup = s_picker_feedback = NULL;
+    s_camera_picker_popup = s_picker_feedback = s_picker_close = NULL;
+    memset(s_picker_actions, 0, sizeof(s_picker_actions));
     s_picker_owner = 0;
     memset(s_picker_urls, 0, sizeof(s_picker_urls));
     if (popup) lv_obj_delete(popup);
@@ -624,64 +722,70 @@ static void camera_picker_close_cb(lv_event_t *event)
 
 static void camera_picker_select_cb(lv_event_t *event)
 {
-    if (!event || !s_root || !s_camera_picker_popup || s_camera_dialog_dispatching) return;
-    if (s_picker_owner != moonraker_config_generation()) {
-        ui_value_set_text(s_picker_feedback, "Printer changed. Close and reopen the camera picker.");
-        return;
+    if(!event || !s_camera_picker_popup)return;
+    size_t index=(size_t)(uintptr_t)lv_event_get_user_data(event);
+    if(index>=CAMERA_CATALOG_MAX_CAMERAS || !camera_owned_action(event,s_picker_actions[index]))return;
+    if(s_picker_owner!=moonraker_config_generation()){
+        ui_value_set_text(s_picker_feedback,"Printer changed. Close and reopen the camera picker.");return;
     }
-    size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
-    if (index >= CAMERA_CATALOG_MAX_CAMERAS) return;
-    int profile_index = moonraker_config_active_profile_index();
-    camera_catalog_entry_t entry = {0};
-    if (!camera_catalog_get(profile_index, index, &entry) || !entry.configured || strcmp(entry.stream_url,s_picker_urls[index])) {
-        ui_value_set_text(s_picker_feedback, "Camera configuration changed. Close and reopen the picker.");
-        return;
+    ++s_camera_ui_epoch;
+    camera_ui_context_t context=camera_ui_context();
+    uint32_t epoch=s_camera_dialog_epoch;lv_obj_t *popup=s_camera_picker_popup;
+    char url[sizeof(s_picker_urls[index])];memcpy(url,s_picker_urls[index],sizeof(url));
+    s_camera_dialog_dispatching=true;
+    camera_catalog_entry_t entry={0};
+    bool configured=camera_catalog_get(context.profile,index,&entry);
+    if(!camera_review_current(&context,popup,epoch,false))goto finished;
+    if(!configured || !entry.configured || strcmp(entry.stream_url,url)){
+        ui_value_set_text(s_picker_feedback,"Camera configuration changed. Close and reopen the picker.");goto finished;
     }
-    uint32_t epoch = s_camera_dialog_epoch, owner = s_picker_owner;
-    lv_obj_t *popup = s_camera_picker_popup;
-    s_camera_dialog_dispatching = true;
-    bool saved = camera_catalog_set_default(profile_index, index);
-    s_camera_dialog_dispatching = false;
-    if (epoch != s_camera_dialog_epoch || popup != s_camera_picker_popup || owner != moonraker_config_generation()) return;
-    if (!saved) {
-        ui_value_set_text(s_picker_feedback, "Could not save the default camera. Retry or Close.");
-        return;
-    }
-    s_camera_index = index;
+    bool saved=camera_catalog_set_default(context.profile,index);
+    if(!camera_review_current(&context,popup,epoch,false))goto finished;
+    if(!saved){ui_value_set_text(s_picker_feedback,"Could not save the default camera. Retry or Close.");goto finished;}
+    s_camera_index=index;context.camera=index;
     camera_stream_request_stop();
+    if(!camera_review_current(&context,popup,epoch,false))goto finished;
     camera_release_frame();
-    s_camera_last_frame_tick = 0;
-    s_camera_stream_started_tick = 0;
-    s_camera_window_tick = 0;
-    s_camera_frame_count = 0;
+    if(!camera_review_current(&context,popup,epoch,false))goto finished;
+    camera_reset_timing();
     camera_update_selector();
+    if(!camera_review_current(&context,popup,epoch,false))goto finished;
     camera_set_status("CONNECTING | switching camera");
+    if(!camera_review_current(&context,popup,epoch,false))goto finished;
     camera_picker_close_cb(NULL);
-    camera_poll_cb(NULL);
+    if(camera_ui_current(&context))camera_poll_cb(NULL);
+finished:
+    s_camera_dialog_dispatching=false;
 }
 
 static void camera_picker_open_cb(lv_event_t *event)
 {
-    (void)event;
-    if (!camera_page_active() || s_camera_dialog_dispatching || s_camera_generation != moonraker_config_generation()) return;
+    if (!camera_owned_action(event,s_camera_selector) || s_camera_generation != moonraker_config_generation()) return;
     if (s_camera_picker_popup) { lv_obj_move_foreground(s_camera_picker_popup); return; }
-    int profile = moonraker_config_active_profile_index();
+    camera_ui_context_t context=camera_ui_context();
+    int profile = context.profile;
     s_picker_owner = moonraker_config_generation();
     memset(s_picker_urls, 0, sizeof(s_picker_urls));
     s_camera_picker_popup = ui_form_dialog(ui_text("SELECT CAMERA"), 680, 440, UI_POPUP_STANDARD);
     if (!s_camera_picker_popup) return;
     lv_obj_add_event_cb(s_camera_picker_popup, camera_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = ui_form_body(s_camera_picker_popup);
+    lv_obj_t *popup=s_camera_picker_popup;uint32_t epoch=s_camera_dialog_epoch;
+    s_picker_close=ui_form_action(popup, UI_BUTTON_CLOSE, LV_SYMBOL_CLOSE " CLOSE", camera_picker_close_cb, NULL);camera_watch(s_picker_close);
     size_t default_index = camera_catalog_default(profile);
+    if(!camera_review_current(&context,popup,epoch,false))return;
     unsigned rows = 0;
     for (size_t index = 0; index < CAMERA_CATALOG_MAX_CAMERAS; ++index) {
         camera_catalog_entry_t entry;
-        if (!camera_catalog_get(profile, index, &entry) || !entry.configured) continue;
+        bool configured=camera_catalog_get(profile,index,&entry);
+        if(!camera_review_current(&context,popup,epoch,false))return;
+        if(!configured || !entry.configured)continue;
         memcpy(s_picker_urls[index], entry.stream_url, sizeof(s_picker_urls[index]));
         s_picker_urls[index][sizeof(s_picker_urls[index])-1] = 0;
         char label[64];
         snprintf(label, sizeof(label), "%s%s", entry.name[0] ? entry.name : "Camera", index == default_index ? "  DEFAULT" : "");
         lv_obj_t *button = ui_button_create(body, index == s_camera_index ? UI_BUTTON_PRIMARY : UI_BUTTON_SECONDARY, label);
+        s_picker_actions[index]=button;camera_watch(button);
         lv_obj_set_size(button, LV_PCT(100), 56);
         lv_obj_add_event_cb(button, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
         lv_obj_add_event_cb(button, camera_picker_select_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)index);
@@ -689,8 +793,7 @@ static void camera_picker_open_cb(lv_event_t *event)
         ++rows;
     }
     if (!rows) ui_form_text(body, "No configured cameras. Use Configure to add a camera.", UI_FONT_BODY, UI_TEXT_DIM);
-    s_picker_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);
-    ui_form_action(s_camera_picker_popup, UI_BUTTON_CLOSE, LV_SYMBOL_CLOSE " CLOSE", camera_picker_close_cb, NULL);
+    s_picker_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);camera_watch(s_picker_feedback);
     ui_form_finish(s_camera_picker_popup);
 }
 
@@ -701,29 +804,40 @@ static void camera_select_next_cb(lv_event_t *event)
 
 
 
-void ui_camera_show(void)
+static bool camera_show_ready(void)
 {
-    if (s_camera_retiring) return;
-    if (s_root && (!s_card || !s_image)) camera_retire_page(false);
-    if (s_root) {
-        lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
+    ++s_camera_show_depth;
+    /* Install the page's timer before callbacks, but poll only after its
+     * persisted default has been chosen and the outer Show has unwound. */
+    if(!s_setup_active && !s_refresh_timer)s_refresh_timer=lv_timer_create(camera_poll_cb,100,NULL);
+    camera_ui_context_t context=camera_ui_context();
+    size_t index=camera_catalog_default(context.profile);
+    if(!camera_ui_owned(&context))goto interrupted;
+    s_camera_index=index;context.camera=index;
+    camera_update_selector();
+    if(!camera_ui_same_page(&context))goto interrupted;
+    context.camera=s_camera_index;
+    --s_camera_show_depth;
+    camera_start();
+    return camera_ui_owned(&context);
+interrupted:
+    --s_camera_show_depth;
+    return false;
+}
+
+static bool camera_show_page(void)
+{
+    if(s_camera_retiring)return false;
+    if(s_root && (!s_card || !s_image))camera_retire_page(false);
+    if(s_root){
+        ++s_camera_ui_epoch;
+        lv_obj_clear_flag(s_root,LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(s_root);
-        if (!s_setup_active && !s_refresh_timer) {
-            s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
-        }
-        s_camera_index = camera_catalog_default(
-            moonraker_config_active_profile_index());
-        camera_update_selector();
-        camera_start();
-        return;
+        return camera_show_ready();
     }
-
-    s_camera_generation = moonraker_config_generation();
-    /* Persisted default must be chosen before the first stream starts.
-     * Otherwise a fresh boot would always open slot 1 when it is configured. */
-    s_camera_index = camera_catalog_default(
-        moonraker_config_active_profile_index());
-
+    s_camera_generation=moonraker_config_generation();
+    s_camera_index=0;
+    ++s_camera_ui_epoch;
     s_root = lv_obj_create(lv_screen_active());
     lv_obj_add_event_cb(s_root, camera_page_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_size(s_root, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
@@ -760,38 +874,38 @@ void ui_camera_show(void)
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " CONFIGURE");
     lv_obj_set_size(s_configure_button, 196, 48);
     lv_obj_set_pos(s_configure_button, 20, ui_theme_is_studio() ? 358 : 464);
-    ui_button_expand_touch_target(s_configure_button);
+    ui_button_expand_touch_target(s_configure_button);camera_watch(s_configure_button);
     lv_obj_add_event_cb(s_configure_button, camera_configure_cb, LV_EVENT_CLICKED, NULL);
 
     s_view_button = ui_button_create(
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_SETTINGS " VIEW");
     lv_obj_set_size(s_view_button, 120, 48);
     lv_obj_set_pos(s_view_button, 226, ui_theme_is_studio() ? 358 : 464);
-    ui_button_expand_touch_target(s_view_button);
+    ui_button_expand_touch_target(s_view_button);camera_watch(s_view_button);
     lv_obj_add_event_cb(s_view_button, camera_view_open_cb, LV_EVENT_CLICKED, NULL);
 
     s_camera_selector = ui_button_create(
         s_root, UI_BUTTON_SECONDARY, LV_SYMBOL_IMAGE " CAMERA 1");
     lv_obj_set_size(s_camera_selector, 180, 48);
     lv_obj_set_pos(s_camera_selector, 356, ui_theme_is_studio() ? 358 : 464);
-    ui_button_expand_touch_target(s_camera_selector);
+    ui_button_expand_touch_target(s_camera_selector);camera_watch(s_camera_selector);
     lv_obj_add_event_cb(s_camera_selector, camera_select_next_cb, LV_EVENT_CLICKED, NULL);
-    camera_update_selector();
+    /* Catalog callbacks run only after every page field has been created. */
 
     s_fullscreen_button = ui_button_create(
         s_root, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " FULLSCREEN");
     lv_obj_set_size(s_fullscreen_button, 210, 48);
     lv_obj_set_pos(s_fullscreen_button, 624, ui_theme_is_studio() ? 358 : 464);
-    ui_button_expand_touch_target(s_fullscreen_button);
+    ui_button_expand_touch_target(s_fullscreen_button);camera_watch(s_fullscreen_button);
     lv_obj_add_event_cb(s_fullscreen_button, camera_fullscreen_cb, LV_EVENT_CLICKED, NULL);
 
-    s_retry_button = ui_button_create(s_root, UI_BUTTON_SECONDARY, "RETRY");
+    s_retry_button = ui_button_create(s_root, UI_BUTTON_SECONDARY, "RETRY");camera_watch(s_retry_button);
     lv_obj_set_size(s_retry_button, 180, 44);
     lv_obj_set_pos(s_retry_button, 20, ui_theme_is_studio() ? 74 : 410);
     lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(s_retry_button, camera_retry_cb, LV_EVENT_CLICKED, NULL);
 
-    s_status = lv_label_create(s_root);
+    s_status = lv_label_create(s_root);camera_watch(s_status);
     ui_apply_text_body(s_status);
     ui_apply_label_dim(s_status);
     lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 40);
@@ -799,18 +913,18 @@ void ui_camera_show(void)
     lv_label_set_long_mode(s_status, LV_LABEL_LONG_WRAP);
     lv_label_set_text(s_status, ui_text("Connecting to configured camera..."));
 
-    if (ui_theme_is_studio()) camera_set_viewport(false);
-    if (!s_setup_active) s_refresh_timer = lv_timer_create(camera_poll_cb, 100, NULL);
-    camera_start();
+    if(ui_theme_is_studio())camera_set_viewport(false);
+    return camera_show_ready();
 }
 
+void ui_camera_show(void)
+{
+    (void)camera_show_page();
+}
 
 void ui_camera_show_fullscreen(void)
 {
-    ui_camera_show();
-    if (camera_page_active() && !s_fullscreen) {
-        camera_set_viewport(true);
-    }
+    if(camera_show_page() && camera_page_active() && !s_fullscreen)camera_set_viewport(true);
 }
 
 
@@ -822,21 +936,21 @@ void ui_camera_destroy(void)
 
 void ui_camera_hide(void)
 {
-    if (s_fullscreen) camera_set_viewport(false);
+    ++s_camera_ui_epoch;
+    camera_ui_context_t context=camera_ui_context();
+    if(s_fullscreen)camera_set_viewport(false);
+    if(context.root && !camera_ui_owned(&context))return;
+    if(s_root)lv_obj_add_flag(s_root,LV_OBJ_FLAG_HIDDEN);
+    lv_timer_t *timer=s_refresh_timer;s_refresh_timer=NULL;
+    if(timer)lv_timer_delete(timer);
     camera_close_popups();
-    if (s_root) {
-        lv_obj_add_flag(s_root, LV_OBJ_FLAG_HIDDEN);
-    }
-    if (s_refresh_timer) {
-        lv_timer_delete(s_refresh_timer);
-        s_refresh_timer = NULL;
-    }
+    if(context.epoch!=s_camera_ui_epoch)return;
     camera_stream_request_stop();
+    if(context.epoch!=s_camera_ui_epoch)return;
+    if(context.root && !camera_ui_owned(&context))return;
     camera_release_frame();
-    s_camera_last_frame_tick = 0;
-    s_camera_stream_started_tick = 0;
-    s_camera_window_tick = 0;
-    s_camera_frame_count = 0;
+    if(context.epoch!=s_camera_ui_epoch)return;
+    camera_reset_timing();
     ui_shell_raise_topbar();
     ui_shell_raise_nav();
 }

@@ -100,8 +100,96 @@ static uint16_t raster[1024*600];static int viewport=1024;
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*viewport+x]=*v++;lv_display_flush_ready(d);}
 static void snapshot(int theme,const char*name){const char*folder=getenv("PROFILES_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%d.ppm",folder,name,theme);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 static void inside(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"Outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
-static void fit(lv_obj_t*button){lv_obj_t*l=lv_obj_get_child(button,0);inside(l,button);lv_point_t n;lv_text_get_size(&n,lv_label_get_text(l),lv_obj_get_style_text_font(l,0),lv_obj_get_style_text_letter_space(l,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(n.x<=lv_obj_get_width(l));assert(lv_obj_get_height(l)==lv_obj_get_style_text_font(l,0)->line_height);assert(lv_obj_get_height(button)>=48);}
+static void fit(lv_obj_t*button){lv_obj_t*l=lv_obj_get_child(button,0);inside(l,button);lv_point_t n;lv_text_get_size(&n,lv_label_get_text(l),lv_obj_get_style_text_font(l,0),lv_obj_get_style_text_letter_space(l,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);if(n.x>lv_obj_get_width(l))fprintf(stderr,"fit theme=%d viewport=%d text=%s needed=%d width=%d\n",ui_theme_get_active(),viewport,lv_label_get_text(l),n.x,lv_obj_get_width(l));assert(n.x<=lv_obj_get_width(l));assert(lv_obj_get_height(l)==lv_obj_get_style_text_font(l,0)->line_height);assert(lv_obj_get_height(button)>=48);}
 static void layout(lv_obj_t*popup){lv_obj_update_layout(popup);inside(popup,lv_screen_active());lv_obj_t*body=lv_obj_get_child(popup,1),*footer=lv_obj_get_child(popup,-1);inside(body,popup);inside(footer,popup);assert(lv_obj_get_height(body)>50);for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t*b=lv_obj_get_child(footer,i);inside(b,footer);fit(b);}lv_area_t a,b;lv_obj_get_coords(footer,&a);lv_obj_scroll_to_y(body,2000,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&b);assert(!memcmp(&a,&b,sizeof(a)));lv_obj_t*last=lv_obj_get_child(body,-1);inside(last,body);lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);lv_obj_update_layout(popup);}
+static void manager_polish_checks(void)
+{
+ lv_obj_update_layout(s_manager_popup);
+ lv_obj_t *footer=lv_obj_get_child(s_manager_popup,-1);
+ assert(lv_obj_get_parent(s_manager_remove_action)==footer);
+ assert(lv_obj_get_parent(s_manager_edit_action)==footer);
+ assert(lv_obj_get_parent(s_manager_select_action)==footer);
+ assert(lv_obj_get_parent(s_manager_close_action)==footer);
+ assert(lv_obj_get_child_count(footer)==4);
+ for(int i=0;i<MOONRAKER_CONFIG_MAX_PROFILES;i++){
+  lv_obj_t *row=s_profile_rows[i],*name=lv_obj_get_child(row,0),*endpoint=lv_obj_get_child(row,1),*badge=lv_obj_get_child(row,2);
+  assert(lv_obj_get_style_radius(row,0)==0);
+  assert(lv_obj_has_state(row,LV_STATE_USER_1)==(i==s_selected_profile));
+  assert(!strcmp(lv_label_get_text(badge),profiles[i].configured && i==active ? "Active" : ""));
+  assert(lv_label_get_long_mode(name)==LV_LABEL_LONG_DOT && lv_label_get_long_mode(endpoint)==LV_LABEL_LONG_DOT);
+  assert(lv_obj_get_height(name)==lv_obj_get_style_text_font(name,0)->line_height);
+  assert(lv_obj_get_height(endpoint)==lv_obj_get_style_text_font(endpoint,0)->line_height);
+  assert(lv_obj_get_style_pad_right(name,0)>=lv_obj_get_width(badge));
+ }
+ assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_manager_edit_action,0)),
+  profiles[s_selected_profile].configured?LV_SYMBOL_EDIT " Edit printer":LV_SYMBOL_PLUS " Add printer"));
+}
+static void editor_polish_checks(void)
+{
+ lv_obj_t *body=lv_obj_get_child(s_editor_popup,1);
+ lv_obj_t *host_group=lv_obj_get_parent(s_editor_host),*port_group=lv_obj_get_parent(s_editor_port);
+ assert(host_group!=port_group && lv_obj_get_parent(host_group)==lv_obj_get_parent(port_group));
+ inside(s_editor_host,host_group);inside(s_editor_port,port_group);
+ lv_area_t host,port;lv_obj_get_coords(s_editor_host,&host);lv_obj_get_coords(s_editor_port,&port);
+ assert(host.y1==port.y1 && host.x2<port.x1);
+ lv_point_t digits;lv_text_get_size(&digits,"65535",lv_obj_get_style_text_font(s_editor_port,0),lv_obj_get_style_text_letter_space(s_editor_port,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+ assert(digits.x<=lv_obj_get_content_width(s_editor_port));
+ fit(s_editor_discover_action);fit(s_security_opener);fit(s_editor_auth_action);
+ assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_editor_test_action,0)),LV_SYMBOL_PLAY " Test connection"));
+ if(viewport==1024){
+  assert(lv_obj_get_scroll_bottom(body)<=0);
+  inside(lv_obj_get_parent(s_editor_name),body);inside(lv_obj_get_parent(host_group),body);
+  inside(s_security_opener,body);inside(s_editor_auth_action,body);inside(s_editor_status,body);
+ }
+}
+static void camera_polish_checks(void)
+{
+ lv_obj_update_layout(s_editor_camera_popup);
+ int columns=viewport>=900?4:2;
+ for(unsigned i=0;i<CAMERA_CATALOG_MAX_CAMERAS;i++){
+  lv_obj_t *button=s_editor_camera_slot_buttons[i],*name=lv_obj_get_child(button,0),*marker=lv_obj_get_child(button,1);
+  inside(name,button);inside(marker,button);
+  /* DOT mode intentionally truncates names; enforce the clipping box and a
+   * single line rather than requiring the full visible buffer to measure in. */
+  assert(lv_label_get_long_mode(name)==LV_LABEL_LONG_DOT);
+  assert(lv_obj_get_height(name)==lv_obj_get_style_text_font(name,0)->line_height);
+  lv_area_t a,b;lv_obj_get_coords(name,&a);lv_obj_get_coords(marker,&b);assert(a.y2<b.y1);
+  assert(lv_obj_has_state(button,LV_STATE_CHECKED)==(i==s_editor_camera_slot));
+  assert(lv_obj_get_y(button)==lv_obj_get_y(s_editor_camera_slot_buttons[(i/columns)*columns]));
+  for(unsigned j=0;j<i;j++){
+   lv_obj_get_coords(button,&a);lv_obj_get_coords(s_editor_camera_slot_buttons[j],&b);
+   assert(a.x2<b.x1 || b.x2<a.x1 || a.y2<b.y1 || b.y2<a.y1);
+  }
+  if(!strcmp(lv_label_get_text(marker),"Default"))assert(i==default_camera);
+ }
+ fit(s_camera_find);fit(s_camera_test);fit(s_camera_default);fit(s_camera_remove_action);
+ assert(lv_obj_get_parent(s_editor_camera_popup)==lv_screen_active());
+}
+static void count_scroll_draw(lv_event_t *event)
+{
+ unsigned *count=lv_event_get_user_data(event);(*count)++;
+}
+static void profile_scroll_render_check(lv_obj_t *popup,bool require_cover)
+{
+ lv_obj_t *body=lv_obj_get_child(popup,1),*footer=lv_obj_get_child(popup,-1);
+ lv_obj_update_layout(popup);lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);lv_refr_now(NULL);
+ lv_area_t before,after;lv_obj_get_coords(footer,&before);
+ bool overflow=lv_obj_get_scroll_bottom(body)>0;
+ unsigned parent_draws=0,body_draws=0;
+ lv_obj_add_event_cb(popup,count_scroll_draw,LV_EVENT_DRAW_MAIN_BEGIN,&parent_draws);
+ lv_obj_add_event_cb(body,count_scroll_draw,LV_EVENT_DRAW_MAIN_BEGIN,&body_draws);
+ for(int i=1;i<=6;i++){
+  if(overflow)lv_obj_scroll_to_y(body,i*24,LV_ANIM_OFF);else lv_obj_invalidate(body);lv_refr_now(NULL);
+ }
+ lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));
+ assert((overflow?lv_obj_get_scroll_y(body)>0:lv_obj_get_scroll_y(body)==0) && body_draws>0);
+ if(getenv("PROFILE_SCROLL_DIAGNOSTIC"))printf("SCROLL theme=%d overflow=%d parent_draws=%u body_draws=%u\n",ui_theme_get_active(),overflow,parent_draws,body_draws);
+ fflush(stdout);
+ if(require_cover)assert(parent_draws==0);
+ lv_obj_remove_event_cb_with_user_data(popup,count_scroll_draw,&parent_draws);
+ lv_obj_remove_event_cb_with_user_data(body,count_scroll_draw,&body_draws);
+ lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);lv_obj_update_layout(popup);
+}
 static void reset(void){default_camera=0;import_ok=false;memset(profiles,0,sizeof(profiles));profiles[0]=(moonraker_profile_t){.configured=true,.name="Workshop printer with long name",.host="workshop-printer-long-hostname.local",.port=7125};profiles[1]=(moonraker_profile_t){.configured=true,.name="Printer B",.host="printer-b.local",.port=7126};active=0;storage_ok=true;}
 static void nested_checks(int theme,bool render)
 {
@@ -155,10 +243,12 @@ static void nested_checks(int theme,bool render)
     for(unsigned i=0;i<4;i++){
         lv_obj_t *button=s_editor_camera_slot_buttons[i],*label=lv_obj_get_child(button,0);
         inside(button,lv_obj_get_parent(button));inside(label,button);
-        assert(lv_label_get_long_mode(label)==LV_LABEL_LONG_SCROLL_CIRCULAR);
+        assert(lv_label_get_long_mode(label)==LV_LABEL_LONG_DOT);
     }
+    camera_polish_checks();profile_scroll_render_check(s_editor_camera_popup,true);
     if(render)snapshot(theme,"camera");
-    click(s_editor_camera_slot_buttons[2]);assert(s_editor_camera_slot==2);
+    click(s_editor_camera_slot_buttons[2]);assert(s_editor_camera_slot==2);camera_polish_checks();
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_editor_camera_slot_buttons[default_camera],1)),"Default"));
     assert(strstr(lv_textarea_get_text(s_editor_camera_stream),"camera2.local"));
     click(s_editor_camera_stream);layout(s_editor_keyboard_popup);
     assert(lv_textarea_get_max_length(s_editor_keyboard_value)==MOONRAKER_CONFIG_CAMERA_URL_LENGTH-1);
@@ -607,7 +697,7 @@ static void profile_editor_control_safety(void)
  editor_save_cb(NULL);assert(camera_set_profile==1&&strstr(camera_set_name,"Workshop camera"));
  manager_edit_cb(NULL);editor_close();camera_get_hook=controls_discover_replace;manager_edit_cb(NULL);assert(s_editor_profile==2);
  controls_fixture_open();editor_close();profile_read_hook=controls_discover_replace;click(s_profile_rows[0]);
- assert(s_editor_profile==2&&!strstr(lv_label_get_text(s_manager_status),"Selected Workshop"));
+ assert(s_editor_profile==2&&!strstr(lv_label_get_text(s_manager_status),"Selected: Workshop"));
  ui_printer_profiles_close_all();assert(!s_manager_close_action&&!s_manager_edit_action&&!s_editor_cancel_action&&!s_editor_discover_action&&!s_editor_auth_action&&!s_editor_camera_action&&!s_auth_cancel_action&&!s_key_cancel_action);
 }
 static uint32_t captured_discovery_request;
@@ -654,16 +744,64 @@ static void profile_discovery_request_safety(void)
  assert(!ui_printer_profiles_apply_discovered_endpoint(current,"wrong.local",7129,"Wrong")&&!ui_printer_profiles_discovery_request());
  ui_printer_profiles_close_all();assert(!ui_printer_profiles_discovery_request());
 }
+static bool modal_pointer_pressed;
+static lv_point_t modal_pointer_point={6,6};
+static void modal_pointer_read(lv_indev_t *input,lv_indev_data_t *data)
+{
+ (void)input;data->point=modal_pointer_point;data->state=modal_pointer_pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;
+}
+static void modal_pointer_tap(lv_indev_t *input)
+{
+ lv_obj_update_layout(lv_screen_active());
+ modal_pointer_pressed=true;lv_indev_read(input);modal_pointer_pressed=false;lv_indev_read(input);
+}
+static void profile_modal_layers(void)
+{
+ reset();unsigned hits=0;
+ lv_obj_t *underlay=lv_button_create(lv_screen_active());lv_obj_remove_style_all(underlay);
+ lv_obj_set_pos(underlay,0,0);lv_obj_set_size(underlay,12,12);
+ lv_obj_add_event_cb(underlay,count_scroll_draw,LV_EVENT_CLICKED,&hits);
+ lv_indev_t *input=lv_indev_create();lv_indev_set_type(input,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(input,modal_pointer_read);
+ lv_obj_t *launcher=ui_popup_create_on_screen(viewport-32,lv_display_get_vertical_resolution(NULL)-32,UI_POPUP_STANDARD);
+ ui_printer_profiles_show(active_changed,discover);manager_edit_cb(NULL);
+ assert(lv_obj_get_parent(s_manager_popup)==lv_screen_active());
+ assert(lv_obj_get_parent(s_editor_popup)==lv_screen_active());
+ assert(lv_obj_get_index(launcher)<lv_obj_get_index(s_manager_popup));
+ assert(lv_obj_get_index(s_manager_popup)<lv_obj_get_index(s_editor_popup));
+ modal_pointer_tap(input);assert(hits==0);
+ editor_camera_open_cb(NULL);assert(s_editor_camera_popup && lv_obj_get_parent(s_editor_camera_popup)==lv_screen_active());
+ assert(lv_obj_get_index(s_editor_camera_popup)>lv_obj_get_index(s_editor_popup));
+ lv_obj_update_layout(s_editor_camera_popup);lv_area_t selected_slot;
+ lv_obj_get_coords(s_editor_camera_slot_buttons[s_editor_camera_slot],&selected_slot);
+ modal_pointer_point=(lv_point_t){(selected_slot.x1+selected_slot.x2)/2,(selected_slot.y1+selected_slot.y2)/2};
+ modal_pointer_tap(input);assert(lv_obj_has_state(s_editor_camera_slot_buttons[s_editor_camera_slot],LV_STATE_CHECKED));
+ modal_pointer_tap(input);assert(lv_obj_has_state(s_editor_camera_slot_buttons[s_editor_camera_slot],LV_STATE_CHECKED));
+ modal_pointer_point=(lv_point_t){6,6};modal_pointer_tap(input);assert(hits==0);
+ click(s_editor_camera_name);assert(s_editor_keyboard_popup && lv_obj_get_parent(s_editor_keyboard_popup)==lv_layer_top());
+ modal_pointer_tap(input);assert(hits==0);editor_camera_close();assert(s_editor_popup&&!s_editor_keyboard_popup);
+ editor_auth_open_cb(NULL);assert(s_editor_auth_popup && lv_obj_get_parent(s_editor_auth_popup)==lv_layer_top());
+ modal_pointer_tap(input);assert(hits==0);editor_auth_close();assert(s_editor_popup);
+ ui_printer_profiles_close_all();lv_obj_delete(launcher);
+ modal_pointer_tap(input);assert(hits==1);
+ lv_indev_delete(input);lv_obj_delete(underlay);
+}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buf[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buf,NULL,sizeof(buf),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
+if(getenv("PROFILE_SCROLL_DIAGNOSTIC")){
+ for(int theme=0;theme<5;theme++){
+  ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density(UI_DENSITY_COMFORTABLE);ui_theme_set_accessibility((ui_accessibility_t){0});reset();
+  ui_printer_profiles_show(active_changed,discover);manager_edit_cb(NULL);profile_scroll_render_check(s_editor_popup,true);ui_printer_profiles_close_all();
+ }
+ lv_display_delete(d);lv_deinit();return 0;
+}
 for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
 viewport=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport,size==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();int old_saves=saves,old_deletes=deletes,old_changed=changed;
-ui_printer_profiles_show(active_changed,discover);nested_checks(theme,!size&&density==1&&large);layout(s_manager_popup);if(ui_theme_is_studio())assert(lv_obj_get_width(s_manager_popup)==viewport-48);for(int i=0;i<4;i++){lv_obj_t*r=s_profile_rows[i];for(unsigned j=0;j<lv_obj_get_child_count(r);j++)inside(lv_obj_get_child(r,j),r);}if(!size&&density==1&&large)snapshot(theme,"manager");
-click(s_profile_rows[2]);assert(s_selected_profile==2);manager_select_cb(NULL);assert(active==0&&changed==old_changed);manager_delete_cb(NULL);assert(!s_delete_popup);
-click(s_profile_rows[0]);manager_edit_cb(NULL);layout(s_editor_popup);lv_obj_t*fields[]={s_editor_name,s_editor_host,s_editor_port};for(unsigned i=0;i<3;i++){assert(lv_obj_get_height(fields[i])>=56);assert(lv_obj_get_style_text_font(fields[i],0)==UI_FONT_BODY_LARGE);}assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));if(!size&&density==1&&large)snapshot(theme,"editor");
+ui_printer_profiles_show(active_changed,discover);nested_checks(theme,!size&&density==1&&large);layout(s_manager_popup);if(ui_theme_is_studio())assert(lv_obj_get_width(s_manager_popup)==viewport-48);for(int i=0;i<4;i++){lv_obj_t*r=s_profile_rows[i];for(unsigned j=0;j<lv_obj_get_child_count(r);j++)inside(lv_obj_get_child(r,j),r);}manager_polish_checks();if(!size&&density==1&&large)snapshot(theme,"manager");
+click(s_profile_rows[2]);assert(s_selected_profile==2);manager_polish_checks();manager_select_cb(NULL);assert(active==0&&changed==old_changed);manager_delete_cb(NULL);assert(!s_delete_popup);
+click(s_profile_rows[0]);manager_polish_checks();manager_edit_cb(NULL);layout(s_editor_popup);editor_polish_checks();profile_scroll_render_check(s_editor_popup,true);lv_obj_t*fields[]={s_editor_name,s_editor_host,s_editor_port};for(unsigned i=0;i<3;i++){assert(lv_obj_get_height(fields[i])>=56);assert(lv_obj_get_style_text_font(fields[i],0)==UI_FONT_BODY_LARGE);}assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));if(!size&&density==1&&large)snapshot(theme,"editor");
 int old_discovered=discovered;editor_discover_cb(NULL);assert(discovered==old_discovered+1);lv_textarea_set_text(s_editor_host,"");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_host,"changed.local");lv_textarea_set_text(s_editor_port,"0");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_port,"7127");s_editor_secure=true;editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);s_editor_secure=false;storage_ok=false;editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);storage_ok=true;
 ui_printer_profiles_set_discovered_endpoint("discovered.local",7128,"Moonraker");assert(!strcmp(lv_textarea_get_text(s_editor_host),"discovered.local"));assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));editor_save_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1&&changed==old_changed+1);assert(!strcmp(profiles[0].host,"discovered.local")&&profiles[0].port==7128);
 manager_edit_cb(NULL);lv_textarea_set_text(s_editor_host,"cancelled.local");editor_cancel_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1);assert(strcmp(profiles[0].host,"cancelled.local"));
 manager_delete_cb(NULL);assert(s_delete_popup);layout(s_delete_popup);if(!size&&density==1&&large)snapshot(theme,"remove");delete_cancel_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes);manager_delete_cb(NULL);storage_ok=false;delete_confirm_cb(NULL);assert(s_delete_popup&&deletes==old_deletes);storage_ok=true;manager_delete_cb(NULL);delete_confirm_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes+1&&active==1&&changed==old_changed+2);manager_delete_cb(NULL);assert(!s_delete_popup);
 ui_printer_profiles_close_all();assert(!s_manager_popup&&!s_manager_list&&!s_editor_popup&&!s_active_changed_cb);reset();ui_printer_profiles_show_for_slot(2,active_changed,discover);assert(s_editor_popup&&s_editor_profile==2);layout(s_editor_popup);editor_test_cb(NULL);assert(!s_editor_test_timer);lv_textarea_set_text(s_editor_host,"test.local");editor_test_cb(NULL);assert(s_editor_test_timer);editor_camera_open_cb(NULL);editor_camera_test_cb(NULL);editor_camera_discover_cb(NULL);assert(discovered_profile==2);config_generation++;editor_camera_test_poll_cb(s_editor_camera_test_timer);editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);assert(!s_editor_camera_test_timer&&!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"changed"));lv_obj_delete(s_editor_popup);assert(!s_editor_popup&&!s_editor_test_timer&&!s_editor_host);manager_edit_cb(NULL);lv_obj_delete(s_manager_popup);assert(!s_editor_popup&&!s_manager_popup&&!s_manager_list);profile_draft_safety();profile_persistence_safety();profile_camera_removal_safety();profile_camera_operation_safety();profile_security_safety();profile_editor_control_safety();profile_discovery_request_safety();
 }
-lv_display_delete(d);lv_deinit();puts("PASS: profile manager/editor/remove layouts in five themes, three densities, both text sizes and three viewports; pinned actions, scroll reach, large fields, selection, discovery, save validation/failure/cancel, remove guards, authentication/security/certificate/camera/keyboard layouts and behavior, numeric/password/length limits, camera slot routing/default/removal and teardown");}
+profile_modal_layers();lv_display_delete(d);lv_deinit();puts("PASS: camera slot grid/default/selected/action fit and opaque redraw; grouped editor fits panel, host/port alignment and five-digit port; modal native-input blocking/layer order and editor scroll damage skips parent redraws with pinned footer; flat manager rows, separate Active/selected markers, adaptive Add/Edit label and four pinned actions; profile manager/editor/remove layouts in five themes, three densities, both text sizes and three viewports; pinned actions, scroll reach, large fields, selection, discovery, save validation/failure/cancel, remove guards, authentication/security/certificate/camera/keyboard layouts and behavior, numeric/password/length limits, camera slot routing/default/removal and teardown");}

@@ -1623,3 +1623,51 @@ Active Print tracks its panel, preview box/label, footer/remaining fields and ca
 Dashboard synchronous/worker renders use a bounded temporary PSRAM candidate, verify component/profile/generation/file after rendering and copy pixels only for a current request. A stale render no longer writes directly into the visible shared buffer. Failed temporary allocation preserves the existing preview. Main's former direct canvas construction paths now delegate to the component; render UI polling validates its owned timer and current file/profile. Cached restores reject missing data/invalid dimensions/stride/length, copy their filename, and fence invalid-preview feedback against replacement. The preview coordinator captures and clears all four old object slots before deleting captured objects, preserving callback-created replacement slots and avoiding duplicate deletion when slots alias. Existing renderer sampling/aspect policy, cache persistence and public operator flows remain. No visual polish or printer commands are added; baseline is the Dashboard camera closeout patch, feature/profile-setup-dialogs / 7.0.0-dev.
 
 The planned pre-polish code batches are complete after both closeout installers. See MODERNIZATION_CLOSEOUT.md for host coverage and remaining device acceptance/checkpoint steps. This is a source/host closeout, not a claim that firmware/device soak tests have run here.
+
+## Visual polish: printer chooser list (7.0.0-dev)
+
+After the modernization checkpoint `ed86f07`, the chooser's two-by-two card grid is replaced by four full-width, flat rows. Names/endpoints share a left column; live state, active marker and Open/Set up affordances align on the right. The active row has an accent edge and a subtle theme surface; separators replace card outlines. Cached previews fit a compact 64px well; absent previews use a file symbol and empty slots use a plus. Long names/endpoints truncate to a fixed single line instead of continuous marquee motion. All four slots remain on screen; Studio keeps its 976×424 shell frame and other themes keep their existing page frame.
+
+Selection, Manage, empty-slot setup, status policy, cache ownership, subject retirement and the guarded 500ms timer retain the existing contracts. The removed preview caption is superseded by the row name/status. The chooser audit covers flat-row bounds, non-overlapping columns, active-row transitions, overflow, native taps and unchanged-refresh silence across all five themes, three densities and both text sizes. Firmware build/flash and panel acceptance remain local workflow steps.
+
+### Chooser visual revision: familiar two-column layout
+
+User review rejected the full-width list. `apply_printer_chooser_familiar_layout.py` restores the prior two-column/two-row positions and 116px preview wells, with name, endpoint, status and action back in their familiar positions. The sections use the page background, a thin lower separator and an active accent edge; enclosing card borders, rounded card surfaces and selected-section fill remain removed. The list-polish single-line ellipsis/quiet refresh fix and ownership guards remain. All four profiles are visible without scrolling.
+
+The actual chooser audit passes all five themes, three densities and both text sizes with pairwise section/label bounds, native pointer taps, active transitions, long-name/host quiet refresh, preview ownership and existing interrupted-lifetime checks.
+
+### Chooser detail polish: separators, status and placeholders
+
+`apply_printer_chooser_detail_polish.py` builds on the accepted familiar two-column layout. A non-interactive, theme-colored 1px center separator is inset below the header and above the lower edge. Lower rules and Open/Set up/Active baselines remain aligned. Known live/connection status strings are presented in sentence case (Printing, Paused, Ready, Connecting..., Offline / retrying); unknown strings pass through, and raw printer/health state, freshness and status colors retain their existing policy.
+
+Empty-slot titles use the existing dim text token and their Not configured status uses the caption font, keeping configured printers visually prominent without introducing lower-opacity text. Preview placeholders use Montserrat's 32px symbol glyphs in every theme so Studio no longer falls back to tiny icons; cached thumbnails retain the same centered 108px fit inside the 116px well.
+
+Actual chooser host checks pass the full 5-theme × 3-density × 2-text-size matrix, including center/lower separator geometry, action baselines, 216×108 preview aspect fit, placeholder glyph size, empty/configured transitions, raw-to-display status, unchanged refresh silence and existing action/observer lifetime cases.
+
+## Visual polish: Manage printers
+
+`apply_profile_manager_visual_polish.py` follows the accepted chooser detail polish. The manager now uses flat, single-line name/endpoint rows with a local selection accent and a separate Active marker for the currently active printer. Empty slots use quieter Add printer/Available profile slot wording. Names and endpoints use ellipsis instead of animated marquees. The selected slot drives an explicit Edit printer or Add printer footer label.
+
+Close, Remove, Edit/Add printer and Use printer are all in the pinned wrapping footer; Remove no longer sits below the scrollable profile list. Status feedback stays in the scrollable body and avoids repeating the endpoint already shown on each row. Existing selection persistence, callback ownership, discovery, editor and removal-confirmation contracts remain; this patch does not add a connection probe or change activation policy. Editor/dialog visual polish remains the next small patch.
+
+## Profile editor scroll rendering follow-up
+
+Panel review reported slow scrolling in Edit printer. The editor had a transparent scroll body, and both manager/editor used the top layer. LVGL 9.5 refreshes the top layer unconditionally after the active screen, so making the body opaque alone did not eliminate parent-popup redraws.
+
+`apply_profile_editor_scroll_performance.py` moves the manager/editor to the existing screen-local modal constructor and gives only the editor scroll body an opaque surface matching its popup. Setup Center uses the same constructor so the editor opened from Setup remains above its launcher. Nested authentication/security/keyboard/discovery dialogs keep their existing top-layer placement and ownership; footer actions, form geometry, scroll behavior and saved values retain their contracts.
+
+In the real-LVGL host diagnostic at 1024×600, comfortable density and standard text, six 24px editor scroll steps produced 36 parent-popup draw callbacks in each non-Studio theme and 40 in Studio before the change. Afterward all five produced zero parent-popup draw callbacks while the body still rendered 36/40 times. This measures occlusion/culling, not device FPS or a guaranteed speedup factor. The regression audit repeats scrolling across the existing theme/density/text/viewport matrix and keeps the footer coordinates fixed. Native pointer checks verify screen-local modal blocking and top-layer nested authentication ordering; Setup/shared-modal audits cover the launcher and ownership paths. Physical panel responsiveness remains the acceptance check.
+
+## Visual polish: grouped profile editor
+
+`apply_profile_editor_visual_polish.py` builds on the accepted scroll-performance patch. The main editor groups each caption with its field and places Moonraker host/IP and port together in a responsive connection row. Security/access controls share a wrapping action row. Sentence-case field/dialog/action labels and a clear Test connection footer replace the uppercase form labels. The main form fits the native panel in the tested theme/density/text combinations, while small viewports retain scrolling and a pinned wrapping footer.
+
+Connection security is now a stable action label, with the security dialog describing whether the current draft uses HTTP or HTTPS/WSS; selecting/importing certificates retains the existing draft/persistence behavior. API-key/keyboard headings and actions use the same wording style. No connection, validation, persistence, keyboard, certificate or discovery policy changes. The opaque editor viewport and screen-local modal placement remain.
+
+The profile host audit adds main-form visibility, host/port alignment, five-digit port legibility and body-action text-fit checks. Its rendering check scrolls when content overflows; when the condensed form fits, it invalidates/redraws the viewport instead, still requiring zero parent-popup draw callbacks and pinned footer coordinates.
+
+## Visual polish: profile camera setup
+
+`apply_profile_camera_visual_polish.py` follows the accepted grouped editor. Camera slots have static, single-line ellipsized names and a separate Default/Available slot caption; selection uses the current theme accent and remains selected on repeated native taps. The slot grid keeps four columns at panel width and two at narrow viewports. Name/URL captions are grouped with their fields, action labels use sentence case, and the main camera popup uses the same opaque, screen-local scroll path as Edit printer. Keyboard and removal review remain top-layer nested modals.
+
+The host profile audit checks slot geometry, marker separation, Default versus selection, full action-label fit, camera viewport redraw culling and native modal input/order alongside the existing camera save/default/remove/discovery/test lifetime scenarios. Hardware acceleration was reviewed during this batch; findings and the proposed separate PPA experiment are recorded in GRAPHICS_ACCELERATION.md. This camera patch retains the current accelerator configuration.

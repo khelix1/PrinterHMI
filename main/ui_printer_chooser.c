@@ -31,6 +31,10 @@ typedef struct {
     char name_previous[MOONRAKER_CONFIG_NAME_LENGTH];
     char endpoint_value[MOONRAKER_CONFIG_HOST_LENGTH + 16];
     char endpoint_previous[MOONRAKER_CONFIG_HOST_LENGTH + 16];
+    /* LVGL DOT mode edits its visible label buffer. Remember that representation
+     * separately from the full subject so unchanged polls do not repair dots. */
+    char name_rendered[MOONRAKER_CONFIG_NAME_LENGTH];
+    char endpoint_rendered[MOONRAKER_CONFIG_HOST_LENGTH + 16];
     bool name_bound;
     bool endpoint_bound;
     lv_subject_t status_subject;
@@ -39,7 +43,6 @@ typedef struct {
     bool status_bound;
     bool subjects_ready;
     lv_obj_t *preview_box;
-    lv_obj_t *preview;
     lv_obj_t *preview_icon;
     lv_obj_t *preview_image;
     uint32_t preview_revision;
@@ -81,7 +84,7 @@ static void card_retire(chooser_card_t *card)
     /* Keep subject storage intact until an in-flight notification unwinds. */
     bool ready=card->subjects_ready;
     card->subjects_ready=card->name_bound=card->endpoint_bound=card->status_bound=false;
-    card->root=card->name=card->endpoint=card->status=card->preview_box=card->preview=NULL;
+    card->root=card->name=card->endpoint=card->status=card->preview_box=NULL;
     card->preview_icon=card->preview_image=card->active=card->hint=NULL;card->preview_revision=0;
     if(ready){lv_subject_deinit(&card->name_subject);lv_subject_deinit(&card->endpoint_subject);lv_subject_deinit(&card->status_subject);}
 }
@@ -106,7 +109,7 @@ static void chooser_field_deleted(lv_event_t *event)
     for(int i=0;i<MOONRAKER_CONFIG_MAX_PROFILES;++i){
         chooser_card_t *card=&s_cards[i];
         lv_obj_t **fields[]={&card->name,&card->endpoint,&card->status,&card->preview_box,
-            &card->preview,&card->preview_icon,&card->preview_image,&card->active,&card->hint};
+            &card->preview_icon,&card->preview_image,&card->active,&card->hint};
         if(object==card->name)card->name_bound=false;
         if(object==card->endpoint)card->endpoint_bound=false;
         if(object==card->status)card->status_bound=false;
@@ -130,7 +133,7 @@ static void card_subjects_delete_cb(lv_event_t *event)
 }
 
 static void set_card_text(lv_obj_t *label, lv_subject_t *subject,
-                          size_t capacity, bool bound, const char *text)
+                          size_t capacity, bool bound, char *rendered, const char *text)
 {
     if (!label) return;
     if (!text) text = "";
@@ -141,32 +144,62 @@ static void set_card_text(lv_obj_t *label, lv_subject_t *subject,
     bool unchanged = strcmp(lv_subject_get_string(subject), text) == 0;
     uint32_t epoch=s_chooser_epoch;
     ++s_subject_depth;lv_subject_copy_string(subject,text);--s_subject_depth;
-    if(unchanged && epoch==s_chooser_epoch)ui_value_set_text(label,text);
+    if(unchanged && epoch==s_chooser_epoch &&
+        (!rendered || strcmp(rendered,lv_label_get_text(label))!=0))
+        ui_value_set_text(label,text);
+    if(rendered && epoch==s_chooser_epoch) {
+        lv_obj_update_layout(label);
+        if(epoch==s_chooser_epoch)
+            snprintf(rendered,capacity,"%s",lv_label_get_text(label));
+    }
     chooser_flush_show();
 }
 
-static void set_status_text(chooser_card_t *card, const char *text)
+static void set_status_text_font(chooser_card_t *card, const char *text, const lv_font_t *font)
 {
     if (!card) return;
     uint32_t epoch=s_chooser_epoch;
     bool changed = card->status && strcmp(lv_label_get_text(card->status), text ? text : "") != 0;
     set_card_text(card->status, &card->status_subject,
-        sizeof(card->status_value), card->status_bound, text);
-    if(changed && epoch==s_chooser_epoch)ui_text_fit_single_line(card->status,UI_FONT_BODY_LARGE);
+        sizeof(card->status_value), card->status_bound, NULL, text);
+    if(changed && epoch==s_chooser_epoch)ui_text_fit_single_line(card->status,font);
+}
+
+static void set_status_text(chooser_card_t *card, const char *text)
+{
+    set_status_text_font(card,text,UI_FONT_BODY_LARGE);
+}
+
+/* Display wording only: health, freshness and command policy use the raw state. */
+static const char *chooser_display_status(const char *raw)
+{
+    if(!raw)return "";
+    static const struct {const char *raw,*display;} names[] = {
+        {"printing","Printing"}, {"paused","Paused"}, {"ready","Ready"},
+        {"standby","Standby"}, {"complete","Complete"}, {"cancelled","Cancelled"},
+        {"error","Error"}, {"shutdown","Shutdown"},
+        {"CHECKING...","Checking..."}, {"CONNECTING...","Connecting..."},
+        {"VERIFYING...","Verifying..."}, {"OFFLINE / RETRYING","Offline / retrying"},
+        {"KLIPPER SHUTDOWN","Klipper shutdown"}, {"WAITING FOR KLIPPER","Waiting for Klipper"},
+        {"ONLINE","Online"}, {"OFFLINE","Offline"}
+    };
+    for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);++i)
+        if(!strcmp(raw,names[i].raw))return ui_text(names[i].display);
+    return raw;
 }
 
 static void set_name_text(chooser_card_t *card, const char *text)
 {
     if (!card) return;
     set_card_text(card->name, &card->name_subject,
-        sizeof(card->name_value), card->name_bound, text);
+        sizeof(card->name_value), card->name_bound, card->name_rendered, text);
 }
 
 static void set_endpoint_text(chooser_card_t *card, const char *text)
 {
     if (!card) return;
     set_card_text(card->endpoint, &card->endpoint_subject,
-        sizeof(card->endpoint_value), card->endpoint_bound, text);
+        sizeof(card->endpoint_value), card->endpoint_bound, card->endpoint_rendered, text);
 }
 
 static void apply_status_style(lv_obj_t *label, bool configured, bool online)
@@ -222,18 +255,37 @@ static lv_obj_t *make_label(
 }
 
 
-static void create_card(int index, int x, int y)
+static void create_card(int index, int x, int y, int width, int height)
 {
     chooser_card_t *card = &s_cards[index];
 
     card->root = lv_obj_create(s_root);
+    lv_obj_remove_style_all(card->root);
     lv_obj_add_event_cb(card->root,card_subjects_delete_cb,LV_EVENT_DELETE,card);
-    lv_obj_set_size(card->root, ui_theme_is_studio()?480:390, ui_theme_is_studio()?176:184);
+    lv_obj_set_size(card->root, width, height);
     lv_obj_set_pos(card->root, x, y);
     lv_obj_clear_flag(card->root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(card->root, LV_OBJ_FLAG_CLICKABLE);
-    ui_apply_card_style(card->root);
+    /* Open two-column sections retain the familiar chooser geometry. */
+    lv_obj_set_style_bg_color(card->root, UI_PANEL, 0);
+    lv_obj_set_style_bg_opa(card->root, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_radius(card->root, 0, 0);
     lv_obj_set_style_pad_all(card->root, 0, 0);
+    lv_obj_set_style_border_width(card->root, 3, 0);
+    lv_obj_set_style_border_side(card->root, LV_BORDER_SIDE_LEFT, 0);
+    lv_obj_set_style_border_color(card->root, UI_ACCENT_BRIGHT, 0);
+    lv_obj_set_style_border_opa(card->root, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_opa(card->root, LV_OPA_COVER, LV_STATE_USER_1);
+    lv_obj_set_style_bg_color(card->root, UI_CONTROL, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(card->root, LV_OPA_COVER, LV_STATE_PRESSED);
+
+    lv_obj_t *divider = lv_obj_create(card->root);
+    lv_obj_remove_style_all(divider);
+    lv_obj_set_size(divider, width - 24, 1);
+    lv_obj_set_pos(divider, 9, height - 1);
+    lv_obj_set_style_bg_color(divider, UI_BORDER, 0);
+    lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(divider, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_add_event_cb(
         card->root,
@@ -248,37 +300,29 @@ static void create_card(int index, int x, int y)
     lv_obj_clear_flag(card->preview_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     ui_apply_preview_style(card->preview_box);
     lv_obj_set_style_pad_all(card->preview_box, 0, 0);
+    lv_obj_set_style_radius(card->preview_box, 8, 0);
 
     card->preview_icon = lv_label_create(card->preview_box);chooser_watch(card->preview_icon);
     lv_label_set_text(card->preview_icon, LV_SYMBOL_FILE);
-    ui_apply_text_popup_title(card->preview_icon);
-    ui_apply_label_dim(card->preview_icon);
-    lv_obj_align(card->preview_icon, LV_ALIGN_TOP_MID, 0, 16);
+    /* Symbols use the same glyph face/size in every theme, including Studio. */
+    ui_apply_custom_label_style(card->preview_icon, &lv_font_montserrat_32, UI_TEXT_DIM);
+    lv_obj_center(card->preview_icon);
 
-    card->preview = lv_label_create(card->preview_box);chooser_watch(card->preview);
-    lv_label_set_text(card->preview, "NO LIVE\nPREVIEW");
-    lv_obj_set_width(card->preview, 108);
-    lv_label_set_long_mode(card->preview, LV_LABEL_LONG_CLIP);
-    ui_apply_text_caption(card->preview);
-    lv_obj_set_height(card->preview, UI_FONT_CAPTION->line_height * 2);
-    lv_obj_set_style_text_line_space(card->preview, 0, 0);
-    ui_apply_label_dim(card->preview);
-    lv_obj_set_style_text_align(card->preview, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(card->preview, LV_ALIGN_BOTTOM_MID, 0, -14);
-
-    card->name = make_label(card->root, "PRINTER", 146, 14, ui_theme_is_studio()?310:220);
+    card->name = make_label(card->root, "PRINTER", 146, 14, width - 170);
     ui_apply_text_title(card->name);
     ui_apply_label_bright(card->name);
-    lv_label_set_long_mode(card->name, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_label_set_long_mode(card->name, LV_LABEL_LONG_DOT);
+    lv_obj_set_height(card->name, lv_obj_get_style_text_font(card->name, 0)->line_height);
     lv_obj_set_style_text_letter_space(card->name, 0, 0);
 
-    card->endpoint = make_label(card->root, "--", 146, 58, ui_theme_is_studio()?310:220);
+    card->endpoint = make_label(card->root, "--", 146, 58, width - 170);
     ui_apply_text_caption(card->endpoint);
     ui_apply_label_dim(card->endpoint);
-    lv_label_set_long_mode(card->endpoint, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_label_set_long_mode(card->endpoint, LV_LABEL_LONG_DOT);
+    lv_obj_set_height(card->endpoint, lv_obj_get_style_text_font(card->endpoint, 0)->line_height);
     lv_obj_set_style_text_letter_space(card->endpoint, 0, 0);
 
-    card->status = make_label(card->root, "CHECKING...", 146, 88, ui_theme_is_studio()?310:220);
+    card->status = make_label(card->root, "Checking...", 146, 88, width - 170);
     ui_apply_text_body_large(card->status);
     ui_apply_label_dim(card->status);
     ui_text_fit_single_line(card->status, UI_FONT_BODY_LARGE);
@@ -289,21 +333,22 @@ static void create_card(int index, int x, int y)
     card->name_bound = lv_label_bind_text(card->name, &card->name_subject, NULL) != NULL;
     card->endpoint_bound = lv_label_bind_text(card->endpoint, &card->endpoint_subject, NULL) != NULL;
     lv_subject_init_string(&card->status_subject, card->status_value,
-        card->status_previous, sizeof(card->status_value), "CHECKING...");
+        card->status_previous, sizeof(card->status_value), "Checking...");
     card->status_bound = lv_label_bind_text(card->status, &card->status_subject, NULL) != NULL;
     card->subjects_ready=true;
 
-    lv_obj_t *hint = make_label(card->root, "TAP TO OPEN", 146, 148, 130);
+    lv_obj_t *hint = make_label(card->root, "Open " LV_SYMBOL_RIGHT, 146, height - 36, 130);
     ui_apply_text_caption(hint);
     ui_apply_label_dim(hint);
     lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
     card->hint = hint;
 
-    card->active = make_label(card->root, "ACTIVE", ui_theme_is_studio()?374:284, 148, 82);
+    card->active = make_label(card->root, "Active", width - 106, height - 36, 82);
     ui_apply_text_caption(card->active);
     ui_apply_label_success(card->active);
     lv_label_set_long_mode(card->active, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(card->active, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_align(card->hint, LV_TEXT_ALIGN_LEFT, 0);
 }
 
 
@@ -342,6 +387,18 @@ static void refresh_cards(void)
         }
 
         if (!card->root) continue;
+
+        /* Keep the normal 500ms refresh quiet when the selected row is unchanged. */
+        bool selected = configured && index == active;
+        if (lv_obj_has_state(card->root, LV_STATE_USER_1) != selected) {
+            if (selected) lv_obj_add_state(card->root, LV_STATE_USER_1);
+            else lv_obj_remove_state(card->root, LV_STATE_USER_1);
+        }
+        if(!chooser_current(&context))goto finished;
+        ui_value_set_color(card->name, configured ? UI_TEXT_BRIGHT : UI_TEXT_DIM, 0);
+        if(!chooser_current(&context))goto finished;
+        ui_value_set_text(card->preview_icon, configured ? LV_SYMBOL_FILE : LV_SYMBOL_PLUS);
+        if(!chooser_current(&context))goto finished;
 
         const char *cached_file = NULL;
         uint32_t cached_revision = 0;
@@ -392,14 +449,12 @@ static void refresh_cards(void)
                 /* Created last in this preview box; no repeated z-order write. */
             }
 
-            chooser_hidden(card->preview,true);
             chooser_hidden(card->preview_icon,true);
         } else {
             if (card->preview_image) {
                 chooser_hidden(card->preview_image,true);
             }
 
-            chooser_hidden(card->preview,false);
             chooser_hidden(card->preview_icon,false);
             card->preview_revision = 0;
         }
@@ -407,16 +462,14 @@ static void refresh_cards(void)
         if(!chooser_current(&context))goto finished;
         if (!configured) {
             char empty_name[32];
-            snprintf(empty_name, sizeof(empty_name), "ADD PRINTER %d", index + 1);
+            snprintf(empty_name, sizeof(empty_name), "Add printer %d", index + 1);
             set_name_text(card, empty_name);
             if(!chooser_current(&context))goto finished;
-            set_endpoint_text(card, ui_text("EMPTY PROFILE SLOT"));
+            set_endpoint_text(card, ui_text("Available profile slot"));
             if(!chooser_current(&context))goto finished;
-            set_status_text(card, ui_text("NOT CONFIGURED"));
+            set_status_text_font(card, ui_text("Not configured"), UI_FONT_CAPTION);
             if(!chooser_current(&context))goto finished;
-            ui_value_set_text(card->hint, ui_text("TAP TO ADD"));
-            if(!chooser_current(&context))goto finished;
-            if(!cached_image)ui_value_set_text(card->preview,"ADD A\nPRINTER");
+            ui_value_set_text(card->hint, ui_text("Set up " LV_SYMBOL_RIGHT));
             if(!chooser_current(&context))goto finished;
             chooser_hidden(card->active,true);
             apply_status_style(card->status, false, false);
@@ -426,7 +479,7 @@ static void refresh_cards(void)
         char endpoint[MOONRAKER_CONFIG_HOST_LENGTH + 16];
         snprintf(endpoint,sizeof(endpoint),"%s:%d",profile_host,profile_port);
 
-        ui_value_set_text(card->hint, ui_text("TAP TO OPEN"));
+        ui_value_set_text(card->hint, ui_text("Open " LV_SYMBOL_RIGHT));
         if(!chooser_current(&context))goto finished;
         set_name_text(card,profile_name);
         if(!chooser_current(&context))goto finished;
@@ -487,7 +540,7 @@ static void refresh_cards(void)
                             : "ONLINE")));
         }
 
-        set_status_text(card, status_text);
+        set_status_text(card, chooser_display_status(status_text));
         if(!chooser_current(&context))goto finished;
         if ((index == active && !state->moonraker_ok &&
              (!known || (health_online && (!state->printer_state[0] ||
@@ -501,28 +554,7 @@ static void refresh_cards(void)
             apply_status_style(card->status, true, status_online);
         }
 
-        if (index == active) {
-            chooser_hidden(card->active,false);
-
-            if (!cached_image) {
-                if (state && state->live_data_ok && state->printer_file[0]) {
-                    ui_value_set_text(card->preview, state->printer_file);
-                    if(!chooser_current(&context))goto finished;
-                    ui_value_set_color(card->preview, UI_TEXT_BRIGHT, 0);
-                } else {
-                    ui_value_set_text(card->preview, online ? "READY FOR\nLIVE DATA" : "NO LIVE\nPREVIEW");
-                    if(!chooser_current(&context))goto finished;
-                    ui_value_set_color(card->preview, UI_TEXT_DIM, 0);
-                }
-            }
-        } else {
-            chooser_hidden(card->active,true);
-            if (!cached_image) {
-                ui_value_set_text(card->preview, online ? "AVAILABLE\nTO OPEN" : "NO LIVE\nPREVIEW");
-                if(!chooser_current(&context))goto finished;
-                ui_value_set_color(card->preview, UI_TEXT_DIM, 0);
-            }
-        }
+        chooser_hidden(card->active, index != active);
     }
 finished:
     s_refreshing=false;chooser_flush_show();
@@ -573,13 +605,13 @@ void ui_printer_chooser_show(
     ui_apply_root_style(s_root);
     lv_obj_set_style_pad_all(s_root, 0, 0);
 
-    lv_obj_t *title = make_label(s_root, "PRINTERS", 20, 12, 360);
+    lv_obj_t *title = make_label(s_root, "Printers", 20, 12, 360);
     ui_apply_text_heading(title);
     ui_apply_label_bright(title);
 
     lv_obj_t *subtitle = make_label(
         s_root,
-        "Choose a printer to open its live operator dashboard.",
+        "Select a printer to open its dashboard.",
         20,
         54,
         520);
@@ -590,7 +622,7 @@ void ui_printer_chooser_show(
         s_root,
         UI_BUTTON_OUTLINED,
         LV_SYMBOL_SETTINGS,
-        "MANAGE PRINTERS",
+        "Manage printers",
         UI_ACCENT_CYAN,
         UI_BUTTON_ICON_HORIZONTAL);
 
@@ -608,16 +640,27 @@ void ui_printer_chooser_show(
         }
     }
 
+    int section_x = 20, section_y = 84, section_width = 390, section_height = 184;
+    int column_step = 404, row_step = 198;
     if(ui_theme_is_studio()) {
         lv_obj_set_pos(title,0,0);lv_obj_set_width(title,640);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
         lv_obj_add_flag(subtitle,LV_OBJ_FLAG_HIDDEN);
         if(manage){lv_obj_set_size(manage,280,44);lv_obj_set_pos(manage,696,0);}
-        create_card(0,0,60);create_card(1,496,60);
-        create_card(2,0,248);create_card(3,496,248);
-    } else {
-        create_card(0,20,84);create_card(1,424,84);
-        create_card(2,20,282);create_card(3,424,282);
+        section_x = 0; section_y = 60; section_width = 480; section_height = 176;
+        column_step = 496; row_step = 188;
     }
+    for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index)
+        create_card(index, section_x + (index % 2) * column_step,
+            section_y + (index / 2) * row_step, section_width, section_height);
+
+    lv_obj_t *center_separator = lv_obj_create(s_root);
+    lv_obj_remove_style_all(center_separator);
+    lv_obj_set_size(center_separator, 1, row_step + section_height - 20);
+    lv_obj_set_pos(center_separator,
+        section_x + section_width + (column_step - section_width) / 2, section_y + 8);
+    lv_obj_set_style_bg_color(center_separator, UI_BORDER, 0);
+    lv_obj_set_style_bg_opa(center_separator, LV_OPA_60, 0);
+    lv_obj_clear_flag(center_separator, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *root=s_root;uint32_t epoch=s_chooser_epoch;
     refresh_cards();

@@ -1358,3 +1358,62 @@ Panel checks pending: Dashboard Camera/Thumbnail toggle repeatedly; confirm live
 `aspect_preview_pipeline_test.py` now uses real Active Print construction across all five themes and both text sizes. It extracts actual main.c synchronous render, apply/restore, worker, current-request and render-timer functions. Checks retain aspect/stride/containment and source sampling, and add profile/file/panel changes after rendering, temporary allocation failure preserving previous pixels, synchronous staged publication and unrelated/NULL timer rejection. Render-boundary injection runs after the real renderer returns; backend persistence remains mocked. Peak temporary rendering memory adds one bounded 286x215 RGB565 PSRAM candidate; failure retains the previous preview instead of borrowing a stale source.
 
 Combined host closeout passed Camera pipeline, Dashboard camera, Active Print/coordinator, aspect-preview pipeline, preview-cache/lightbox ownership, reusable thumbnail ownership, chooser refresh, responsive layouts, Studio pages and live appearance, plus offline navigation. Viewport/theme matrices remain those documented by each suite. This does not replace ESP-IDF compilation, target PSRAM/JPEG/HTTP behavior or panel timing/heap soak. See MODERNIZATION_CLOSEOUT.md for the ordered device acceptance and branch checkpoint. Nothing committed or pushed; identity remains feature/profile-setup-dialogs / 7.0.0-dev.
+
+## Printer chooser visual list acceptance
+
+Apply `apply_printer_chooser_list_polish.py` after the complete `ed86f07` modernization checkpoint on `feature/profile-setup-dialogs`, version `7.0.0-dev`. The guarded installer prints prerequisite mismatches before changing files. Build only after installer success (`python3 ~/Downloads/apply_printer_chooser_list_polish.py && ./tools/build_idf6_hosted3.sh`), then flash.
+
+- Confirm four full-width rows, aligned name/endpoint and status/action columns, no chooser scroll, an accent edge plus Active text on the current printer, and plus symbols for empty slots.
+- Open configured printers by tapping the thumbnail, name, endpoint, status, action and row background. Empty rows open their setup flow; Manage printers opens the existing profile manager.
+- Change printer and reopen the chooser: only the current configured row is marked Active. Verify online/printing/paused/offline states and background verification remain accurate.
+- Check cached previews and missing-preview symbols, long profile names/hosts, every theme, large text and density settings. Long names/hosts must remain one line with ellipsis rather than animated text.
+- Repeat open/close and profile edits; leave idle to check stable refresh without flicker. Host `chooser_refresh_test.py` exercises the actual LVGL chooser across 5×3×2 theme/density/text combinations, native pointer taps, independent field deletion, observer/reopen lifetime, active-row styling and unchanged 500ms redraw/notification counts. Standalone chooser owner compilation treats warnings as errors.
+
+### Chooser layout revision after list review
+
+Apply `apply_printer_chooser_familiar_layout.py` after `apply_printer_chooser_list_polish.py`. This supersedes the full-width-row visual expectation above: expect the familiar two-by-two arrangement and larger 116px preview wells, with flat page-backed sections, thin lower separators and an active accent edge. Name/endpoint/status/action order follows the original chooser. Verify both columns and rows, long names/hosts, thumbnail fit, configured-printer taps, empty-slot setup, Manage printers and all themes/text/density settings after build and flash. The same chooser host audit covers every 5×3×2 combination and unchanged 500ms polls, including ellipsized names/hosts.
+
+### Chooser detail polish acceptance
+
+Apply `apply_printer_chooser_detail_polish.py` after the accepted `apply_printer_chooser_familiar_layout.py`, then build, flash and verify. Expect a muted, inset center separator, the same familiar two-column positions, aligned lower separators/actions, sentence-case live/connection status, quieter empty-slot titles/status, and consistently sized missing-preview symbols in Studio and the other themes.
+
+Check real thumbnails remain centered and preserve aspect ratio; confirm Printing/Paused/Ready and offline/retrying/verification feedback keep their original status colors and behavior. Tap previews, names, statuses, Open, empty-slot Set up and Manage printers. Reopen after printer selection/profile edits. Repeat with all themes, large text and density settings; leave the chooser idle and check for flicker. Host `chooser_refresh_test.py` covers separator bounds/non-interaction, action alignment, aspect fit, symbol size, state presentation and all prior unchanged-refresh and lifecycle regressions across 30 combinations; firmware build/flash and panel verification remain local steps.
+
+## Manage printers visual acceptance
+
+Apply `apply_profile_manager_visual_polish.py` after `apply_printer_chooser_detail_polish.py` on `feature/profile-setup-dialogs`, version `7.0.0-dev`. Build only after successful installation, then flash.
+
+- Open Manage printers from the chooser. Check the sentence-case heading, flat rows, names/endpoints on one line, subdued empty slots and four visible footer actions at the panel's normal size.
+- Select another configured row: the selection accent moves but Active stays with the current printer until Use printer succeeds. Verify Edit printer opens the selected profile and Close returns normally.
+- Select an empty slot: the action reads Add printer and opens its editor. Use printer/Remove retain their empty-slot guard messages.
+- Verify Remove is pinned with the other footer actions, still opens its existing review and honors Cancel, last-profile protection and persistence-failure behavior.
+- Check all themes, density and large text. At narrower/smaller viewports, confirm footer wrapping remains visible and scroll the profile body to reach all rows/status. Long names and endpoints must truncate on one line without animation.
+
+Host `profiles_layout_test.py` exercises the actual manager/editor/removal and nested dialogs across 5 themes × 3 densities × 2 text sizes × 3 viewports, including flat-row bounds, Active versus selected, adaptive Add/Edit text, four pinned actions, scroll reach and prior save/discovery/removal/security/camera lifetime regressions. Standalone owner compilation treats warnings as errors. Target firmware compilation, flash and physical panel acceptance remain local.
+
+## Edit printer scroll performance acceptance
+
+Apply `apply_profile_editor_scroll_performance.py` after `apply_profile_manager_visual_polish.py`, then build only on installer success and flash. Open Manage printers > Edit printer and drag repeatedly through the connection/security controls in both directions. Compare responsiveness with the prior build. Repeat across themes, especially Studio and the theme where the slowdown was observed, and with large text/density options.
+
+Verify the footer remains pinned; tap and edit name/host/port, cancel keyboard edits, open/close security and authentication, test the connection when available, and cancel/save through the existing flow. Open the same editor from Setup Center > Printer options/review to verify it appears above Setup; return/cancel without losing the launcher. Taps outside each modal must remain blocked, and nested keyboard/authentication/security/discovery dialogs must stay above it. Verify returning to the chooser and manager is normal.
+
+Host checks: `profiles_layout_test.py` includes six real renderer scroll steps for each theme/density/text/viewport case, requires zero parent-popup draw callbacks with continuing body drawing, checks the pinned footer and native modal blocking/order, and retains persistence/discovery/security/camera regressions. `PROFILE_SCROLL_DIAGNOSTIC=1` selects a short five-theme draw-count diagnostic instead of the full matrix. `setup_center_layout_test.py` verifies the screen-local launcher and existing setup lifecycle; `shared_popup_safety_test.py` verifies the shared modal mechanisms. Host draw counts do not establish panel FPS, touch latency or transport behavior.
+
+## Grouped profile editor visual acceptance
+
+Apply `apply_profile_editor_visual_polish.py` after `apply_profile_editor_scroll_performance.py`, then build/flash.
+
+- Open Edit printer and Add printer. At 1024×600, confirm the main form fits without needing to scroll: Printer name, host/IP plus Port, Discover printers, Connection security, API key and the helper/status text. Footer actions remain Cancel, Camera, Test connection and Save.
+- Verify host/IP and port align, long host/name values remain editable and the five-digit maximum port remains readable. Open/cancel field keyboards; port still accepts only digits and preserves the existing validation.
+- Open Connection security: current draft transport is described. Cancel, choose Standard HTTP or use the existing certificate flow; configuration changes must retain their established draft/save behavior. Open API key, edit/cancel or Use key, then test/save when appropriate.
+- Check all themes, densities and large text. Narrow/small viewports may wrap security/footer actions and scroll the form, with no horizontal clipping. Preserve the improved scrolling, pinned footer and modal blocking/layering from the preceding patch.
+
+The actual profile audit spans 90 theme/density/text/viewport cases with new form-fit, host/port/maximum-digit and action-fit checks, plus all prior persistence, discovery, camera, security, keyboard, modal blocking and redraw regressions. Native panel appearance, input feel and actual network tests remain build/flash acceptance steps.
+
+## Profile camera visual acceptance
+
+Apply `apply_profile_camera_visual_polish.py` after `apply_profile_editor_visual_polish.py`, then build/flash. Open Edit printer > Camera. Verify a static slot grid, an explicit Default caption, a theme-accent selection border, and no moving name marquees. Tap the current slot repeatedly: it must stay selected. Select another slot: the Default caption remains with the configured default until Make default succeeds.
+
+Check name/URL field keyboard behavior, Find cameras, Test stream, Make default, Remove > Keep camera, Cancel and Use camera. The selected full name remains editable in the field even when its slot caption is ellipsized. Verify stream/navigation suspension and resumption remain normal, and scroll smoothly through small viewports. Confirm keyboard/removal review are above the camera modal and outside taps remain blocked. Repeat theme, density and large-text checks.
+
+The actual profile matrix covers four-/two-column geometry, single-line name clipping, separate default markers, exclusive selected state, action text fit, zero parent redraws for opaque viewport scrolling/repainting, native repeated-slot taps and nested modal ordering, plus prior camera persistence/worker/replacement regressions. Physical camera transport, rendering speed and device acceptance remain panel steps.

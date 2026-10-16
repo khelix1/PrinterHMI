@@ -352,7 +352,8 @@ static void show_center(void)
     int height=lv_display_get_vertical_resolution(NULL)-32;
     if(width>960)width=960;
     if(height>560)height=560;
-    s_center=ui_popup_create(lv_screen_active(),width,height,UI_POPUP_STANDARD);
+    /* Keep the profile editor's screen-local modal above its Setup launcher. */
+    s_center=ui_popup_create_on_screen(width,height,UI_POPUP_STANDARD);
     if(!s_center)return;
     lv_obj_add_event_cb(s_center,center_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_center,LV_FLEX_FLOW_COLUMN);

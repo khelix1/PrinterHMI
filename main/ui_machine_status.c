@@ -186,14 +186,14 @@ lv_obj_t *ui_machine_status_create_profile(
     if (!parent || !rect || !layout) return NULL;
 
     const char *names[] = {
-        "NOZZLE",
-        "BED",
-        "AIR TEMPERATURE",
-        "HUMIDITY",
-        "SPEED",
-        "FLOW",
-        "PART FAN",
-        "FILAMENT",
+        "Nozzle",
+        "Bed",
+        "Air temp",
+        "Humidity",
+        "Speed",
+        "Flow",
+        "Part fan",
+        "Filament",
     };
 
     const char *defaults[] = {
@@ -260,7 +260,7 @@ lv_obj_t *ui_machine_status_create_profile(
 
         ui_create_operator_card_heading(
             thermal,
-            "THERMAL",
+            "Thermal",
             16,
             8);
         machine_status_add_live_badge(
@@ -276,7 +276,7 @@ lv_obj_t *ui_machine_status_create_profile(
 
         ui_create_operator_card_heading(
             process,
-            "PROCESS",
+            "Process",
             16,
             8);
         ui_create_operator_card_divider(
@@ -330,7 +330,7 @@ lv_obj_t *ui_machine_status_create_profile(
 
         ui_create_operator_card_heading(
             host,
-            "MACHINE STATUS",
+            "Machine status",
             18,
             12);
         machine_status_add_live_badge(
@@ -520,7 +520,7 @@ void ui_machine_status_set_active_hotend(
     if (ctx->nozzle_name) {
         lv_label_set_text(
             ctx->nozzle_name,
-            name && name[0] ? name : ui_text("NOZZLE"));
+            name && name[0] ? name : ui_text("Nozzle"));
     }
 
     if (ctx->nozzle) {

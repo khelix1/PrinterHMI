@@ -3,6 +3,7 @@
 #include "ui_button.h"
 #include "ui_popup.h"
 #include "ui_form_dialog.h"
+#include "ui_widgets.h"
 
 #include "lvgl.h"
 #include "ui_theme.h"
@@ -444,7 +445,7 @@ static void moonraker_discovery_show_internal(
         available = lv_obj_get_height(parent) - 16;
         if (available > 32 && popup_height > available) popup_height = available;
     }
-    s_popup = ui_form_dialog("DISCOVER MOONRAKER", popup_width, popup_height, UI_POPUP_STANDARD);
+    s_popup = ui_form_dialog("Discover Moonraker", popup_width, popup_height, UI_POPUP_STANDARD);
     if (!s_popup) {s_close_cb=NULL;s_select_cb=NULL;s_select_request_cb=NULL;s_close_request_cb=NULL;s_select_request=0;return;}
     __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_owner_generation=moonraker_config_generation();
@@ -453,20 +454,26 @@ static void moonraker_discovery_show_internal(
     lv_obj_center(s_popup);
     lv_obj_add_event_cb(s_popup, discovery_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = ui_form_body(s_popup);
+    lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_OFF);
     s_status_label = ui_form_text(body, s_status, UI_FONT_BODY, UI_TEXT);
     discovery_watch(s_status_label);
-    ui_form_text(body, "Select a verified printer. READY means Klipper responded.", UI_FONT_CAPTION, UI_TEXT_DIM);
+    ui_form_text(body, "Select a verified printer. Ready means Klipper responded.", UI_FONT_CAPTION, UI_TEXT_DIM);
     s_results_list = lv_obj_create(body);
     discovery_watch(s_results_list);
     lv_obj_remove_style_all(s_results_list);
-    lv_obj_set_size(s_results_list, LV_PCT(100), 160);
+    /* Fill the remaining body instead of leaving a fixed 160px result strip. */
+    lv_obj_set_size(s_results_list,LV_PCT(100),0);
+    lv_obj_set_style_min_height(s_results_list,UI_FONT_BODY->line_height*4+32,0);
+    lv_obj_set_flex_grow(s_results_list,1);
     lv_obj_set_flex_flow(s_results_list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(s_results_list, 8, 0);
     lv_obj_set_scroll_dir(s_results_list, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(s_results_list, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(s_results_list, LV_SCROLLBAR_MODE_OFF);
     s_candidate_count = 0;
-    s_retry_action=ui_form_action(s_popup, UI_BUTTON_SECONDARY, "RETRY", discovery_retry_cb, NULL);discovery_watch(s_retry_action);
-    s_close_action=ui_form_action(s_popup, UI_BUTTON_OUTLINED, "CLOSE", close_event_cb, NULL);discovery_watch(s_close_action);
+    s_retry_action=ui_form_action(s_popup, UI_BUTTON_SECONDARY, "Retry", discovery_retry_cb, NULL);discovery_watch(s_retry_action);
+    s_close_action=ui_form_action(s_popup, UI_BUTTON_OUTLINED, "Close", close_event_cb, NULL);discovery_watch(s_close_action);
+    lv_obj_t *footer=lv_obj_get_child(s_popup,-1);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
     ui_form_finish(s_popup);
 }
 
@@ -486,10 +493,9 @@ void moonraker_discovery_show_in_parent(
     moonraker_discovery_select_cb_t select_cb)
 {
     if (!parent) return;
-    /* The setup card is 720x440; leave a small inset so every discovery
-     * result, status message, and CLOSE action remains inside that card. */
+    /* The owner bounds the available workspace; retain only a small inset. */
     moonraker_discovery_show_internal(
-        parent, 704, 424, status_text, close_cb, select_cb,NULL,0,NULL);
+        parent, 860, 540, status_text, close_cb, select_cb,NULL,0,NULL);
 }
 
 static bool discovery_show_request(lv_obj_t *parent,int width,int height,const char *status_text,
@@ -511,7 +517,7 @@ bool moonraker_discovery_show_for_request(const char *status_text,moonraker_disc
 bool moonraker_discovery_show_in_parent_for_request(lv_obj_t *parent,const char *status_text,
     moonraker_discovery_close_request_cb_t close_cb,moonraker_discovery_select_request_cb_t select_cb,uint32_t request)
 {
-    return discovery_show_request(parent,704,424,status_text,close_cb,select_cb,request);
+    return discovery_show_request(parent,860,540,status_text,close_cb,select_cb,request);
 }
 void moonraker_discovery_close_request(uint32_t request)
 {
@@ -566,11 +572,15 @@ static bool moonraker_discovery_add_candidate(
         endpoint->identity,
         endpoint->host,
         endpoint->port,
-        endpoint->klippy_ready ? "READY" : "MOONRAKER");
+        endpoint->klippy_ready ? "Ready" : "Moonraker");
 
     lv_obj_t *button = ui_button_create(s_results_list, UI_BUTTON_OUTLINED, row);
     if (button) {
         lv_obj_set_size(button, LV_PCT(100), LV_SIZE_CONTENT);
+        if(ui_theme_is_studio()) {
+            ui_apply_surface_role(button,UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(button,LV_BORDER_SIDE_BOTTOM);
+        }
         lv_obj_set_style_min_height(button, 56, 0);
         lv_obj_set_style_pad_all(button, 12, 0);
         lv_obj_set_flex_flow(button, LV_FLEX_FLOW_COLUMN);

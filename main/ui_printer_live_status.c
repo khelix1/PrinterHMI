@@ -527,7 +527,7 @@ void ui_printer_live_status_create(
 
     lv_label_set_text(
         title,
-        ui_text("ACTIVE PRINT"));
+        ui_text("Active print"));
 
     ui_apply_text_body_large(title);
     ui_apply_label_dim(title);
@@ -543,35 +543,7 @@ void ui_printer_live_status_create(
         *active_file_label = NULL;
     }
 
-    lv_obj_t *divider =
-        lv_obj_create(card);
-
-    lv_obj_clear_flag(
-        divider,
-        LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_set_size(divider, 1, 156);
-    lv_obj_set_pos(divider, compact_operator_shell ? 196 : 310, 48);
-
-    lv_obj_set_style_bg_color(
-        divider,
-        UI_BORDER_SOFT,
-        0);
-
-    lv_obj_set_style_bg_opa(
-        divider,
-        LV_OPA_COVER,
-        0);
-
-    lv_obj_set_style_border_width(
-        divider,
-        0,
-        0);
-
-    lv_obj_set_style_pad_all(
-        divider,
-        0,
-        0);
+    ui_create_divider(card,compact_operator_shell?196:310,48,1,156);
 
     if (layer_label) {
         *layer_label =

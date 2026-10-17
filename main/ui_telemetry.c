@@ -50,7 +50,7 @@ static lv_obj_t *action(lv_obj_t *parent,const char *text,lv_event_cb_t cb,void 
     ui_apply_custom_label_style(label,UI_FONT_BODY,UI_TEXT_BRIGHT);
     lv_obj_set_width(label,LV_SIZE_CONTENT);lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
     int32_t width=lv_obj_get_self_width(label)+28;if(width<96)width=96;
-    lv_obj_set_size(button,width,44);lv_obj_center(label);
+    lv_obj_set_size(button,width,48);lv_obj_center(label);
     if(cb)lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,data);
     return button;
 }
@@ -99,7 +99,7 @@ static void scale_cb(lv_event_t *e)
 static lv_obj_t *selector(lv_obj_t *parent,const char *options,int width,lv_event_cb_t callback)
 {
     lv_obj_t *dropdown=lv_dropdown_create(parent);
-    lv_obj_set_size(dropdown,width,44);
+    lv_obj_set_size(dropdown,width,48);
     lv_dropdown_set_options(dropdown,options);
     ui_selector_style(dropdown,UI_FONT_BODY);
     lv_obj_add_event_cb(dropdown,callback,LV_EVENT_VALUE_CHANGED,NULL);
@@ -141,7 +141,7 @@ void ui_telemetry_show(void)
     s_status=telemetry_make_label(header,"WAITING",UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_obj_set_width(s_status,0);lv_obj_set_flex_grow(s_status,1);lv_obj_set_style_text_align(s_status,LV_TEXT_ALIGN_RIGHT,0);
     lv_obj_t *tabs=layout_row(s_panel,true);
-    const char *names[]={"Heat","Motion","Environment"};
+    const char *names[]={"Thermal","Motion","Drybox"};
     for(unsigned i=0;i<3;i++)s_tabs[i]=action(tabs,names[i],view_cb,(void *)(uintptr_t)i);
     lv_obj_t *controls=tabs;
     s_range=selector(controls,"2 min\n5 min\n10 min",120,range_cb);
@@ -152,7 +152,7 @@ void ui_telemetry_show(void)
     ui_value_set_text(lv_obj_get_child(s_hold_button,0),"Hold graph");
     s_graph_host=lv_obj_create(s_panel);lv_obj_remove_style_all(s_graph_host);
     lv_obj_set_size(s_graph_host,LV_PCT(100),0);lv_obj_set_flex_grow(s_graph_host,1);
-    lv_obj_set_scroll_dir(s_graph_host,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_graph_host,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(s_graph_host,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_graph_host,LV_SCROLLBAR_MODE_OFF);
     ui_telemetry_charts_create(s_graph_host);
     s_history_status=telemetry_make_label(s_panel,"",UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_obj_set_width(s_history_status,LV_PCT(100));
@@ -208,22 +208,18 @@ static void telemetry_render(bool force)
     synchronize_hotends();
     for(unsigned i=0;i<3;i++) {
         if(!s_tabs[i])continue;
-        if(i==(unsigned)s_view)lv_obj_add_state(s_tabs[i],LV_STATE_CHECKED);
-        else lv_obj_remove_state(s_tabs[i],LV_STATE_CHECKED);
-        ui_value_set_bg_color(s_tabs[i],UI_CONTROL,LV_PART_MAIN|LV_STATE_CHECKED);
-        ui_value_set_border_color(s_tabs[i],UI_ACCENT_BRIGHT,LV_PART_MAIN|LV_STATE_CHECKED);
-        ui_value_set_border_color(s_tabs[i],i==(unsigned)s_view?UI_ACCENT_BRIGHT:UI_BORDER_BRIGHT,LV_PART_MAIN);
-        ui_value_set_bg_color(s_tabs[i],i==(unsigned)s_view?UI_CONTROL:UI_BG_DEEP,LV_PART_MAIN);
-        ui_value_set_bg_opa(s_tabs[i],LV_OPA_COVER,LV_PART_MAIN);
+        ui_button_set_filter_active(s_tabs[i],i==(unsigned)s_view);
         if(s_held)lv_obj_add_state(s_tabs[i],LV_STATE_DISABLED);else lv_obj_remove_state(s_tabs[i],LV_STATE_DISABLED);
     }
     lv_obj_t *selectors[]={s_range,s_hotend_selector,s_scale_button};
     for(unsigned i=0;i<3;i++){if(!selectors[i])continue;if(s_held)lv_obj_add_state(selectors[i],LV_STATE_DISABLED);else lv_obj_remove_state(selectors[i],LV_STATE_DISABLED);}
     if(s_hotend_selector){if(s_view==UI_TELEMETRY_HEAT)lv_obj_remove_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);}
-    if(s_scale_button){if(s_view==UI_TELEMETRY_HEAT)lv_obj_remove_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);}
+    if(s_scale_button){if(s_view!=UI_TELEMETRY_MOTION)lv_obj_remove_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);}
     /* Both action labels have room for either state, keeping touch geometry stable. */
     lv_obj_t *hold_label=s_hold_button?lv_obj_get_child(s_hold_button,0):NULL;ui_value_set_text(hold_label,s_held?"Resume live":"Hold graph");
     ui_value_set_text(s_scale_button?lv_obj_get_child(s_scale_button,0):NULL,s_include_targets?"Targets on":"Detail only");
+    ui_button_set_filter_active(s_hold_button,s_held);
+    ui_button_set_filter_active(s_scale_button,s_include_targets);
     telemetry_sample_t sample;telemetry_history_from_state(&s_latest,s_now_us,&sample);
     bool live=s_latest.live_data_ok;
     char status[160];

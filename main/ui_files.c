@@ -50,6 +50,7 @@ static lv_obj_t *s_search_keyboard, *s_search_apply, *s_search_cancel;
 static uint32_t s_files_epoch, s_files_generation;
 static bool s_files_browser_dispatching;
 static char s_search_text[64];
+static char s_folder_breadcrumb[190] = "G-code files";
 static void up_button_deleted(lv_event_t *event)
 {
     if(lv_event_get_target_obj(event)==s_up_button)s_up_button=NULL;
@@ -277,10 +278,7 @@ static void request_visible_file_previews(void)
  * list forces LVGL to repaint the parent page under every scrolled row. */
 static void files_style_scroll_surface(lv_obj_t *list)
 {
-    lv_obj_set_style_bg_color(list, UI_BG, 0);
-    lv_obj_set_style_bg_grad_dir(list, LV_GRAD_DIR_NONE, 0);
-    lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(list, 0, 0);
+    ui_apply_scroll_surface(list);
 }
 
 static void file_list_scroll_event_cb(lv_event_t *e)
@@ -415,20 +413,7 @@ void ui_files_add_file_entry(const char *path,
      * A bottom-only border gives the page a continuous file-browser
      * appearance without turning every row into a separate card.
      */
-    lv_obj_set_style_border_width(
-        btn,
-        0,
-        LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_set_style_border_side(
-        btn,
-        LV_BORDER_SIDE_BOTTOM,
-        LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_set_style_border_width(
-        btn,
-        UI_BORDER_THIN,
-        LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_apply_divider_border(btn,LV_BORDER_SIDE_BOTTOM);
 
     lv_obj_set_style_pad_all(
         btn,
@@ -688,40 +673,46 @@ void ui_files_clear_rows(void)
     if (s_printer_file_list) lv_obj_clean(s_printer_file_list);
 }
 
+static void files_update_breadcrumb(void)
+{
+    if (!s_breadcrumb_label) return;
+    if (s_search_text[0]) {
+        char text[190];
+        snprintf(text, sizeof(text), "Search / %s", s_search_text);
+        ui_value_set_text(s_breadcrumb_label, text);
+    } else {
+        ui_value_set_text(s_breadcrumb_label, s_folder_breadcrumb);
+    }
+}
+
 void ui_files_set_breadcrumb(const char *path)
 {
-    s_folder_has_parent=path && path[0];
+    s_folder_has_parent = path && path[0];
+    snprintf(s_folder_breadcrumb, sizeof(s_folder_breadcrumb),
+             "G-code files%s%s", s_folder_has_parent ? " / " : "",
+             s_folder_has_parent ? path : "");
     update_up_button();
-    if (!s_breadcrumb_label) return;
-    char text[190];
-    snprintf(text, sizeof(text), "GCODE / %s", path && path[0] ? path : "ROOT");
-    ui_value_set_text(s_breadcrumb_label, text);
+    files_update_breadcrumb();
 }
 
 void ui_files_set_sort_text(const char *text)
 {
-    if (s_sort_label) ui_value_set_text(s_sort_label, text ? text : ui_text("SORT"));
+    const char *label = text ? text : "Sort";
+    if (!strcmp(label, "NAME")) label = "Name";
+    else if (!strcmp(label, "NEWEST")) label = "Newest";
+    else if (!strcmp(label, "SIZE")) label = "Size";
+    if (s_sort_label) ui_value_set_text(s_sort_label, ui_text(label));
 }
 
 void ui_files_set_search_text(const char *text)
 {
     snprintf(s_search_text, sizeof(s_search_text), "%s", text ? text : "");
     update_up_button();
-
-    if (s_search_label) {
-        ui_value_set_text(s_search_label,
-                          s_search_text[0] ? ui_text("SEARCH*") : ui_text("SEARCH"));
-    }
-
-    if (s_search_text[0] && s_breadcrumb_label) {
-        char breadcrumb[190];
-        snprintf(breadcrumb,
-                 sizeof(breadcrumb),
-                 "SEARCH / %.170s",
-                 s_search_text);
-        ui_value_set_text(s_breadcrumb_label, breadcrumb);
-    }
+    if (s_search_label) ui_value_set_text(s_search_label, ui_text("Search"));
+    ui_button_set_filter_active(s_search_button,s_search_text[0]!=0);
+    files_update_breadcrumb();
 }
+
 
 static void close_search_popup(void)
 {
@@ -804,7 +795,7 @@ static void search_button_cb(lv_event_t *event)
 {
     if (!files_owned_click(event,s_search_button))return;
     if (s_search_popup) { lv_obj_move_foreground(s_search_popup); return; }
-    s_search_popup=ui_form_dialog("SEARCH FILES",760,540,UI_POPUP_STANDARD);
+    s_search_popup=ui_form_dialog("Search files",760,540,UI_POPUP_STANDARD);
     if(!s_search_popup)return;
     ++s_files_epoch;
     lv_obj_add_event_cb(s_search_popup,search_popup_deleted_cb,LV_EVENT_DELETE,NULL);
@@ -814,8 +805,8 @@ static void search_button_cb(lv_event_t *event)
     lv_obj_t *keyboard=ui_form_keyboard(s_search_popup,s_search_textarea,LV_KEYBOARD_MODE_TEXT_LOWER);
     s_search_keyboard=keyboard;files_watch(keyboard);
     ui_popup_keyboard_actions(keyboard,search_keyboard_cb,search_keyboard_cb);
-    s_search_cancel=ui_form_action(s_search_popup,UI_BUTTON_CANCEL,"CANCEL",search_cancel_button_cb,NULL);files_watch(s_search_cancel);
-    s_search_apply=ui_form_action(s_search_popup,UI_BUTTON_PRIMARY,"SEARCH",search_apply_button_cb,NULL);files_watch(s_search_apply);
+    s_search_cancel=ui_form_action(s_search_popup,UI_BUTTON_CANCEL,"Cancel",search_cancel_button_cb,NULL);files_watch(s_search_cancel);
+    s_search_apply=ui_form_action(s_search_popup,UI_BUTTON_PRIMARY,"Search",search_apply_button_cb,NULL);files_watch(s_search_apply);
     ui_form_finish(s_search_popup);ui_popup_focus_input(s_search_textarea);
     lv_obj_move_foreground(s_search_popup);
 }
@@ -891,7 +882,8 @@ void ui_files_show(void)
         s_sort_button=sort;files_watch(sort);
         s_sort_label=lv_obj_get_child(sort,0);
         s_refresh_button=studio_action(s_printer_file_popup,"Refresh",422,70,154,44,files_refresh_event_cb,NULL);files_watch(s_refresh_button);
-        s_breadcrumb_label=studio_text(s_printer_file_popup,"/gcodes",0,120,576,UI_FONT_CAPTION,UI_TEXT_DIM);
+        s_breadcrumb_label=studio_text(s_printer_file_popup,"G-code files",0,120,576,UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_label_set_long_mode(s_breadcrumb_label,LV_LABEL_LONG_DOT);
         ui_files_set_breadcrumb(NULL);ui_files_set_search_text(s_search_text);
         lv_obj_t *viewport=studio_plane(s_printer_file_popup,0,150,576,274);
         s_printer_file_list=studio_plane(viewport,0,0,576,274);
@@ -963,7 +955,7 @@ void ui_files_show(void)
 
     lv_obj_t *up = ui_button_create_icon(
         toolbar, UI_BUTTON_OUTLINED,
-        LV_SYMBOL_UP, "UP", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
+        LV_SYMBOL_UP, "Up", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     s_up_button=up;
     if (up) {
         lv_obj_add_event_cb(up,up_button_deleted,LV_EVENT_DELETE,NULL);
@@ -974,7 +966,7 @@ void ui_files_show(void)
 
     lv_obj_t *search = ui_button_create_icon(
         toolbar, UI_BUTTON_OUTLINED,
-        LV_SYMBOL_EDIT, "SEARCH", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
+        LV_SYMBOL_EDIT, "Search", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (search) {
         s_search_button=search;files_watch(search);
         ui_responsive_action(search);
@@ -986,7 +978,7 @@ void ui_files_show(void)
 
     lv_obj_t *sort = ui_button_create_icon(
         toolbar, UI_BUTTON_OUTLINED,
-        LV_SYMBOL_LIST, "NAME", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
+        LV_SYMBOL_LIST, "Name", UI_ACCENT_CYAN, UI_BUTTON_ICON_HORIZONTAL);
     if (sort) {
         s_sort_button=sort;files_watch(sort);
         ui_responsive_action(sort);
@@ -1003,7 +995,7 @@ void ui_files_show(void)
             toolbar,
             UI_BUTTON_OUTLINED,
             LV_SYMBOL_REFRESH,
-            "REFRESH",
+            "Refresh",
             UI_ACCENT_CYAN,
             UI_BUTTON_ICON_HORIZONTAL);
 

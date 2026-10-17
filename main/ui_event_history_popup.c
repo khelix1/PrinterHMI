@@ -9,6 +9,7 @@
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_responsive_layout.h"
 #include "ui_text_fit.h"
 
@@ -174,6 +175,11 @@ static void rebuild_event_list_impl(void)
         lv_obj_set_style_border_width(row,1,0);
         lv_obj_set_style_border_color(row,UI_BORDER_SOFT,0);
         lv_obj_set_style_radius(row,UI_RADIUS_ACTION,0);
+        if(ui_theme_is_studio()) {
+            ui_apply_surface_role(row,UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(row,LV_BORDER_SIDE_BOTTOM);
+            lv_obj_set_style_pad_all(row,12,0);
+        }
         lv_obj_t *meta=lv_label_create(row);
         lv_label_set_text(meta,metadata);lv_obj_set_width(meta,LV_PCT(100));
         lv_label_set_long_mode(meta,LV_LABEL_LONG_WRAP);
@@ -279,7 +285,9 @@ static void follow_cb(lv_event_t *event)
     if(event && lv_event_get_code(event)!=LV_EVENT_CLICKED)return;
     if(!s_popup || !s_list || !s_follow_button)return;
     s_follow_live=!s_follow_live;
-    lv_label_set_text(lv_obj_get_child(s_follow_button,0),s_follow_live ? "HOLD" : "FOLLOW LIVE");
+    lv_label_set_text(lv_obj_get_child(s_follow_button,0),s_follow_live ? "Hold" : "Follow live");
+    ui_text_fit_single_line(lv_obj_get_child(s_follow_button,0),UI_FONT_BODY);
+    ui_button_set_filter_active(s_follow_button,!s_follow_live);
     if(s_follow_live)rebuild_event_list();
 }
 static void action_fit(lv_event_t *event)
@@ -309,20 +317,22 @@ void ui_event_history_popup_show(void)
     lv_obj_set_flex_flow(s_popup,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_popup,16,0);lv_obj_set_style_pad_row(s_popup,12,0);
     lv_obj_t *title=lv_label_create(s_popup);
-    lv_label_set_text(title,"EVENT HISTORY");lv_obj_set_width(title,LV_PCT(100));
+    lv_label_set_text(title,"Event history");lv_obj_set_width(title,LV_PCT(100));
     ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
     lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
     s_list=lv_obj_create(s_popup);lv_obj_add_event_cb(s_list,history_field_deleted,LV_EVENT_DELETE,NULL);lv_obj_remove_style_all(s_list);
     lv_obj_set_size(s_list,LV_PCT(100),0);lv_obj_set_flex_grow(s_list,1);
     lv_obj_set_flex_flow(s_list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_list,8,0);
-    lv_obj_set_scroll_dir(s_list,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_list,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(s_list,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_list,LV_SCROLLBAR_MODE_OFF);
     lv_obj_t *footer=lv_obj_create(s_popup);ui_responsive_column(footer);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
     lv_obj_set_flex_flow(footer,LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_column(footer,8,0);lv_obj_set_style_pad_row(footer,8,0);
-    s_follow_button=history_action(footer,UI_BUTTON_OUTLINED,"HOLD",follow_cb);
+    s_follow_button=history_action(footer,UI_BUTTON_OUTLINED,"Hold",follow_cb);
+    ui_button_set_filter_active(s_follow_button,false);
     lv_obj_add_event_cb(s_follow_button,history_field_deleted,LV_EVENT_DELETE,NULL);
-    history_action(footer,UI_BUTTON_DANGER,"CLEAR",clear_cb);
-    history_action(footer,UI_BUTTON_CLOSE,"CLOSE",close_cb);
+    history_action(footer,UI_BUTTON_DANGER,"Clear",clear_cb);
+    history_action(footer,UI_BUTTON_CLOSE,"Close",close_cb);
     uint32_t epoch=s_history_epoch;
     rebuild_event_list();
     if(epoch!=s_history_epoch || !s_popup || !s_list)return;

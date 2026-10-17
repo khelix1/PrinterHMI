@@ -97,7 +97,7 @@ bool ui_calibration_manual_probe_show(
     s_probe.abort_cb = abort_cb;
     s_probe.accept_cb = accept_cb;
     lv_obj_add_event_cb(s_probe.popup, manual_probe_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(s_probe.popup, title ? title : ui_text("MANUAL PROBE"));
+    ui_cal_dialog_title(s_probe.popup, title ? title : ui_text("Manual probe"));
 
     s_probe.status_label =
         ui_cal_dialog_text(ui_cal_dialog_body(s_probe.popup), instructions
@@ -130,8 +130,8 @@ bool ui_calibration_manual_probe_show(
     }
 
 
-    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "ABORT", manual_probe_abort, NULL, NULL);
-    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "ACCEPT", manual_probe_accept, NULL, NULL);
+    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "Abort", manual_probe_abort, NULL, NULL);
+    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "Accept", manual_probe_accept, NULL, NULL);
 
     return true;
 }

@@ -8,7 +8,7 @@
 #include <string.h>
 
 typedef enum {CHANNEL_HOTEND,CHANNEL_BED,CHANNEL_CENTER,CHANNEL_AIR,CHANNEL_HUMIDITY,
-    CHANNEL_VELOCITY,CHANNEL_FLOW,CHANNEL_SPEED_FACTOR,CHANNEL_FLOW_FACTOR,CHANNEL_PART_FAN,CHANNEL_DRYBOX_FAN} telemetry_channel_t;
+    CHANNEL_VELOCITY,CHANNEL_FLOW,CHANNEL_SPEED_FACTOR,CHANNEL_FLOW_FACTOR,CHANNEL_PART_FAN,CHANNEL_DRYBOX_FAN,CHANNEL_NONE} telemetry_channel_t;
 typedef struct {
     lv_obj_t *card,*title,*value,*target,*chart,*stats,*scale,*time,*time_left,*marker;
     lv_chart_series_t *actual,*reference;
@@ -17,6 +17,7 @@ typedef struct {
     int32_t newest;
 } telemetry_chart_t;
 static telemetry_chart_t s_charts[4];
+static unsigned s_visible_chart_count=3;
 static lv_obj_t *s_chart_host;
 static uint32_t s_chart_epoch;
 static void chart_field_deleted(lv_event_t *event)
@@ -34,9 +35,9 @@ static bool s_chart_include_targets=true;
 static char s_chart_hotend[MOONRAKER_HOTEND_NAME_MAX];
 static const char *const s_channel_names[]={"Hotend","Bed","Drybox center","Drybox air","Humidity","Velocity","Volumetric flow","Speed override","Flow override","Part fan","Drybox fan"};
 static const char *const s_units[]={"C","C","C","C","%RH","mm/s","mm3/s","%","%","%","%"};
-static const telemetry_channel_t s_view_channels[3][4]={{CHANNEL_HOTEND,CHANNEL_BED,CHANNEL_CENTER,CHANNEL_AIR},
+static const telemetry_channel_t s_view_channels[3][4]={{CHANNEL_HOTEND,CHANNEL_BED,CHANNEL_PART_FAN,CHANNEL_NONE},
     {CHANNEL_VELOCITY,CHANNEL_FLOW,CHANNEL_SPEED_FACTOR,CHANNEL_FLOW_FACTOR},
-    {CHANNEL_AIR,CHANNEL_HUMIDITY,CHANNEL_PART_FAN,CHANNEL_DRYBOX_FAN}};
+    {CHANNEL_CENTER,CHANNEL_AIR,CHANNEL_HUMIDITY,CHANNEL_DRYBOX_FAN}};
 
 static double channel_value(const telemetry_sample_t *s,telemetry_channel_t channel,bool target)
 {
@@ -153,14 +154,18 @@ void ui_telemetry_charts_create(lv_obj_t *parent)
 void ui_telemetry_charts_configure(ui_telemetry_view_t view,unsigned points,const char *hotend,bool include_targets)
 {
     if(view>UI_TELEMETRY_ENVIRONMENT)view=UI_TELEMETRY_HEAT;
+    s_visible_chart_count=view==UI_TELEMETRY_HEAT?3:4;
     s_points=points==60 || points==150?points:300;
     s_chart_include_targets=include_targets;
     snprintf(s_chart_hotend,sizeof(s_chart_hotend),"%s",hotend?hotend:"");
     for(unsigned i=0;i<4;i++) {
         telemetry_chart_t *c=&s_charts[i];if(!c->chart)continue;
         c->channel=s_view_channels[view][i];
-        ui_value_set_text(c->title,c->channel==CHANNEL_HOTEND && s_chart_hotend[0]?s_chart_hotend:s_channel_names[c->channel]);
+        /* Hidden reusable slots still share the current history-buffer size. */
         if(lv_chart_get_point_count(c->chart)!=s_points)lv_chart_set_point_count(c->chart,s_points);
+        if(i>=s_visible_chart_count) {lv_obj_add_flag(c->card,LV_OBJ_FLAG_HIDDEN);continue;}
+        lv_obj_remove_flag(c->card,LV_OBJ_FLAG_HIDDEN);
+        ui_value_set_text(c->title,c->channel==CHANNEL_HOTEND && s_chart_hotend[0]?s_chart_hotend:s_channel_names[c->channel]);
     }
 }
 
@@ -168,7 +173,7 @@ void ui_telemetry_charts_update_live(const telemetry_sample_t *sample,bool live,
 {
     if(!s_chart_host || !sample)return;
     for(unsigned i=0;i<4;i++) {
-        telemetry_chart_t *c=&s_charts[i];if(!c->value)continue;
+        telemetry_chart_t *c=&s_charts[i];if(!c->value || i>=s_visible_chart_count)continue;
         double value=channel_value(sample,c->channel,false),target=channel_value(sample,c->channel,true);
         char text[112];
         bool unavailable=channel_unavailable(sample,c->channel);
@@ -215,7 +220,7 @@ void ui_telemetry_charts_refresh(int64_t end_us,bool held)
         int64_t age=end_tick-sample.time_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
         if(age<0 || age>=(int64_t)s_points)continue;
         unsigned index=s_points-1-(unsigned)age;
-        for(unsigned n=0;n<4;n++) {
+        for(unsigned n=0;n<s_visible_chart_count;n++) {
             double value=channel_value(&sample,s_charts[n].channel,false);
             double reference=channel_value(&sample,s_charts[n].channel,true);
             actual_values[n][index]=plot_value(value);
@@ -227,7 +232,7 @@ void ui_telemetry_charts_refresh(int64_t end_us,bool held)
             if(isfinite(reference) && reference>0)target_values[n][index]=plot_value(reference);
         }
     }
-    for(unsigned n=0;n<4;n++) {
+    for(unsigned n=0;n<s_visible_chart_count;n++) {
         telemetry_chart_t *c=&s_charts[n];
         int32_t *actual=actual_values[n],*target=target_values[n];
         double min=minima[n],max=maxima[n],low=min,high=max;

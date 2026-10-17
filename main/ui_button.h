@@ -71,6 +71,9 @@ void ui_button_apply_kind(
     lv_obj_t *button,
     ui_button_kind_t kind);
 
+/* Query-owned active filter feedback; tapping the button does not toggle it. */
+void ui_button_set_filter_active(lv_obj_t *button,bool active);
+
 /*
  * Creates and centers a themed button label.
  */

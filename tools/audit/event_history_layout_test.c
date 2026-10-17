@@ -86,10 +86,10 @@ int main(void)
         event_count=40;refresh_timer_cb(s_refresh_timer);check_layout();assert(lv_obj_get_child_count(s_list)==40);
         if(viewport==0&&density==1&&large)capture(theme);
         lv_obj_t *first=lv_obj_get_child(s_list,0);refresh_timer_cb(s_refresh_timer);assert(first==lv_obj_get_child(s_list,0));
-        follow_cb(NULL);assert(!s_follow_live);lv_obj_scroll_to_y(s_list,0,LV_ANIM_OFF);
+        follow_cb(NULL);assert(!s_follow_live&&lv_obj_has_state(s_follow_button,LV_STATE_CHECKED));lv_obj_scroll_to_y(s_list,0,LV_ANIM_OFF);
         sequence++;refresh_timer_cb(s_refresh_timer);assert(s_rendered_sequence==100&&first==lv_obj_get_child(s_list,0));
         ui_event_history_popup_show();assert(!s_follow_live&&first==lv_obj_get_child(s_list,0));
-        follow_cb(NULL);assert(s_follow_live&&s_rendered_sequence==101);check_layout();
+        follow_cb(NULL);assert(s_follow_live&&s_rendered_sequence==101&&!lv_obj_has_state(s_follow_button,LV_STATE_CHECKED));check_layout();
         clear_cb(NULL);assert(!event_count&&lv_obj_get_child_count(s_list)==1);check_layout();
         lv_obj_delete(s_popup);assert(!s_popup&&!s_list&&!s_refresh_timer&&!s_follow_button);
         event_count=2;sequence++;ui_event_history_popup_show();read_hook=1;sequence++;refresh_timer_cb(NULL);assert(!s_popup&&!s_list&&!s_refresh_timer);

@@ -12,6 +12,7 @@ bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
+uint32_t moonraker_config_generation(void){return 1;}
 static moonraker_state_t snapshot;
 static device_descriptor_t devices[3];
 static bool present=true, expects=true;
@@ -44,6 +45,7 @@ int main(void){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   for(int cycle=0;cycle<3;cycle++){
    ui_drybox_page_t p=fixture();
+   s_page_owner=&p;s_page_generation=moonraker_config_generation();watch_page_fields();
    ui_drybox_page_state_t s={.banner_text="READY",.air_temp=32.4f,.center_temp=35.2f,.humidity=22.5f,.heater_target=45,.heater_on=true,.fan_speed=50,.active_program=UI_DRYBOX_PROGRAM_PLA};
    ui_drybox_page_refresh(&p,&s);same(p.air_label,"32.4 C");same(p.humidity_label,"22.5");color(p.humidity_label,UI_ACCENT_CYAN);
    same(s_program_status_label,"PLA ACTIVE");assert(lv_bar_get_value(s_humidity_bar)==22);
@@ -53,10 +55,11 @@ int main(void){
    assert(lv_obj_has_state(s_program_buttons[DRYBOX_PROGRAM_PLA],LV_STATE_DISABLED));assert(!lv_bar_get_value(s_humidity_bar));
    lv_refr_now(d);invalidations=0;for(int i=0;i<100;i++)ui_drybox_page_refresh(&p,&s);assert(!invalidations);
    s.banner_text="READY";s.active_program=UI_DRYBOX_PROGRAM_PETG;s.heater_on=false;s.fan_speed=0;s.heater_target=0;
-   ui_drybox_page_refresh(&p,&s);color(p.humidity_label,UI_ACCENT_CYAN);same(s_program_status_label,"PETG ACTIVE");same(p.heater_label,"OFF");same(p.fan_label,"0 %");color(p.target_label,UI_TEXT_DIM);
+   ui_drybox_page_refresh(&p,&s);color(p.humidity_label,UI_ACCENT_CYAN);same(s_program_status_label,"PETG ACTIVE");same(p.heater_label,"Off");same(p.fan_label,"0 %");color(p.target_label,UI_TEXT_DIM);
    const float humidity[]={9,10,25,40,120,-4};const char *conditions[]={"VERY DRY","IDEAL","MODERATE","HIGH","HIGH","VERY DRY"};
    for(unsigned i=0;i<6;i++){s.humidity=humidity[i];ui_drybox_page_refresh(&p,&s);same(s_humidity_condition_label,conditions[i]);assert(lv_bar_get_value(s_humidity_bar)==(i==4?100:i==5?0:(int)humidity[i]));}
    ui_drybox_page_cleanup(&p);assert(!p.panel && !s_humidity_bar && !s_program_buttons[DRYBOX_PROGRAM_PLA]);
+   snapshot=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true};strcpy(snapshot.printer_state,"ready");
    lv_obj_t *owner=lv_obj_create(lv_screen_active());ui_devices_live_values_init(owner);
    memset(devices,0,sizeof(devices));strcpy(devices[0].object_name,"heater_bed");strcpy(devices[1].object_name,"generic");strcpy(devices[2].object_name,"other");
    devices[1].live_value_valid=true;strcpy(devices[1].live_value,"ON");snapshot.bed_temp=60;snapshot.bed_target=60;present=true;expects=true;

@@ -1,6 +1,7 @@
 #include "ui_filament_recovery.h"
 #include "ui_popup.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_theme.h"
 #include "ui_value_update.h"
 #include "ui_form_dialog.h"
@@ -187,11 +188,12 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     moonraker_state_snapshot(&state);
     selected_temperature = state.nozzle_target >= 170 && state.nozzle_target <= 255
         ? (int)state.nozzle_target : 205;
-    popup = ui_form_dialog("FILAMENT RECOVERY / RESUME", 840, 568, UI_POPUP_STANDARD);
+    popup = ui_form_dialog("Filament recovery", 840, 568, UI_POPUP_STANDARD);
     if (!popup) { send_command = NULL; return; }
     ++popup_epoch;
     lv_obj_add_event_cb(popup, deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = ui_form_body(popup);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     status_label = ui_form_text(body, "", UI_FONT_BODY, UI_TEXT);
     sensor_label = ui_form_text(body, "", UI_FONT_BODY, UI_TEXT);
     message_label = ui_form_text(body,
@@ -201,7 +203,7 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     lv_obj_t *labels[] = {status_label, sensor_label, message_label};
     for (unsigned i = 0; i < 3; ++i)
         lv_obj_add_event_cb(labels[i], field_deleted, LV_EVENT_DELETE, NULL);
-    ui_form_text(body, "NOZZLE TARGET", UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_form_text(body, "Nozzle target", UI_FONT_BODY, UI_TEXT_MUTED);
     static const int32_t temperature_columns[] = {100, LV_GRID_FR(1), 100, LV_GRID_TEMPLATE_LAST};
     static const int32_t one_row[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
     lv_obj_t *temperature_row = lv_obj_create(body);
@@ -209,12 +211,14 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     lv_obj_set_size(temperature_row, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_grid_dsc_array(temperature_row, temperature_columns, one_row);
     lv_obj_set_style_pad_column(temperature_row, 8, 0);
+    ui_apply_divider_border(temperature_row, LV_BORDER_SIDE_BOTTOM);
+    lv_obj_set_style_pad_bottom(temperature_row, 8, 0);
     lv_obj_t *minus = ui_button_create(temperature_row, UI_BUTTON_OUTLINED, "-5 C");
     lv_obj_set_height(minus, 52);
     lv_obj_set_grid_cell(minus, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
     lv_obj_add_event_cb(minus, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
     lv_obj_add_event_cb(minus, temperature_change, LV_EVENT_CLICKED, (void *)(intptr_t)-5);
-    temperature_label = ui_form_text(temperature_row, "", UI_FONT_BODY, UI_TEXT_BRIGHT);
+    temperature_label = ui_form_text(temperature_row, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT);
     lv_obj_set_style_text_align(temperature_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_grid_cell(temperature_label, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     lv_obj_add_event_cb(temperature_label, field_deleted, LV_EVENT_DELETE, NULL);
@@ -234,17 +238,21 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     lv_obj_set_grid_dsc_array(row, columns, rows);
     lv_obj_set_style_pad_column(row, 8, 0);
     lv_obj_set_style_pad_row(row, 8, 0);
-    static const char *names[] = {"HEAT", "UNLOAD", "LOAD 30 mm", "PURGE 10 mm", "RESUME"};
+    static const char *names[] = {"Heat", "Unload", "Load 30 mm", "Purge 10 mm", "Resume"};
     for (size_t i = 0; i < 5; ++i) {
         buttons[i] = ui_button_create(row, i == 4 ? UI_BUTTON_SUCCESS : UI_BUTTON_OUTLINED, names[i]);
         lv_obj_set_size(buttons[i], LV_PCT(100), 54);
-        lv_obj_set_grid_cell(buttons[i], LV_GRID_ALIGN_STRETCH, i % 3, 1, LV_GRID_ALIGN_START, i / 3, 1);
+        lv_obj_set_grid_cell(buttons[i], LV_GRID_ALIGN_STRETCH, i % 3, i == 4 ? 2 : 1, LV_GRID_ALIGN_START, i / 3, 1);
         lv_obj_add_event_cb(buttons[i], ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
         lv_obj_add_event_cb(buttons[i], field_deleted, LV_EVENT_DELETE, NULL);
         lv_obj_add_event_cb(buttons[i], action, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
     }
-    ui_form_action(popup, UI_BUTTON_CLOSE, "CLOSE", close_event, NULL);
+    ui_form_action(popup, UI_BUTTON_CLOSE, "Close", close_event, NULL);
     refresh(NULL);
     refresh_timer = lv_timer_create(refresh, 500, NULL);
     ui_form_finish(popup);
+    /* The grid has its final width now; fit from the preferred readable size
+     * rather than retaining a font chosen during its initial empty layout. */
+    for (unsigned i = 0; i < 5; ++i)
+        ui_text_fit_single_line(lv_obj_get_child(buttons[i], 0), UI_FONT_BODY_LARGE);
 }

@@ -54,6 +54,8 @@ static void geometry(void)
   lv_obj_t *child=lv_obj_get_child(s_root,i);
   if(lv_obj_get_width(child)!=1)continue;
   separators++;contained(child,s_root);
+  assert(lv_color_eq(lv_obj_get_style_bg_color(child,0),UI_BORDER));
+  assert(lv_obj_get_style_bg_opa(child,0)==LV_OPA_COVER);
   assert(!lv_obj_has_flag(child,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
   for(int j=0;j<4;j++)assert(!overlapping(child,s_cards[j].root));
   assert(lv_obj_get_y(child)>lv_obj_get_y(s_cards[0].root));

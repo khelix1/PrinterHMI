@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "ui_popup.h"
+#include "ui_widgets.h"
 #include "ui_responsive_layout.h"
 #include "moonraker_config_controller.h"
 #include "ui_toast.h"
@@ -34,11 +35,11 @@ static inline lv_obj_t *ui_cal_dialog_create(lv_obj_t *parent, int32_t width,
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_bg_color(body, UI_TEXT_MUTED, LV_PART_SCROLLBAR);
-    lv_obj_set_style_bg_opa(body, LV_OPA_70, LV_PART_SCROLLBAR);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     lv_obj_t *footer = lv_obj_create(popup);
     ui_responsive_column(footer);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);

@@ -13,6 +13,7 @@
 #include "moonraker.h"
 #include "moonraker_config_controller.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
@@ -30,7 +31,7 @@ typedef struct {
     lv_obj_t *status;
     lv_obj_t *confirm;
     lv_obj_t *run_action;
-    lv_obj_t *search_label, *editor, *editor_value, *editor_target;
+    lv_obj_t *search_label, *clear_action, *editor, *editor_value, *editor_target;
     lv_obj_t *parameter_fields[MACRO_PARAMETER_MAX + MACRO_PARAMETER_EXTRA];
     lv_obj_t *parameter_names[MACRO_PARAMETER_EXTRA];
     macro_parameter_catalog_t parameters;
@@ -174,11 +175,28 @@ static bool macro_already_sent(const char *command)
     return s_macros->accepted && s_macros->accepted_owner == moonraker_config_generation() &&
         lv_tick_elaps(s_macros->accepted_at) < 5000 && !strcmp(s_macros->accepted_command,command);
 }
+static void macro_update_search(void)
+{
+    if(!s_macros || !s_root)return;
+    uint32_t epoch=s_macro_epoch;
+    lv_obj_t *root=s_root;
+    if(s_macros->clear_action){
+        if(s_macros->query[0])lv_obj_remove_state(s_macros->clear_action,LV_STATE_DISABLED);
+        else lv_obj_add_state(s_macros->clear_action,LV_STATE_DISABLED);
+    }
+    if(!s_macros || s_root!=root || epoch!=s_macro_epoch || !s_macros->search_label)return;
+    lv_obj_t *label=s_macros->search_label;
+    ui_value_set_text(label,"Search");
+    if(!s_macros || !s_root || epoch!=s_macro_epoch || label!=s_macros->search_label)return;
+    ui_button_set_filter_active(lv_obj_get_parent(label),s_macros->query[0]!=0);
+}
 static void macro_field_deleted(lv_event_t *event)
 {
     if(!s_macros)return;
     lv_obj_t *target=lv_event_get_target_obj(event);
     bool retired=false;
+    if(target==s_macros->clear_action){s_macros->clear_action=NULL;retired=true;}
+    if(target==s_macros->search_label){s_macros->search_label=NULL;retired=true;}
     if(target==s_macros->editor_value){s_macros->editor_value=NULL;retired=true;}
     for(size_t i=0;i<MACRO_PARAMETER_MAX+MACRO_PARAMETER_EXTRA;i++)
         if(target==s_macros->parameter_fields[i]){s_macros->parameter_fields[i]=NULL;retired=true;}
@@ -267,8 +285,7 @@ static void editor_done_cb(lv_event_t *event)
         uint32_t expected_epoch=s_macro_epoch+1,owner=s_macros->editor_owner;
         close_editor();
         if(s_macro_epoch!=expected_epoch || !s_root || owner!=moonraker_config_generation())return;
-        if (s_macros->search_label)
-            lv_label_set_text(s_macros->search_label, s_macros->query[0] ? "SEARCH*" : "SEARCH");
+        macro_update_search();
         rebuild_macro_list();
     } else {
         if (s_macros->editor_target)
@@ -328,7 +345,7 @@ static lv_obj_t *macro_actions(lv_obj_t *popup, const char *text,
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(row, UI_GAP_ROW, 0);
     lv_obj_t *cancel = ui_popup_add_action_at(row, UI_POPUP_ACTION_CANCEL,
-        "CANCEL", 0, 0, LV_PCT(48), 48, cancel_cb, NULL, NULL);
+        "Cancel", 0, 0, LV_PCT(48), 48, cancel_cb, NULL, NULL);
     lv_obj_set_flex_grow(cancel, 1);
     lv_obj_t *accept = ui_popup_add_action_at(row, UI_POPUP_ACTION_PRIMARY,
         text, 0, 0, LV_PCT(48), 48, accept_cb, NULL, NULL);
@@ -369,7 +386,7 @@ static void open_editor(lv_obj_t *target, bool search)
     s_macros->editor_owner = moonraker_config_generation();
     s_macros->editor_target = target;
     lv_obj_t *body;
-    s_macros->editor = macro_dialog(search ? "SEARCH MACROS" : "EDIT PARAMETER", &body);
+    s_macros->editor = macro_dialog(search ? "Search macros" : "Edit parameter", &body);
     if (!s_macros->editor) return;
     uint32_t maximum = search ? sizeof(s_macros->query) - 1 : lv_textarea_get_max_length(target);
     s_macros->editor_value = ui_popup_add_textarea(body, LV_PCT(100), 56,
@@ -380,7 +397,7 @@ static void open_editor(lv_obj_t *target, bool search)
     lv_obj_set_height(s_macros->editor_value, 56);
     lv_obj_t *keyboard=ui_popup_add_keyboard(body, s_macros->editor_value, LV_PCT(100), 224,
         LV_ALIGN_TOP_LEFT, 0, 0, LV_KEYBOARD_MODE_TEXT_LOWER);
-    macro_actions(s_macros->editor, "DONE", editor_cancel_cb, editor_done_cb);
+    macro_actions(s_macros->editor, "Done", editor_cancel_cb, editor_done_cb);
     ui_popup_keyboard_actions(keyboard,editor_done_cb,editor_cancel_cb);
     ui_popup_pin_keyboard(s_macros->editor,keyboard);
 }
@@ -388,11 +405,13 @@ static void field_cb(lv_event_t *event) { if(event)open_editor(lv_event_get_targ
 static void search_cb(lv_event_t *event) { (void)event; open_editor(NULL, true); }
 static void clear_search_cb(lv_event_t *event)
 {
-    (void)event;
     if (!s_macros || !s_root || s_macro_dispatching) return;
+    if(event && (!s_macros->clear_action || lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED) ||
+        lv_event_get_code(event)!=LV_EVENT_CLICKED || lv_event_get_target_obj(event)!=s_macros->clear_action ||
+        lv_event_get_current_target_obj(event)!=s_macros->clear_action))return;
     close_editor();
     s_macros->query[0] = 0;
-    if (s_macros->search_label) lv_label_set_text(s_macros->search_label, "SEARCH");
+    macro_update_search();
     rebuild_macro_list();
 }
 
@@ -435,12 +454,12 @@ static void review_macro_cb(lv_event_t *event)
     lv_obj_delete(old);
     if(epoch!=s_macro_epoch || !s_root || owner!=moonraker_config_generation())return;
     lv_obj_t *body;
-    s_confirm = macro_dialog("RUN MACRO?", &body);
+    s_confirm = macro_dialog("Run macro?", &body);
     if (!s_confirm) { s_pending_macro[0] = 0; return; }
     s_macros->reviewed = true;
     macro_body_text(body, "Review the command before running:");
     macro_body_text(body, s_macros->pending_command);
-    s_macros->run_action=macro_actions(s_confirm, LV_SYMBOL_PLAY " RUN", close_confirm_cb, run_macro_cb);
+    s_macros->run_action=macro_actions(s_confirm, LV_SYMBOL_PLAY " Run", close_confirm_cb, run_macro_cb);
     lv_obj_add_event_cb(s_macros->run_action,macro_run_deleted,LV_EVENT_DELETE,NULL);
     macro_run_availability();
 }
@@ -477,7 +496,7 @@ static void macro_button_cb(lv_event_t *event)
             lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
         } else {
             lv_obj_t *name = ui_popup_add_textarea(cell, LV_PCT(100), 48, LV_ALIGN_TOP_LEFT,
-                0, 0, true, false, MACRO_PARAMETER_NAME_MAX - 1, "Additional NAME", "", NULL);
+                0, 0, true, false, MACRO_PARAMETER_NAME_MAX - 1, "Additional name", "", NULL);
             ui_apply_custom_label_style(name, UI_FONT_BODY, UI_TEXT);
             lv_obj_set_height(name, 56);
             s_macros->parameter_names[i - count] = name;
@@ -492,7 +511,7 @@ static void macro_button_cb(lv_event_t *event)
         lv_obj_add_event_cb(value, field_cb, LV_EVENT_CLICKED, NULL);
         lv_obj_add_event_cb(value,macro_field_deleted,LV_EVENT_DELETE,NULL);
     }
-    macro_actions(s_confirm, "REVIEW", close_confirm_cb, review_macro_cb);
+    macro_actions(s_confirm, "Review", close_confirm_cb, review_macro_cb);
 }
 
 
@@ -517,21 +536,21 @@ static void rebuild_macro_list(void)
             snprintf(
                 status_text,
                 sizeof(status_text),
-                "WAITING FOR PRINTER DISCOVERY");
+                "Waiting for printer discovery");
         } else if (status.truncated) {
             snprintf(
                 status_text,
                 sizeof(status_text),
-                "%u OF %u PUBLIC MACROS",
+                "%u of %u public macros",
                 (unsigned)status.count,
                 (unsigned)status.total_count);
         } else {
             snprintf(
                 status_text,
                 sizeof(status_text),
-                "%u PUBLIC MACRO%s",
+                "%u public macro%s",
                 (unsigned)status.count,
-                status.count == 1 ? "" : "S");
+                status.count == 1 ? "" : "s");
         }
 
         lv_label_set_text(
@@ -546,7 +565,7 @@ static void rebuild_macro_list(void)
         lv_label_set_text(
             empty,
             status.discovered
-                ? ui_text("No public gcode_macro objects were detected.")
+                ? ui_text("No public macros were reported by this printer.")
                 : ui_text("Waiting for Moonraker object discovery..."));
         lv_obj_set_width(empty, lv_pct(100));
         lv_obj_set_style_text_align(
@@ -585,6 +604,7 @@ static void rebuild_macro_list(void)
             button = ui_button_create_icon(s_list, UI_BUTTON_OUTLINED,
                 favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY, name, UI_OK_BRIGHT, UI_BUTTON_ICON_HORIZONTAL);
             if (!button) continue;
+            if(ui_theme_is_studio())ui_apply_flat_entry(button);
             s_macros->rows[displayed] = button;
             lv_obj_add_event_cb(button, macro_button_cb, LV_EVENT_CLICKED, NULL);
             lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED, NULL);
@@ -607,7 +627,7 @@ static void rebuild_macro_list(void)
     lv_obj_send_event(s_list, LV_EVENT_SIZE_CHANGED, NULL);
     if (s_macros->query[0]) {
         char text[96];
-        snprintf(text, sizeof(text), "%u MATCHES: %.47s", (unsigned)displayed, s_macros->query);
+        snprintf(text, sizeof(text), "%u match%s: %.47s", (unsigned)displayed, displayed==1?"":"es", s_macros->query);
         lv_label_set_text(s_status, text);
     }
     if (!displayed) {
@@ -678,11 +698,11 @@ void ui_macros_show(
     lv_obj_t *header = lv_obj_create(s_root);
     ui_responsive_column(header);
     lv_obj_t *title = lv_label_create(header);
-    lv_label_set_text(title, ui_text("MACROS"));
+    lv_label_set_text(title, ui_text("Macros"));
     ui_apply_text_title(title);
     ui_apply_label_bright(title);
     lv_obj_t *subtitle = lv_label_create(header);
-    lv_label_set_text(subtitle, ui_text("DETECTED PUBLIC KLIPPER ACTIONS"));
+    lv_label_set_text(subtitle, ui_text("Public Klipper macros"));
     lv_obj_set_width(subtitle, lv_pct(100));
     ui_apply_text_caption(subtitle);
     ui_apply_label_dim(subtitle);
@@ -695,18 +715,22 @@ void ui_macros_show(
     ui_responsive_column(actions);
     lv_obj_set_flex_flow(actions, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_column(actions, UI_GAP_ROW, 0);
-    lv_obj_t *search = ui_button_create(actions, UI_BUTTON_OUTLINED, "SEARCH");
+    lv_obj_t *search = ui_button_create(actions, UI_BUTTON_OUTLINED, "Search");
     ui_responsive_action(search);
     s_macros->search_label = lv_obj_get_child(search, 0);
-    lv_label_set_text(s_macros->search_label, s_macros->query[0] ? "SEARCH*" : "SEARCH");
+    lv_obj_add_event_cb(s_macros->search_label,macro_field_deleted,LV_EVENT_DELETE,NULL);
+    macro_update_search();
     lv_obj_add_event_cb(search, search_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *clear = ui_button_create(actions, UI_BUTTON_OUTLINED, "CLEAR SEARCH");
+    lv_obj_t *clear = ui_button_create(actions, UI_BUTTON_OUTLINED, "Clear search");
+    s_macros->clear_action=clear;
+    lv_obj_add_event_cb(clear,macro_field_deleted,LV_EVENT_DELETE,NULL);
     ui_responsive_action(clear);
+    macro_update_search();
     lv_label_set_long_mode(lv_obj_get_child(search, 0), LV_LABEL_LONG_CLIP);
     lv_label_set_long_mode(lv_obj_get_child(clear, 0), LV_LABEL_LONG_CLIP);
     lv_obj_add_event_cb(clear, clear_search_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *hint = lv_label_create(header);
-    lv_label_set_text(hint, "Long-press a macro to change Favorites.");
+    lv_label_set_text(hint, "Long-press a macro to change favorites.");
     lv_obj_set_width(hint, lv_pct(100));
     ui_apply_text_caption(hint);
     ui_apply_label_dim(hint);
@@ -714,15 +738,15 @@ void ui_macros_show(
     s_list = lv_obj_create(s_root);
     lv_obj_set_size(s_list, lv_pct(100), 0);
     lv_obj_set_flex_grow(s_list, 1);
-    ui_apply_card_style(s_list);
+    ui_apply_scroll_surface(s_list);
     lv_obj_set_style_pad_all(s_list, ui_theme_is_studio()?0:10, 0);
     lv_obj_set_scroll_dir(s_list, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(s_list, LV_SCROLLBAR_MODE_OFF);
     ui_responsive_cards(s_list, 320);
     if(ui_theme_is_studio()) {
         lv_obj_set_style_pad_row(s_root,4,0);
         lv_obj_set_layout(header,LV_LAYOUT_NONE);lv_obj_set_size(header,lv_pct(100),76);
-        lv_obj_set_pos(title,0,0);lv_obj_set_width(title,200);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
+        lv_obj_set_pos(title,0,0);lv_obj_set_width(title,200);ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
         lv_obj_add_flag(subtitle,LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(s_status,220,10);lv_obj_set_size(s_status,380,26);lv_label_set_long_mode(s_status,LV_LABEL_LONG_DOT);
         lv_obj_set_pos(hint,0,50);lv_obj_set_width(hint,976);
@@ -758,7 +782,7 @@ void ui_macros_hide(void)
     s_refresh_timer = NULL;
     memset(s_macros->rows, 0, sizeof(s_macros->rows));
     s_macros->empty = NULL;
-    s_macros->search_label = NULL;
+    s_macros->search_label = s_macros->clear_action = NULL;
     s_command_callback = NULL;
     s_rendered_generation = 0;
     close_confirm();

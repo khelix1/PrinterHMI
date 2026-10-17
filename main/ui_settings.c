@@ -466,9 +466,9 @@ void ui_settings_show_page(
         snprintf(
             image_build,
             sizeof(image_build),
-            "%s  %s",
-            app->date,
-            app->time);
+            "%.*s  %.*s",
+            (int)sizeof(app->date) - 1, app->date,
+            (int)sizeof(app->time) - 1, app->time);
     } else {
         snprintf(
             image_build,
@@ -509,7 +509,7 @@ void ui_settings_show_page(
 
     lv_obj_t *banner_title = settings_make_label(
         banner,
-        "SETTINGS",
+        "Settings",
         &lv_font_montserrat_16,
         UI_TEXT_BRIGHT);
 
@@ -533,7 +533,7 @@ void ui_settings_show_page(
 
     lv_obj_t *status_label = settings_make_label(
         status,
-        "SYSTEM READY",
+        "System ready",
         &lv_font_montserrat_14,
         UI_TEXT_BRIGHT);
 
@@ -556,7 +556,7 @@ void ui_settings_show_page(
         layout->content.y);
 
     lv_obj_set_scroll_dir(content, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_OFF);
 
     ui_apply_surface_role(content, UI_SURFACE_TRANSPARENT);
     /*
@@ -571,7 +571,7 @@ void ui_settings_show_page(
         lv_obj_set_pos(content,0,66);lv_obj_set_size(content,976,358);
         lv_obj_set_pos(banner,0,0);lv_obj_set_size(banner,976,62);
         lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(banner,0,0);
-        lv_obj_set_pos(banner_title,0,0);ui_apply_custom_label_style(banner_title,&ui_studio_font_48,UI_TEXT);
+        lv_obj_set_pos(banner_title,0,0);ui_apply_custom_label_style(banner_title,UI_FONT_TITLE,UI_TEXT);
         lv_obj_add_flag(banner_subtitle,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(status,LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -585,14 +585,14 @@ void ui_settings_show_page(
     const int setup_height = first_row_y + action_height + 6;
     lv_obj_t *setup = ui_settings_section_create(
         content,
-        "SETUP CENTER",
+        "Setup center",
         section_y,
         setup_height);
     ui_settings_section_add_action_row(
         setup,
-        "Run System Setup Again",
+        "Run system setup again",
         "Guided Wi-Fi, printer, and camera configuration",
-        "OPEN SETUP",
+        "Open setup",
         first_row_y,
         setup_cb,
         false);
@@ -606,7 +606,7 @@ void ui_settings_show_page(
 
     lv_obj_t *connections = ui_settings_section_create(
         content,
-        "CONNECTIONS",
+        "Connections",
         section_y,
         connections_height);
 
@@ -614,7 +614,7 @@ void ui_settings_show_page(
         connections,
         "Network & Moonraker",
         "Wi-Fi, active printer connection and discovery settings",
-        "OPEN NETWORK",
+        "Open network",
         first_row_y,
         network_cb,
         false);
@@ -632,13 +632,13 @@ void ui_settings_show_page(
     const int firmware_height = firmware_row_5 + action_height + 6;
     lv_obj_t *firmware = ui_settings_section_create(
         content,
-        "FIRMWARE & UPDATES",
+        "Firmware & updates",
         section_y,
         firmware_height);
 
     ui_settings_section_add_row(
         firmware,
-        "Firmware Version",
+        "Firmware version",
         "Version embedded in the running OTA image",
         firmware_version,
         firmware_row_1,
@@ -649,7 +649,7 @@ void ui_settings_show_page(
 
     ui_settings_section_add_row(
         firmware,
-        "Image Build",
+        "Image build",
         "Compilation date and time of the running image",
         image_build,
         firmware_row_2,
@@ -659,19 +659,19 @@ void ui_settings_show_page(
         firmware, firmware_row_2 + row_height);
 
     ui_settings_section_add_row(
-        firmware, "Firmware Channel", "Build channel of the running image",
+        firmware, "Firmware channel", "Build channel of the running image",
         firmware_identity_channel_name(identity.channel), firmware_row_3, NULL);
     ui_settings_section_add_divider(firmware, firmware_row_3 + row_height);
     ui_settings_section_add_row(
-        firmware, "Source Revision", "Source commit used to build this image",
+        firmware, "Source revision", "Source commit used to build this image",
         source_revision, firmware_row_4, NULL);
     ui_settings_section_add_divider(firmware, firmware_row_4 + row_height);
 
     ui_settings_section_add_action_row(
         firmware,
-        "Firmware Update",
+        "Firmware update",
         "Check for and install an OTA update",
-        "OTA UPDATE",
+        "OTA update",
         firmware_row_5,
         ota_cb,
         false);
@@ -684,19 +684,18 @@ void ui_settings_show_page(
     const int device_row_1 = first_row_y;
     const int device_row_2 = device_row_1 + action_height + 1;
     const int device_row_3 = device_row_2 + action_height + 1;
-    const int device_row_4 = device_row_3 + row_height + 1;
-    const int device_height = device_row_4 + action_height + 6;
+    const int device_height = device_row_3 + action_height + 6;
     lv_obj_t *device = ui_settings_section_create(
         content,
-        "DEVICE",
+        "Maintenance",
         section_y,
         device_height);
 
     s_reboot_action=ui_settings_section_add_action_row(
         device,
-        "Reboot Controller",
+        "Reboot controller",
         "Restart the ESP32-P4 controller",
-        "REBOOT",
+        "Reboot",
         device_row_1,
         settings_reboot_cb,
         false);
@@ -709,7 +708,7 @@ void ui_settings_show_page(
         device,
         "Restart Klipper",
         "Restart the active printer firmware",
-        "RESTART KLIPPER",
+        "Restart Klipper",
         device_row_2,
         settings_klipper_restart_cb,
         true);
@@ -717,25 +716,12 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         device, device_row_2 + action_height);
 
-    settings_sleep_label = ui_settings_section_add_row(
-        device,
-        "Sleep Timeout",
-        "Tap to change display sleep behavior",
-        settings_sleep_timeout_text(),
-        device_row_3,
-        settings_sleep_card_cb);
-
-    s_sleep_action=settings_sleep_label?lv_obj_get_parent(settings_sleep_label):NULL;
-    settings_display_field_own(settings_sleep_label);settings_display_field_own(s_sleep_action);
-    ui_settings_section_add_divider(
-        device, device_row_3 + row_height);
-
     ui_settings_section_add_action_row(
         device,
-        "Factory Reset",
+        "Factory reset",
         "Erase saved connections and preferences",
-        "FACTORY RESET",
-        device_row_4,
+        "Factory reset",
+        device_row_3,
         reset_settings_cb,
         true);
 
@@ -747,13 +733,13 @@ void ui_settings_show_page(
     const int time_height = first_row_y + row_height + 6;
     lv_obj_t *time_region = ui_settings_section_create(
         content,
-        "TIME & REGION",
+        "Time & region",
         section_y,
         time_height);
 
     s_timezone_label = ui_settings_section_add_row(
         time_region,
-        "Time Zone",
+        "Time zone",
         "Tap to change local time and daylight-saving rules",
         timezone_config_selected_label(),
         first_row_y,
@@ -771,57 +757,31 @@ void ui_settings_show_page(
     const int system_height = system_row_4 + row_height + 6;
     lv_obj_t *system = ui_settings_section_create(
         content,
-        "SYSTEM INFORMATION",
+        "System information",
         section_y,
         system_height);
 
-    settings_system_info_bind_idf_label(
-        ui_settings_section_add_row(
-            system,
-            "ESP-IDF Version",
-            "Framework used to build the running image",
-            app && app->idf_ver[0]
-                ? app->idf_ver
-                : settings_system_info_idf_version(),
-            system_row_1,
-            NULL));
-
-    ui_settings_section_add_divider(
-        system, system_row_1 + row_height);
-
-    settings_system_info_bind_heap_label(
-        ui_settings_section_add_row(
-            system,
-            "Free Heap",
-            "Now / minimum / largest contiguous internal block",
-            "--",
-            system_row_2,
-            NULL));
-
-    ui_settings_section_add_divider(
-        system, system_row_2 + row_height);
-
-    settings_system_info_bind_psram_label(
-        ui_settings_section_add_row(
-            system,
-            "Free PSRAM",
-            "Now / minimum PSRAM since startup",
-            "--",
-            system_row_3,
-            NULL));
-
-    ui_settings_section_add_divider(
-        system, system_row_3 + row_height);
-
     settings_system_info_bind_uptime_label(
-        ui_settings_section_add_row(
-            system,
-            "Uptime",
-            "Time since controller startup",
-            "--",
-            system_row_4,
-            NULL));
+        ui_settings_section_add_row(system,"Uptime","Time since controller startup","--",system_row_1,NULL));
+    ui_settings_section_add_divider(system,system_row_1+row_height);
 
+    static const char *const heap_captions[]={"Free now","Lowest","Largest block"};
+    lv_obj_t *heap_values[3];
+    ui_settings_section_add_metrics_row(system,"Internal RAM","Lowest free since startup",
+        heap_captions,3,system_row_2,heap_values);
+    settings_system_info_bind_heap_metrics(heap_values[0],heap_values[1],heap_values[2]);
+    ui_settings_section_add_divider(system,system_row_2+row_height);
+
+    static const char *const psram_captions[]={"Free now","Lowest"};
+    lv_obj_t *psram_values[2];
+    ui_settings_section_add_metrics_row(system,"PSRAM","Lowest free since startup",
+        psram_captions,2,system_row_3,psram_values);
+    settings_system_info_bind_psram_metrics(psram_values[0],psram_values[1]);
+    ui_settings_section_add_divider(system,system_row_3+row_height);
+
+    settings_system_info_bind_idf_label(
+        ui_settings_section_add_row(system,"ESP-IDF version","Framework used to build the running image",
+            app && app->idf_ver[0] ? app->idf_ver : settings_system_info_idf_version(),system_row_4,NULL));
     section_y += system_height + section_gap;
 
     /*
@@ -834,7 +794,7 @@ void ui_settings_show_page(
         storage_row_3 + action_height + 6;
     lv_obj_t *storage = ui_settings_section_create(
         content,
-        "STORAGE",
+        "Storage & backup",
         section_y,
         storage_height);
 
@@ -851,7 +811,7 @@ void ui_settings_show_page(
 
     ui_settings_section_add_row(
         storage,
-        "Storage Capacity",
+        "Storage capacity",
         NULL,
         storage_text ? storage_text : "--",
         storage_row_2,
@@ -863,9 +823,9 @@ void ui_settings_show_page(
 
     ui_settings_section_add_action_row(
         storage,
-        "Configuration Backup",
+        "Configuration backup",
         "Back up or restore profiles and interface settings",
-        "BACKUP / RESTORE",
+        "Backup / restore",
         storage_row_3,
         settings_backup_cb,
         false);
@@ -876,21 +836,27 @@ void ui_settings_show_page(
      * Operator history
      */
     const int operator_height =
-        first_row_y + action_height + 6;
+        first_row_y + row_height + 1 + action_height + 6;
 
     lv_obj_t *operator_section =
         ui_settings_section_create(
             content,
-            "OPERATOR",
+            "Notifications & history",
             section_y,
             operator_height);
 
+    s_notifications_label = ui_settings_section_add_row(operator_section,
+        "Notifications", "System-wide level; faults remain visible",
+        ui_toast_preference_label(), first_row_y, settings_notifications_cb);
+
+    ui_settings_section_add_divider(operator_section,first_row_y+row_height);
+
     ui_settings_section_add_action_row(
         operator_section,
-        "Event History",
+        "Event history",
         "Recent connection, firmware, and machine events",
-        "VIEW HISTORY",
-        first_row_y,
+        "View history",
+        first_row_y + row_height + 1,
         settings_event_history_cb,
         false);
 
@@ -908,7 +874,7 @@ void ui_settings_show_page(
     const int display_height = display_row_6 + row_height + 6;
     lv_obj_t *display = ui_settings_section_create(
         content,
-        "DISPLAY",
+        "Display & appearance",
         section_y,
         display_height);
 
@@ -937,51 +903,60 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         display, display_row_1 + row_height);
 
+    settings_sleep_label = ui_settings_section_add_row(
+        display,
+        "Sleep timeout",
+        "Tap to change display sleep behavior",
+        settings_sleep_timeout_text(),
+        display_row_2,
+        settings_sleep_card_cb);
+
+    s_sleep_action=settings_sleep_label?lv_obj_get_parent(settings_sleep_label):NULL;
+    settings_display_field_own(settings_sleep_label);settings_display_field_own(s_sleep_action);
+    ui_settings_section_add_divider(
+        display, display_row_2 + row_height);
+
+
     s_theme_label = ui_settings_section_add_row(
         display,
         "Theme",
         "Tap to change the operator interface appearance",
         theme_manager_active_label(),
-        display_row_2,
-        settings_theme_card_cb);
-
-    ui_settings_section_add_divider(
-        display, display_row_2 + row_height);
-
-    ui_settings_section_add_row(
-        display,
-        "Accent Color",
-        "Override the theme accent while preserving semantic colors",
-        theme_manager_accent_label(),
         display_row_3,
-        settings_accent_card_cb);
+        settings_theme_card_cb);
 
     ui_settings_section_add_divider(
         display, display_row_3 + row_height);
 
     ui_settings_section_add_row(
         display,
-        "Display Density",
-        "Choose compact, comfortable, or spacious type and spacing",
-        theme_manager_density_label(),
+        "Accent color",
+        "Override the theme accent while preserving semantic colors",
+        theme_manager_accent_label(),
         display_row_4,
-        settings_density_card_cb);
+        settings_accent_card_cb);
 
     ui_settings_section_add_divider(
         display, display_row_4 + row_height);
 
     ui_settings_section_add_row(
         display,
+        "Display density",
+        "Choose compact, comfortable, or spacious type and spacing",
+        theme_manager_density_label(),
+        display_row_5,
+        settings_density_card_cb);
+
+    ui_settings_section_add_divider(
+        display, display_row_5 + row_height);
+
+    ui_settings_section_add_row(
+        display,
         "Accessibility",
         "Text, contrast, transparency, and motion preferences",
         theme_manager_accessibility_label(),
-        display_row_5,
+        display_row_6,
         settings_accessibility_card_cb);
-
-    ui_settings_section_add_divider(display, display_row_5 + row_height);
-    s_notifications_label = ui_settings_section_add_row(display,
-        "Notifications", "System-wide level; faults remain visible",
-        ui_toast_preference_label(), display_row_6, settings_notifications_cb);
 
     section_y += display_height + section_gap;
 
@@ -993,7 +968,7 @@ void ui_settings_show_page(
 
     lv_obj_t *about = ui_settings_section_create(
         content,
-        "ABOUT",
+        "About",
         section_y,
         about_height);
 
@@ -1001,17 +976,18 @@ void ui_settings_show_page(
         about,
         "About PrinterHMI",
         "Product information, software credits and acknowledgements",
-        "VIEW ABOUT",
+        "View about",
         first_row_y,
         settings_about_cb,
         false);
 
-    if(ui_theme_is_studio()) {
-        lv_obj_t *sections[]={display,connections,setup,device,time_region,firmware,system,storage,operator_section,about};
-        int y=0;lv_obj_update_layout(content);
-        for(unsigned i=0;i<sizeof(sections)/sizeof(sections[0]);i++) {
-            lv_obj_set_pos(sections[i],0,y);y+=lv_obj_get_height(sections[i])+20;
-        }
+    /* Everyday preferences first; maintenance and reference details follow.
+     * Keep one order across themes while retaining their section styling. */
+    lv_obj_t *sections[]={display,operator_section,connections,time_region,storage,firmware,setup,device,system,about};
+    int y=0;lv_obj_update_layout(content);
+    for(unsigned i=0;i<sizeof(sections)/sizeof(sections[0]);i++) {
+        lv_obj_set_pos(sections[i],0,y);
+        y+=lv_obj_get_height(sections[i])+(ui_theme_is_studio()?20:section_gap);
     }
     settings_display_field_own(s_timezone_label);settings_display_field_own(s_theme_label);settings_display_field_own(s_notifications_label);
     ui_settings_refresh();
@@ -1036,6 +1012,7 @@ void ui_settings_refresh(void)
     char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
     ui_value_set_text(s_brightness_value,value);
     ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
+    ui_value_set_text(s_timezone_label,timezone_config_selected_label());
 }
 
 int ui_settings_brightness_percent(void)

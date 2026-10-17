@@ -109,7 +109,7 @@ static void show_armed_popup(
     }
 
     pa_register_popup();
-    ui_cal_dialog_title(s_pa.popup, ui_text("PRESSURE ADVANCE TOWER ARMED"));
+    ui_cal_dialog_title(s_pa.popup, ui_text("Pressure advance tower armed"));
 
 
     s_pa.armed = true;
@@ -123,7 +123,7 @@ static void show_armed_popup(
         factor ? factor : "--");
     ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
 
-    ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "Close", close_popup_cb, NULL, NULL);
 }
 
 
@@ -207,7 +207,7 @@ static void button_cb(
     }
 
     pa_register_popup();
-    ui_cal_dialog_title(s_pa.popup, ui_text("SET UP PRESSURE ADVANCE TOWER"));
+    ui_cal_dialog_title(s_pa.popup, ui_text("Set up pressure advance tower"));
 
 
     char body[520];
@@ -223,11 +223,11 @@ static void button_cb(
     ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
 
     s_pa.feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), "");
-    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("DIRECT DRIVE"), 260, arm_tower_cb, (void *)ui_text(".005"), NULL);
-    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("LONG BOWDEN"), 260, arm_tower_cb, (void *)ui_text(".020"), NULL);
+    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Direct drive"), 260, arm_tower_cb, (void *)ui_text(".005"), NULL);
+    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Long Bowden"), 260, arm_tower_cb, (void *)ui_text(".020"), NULL);
 
 
-    ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "Close", close_popup_cb, NULL, NULL);
 }
 
 
@@ -246,7 +246,7 @@ void ui_calibration_pressure_advance_create(
     s_pa.button = ui_button_create(
         card,
         UI_BUTTON_OUTLINED,
-        "PA TOWER");
+        "PA tower");
 
     if (!s_pa.button) {
         return;
@@ -255,7 +255,7 @@ void ui_calibration_pressure_advance_create(
     lv_obj_set_size(
         s_pa.button,
         150,
-        38);
+        44);
     lv_obj_align(
         s_pa.button,
         LV_ALIGN_BOTTOM_LEFT,

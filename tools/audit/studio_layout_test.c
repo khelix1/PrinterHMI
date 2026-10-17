@@ -69,7 +69,7 @@ int main(void){
   static uint16_t tiny[4];s_active_print_thumb_canvas_buf=tiny;
   ui_active_print_thumb_show_canvas_from_buffer(page.active_print_host,2,2,"fixture.gcode");
   int before=lightboxes;tap(pointer,160,300);assert(lightboxes==before+1);
-  ui_active_print_thumb_delete_canvas();ui_active_print_thumb_set_placeholder(page.active_print_host,"PRINT\nTHUMBNAIL");
+  ui_active_print_thumb_delete_canvas();ui_active_print_thumb_set_placeholder(page.active_print_host,"Model preview\n\nNo preview loaded");
   if(density==1)screenshot(large?"studio-dark-large":"studio-dark");
 
   lv_area_t stop_area;lv_obj_get_coords(lv_obj_get_parent(estop),&stop_area);
@@ -86,6 +86,26 @@ int main(void){
   lv_obj_t*nested=lv_obj_create(page.root);lv_obj_set_size(nested,400,200);ui_apply_root_style(nested);assert(lv_obj_get_style_width(nested,0)==400);lv_obj_delete(nested);
 
   ui_dashboard_page_destroy(&page);ui_shell_destroy();assert(!find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP"));
+ }
+ /* Native Operator Dashboard, with its own cards and typography retained. */
+ for(unsigned large=0;large<2;large++)for(unsigned density=0;density<3;density++){
+  ui_theme_set_active(UI_THEME_OPERATOR);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});ui_apply_root_style(lv_screen_active());
+  ui_shell_create();ui_shell_create_nav();ui_shell_set_active_printer_name("Sermoon D1");
+  ui_dashboard_page_t page=ui_dashboard_page_create(lv_screen_active());
+  ui_status_banner_set(page.banner_host,"PRINTING","Spool holder.gcode","ETA 3:42 PM","64%");
+  ui_active_print_set(page.active_print_host,"171 / 267","01:06","REM 00:38");
+  ui_machine_status_set(page.machine_status_host,"210 / 210 C","60 / 60 C","45 C","18 %RH","125 mm/s","8.3 mm3/s","65%");
+  ui_machine_status_set_connection(page.machine_status_host,true);ui_machine_status_set_filament(page.machine_status_host,true,NULL);
+  ui_command_bar_update("printing",true);lv_obj_update_layout(lv_screen_active());labels(page.root);
+  active_print_ctx_t *active=lv_obj_get_user_data(page.active_print_host);
+  lv_area_t preview,timing;lv_obj_get_coords(active->preview_box,&preview);lv_obj_get_coords(active->footer,&timing);assert(preview.y2<timing.y1);
+  const lv_font_t *font=lv_obj_get_style_text_font(active->footer,0);lv_point_t measured;
+  lv_text_get_size(&measured,lv_label_get_text(active->footer),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(measured.x<=lv_obj_get_width(active->footer));
+  assert(find(page.root,"Active print")&&find(page.root,"Machine status")&&find(page.root,"Air temp"));
+  click(s_pause_button);assert(!strcmp(last_action,"PAUSE"));click(s_object_button);assert(!strcmp(last_action,"CANCEL_OBJECT"));click(s_cancel_button);assert(!strcmp(last_action,"CANCEL_PRINT"));
+  ui_command_bar_update("paused",true);assert(lv_obj_has_flag(s_pause_button,LV_OBJ_FLAG_HIDDEN));click(s_resume_button);assert(!strcmp(last_action,"RESUME"));
+  if(density==1)screenshot(large?"dashboard-operator-large":"dashboard-operator");
+  ui_dashboard_page_destroy(&page);ui_shell_destroy();
  }
  /* Page roots are fixed; only explicit Files/Settings content may scroll. */
  ui_theme_set_active(UI_THEME_STUDIO_DARK);lv_obj_t*aux=lv_obj_create(lv_screen_active());lv_obj_set_size(aux,854,528);ui_apply_surface_role(aux,UI_SURFACE_PAGE_DEEP);lv_obj_update_layout(aux);assert(lv_obj_get_height(aux)==424);assert(!lv_obj_has_flag(aux,LV_OBJ_FLAG_SCROLLABLE));lv_obj_delete(aux);
@@ -118,5 +138,5 @@ int main(void){
   ui_global_estop_show_restart_confirmation();lv_obj_t *cancel=find(lv_layer_top(),LV_SYMBOL_CLOSE " CANCEL");assert(cancel);click(lv_obj_get_parent(cancel));assert(!find(lv_layer_top(),"RESTART KLIPPER?"));
  }
  lv_display_set_resolution(d,1024,600);
- puts("PASS: native STUDIO Dashboard bounds/text across densities and large text, thermal unknowns, print action routes/states, eight navigation routes, fixed page roots, E-stop recreation and repeated teardown");return 0;
+ puts("PASS: native Studio and Operator Dashboard bounds/text across densities and large text, thermal unknowns, print action routes/states, eight navigation routes, fixed page roots, E-stop recreation and repeated teardown");return 0;
 }

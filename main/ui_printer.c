@@ -107,8 +107,7 @@ static void preview_show_placeholder(void)
 
     lv_label_set_text(
         s_preview_label,
-        ui_theme_is_studio() ? "Model preview\n\nNo preview loaded" :
-        "PRINT\nTHUMBNAIL\n\nNo preview loaded");
+        "Model preview\n\nNo preview loaded");
 
     lv_obj_center(s_preview_label);
 }

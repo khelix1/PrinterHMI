@@ -36,7 +36,9 @@ void ui_printer_profiles_set_discovered_endpoint(
     int port,
     const char *identity);
 
-/* Opens the selected profile editor directly at its Camera Setup panel. */
+/* Opens Camera setup directly for the saved profile; closes prior profile
+ * dialogs. Cancel/Use camera returns to the caller without an editor stack.
+ * Callback parameters are retained for source compatibility. */
 void ui_printer_profiles_open_camera_setup(
     int profile_index,
     ui_printer_profiles_active_changed_cb_t active_changed_cb,

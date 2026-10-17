@@ -38,7 +38,7 @@ static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p)
 static void capture(unsigned theme,unsigned tab)
 {
  const char *folder=getenv("TOOLHEAD_SCREENSHOTS");if(!folder)return;
- lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/toolhead-theme%u-tab%u.ppm",folder,theme,tab);
+ lv_tick_inc(250);lv_timer_handler();lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/toolhead-theme%u-tab%u.ppm",folder,theme,tab);
  FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");
  for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);
 }
@@ -107,13 +107,20 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
    lv_obj_update_layout(s_toolhead_popup);
    assert(s_active_tab==tab&&sends==baseline_sends&&s_refresh_timer==baseline_timer);
    assert(check_buttons(s_toolhead_popup)==((unsigned[]){22,11,15})[tab]);
-   for(unsigned i=0;i<3;i++)assert(lv_obj_has_flag(s_tab_panels[i],LV_OBJ_FLAG_HIDDEN)==(i!=tab));
+   for(unsigned i=0;i<3;i++) {
+    assert(lv_obj_has_flag(s_tab_panels[i],LV_OBJ_FLAG_HIDDEN)==(i!=tab));
+    assert(lv_obj_has_state(s_tab_buttons[i],LV_STATE_CHECKED)==(i==tab));
+   }
+   assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);
    if(width==1024) {
     /* Every active panel and button is reachable without scrolling, including large text. */
     if(lv_obj_get_scroll_bottom(body)>0)fprintf(stderr,"overflow tab=%u theme=%d density=%d large=%d bottom=%d\n",tab,theme,density,large,(int)lv_obj_get_scroll_bottom(body));
     assert(lv_obj_get_scroll_bottom(body)<=0);assert(lv_obj_get_scroll_y(body)==0);
     inside(s_tab_panels[tab],body);
-    if(density==2&&large)capture(theme,tab);
+    if(density==2&&large) {
+     capture(theme,tab);lv_obj_update_layout(s_toolhead_popup);
+     inside(s_tab_panels[tab],body);check_buttons(s_toolhead_popup);
+    }
    }
    lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));
   }
@@ -127,7 +134,7 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
    pressed=false;lv_indev_read(pointer);lv_obj_update_layout(s_toolhead_popup);assert(lv_obj_get_scroll_y(body)>0);
    lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));
   }
-  lv_obj_t *last=find_label(s_tab_panels[2],"RESET");assert(last);
+  lv_obj_t *last=find_label(s_tab_panels[2],"Reset");assert(last);
   /* Preserve exact commands through the new grid buttons. */
   lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);click(steps[0]);assert(step==1);
   lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"X+ " LV_SYMBOL_RIGHT)));assert(!strcmp(sent,"G91\nG1 X1.00 F6000\nG90"));
@@ -154,12 +161,12 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
   for(unsigned i=0;i<5;i++) {
    click(s_extrusion_buttons[i]);assert(s_extrusion_step==atof(s_extrusion_values[i]));
    for(int retract=0;retract<2;retract++) {
-    lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,retract?"RETRACT":"EXTRUDE")));
+    lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,retract?"Retract":"Extrude")));
     char expected[128];snprintf(expected,sizeof(expected),"M83\nG1 E%.0f F300",(retract?-1:1)*s_extrusion_step);assert(!strcmp(sent,expected));
    }
   }
   click(s_extrusion_buttons[2]);
-  lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"EXTRUDE")));assert(!strcmp(sent,"M83\nG1 E10 F300"));
+  lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"Extrude")));assert(!strcmp(sent,"M83\nG1 E10 F300"));
   click(s_tab_buttons[0]);assert(s_extrusion_step==10&&fabs(s_z_step-25.0)<0.0001);
   motion_open();assert(s_active_tab==0&&s_refresh_timer==baseline_timer);
   click(s_tab_buttons[2]);motion_open();assert(s_active_tab==2&&s_refresh_timer==baseline_timer);

@@ -24,7 +24,7 @@ bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return 
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
 static uint16_t raster[1024*600];static int width=1024;
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*width+x]=*v++;lv_display_flush_ready(d);}
-static void snapshot(int theme,const char *name){const char *folder=getenv("MOTION_LAYOUT_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%d.ppm",folder,name,theme);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+static void snapshot(int theme,const char *name){const char *folder=getenv("DEVICES_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%d.ppm",folder,name,theme);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 
 static void single(lv_obj_t*l,bool require_fit){lv_obj_update_layout(l);const lv_font_t*f=lv_obj_get_style_text_font(l,0);assert(lv_obj_get_height(l)==f->line_height);if(require_fit){lv_point_t n;lv_text_get_size(&n,lv_label_get_text(l),f,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(n.x<=lv_obj_get_width(l));}}
@@ -34,7 +34,10 @@ void ui_endstop_status_show(void){endstop_calls++;}
 void ui_endstop_status_close(void){endstop_closes++;}
 static lv_obj_t *find(lv_obj_t *o,const char *text){if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;for(uint32_t i=0;i<lv_obj_get_child_count(o);i++){lv_obj_t *found=find(lv_obj_get_child(o,i),text);if(found)return found;}return NULL;}
 static lv_point_t touch;static bool pressed;
+static void tap_at(lv_indev_t *i,int x,int y);
+
 static void read_touch(lv_indev_t *i,lv_indev_data_t *d){(void)i;d->point=touch;d->state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;}
+static void tap_at(lv_indev_t *i,int x,int y){touch=(lv_point_t){x,y};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 static void tap(lv_indev_t *i,lv_obj_t *button){lv_area_t a;lv_obj_get_coords(button,&a);touch=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
 lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
@@ -46,9 +49,20 @@ for(int i=0;i<96;i++){snprintf(entries[i].display_name,sizeof(entries[i].display
 lv_obj_t*root=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(root);lv_obj_set_size(root,ui_theme_is_studio()?976:854,ui_theme_is_studio()?424:528);lv_obj_t*banner=lv_label_create(root);lv_obj_set_width(banner,190);ui_devices_catalog_view_create(root,banner);lv_obj_update_layout(root);
 for(int i=0;i<8;i++){lv_obj_t*b=s_devices->filter_buttons[i];assert(lv_obj_get_height(b)>=44);if(ui_theme_is_studio())inside(b,s_devices->filter_strip);single(lv_obj_get_child(b,0),true);}
 for(int i=0;i<12;i++){lv_obj_t*card=s_devices->rows[i].card;assert(card);lv_obj_t*labels[]={s_devices->rows[i].name,s_devices->rows[i].object,s_devices->rows[i].kind,s_devices->rows[i].value};for(int j=0;j<4;j++){single(labels[j],j>=2);inside(labels[j],card);}lv_area_t a,b;lv_obj_get_coords(labels[2],&a);lv_obj_get_coords(labels[3],&b);assert(a.x2<b.x1);}
-if(ui_theme_is_studio()){inside(s_devices->filter_strip,root);inside(s_devices->list,root);inside(s_devices->previous_button,root);inside(s_devices->next_button,root);assert(lv_obj_get_width(s_devices->list)==792 && lv_obj_get_height(s_devices->list)==304 && lv_obj_has_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE));assert(s_devices->page_count==8);
+if(ui_theme_is_studio()){inside(s_devices->filter_strip,root);inside(s_devices->list,root);inside(s_devices->previous_button,root);inside(s_devices->next_button,root);assert(lv_obj_get_width(s_devices->list)==792 && lv_obj_get_height(s_devices->list)==320 && lv_obj_has_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE));assert(s_devices->page_count==8);
 lv_obj_scroll_to_y(s_devices->list,10000,LV_ANIM_OFF);lv_obj_update_layout(root);inside(s_devices->rows[11].card,s_devices->list);assert(lv_obj_get_scroll_y(s_devices->list)>0);
 lv_obj_send_event(s_devices->next_button,LV_EVENT_CLICKED,NULL);lv_obj_update_layout(root);assert(s_devices->page_index==1 && lv_obj_get_scroll_y(s_devices->list)==0);assert(strstr(lv_label_get_text(s_devices->rows[0].name),"sensor 12"));}
+if(ui_theme_is_studio()){
+ lv_obj_scroll_to_y(s_devices->list,0,LV_ANIM_OFF);lv_obj_update_layout(root);
+ inside(s_devices->rows[5].card,s_devices->list);
+ for(unsigned i=0;i<12;i++){
+  lv_obj_t *entry=s_devices->rows[i].card;
+  assert(lv_obj_get_style_radius(entry,0)==0 && lv_obj_get_style_shadow_width(entry,0)==0);
+  assert(lv_obj_get_style_border_side(entry,0)==LV_BORDER_SIDE_BOTTOM);
+  assert(lv_color_eq(lv_obj_get_style_border_color(entry,0),UI_BORDER));
+ }
+}
+assert(lv_obj_get_scrollbar_mode(s_devices->list)==LV_SCROLLBAR_MODE_OFF);
 lv_obj_t *value=s_devices->rows[0].value;
 assert(strstr(lv_label_get_text(value),"205.0"));
 state.moonraker_ok=false;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
@@ -58,13 +72,52 @@ strcpy(state.printer_state,"ready");
 owner_generation++;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
 devices_refresh_timer_cb(s_devices->refresh_timer);assert(lv_obj_has_flag(s_devices->rows[0].card,LV_OBJ_FLAG_HIDDEN));assert(s_devices->empty);
 if(density==1&&large){snapshot(theme,"devices");}status.stored_count=0;status.generation++;ui_devices_catalog_view_refresh();lv_obj_update_layout(root);assert(s_devices->empty);inside(s_devices->empty,s_devices->list);ui_devices_catalog_view_close();assert(!s_devices->refresh_timer&&!s_devices->root);lv_obj_delete(root);
-ui_devices_show(open_graphs);root=s_devices->root;assert(root);lv_obj_update_layout(root);
-lv_obj_t *graph_label=find(root,ui_theme_is_studio()?"GRAPHS":"TELEMETRY");
-lv_obj_t *endstop_label=find(root,"ENDSTOPS");assert(graph_label && endstop_label);
+status.stored_count=96;status.generation++;ui_devices_show(open_graphs);root=s_devices->root;assert(root);lv_obj_update_layout(root);
+lv_obj_t *graph_label=find(root,ui_theme_is_studio()?"Graphs":"Telemetry");
+lv_obj_t *endstop_label=find(root,"Endstops");assert(graph_label && endstop_label);
 lv_obj_t *graphs=lv_obj_get_parent(graph_label),*endstops=lv_obj_get_parent(endstop_label);
+lv_obj_t *header=lv_obj_get_parent(graphs);
+for(unsigned i=0;i<lv_obj_get_child_count(header);i++){
+ lv_obj_t *a=lv_obj_get_child(header,i);if(lv_obj_has_flag(a,LV_OBJ_FLAG_HIDDEN))continue;inside(a,header);
+ lv_area_t aa;lv_obj_get_coords(a,&aa);
+ for(unsigned j=i+1;j<lv_obj_get_child_count(header);j++){
+  lv_obj_t *b=lv_obj_get_child(header,j);if(lv_obj_has_flag(b,LV_OBJ_FLAG_HIDDEN))continue;
+  lv_area_t bb;lv_obj_get_coords(b,&bb);assert(aa.x2<bb.x1||aa.x1>bb.x2||aa.y2<bb.y1||aa.y1>bb.y2);
+ }
+}
 inside(graphs,lv_obj_get_parent(graphs));inside(endstops,lv_obj_get_parent(endstops));inside(graphs,root);inside(endstops,root);
 if(ui_theme_is_studio()){inside(graph_label,graphs);inside(endstop_label,endstops);single(graph_label,true);single(endstop_label,true);}
 assert(lv_obj_get_height(graphs)>=44&&lv_obj_get_height(endstops)>=44);unsigned before=graph_calls;tap(pointer,graphs);assert(graph_calls==before+1);before=endstop_calls;tap(pointer,endstops);assert(endstop_calls==before+1);
+/* Use native pointer hit testing for categories and pagination, not only
+ * synthetic LV_EVENT_CLICKED. Zero-count categories remain inspectable. */
+for(unsigned selected=0;selected<8;selected++){
+ lv_obj_t *button=s_devices->filter_buttons[selected];
+ lv_obj_scroll_to_view(button,LV_ANIM_OFF);lv_obj_update_layout(root);
+ tap(pointer,button);lv_obj_update_layout(root);
+ assert(s_devices->filter==(device_filter_t)selected && s_devices->page_index==0);
+ if(ui_theme_is_studio())for(unsigned i=0;i<8;i++){
+  lv_obj_t *b=s_devices->filter_buttons[i];
+  assert(lv_obj_has_state(b,LV_STATE_CHECKED)==(i==selected));
+  lv_style_value_t checked_fill;
+  assert(lv_obj_get_local_style_prop(b,LV_STYLE_BG_COLOR,&checked_fill,LV_STATE_CHECKED)==LV_STYLE_RES_FOUND);
+  assert(lv_color_eq(checked_fill.color,UI_CONTROL));
+  assert(lv_obj_get_style_radius(b,0)==0);
+  assert(lv_obj_get_style_border_side(b,0)==LV_BORDER_SIDE_BOTTOM);
+ }
+}
+lv_obj_scroll_to_view(s_devices->filter_buttons[0],LV_ANIM_OFF);lv_obj_update_layout(root);
+tap(pointer,s_devices->filter_buttons[0]);lv_obj_update_layout(root);
+assert(s_devices->filter==DEVICE_FILTER_ALL && lv_obj_has_state(s_devices->previous_button,LV_STATE_DISABLED));
+tap(pointer,s_devices->previous_button);assert(s_devices->page_index==0);
+tap(pointer,s_devices->next_button);lv_obj_update_layout(root);assert(s_devices->page_index==1);
+assert(!lv_obj_has_state(s_devices->previous_button,LV_STATE_DISABLED));
+tap(pointer,s_devices->previous_button);lv_obj_update_layout(root);assert(s_devices->page_index==0);
+if(ui_theme_is_studio())for(unsigned i=0;i<7;i++){
+ lv_area_t a;lv_obj_get_coords(s_devices->filter_buttons[i],&a);
+ tap_at(pointer,(a.x1+a.x2)/2,a.y2-1);lv_obj_update_layout(root);
+ assert(s_devices->filter==(device_filter_t)i);
+}
+tap(pointer,s_devices->filter_buttons[0]);lv_obj_update_layout(root);
 if(density==1&&large)snapshot(theme,"devices-header");
 ui_devices_show(open_graphs);assert(root==s_devices->root);before=endstop_closes;ui_devices_hide();assert(!s_devices->root && !s_devices->refresh_timer && endstop_closes==before+1);
 unsigned timers=timer_count();
@@ -73,10 +126,10 @@ for(int cycle=0;cycle<5;cycle++){
  lv_obj_delete(root);assert(!s_devices->root&&!s_devices->refresh_timer);assert(timer_count()==timers);
  ui_devices_catalog_view_refresh();ui_devices_live_values_update();ui_devices_hide();
  ui_devices_show(open_graphs);owner_generation++;
- before=graph_calls;lv_obj_t *button=lv_obj_get_parent(find(s_devices->root,ui_theme_is_studio()?"GRAPHS":"TELEMETRY"));lv_obj_send_event(button,LV_EVENT_CLICKED,NULL);assert(graph_calls==before);
+ before=graph_calls;lv_obj_t *button=lv_obj_get_parent(find(s_devices->root,ui_theme_is_studio()?"Graphs":"Telemetry"));lv_obj_send_event(button,LV_EVENT_CLICKED,NULL);assert(graph_calls==before);
  ui_devices_show(open_graphs);assert(s_devices->owner_generation==owner_generation);ui_devices_hide();assert(timer_count()==timers);
 }
 /* Live labels and their owner may also be retired independently. */
 root=lv_obj_create(lv_screen_active());value=lv_label_create(root);ui_devices_live_values_init(root);ui_devices_live_values_register(0,value,0);lv_obj_delete(value);ui_devices_live_values_update();lv_obj_delete(root);ui_devices_live_values_update();ui_devices_live_values_close();
 }
-s_devices=NULL;puts("PASS: Devices category counts, complete live readings, card bounds, actual header pointer routes for Graphs/Endstops, offline/shutdown readings, printer fencing, independent label deletion and repeated external page cleanup across all five themes/densities/text sizes");return 0;}
+s_devices=NULL;puts("PASS: Devices category counts, complete readings/bounds, native category and near-edge selection, checked theme colors, disabled Previous and Next/Previous routes, Graphs/Endstops pointer routes, offline/profile guards and teardown across five themes/densities/text sizes");return 0;}

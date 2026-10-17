@@ -50,7 +50,36 @@ static void cards(lv_obj_t *list){
 }
 #if defined(TEST_TOOLS)
 #include "ui_tools.c"
-static void run(int width){ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles);}
+static void tools_symbol_check(void){
+ const uint32_t codepoints[]={0xF021,0xF03E,0xF0E7,0xF04B};
+ for(unsigned i=0;i<4;i++){
+  lv_obj_t *entry=lv_obj_get_child(s_tiles,i),*icon=lv_obj_get_child(entry,0);
+  lv_font_glyph_dsc_t glyph;
+  assert(lv_font_get_glyph_dsc(lv_obj_get_style_text_font(icon,0),&glyph,codepoints[i],0));
+  assert(!glyph.is_placeholder && glyph.box_w>0 && glyph.box_h>0);
+  assert(glyph.resolved_font && lv_font_get_line_height(glyph.resolved_font)>=28);
+ }
+}
+static void tools_divider_check(void){
+ lv_area_t left,right,rule,viewport;
+ lv_obj_get_coords(lv_obj_get_child(s_tiles,0),&left);lv_obj_get_coords(lv_obj_get_child(s_tiles,1),&right);
+ bool columns=left.y1==right.y1 && left.x2<right.x1;
+ assert(s_center_rule && lv_obj_has_flag(s_center_rule,LV_OBJ_FLAG_HIDDEN)!=columns);
+ if(columns){
+  lv_obj_get_coords(s_center_rule,&rule);lv_obj_get_content_coords(s_tiles,&viewport);
+  assert(rule.x1>left.x2 && rule.x2<right.x1 && rule.x1==rule.x2);
+  assert(rule.y1>=viewport.y1 && rule.y2<=viewport.y2);
+  assert(!lv_obj_has_flag(s_center_rule,LV_OBJ_FLAG_CLICKABLE));
+  assert(lv_color_eq(lv_obj_get_style_bg_color(s_center_rule,0),UI_BORDER));
+  assert(lv_obj_get_style_bg_opa(s_center_rule,0)==LV_OPA_COVER);
+  for(unsigned i=0;i<4;i++){
+   lv_obj_t *entry=lv_obj_get_child(s_tiles,i);
+   assert(lv_color_eq(lv_obj_get_style_border_color(entry,0),lv_obj_get_style_bg_color(s_center_rule,0)));
+   assert(lv_obj_get_style_border_opa(entry,0)==LV_OPA_COVER);
+  }
+ }
+}
+static void run(int width){ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);tools_symbol_check();tools_divider_check();snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
 #elif defined(TEST_FILES)
 #include "ui_page_state.c"
 #include "ui_files.c"
@@ -185,6 +214,23 @@ static void files_scroll_damage_check(void)
 static void run(int width){
  ui_files_show();ui_files_set_browser_callbacks(NULL,NULL,NULL,up_fixture);ui_files_set_breadcrumb(NULL);ui_files_set_search_text("");assert(s_up_button&&lv_obj_has_state(s_up_button,LV_STATE_DISABLED));unsigned before_up=up_calls;lv_obj_send_event(s_up_button,LV_EVENT_CLICKED,NULL);assert(up_calls==before_up);
  ui_files_set_breadcrumb("parts/subfolder");assert(!lv_obj_has_state(s_up_button,LV_STATE_DISABLED));lv_obj_send_event(s_up_button,LV_EVENT_CLICKED,NULL);assert(up_calls==before_up+1);ui_files_set_breadcrumb(NULL);ui_files_set_search_text("needle");assert(!lv_obj_has_state(s_up_button,LV_STATE_DISABLED));
+ assert(lv_obj_has_state(s_search_button,LV_STATE_CHECKED));
+ assert(!strcmp(lv_label_get_text(s_search_label),"Search"));
+ assert(!strcmp(lv_label_get_text(s_breadcrumb_label),"Search / needle"));
+ lv_obj_update_layout(s_printer_file_popup);
+ browser_click(s_search_button);assert(s_search_popup && lv_obj_has_state(s_search_button,LV_STATE_CHECKED));
+ lv_textarea_set_text(s_search_textarea,"unapplied query");browser_click(s_search_cancel);
+ assert(!s_search_popup && lv_obj_has_state(s_search_button,LV_STATE_CHECKED));
+ assert(!strcmp(s_search_text,"needle") && !strcmp(lv_label_get_text(s_breadcrumb_label),"Search / needle"));
+ ui_files_set_breadcrumb("parts/subfolder");assert(!strcmp(lv_label_get_text(s_breadcrumb_label),"Search / needle"));
+ ui_files_set_search_text("");assert(!lv_obj_has_state(s_search_button,LV_STATE_CHECKED));
+ assert(!strcmp(lv_label_get_text(s_breadcrumb_label),"G-code files / parts/subfolder"));
+ ui_files_set_breadcrumb(NULL);assert(!strcmp(lv_label_get_text(s_breadcrumb_label),"G-code files"));
+ assert(lv_obj_has_state(s_up_button,LV_STATE_DISABLED));
+ ui_files_set_sort_text("NAME");assert(!strcmp(lv_label_get_text(s_sort_label),"Name"));
+ ui_files_set_sort_text("SIZE");assert(!strcmp(lv_label_get_text(s_sort_label),"Size"));
+ ui_files_set_sort_text("NEWEST");assert(!strcmp(lv_label_get_text(s_sort_label),"Newest"));
+ ui_files_set_sort_text("Custom order");assert(!strcmp(lv_label_get_text(s_sort_label),"Custom order"));
  lv_obj_set_width(s_printer_file_popup,width);ui_files_set_search_text("very long query");ui_files_set_sort_text("NEWEST");lv_obj_update_layout(s_printer_file_popup);
  if(!ui_theme_is_studio()){lv_obj_t *toolbar=lv_obj_get_child(s_printer_file_popup,1);cards(toolbar);assert(lv_obj_get_child_count(toolbar)==4);inside(toolbar,s_printer_file_popup);}inside(s_breadcrumb_label,s_printer_file_popup);
  lv_obj_t *viewport=lv_obj_get_parent(s_printer_file_list);inside(viewport,s_printer_file_popup);assert(lv_obj_get_height(viewport)>100);inside(s_printer_file_list,viewport);
@@ -348,13 +394,24 @@ static void run(int width){
   lv_obj_t *panels[]={s_network.wifi_card,s_network.moonraker_card,s_network.actions_card,s_network.banner};
   for(unsigned p=0;p<4;p++)for(uint32_t i=0;i<lv_obj_get_child_count(panels[p]);i++)inside(lv_obj_get_child(panels[p],i),panels[p]);
   cards(s_network.actions_card);
+ } else {
+  for(unsigned i=0;i<lv_obj_get_child_count(s_network.banner);i++){
+   lv_obj_t *child=lv_obj_get_child(s_network.banner,i);
+   if(!lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))inside(child,s_network.banner);
+  }
+  lv_obj_t *state=ui_status_banner_state_label(s_network.banner);
+  const lv_font_t *font=lv_obj_get_style_text_font(state,0);lv_point_t text_size;
+  lv_text_get_size(&text_size,lv_label_get_text(state),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  assert(lv_obj_get_height(state)==font->line_height && text_size.x<=lv_obj_get_width(state));
+  lv_obj_t *message=lv_obj_get_child(s_network.banner,2);
+  assert(lv_obj_get_width(message)>400 && !strcmp(lv_label_get_text(message),"Printer connected"));
  }
  unsigned prior=scans;lv_obj_send_event(lv_obj_get_child(s_network.actions_card,ui_theme_is_studio()?0:1),LV_EVENT_CLICKED,NULL);assert(scans==prior+1);
  prior=profiles;lv_obj_send_event(lv_obj_get_child(s_network.actions_card,ui_theme_is_studio()?1:2),LV_EVENT_CLICKED,NULL);assert(profiles==prior+1);
  wifi_ap_record_t aps[6]={0};for(unsigned i=0;i<6;i++){snprintf((char *)aps[i].ssid,sizeof(aps[i].ssid),"A_long_access_point_name_%u",i);aps[i].rssi=-57-(int)i;}
  ui_network_render_scan_results(aps,6,8,selected_cb);lv_obj_update_layout(s_network.root);
  assert(lv_obj_get_child_count(s_network.networks_list)==6);
- if(ui_theme_is_studio())cards(s_network.networks_list);
+ cards(s_network.networks_list);
  lv_obj_send_event(lv_obj_get_child(s_network.networks_list,0),LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,(char *)aps[0].ssid));
  snapshot(s_network.root);
  ui_network_render_scan_results(NULL,0,0,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==0);
@@ -394,11 +451,39 @@ static void macro_popup_bounds(lv_obj_t *popup, int width)
  assert(lv_obj_get_scroll_bottom(body)<=1);
  lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);
 }
+static lv_point_t macro_touch;
+static bool macro_touch_down;
+static void macro_read_touch(lv_indev_t *input,lv_indev_data_t *data){
+ (void)input;data->point=macro_touch;data->state=macro_touch_down?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;
+}
+static void macro_drag_list(void){
+ assert(lv_obj_get_scrollbar_mode(s_list)==LV_SCROLLBAR_MODE_OFF);
+ assert(lv_obj_get_scroll_bottom(s_list)>0);
+ lv_area_t area;lv_obj_get_content_coords(s_list,&area);
+ lv_indev_t *input=lv_indev_create();lv_indev_set_type(input,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(input,macro_read_touch);
+ lv_indev_set_scroll_limit(input,2);lv_indev_set_scroll_throw(input,0);
+ unsigned before=macro_sends;
+ macro_touch=(lv_point_t){(area.x1+area.x2)/2,area.y2-8};macro_touch_down=true;lv_indev_read(input);
+ int travel=(area.y2-area.y1)/2;
+ for(int i=1;i<=6;i++){macro_touch.y=area.y2-8-travel*i/6;lv_indev_read(input);}
+ macro_touch_down=false;lv_indev_read(input);lv_obj_update_layout(s_root);
+ assert(lv_obj_get_scroll_y(s_list)>0 && !s_confirm && macro_sends==before);
+ lv_anim_delete(input,NULL);lv_indev_delete(input);
+ lv_obj_scroll_to_y(s_list,0,LV_ANIM_OFF);lv_obj_update_layout(s_root);
+}
 static void run(int width){
  unsigned baseline_timers=macro_timer_count();macro_accept=true;macro_send_hook=NULL;ui_macros_show(send_macro);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);cards(s_list);inside(s_list,s_root);assert(lv_obj_get_height(s_list)>100 && s_macros->rows[63]);if(ui_theme_is_studio()){assert(lv_obj_get_height(s_list)>=340);lv_obj_t *header=lv_obj_get_child(s_root,0);for(uint32_t i=0;i<lv_obj_get_child_count(header);i++){lv_obj_t *child=lv_obj_get_child(header,i);if(!lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))inside(child,header);}cards(header);}
+ if(ui_theme_is_studio())for(unsigned i=0;i<64;i++){
+  lv_obj_t *entry=s_macros->rows[i];assert(entry);
+  assert(lv_obj_get_style_radius(entry,0)==0&&lv_obj_get_style_shadow_width(entry,0)==0);
+  assert(lv_obj_get_style_border_side(entry,0)==LV_BORDER_SIDE_BOTTOM);
+  assert(lv_color_eq(lv_obj_get_style_border_color(entry,0),UI_BORDER));
+ }
+ assert(lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED));macro_drag_list();
  lv_obj_t *first=s_macros->rows[0];fav[63]=true;gen++;rebuild_macro_list();lv_obj_update_layout(s_root);cards(s_list);assert(first==s_macros->rows[0]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();lv_obj_update_layout(s_root);assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));inside(s_macros->empty,s_list);
  clear_search_cb(NULL);lv_obj_update_layout(s_root);
+ assert(!lv_obj_has_state(lv_obj_get_parent(s_macros->search_label),LV_STATE_CHECKED));
  lv_obj_t *header=lv_obj_get_child(s_root,0);
  lv_obj_t *actions=ui_theme_is_studio()?header:lv_obj_get_child(header,3);
  cards(actions);
@@ -410,6 +495,13 @@ static void run(int width){
  search_cb(NULL);lv_obj_t*editor_owner=s_macros->editor;lv_textarea_set_text(s_macros->editor_value,"draft");search_cb(NULL);assert(s_macros->editor==editor_owner&&!strcmp(lv_textarea_get_text(s_macros->editor_value),"draft"));macro_popup_bounds(s_macros->editor,width);keyboard_layout_check(s_macros->editor,lv_obj_get_child(s_macros->editor,2),s_macros->editor_value);snapshot(s_macros->editor);
  lv_textarea_set_text(s_macros->editor_value,"discard me");lv_obj_send_event(lv_obj_get_child(s_macros->editor,2),LV_EVENT_CANCEL,NULL);assert(!s_macros->editor);search_cb(NULL);lv_textarea_set_text(s_macros->editor_value,"MACRO_00");lv_obj_send_event(lv_obj_get_child(s_macros->editor,2),LV_EVENT_READY,NULL);
  assert(!s_macros->editor && !strcmp(s_macros->query,"MACRO_00"));
+ lv_obj_t *search_action=lv_obj_get_parent(s_macros->search_label);
+ assert(lv_obj_has_state(search_action,LV_STATE_CHECKED) && !strcmp(lv_label_get_text(s_macros->search_label),"Search"));
+ assert(!lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED));
+ search_cb(NULL);lv_textarea_set_text(s_macros->editor_value,"discarded");editor_cancel_cb(NULL);
+ assert(!strcmp(s_macros->query,"MACRO_00") && lv_obj_has_state(search_action,LV_STATE_CHECKED));
+ clear_search_cb(NULL);assert(!lv_obj_has_state(search_action,LV_STATE_CHECKED));
+ assert(lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED));
  assert(!lv_obj_has_flag(s_macros->rows[0],LV_OBJ_FLAG_HIDDEN));
  clear_search_cb(NULL);lv_obj_update_layout(s_root);
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);

@@ -236,6 +236,15 @@ static void transfer_format(const ota_progress_snapshot_t *snapshot,
     }
 }
 
+/* Captured and used only by update_task, including all cleanup. UI cancellation
+ * publishes a flag; it never closes a live SDK client on another core. */
+static esp_http_client_handle_t s_worker_http;
+static esp_err_t ota_http_init(esp_http_client_handle_t client)
+{
+    s_worker_http = client;
+    return ESP_OK;
+}
+
 static void update_task(void *arg)
 {
     (void)arg;
@@ -245,6 +254,7 @@ static void update_task(void *arg)
              s_task_url);
 
 
+    s_worker_http = NULL;
     esp_https_ota_handle_t ota_handle = NULL;
     esp_err_t result = ESP_FAIL;
     bool network_owned = false;
@@ -331,6 +341,7 @@ static void update_task(void *arg)
 
     esp_https_ota_config_t ota_config = {
         .http_config = &http_config,
+        .http_client_init_cb = ota_http_init,
     };
 
     result = esp_https_ota_begin(&ota_config, &ota_handle);
@@ -348,6 +359,9 @@ static void update_task(void *arg)
     s_progress.downloading = true;
     portEXIT_CRITICAL(&s_progress_lock);
 
+    bool short_reads = false;
+    int last_bytes = 0;
+    int64_t last_data_us = download_started;
     while (true) {
         if (s_cancel_requested) {
             goto cancelled;
@@ -355,6 +369,30 @@ static void update_task(void *arg)
 
         result = esp_https_ota_perform(ota_handle);
         transfer_record(ota_handle);
+
+        /* The first perform reads/verifies the image header internally. Keep
+         * the connection/header timeout there; subsequent body reads yield
+         * after one second so a stalled server cannot delay Cancel by 15s.
+         * IDF returns IN_PROGRESS on read EAGAIN. Allow 15s without image
+         * progress overall, rather than failing a healthy slow connection. */
+        int bytes = esp_https_ota_get_image_len_read(ota_handle);
+        int64_t now = esp_timer_get_time();
+        if (bytes > last_bytes) {
+            last_bytes = bytes;
+            last_data_us = now;
+        }
+        if (!short_reads && result == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+            result = esp_http_client_set_timeout_ms(s_worker_http, 1000);
+            if (result != ESP_OK) goto failed;
+            short_reads = true;
+            result = ESP_ERR_HTTPS_OTA_IN_PROGRESS;
+        }
+        if (s_cancel_requested) goto cancelled;
+        if (result == ESP_ERR_HTTPS_OTA_IN_PROGRESS &&
+            now - last_data_us >= 15000000) {
+            result = ESP_ERR_TIMEOUT;
+            goto failed;
+        }
 
         if (result == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
             continue;
@@ -386,6 +424,7 @@ static void update_task(void *arg)
 
     result = esp_https_ota_finish(ota_handle);
     ota_handle = NULL;
+    s_worker_http = NULL;
 
     if (result == ESP_OK) {
         set_state("Update Complete\nRebooting...", 100);
@@ -399,6 +438,7 @@ static void update_task(void *arg)
     }
 
 failed:
+    s_worker_http = NULL;
     transfer_end();
     s_cancel_allowed = false;
 
@@ -436,6 +476,7 @@ failed:
     return;
 
 cancelled:
+    s_worker_http = NULL;
     transfer_end();
     s_cancel_allowed = false;
 

@@ -8,3 +8,7 @@ typedef bool (*ui_setup_wizard_wifi_connect_cb_t)(const char *ssid, const char *
  * Printer setup opens the shared profile editor; Wi-Fi/camera flows stay here. */
 void ui_setup_wizard_show(ui_setup_wizard_wifi_connect_cb_t wifi_connect_cb);
 void ui_setup_wizard_close(void);
+
+/* Rebuild persistent app surfaces after a saved theme/text-size change. */
+void ui_setup_wizard_show_with_appearance_callback(
+    ui_setup_wizard_wifi_connect_cb_t wifi_connect_cb,void (*appearance_changed)(void));

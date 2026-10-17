@@ -1,5 +1,7 @@
+#include "ui_widgets.h"
 #include "ui_selector_style.h"
 #include "ui_motion_diagnostics.h"
+#include "ui_calibration_layout.h"
 #include <stdio.h>
 #include <string.h>
 #include "esp_heap_caps.h"
@@ -167,8 +169,8 @@ static void mode_cb(lv_event_t *event)
     close_editor();
     if (s_epoch != expected_epoch || !owns_printer() || !s->mode || !s->pitch || !s->count || !s->result) return;
     bool screw = lv_dropdown_get_selected(s->mode) == 1;
-    label_text(s->pitch_label, screw ? "THREAD PITCH (mm)" : "BELT PITCH (mm)");
-    label_text(s->count_label, screw ? "THREAD STARTS" : "PULLEY TEETH");
+    label_text(s->pitch_label, screw ? "THREAD PITCH (mm)" : "Belt pitch (mm)");
+    label_text(s->count_label, screw ? "Thread starts" : "Pulley teeth");
     lv_textarea_set_text(s->pitch, "2");
     lv_textarea_set_text(s->count, screw ? "4" : "20");
     label_text(s->result, "Enter the hardware measurements, then Calculate.");
@@ -226,6 +228,7 @@ static lv_obj_t *layout_body(lv_obj_t *popup, const char *title)
     lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     return body;
 }
 static lv_obj_t *layout_label(lv_obj_t *parent, const char *text, bool caption)
@@ -241,7 +244,9 @@ static lv_obj_t *layout_footer(lv_obj_t *popup)
 {
     lv_obj_t *footer = lv_obj_create(popup);
     lv_obj_remove_style_all(footer);
-    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_size(footer, LV_PCT(100), LV_SIZE_CONTENT);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(footer, UI_GAP_CARD, 0);
@@ -269,7 +274,7 @@ static void field_cb(lv_event_t *event)
     if (target != s->pitch && target != s->count) return;
     if (s->editor) { lv_obj_move_foreground(s->editor); return; }
     s->editor_target = target;
-    s->editor = ui_form_dialog("EDIT MEASUREMENT", 640, 480, UI_POPUP_STANDARD);
+    s->editor = ui_form_dialog("Edit measurement", 640, 480, UI_POPUP_STANDARD);
     if (!s->editor) { s->editor_target = NULL; return; }
     lv_obj_add_event_cb(s->editor, editor_deleted, LV_EVENT_DELETE, NULL);
     s->editor_value = ui_form_input(ui_form_body(s->editor), "Measurement",
@@ -279,8 +284,8 @@ static void field_cb(lv_event_t *event)
     lv_obj_add_event_cb(s->editor_value, field_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_add_event_cb(s->editor_feedback, field_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *keyboard = ui_form_keyboard(s->editor, s->editor_value, LV_KEYBOARD_MODE_NUMBER);
-    ui_form_action(s->editor, UI_BUTTON_SECONDARY, "CANCEL", editor_cancel_cb, NULL);
-    ui_form_action(s->editor, UI_BUTTON_PRIMARY, "DONE", editor_done_cb, NULL);
+    ui_form_action(s->editor, UI_BUTTON_SECONDARY, "Cancel", editor_cancel_cb, NULL);
+    ui_form_action(s->editor, UI_BUTTON_PRIMARY, "Done", editor_done_cb, NULL);
     ui_popup_keyboard_actions(keyboard, editor_done_cb, editor_cancel_cb);
     ui_form_finish(s->editor);
 }
@@ -446,8 +451,8 @@ static void show_view(motion_view_t view)
         popup_height(view == VIEW_LIMITS ? 440 : 500), UI_POPUP_STANDARD);
     if (!s->popup) return;
     lv_obj_add_event_cb(s->popup, popup_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = layout_body(s->popup, view == VIEW_LIMITS ? "MOTION LIMITS" :
-        view == VIEW_DRIVERS ? "TMC DRIVER DIAGNOSTICS" : "AXIS DISTANCE CALCULATOR");
+    lv_obj_t *body = layout_body(s->popup, view == VIEW_LIMITS ? "Motion limits" :
+        view == VIEW_DRIVERS ? "TMC driver diagnostics" : "Axis distance calculator");
     if (view == VIEW_LIMITS) {
         s->status = layout_label(body, "WAITING FOR LIVE LIMITS", true);
         const char *labels[] = {"Maximum velocity", "Maximum acceleration", "Square-corner velocity", "Minimum cruise ratio"};
@@ -479,7 +484,7 @@ static void show_view(motion_view_t view)
         lv_obj_set_grid_dsc_array(pair, layout_columns, input_rows);
         lv_obj_set_style_pad_row(pair, UI_GAP_ROW, 0);
         for (unsigned i = 0; i < 2; ++i) {
-            lv_obj_t *label = layout_label(pair, i == 0 ? "BELT PITCH (mm)" : "PULLEY TEETH", true);
+            lv_obj_t *label = layout_label(pair, i == 0 ? "Belt pitch (mm)" : "Pulley teeth", true);
             lv_obj_set_grid_cell(label, LV_GRID_ALIGN_STRETCH, i, 1, LV_GRID_ALIGN_END, 0, 1);
             lv_obj_t *field = ui_popup_add_textarea(pair, 354, 56, LV_ALIGN_TOP_LEFT,
                 0, 0, true, false, 18, i == 0 ? "Pitch" : "Teeth or thread starts",
@@ -499,10 +504,10 @@ static void show_view(motion_view_t view)
         layout_label(body, "For screws, enter thread pitch and thread-start count.\nNo motion or configuration changes are sent.", true);
     }
     lv_obj_t *footer = layout_footer(s->popup);
-    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, "CLOSE",
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, "Close",
         0, 0, 170, 48, close_cb, NULL, NULL);
     if (view == VIEW_DISTANCE) {
-        lv_obj_t *calculate = ui_popup_add_action_at(footer, UI_POPUP_ACTION_PRIMARY, "CALCULATE",
+        lv_obj_t *calculate = ui_popup_add_action_at(footer, UI_POPUP_ACTION_PRIMARY, "Calculate",
             0, 0, 180, 48, calculate_cb, NULL, NULL);
         lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(calculate, 1);
     }
@@ -522,17 +527,15 @@ void ui_motion_diagnostics_create(lv_obj_t *card)
     s_card = card; s_card_owner = moonraker_config_generation();
     memset(s_actions, 0, sizeof(s_actions));
     lv_obj_add_event_cb(card, card_deleted, LV_EVENT_DELETE, NULL);
-    const char *labels[] = {"LIMITS", "DISTANCE", "DRIVERS"};
+    const char *labels[] = {"Limits", "Distance", "Drivers"};
     lv_event_cb_t callbacks[] = {limits_cb, distance_cb, drivers_cb};
-    const int widths[] = {100, 132, 110};
-    const int positions[] = {16, 124, 264};
     for (size_t i = 0; i < 3; ++i) {
         lv_obj_t *button = ui_button_create(card, UI_BUTTON_OUTLINED, labels[i]);
         if (!button) continue;
         s_actions[i] = button;
-        lv_obj_set_size(button, widths[i], 44);
+        ui_calibration_layout_motion_action(button,(unsigned)i,true);
         lv_obj_set_style_pad_hor(button, 1, 0);
-        lv_obj_set_pos(button, positions[i], 86);
+        ui_text_fit_single_line(lv_obj_get_child(button,0),UI_FONT_BODY_LARGE);
         lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_CLIP);
         lv_obj_add_event_cb(button, callbacks[i], LV_EVENT_CLICKED, NULL);
         lv_obj_add_event_cb(button, action_deleted, LV_EVENT_DELETE, NULL);

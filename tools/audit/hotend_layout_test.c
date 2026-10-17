@@ -51,7 +51,14 @@ for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;d
  // Temperature and fan changes remain usable during both printing and pause.
  for(int paused=0;paused<2;paused++){
   reset();strcpy(fixture.printer_state,paused?"paused":"printing");ui_printer_popups_show_hotends(send,&fixture);click(s_hotend_temp_buttons[1]);assert(s_control_popup);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),1));assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0001 TARGET=200"));
-  ui_printer_popups_show_bed(send,60,60);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),1));assert(!strcmp(sent,"M140 S60"));
+  ui_printer_popups_show_bed(send,60,60);layout(s_control_popup);
+  lv_obj_t *thermal_body=lv_obj_get_child(s_control_popup,1),*thermal_presets=lv_obj_get_child(thermal_body,2);
+  assert(lv_obj_has_state(lv_obj_get_child(thermal_presets,1),LV_STATE_CHECKED));
+  for(unsigned preset=0;preset<6;preset++) {
+   lv_obj_t *button=lv_obj_get_child(thermal_presets,preset);inside(button,thermal_presets);inside(lv_obj_get_child(button,0),button);
+  }
+  if(!size&&density==1&&large&&!paused)snapshot(theme,"bed-presets");
+  click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),1));assert(!strcmp(sent,"M140 S60"));
   ui_printer_popups_show_part_fan(send,50);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2),4));assert(!strcmp(sent,"M106 S255"));
  }
  reset();ui_printer_popups_show_hotends(send,&fixture);before=sends;click(s_hotend_activate_buttons[1]);generation++;refresh_hotend_list(NULL);assert(!s_hotend_list_popup&&!s_hotend_confirm_button);confirm_hotend_activate_cb(NULL);assert(sends==before);assert(!s_hotend_refresh_timer&&!s_hotend_row_count);

@@ -98,7 +98,7 @@ static void show_screws_results_popup(void)
     }
 
     geometry_register(*s_geometry->screws_popup, s_screws_owner);
-    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("SCREWS TILT RESULTS"));
+    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("Screws tilt results"));
 
 
     *s_geometry->screws_results_label =
@@ -106,7 +106,7 @@ static void show_screws_results_popup(void)
 
 
 
-    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_screws_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CLOSE, "Close", close_screws_popup_cb, NULL, NULL);
 }
 
 
@@ -271,7 +271,7 @@ static void screws_tilt_button_cb(
     }
 
     geometry_register(*s_geometry->screws_popup, s_screws_owner);
-    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("RUN SCREWS TILT?"));
+    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("Run screws tilt?"));
 
 
     char body[420];
@@ -290,9 +290,9 @@ static void screws_tilt_button_cb(
 
 
 
-    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_screws_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_screws_popup_cb, NULL, NULL);
 
-    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_screws_tilt_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_screws_tilt_cb, NULL, NULL);
 }
 
 
@@ -353,7 +353,7 @@ static void run_gantry_level_cb(lv_event_t *event)
         lv_obj_add_state(lv_obj_get_child(footer, i), LV_STATE_DISABLED);
         lv_obj_add_flag(lv_obj_get_child(footer, i), LV_OBJ_FLAG_HIDDEN);
     }
-    ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_gantry_level_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "Close", close_gantry_level_popup_cb, NULL, NULL);
 }
 
 static void gantry_level_button_cb(
@@ -428,8 +428,8 @@ static void gantry_level_button_cb(
 
     geometry_register(*s_geometry->gantry_popup, s_gantry_owner);
     ui_cal_dialog_title(*s_geometry->gantry_popup, *s_geometry->gantry_use_qgl
-            ? ui_text("RUN QUAD GANTRY LEVEL?")
-            : ui_text("RUN Z TILT?"));
+            ? ui_text("Run quad gantry level?")
+            : ui_text("Run Z tilt?"));
 
 
     char body[430];
@@ -448,9 +448,9 @@ static void gantry_level_button_cb(
 
 
 
-    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_gantry_level_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_gantry_level_popup_cb, NULL, NULL);
 
-    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_gantry_level_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_gantry_level_cb, NULL, NULL);
 }
 
 

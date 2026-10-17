@@ -85,8 +85,11 @@ static void layout_checks(lv_display_t*d,lv_indev_t*pointer){
   int width=(int[]){1024,640,480}[size];lv_display_set_resolution(d,width,size==2?400:600);
   ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});fixture_reset();ui_filament_recovery_show(send);lv_obj_update_layout(popup);
   inside(popup,lv_layer_top());lv_obj_t *body=ui_form_body(popup),*footer=lv_obj_get_child(popup,-1);inside(body,popup);inside(footer,popup);assert(button_bounds(popup)==8);
+  assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);
+  assert(lv_obj_get_width(buttons[4])>lv_obj_get_width(buttons[3]));
   lv_area_t before,after;lv_obj_get_coords(footer,&before);
   if(width==1024){
+   for(unsigned i=0;i<5;i++)assert(lv_obj_get_style_text_font(lv_obj_get_child(buttons[i],0),0)->line_height>=UI_FONT_BODY->line_height);
    if(lv_obj_get_scroll_bottom(body)>0)fprintf(stderr,"recovery overflow theme=%d density=%d large=%d bottom=%d\n",theme,density,large,(int)lv_obj_get_scroll_bottom(body));
    assert(lv_obj_get_scroll_bottom(body)<=0);inside(lv_obj_get_parent(buttons[4]),body);
    if(density==1&&large)snapshot(theme);

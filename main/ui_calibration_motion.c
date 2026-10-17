@@ -1,5 +1,6 @@
 #include "ui_calibration_motion.h"
 #include "ui_motion_diagnostics.h"
+#include "ui_calibration_layout.h"
 #include "ui_text.h"
 
 #include <stdint.h>
@@ -403,8 +404,7 @@ static void accelerometer_check_button_cb(
 static lv_obj_t *make_action_button(
     lv_obj_t *card,
     const char *label,
-    lv_align_t align,
-    int x,
+    unsigned column,
     lv_event_cb_t callback)
 {
     lv_obj_t *button = ui_button_create(
@@ -416,11 +416,10 @@ static lv_obj_t *make_action_button(
         return NULL;
     }
 
-    lv_obj_set_size(button, strcmp(label, "RESONANCE") == 0 ? 152 : strcmp(label, "SHAPER") == 0 ? 100 : 102, 44);
+    ui_calibration_layout_motion_action(button,column,false);
     lv_obj_set_style_pad_hor(button, 1, 0);
     lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_CLIP);
-    lv_obj_align(button, align, x, -10);
-    ui_text_fit_single_line(lv_obj_get_child(button, 0), UI_FONT_BODY);
+    ui_text_fit_single_line(lv_obj_get_child(button, 0), UI_FONT_BODY_LARGE);
     lv_label_set_long_mode(lv_obj_get_child(button, 0), LV_LABEL_LONG_CLIP);
     lv_obj_add_event_cb(
         button,
@@ -455,25 +454,22 @@ void ui_calibration_motion_create(
     s_motion.input_shaper_button =
         make_action_button(
             card,
-            "SHAPER",
-            LV_ALIGN_BOTTOM_LEFT,
-            10,
+            "Shaper",
+            0,
             input_shaper_button_cb);
 
     s_motion.resonance_test_button =
         make_action_button(
             card,
-            "RESONANCE",
-            LV_ALIGN_BOTTOM_MID,
-            0,
+            "Resonance",
+            1,
             resonance_test_button_cb);
 
     s_motion.accelerometer_check_button =
         make_action_button(
             card,
-            "SENSOR",
-            LV_ALIGN_BOTTOM_RIGHT,
-            -10,
+            "Sensor",
+            2,
             accelerometer_check_button_cb);
 }
 

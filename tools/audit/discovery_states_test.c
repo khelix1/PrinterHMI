@@ -135,7 +135,8 @@ static void request_safety(const esp_ip4_addr_t *ip)
  discovery_retry_cb(NULL);assert(s_scan_task_handle);worker();assert(!s_scan_task_handle&&s_select_request==66);moonraker_discovery_close_request(66);
 }
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){int w=lv_display_get_horizontal_resolution(d);uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*w+x]=*v++;lv_display_flush_ready(d);}
-static void snapshot(void){const char*path=getenv("DISCOVERY_SCREENSHOT");if(!path)return;lv_refr_now(NULL);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+static void snapshot(unsigned theme,const char *state){const char*path=getenv("DISCOVERY_SCREENSHOT");const char*folder=getenv("DISCOVERY_SCREENSHOTS");char generated[512];if(folder){snprintf(generated,sizeof(generated),"%s/discovery-theme%u-%s.ppm",folder,theme,state);path=generated;}if(!path)return;lv_refr_now(NULL);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+
 static void inside(lv_obj_t*a,lv_obj_t*b){lv_area_t x,y;lv_obj_get_coords(a,&x);lv_obj_get_coords(b,&y);assert(x.x1>=y.x1&&x.y1>=y.y1&&x.x2<=y.x2&&x.y2<=y.y2);}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);esp_ip4_addr_t ip={.addr=0x640144c0};
  lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
@@ -143,8 +144,19 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
   lv_display_set_resolution(d,(unsigned[]){1024,640,480}[size],(unsigned[]){600,480,320}[size]);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   lv_obj_t*page=lv_obj_create(lv_screen_active());lv_obj_set_size(page,lv_display_get_horizontal_resolution(d)-16,lv_display_get_vertical_resolution(d)-16);lv_obj_set_pos(page,8,8);lv_obj_clear_flag(page,LV_OBJ_FLAG_SCROLLABLE);
   moonraker_discovery_show_in_parent(page,"Searching this network for printers...",on_close,on_select);assert(s_popup);lv_obj_update_layout(s_popup);inside(s_popup,lv_screen_active());lv_obj_t*footer=lv_obj_get_child(s_popup,-1);inside(footer,s_popup);for(unsigned i=0;i<2;i++)inside(lv_obj_get_child(footer,i),footer);
-  fail_task=true;assert(!moonraker_discovery_start(&ip)&&strstr(s_status,"Could not start"));fail_task=false;tap(pointer,lv_obj_get_child(footer,0));assert(s_scan_task_handle);discovery_retry_cb(NULL);assert(strstr(s_status,"still finishing"));in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle&&strstr(s_status,"No Moonraker"));if(theme==4&&density==1&&large&&!size)snapshot();
+  fail_task=true;assert(!moonraker_discovery_start(&ip)&&strstr(s_status,"Could not start"));fail_task=false;tap(pointer,lv_obj_get_child(footer,0));assert(s_scan_task_handle);discovery_retry_cb(NULL);assert(strstr(s_status,"still finishing"));in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle&&strstr(s_status,"No Moonraker"));if(density==1&&large&&!size)snapshot(theme,"empty");
   moonraker_probe_result_t probe={.klippy_ready=true};strcpy(probe.identity,"Workshop printer with a long descriptive name");assert(moonraker_discovery_add_candidate("192.0.2.126",7125,&probe));lv_obj_update_layout(s_popup);lv_obj_t*row=lv_obj_get_child(s_results_list,0);lv_obj_scroll_to_view_recursive(row,LV_ANIM_OFF);lv_obj_update_layout(s_popup);unsigned selections=selected;tap(pointer,row);assert(selected==selections+1);
+  if(!size) {
+   lv_obj_t *body=ui_form_body(s_popup);lv_area_t content,list,before_footer,after_footer;
+   lv_obj_get_content_coords(body,&content);lv_obj_get_coords(s_results_list,&list);
+   assert(lv_obj_get_height(s_popup)>=500&&lv_obj_get_height(s_results_list)>200);
+   assert(list.y2==content.y2&&list.x1==content.x1&&list.x2==content.x2);
+   for(unsigned candidate=0;candidate<7;candidate++){char host[32];snprintf(host,sizeof(host),"192.0.2.%u",candidate+130);assert(moonraker_discovery_add_candidate(host,7125,&probe));}
+   lv_obj_update_layout(s_popup);assert(lv_obj_get_child_count(s_results_list)==8&&lv_obj_get_scroll_bottom(s_results_list)>0);
+   if(density==1&&large)snapshot(theme,"results");
+   lv_obj_get_coords(footer,&before_footer);lv_obj_scroll_to_y(s_results_list,10000,LV_ANIM_OFF);lv_obj_update_layout(s_popup);
+   assert(lv_obj_get_scroll_bottom(s_results_list)<=1);lv_obj_get_coords(footer,&after_footer);assert(!memcmp(&before_footer,&after_footer,sizeof(before_footer)));
+  }
   discovery_retry_cb(NULL);assert(!s_candidate_count&&!lv_obj_get_child_count(s_results_list));lv_obj_delete(page);assert(s_cancelled&&!s_popup&&!s_status_label&&!s_results_list);in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle);
   moonraker_discovery_show("Retry after cancellation",on_close,on_select);unsigned before=closed;tap(pointer,lv_obj_get_child(lv_obj_get_child(s_popup,-1),1));assert(closed==before+1&&!s_popup);safety_checks(&ip);request_safety(&ip);
  }

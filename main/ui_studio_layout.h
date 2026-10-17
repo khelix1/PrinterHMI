@@ -1,5 +1,6 @@
 #pragma once
 #include "ui_theme.h"
+#include "ui_widgets.h"
 #include "ui_button_press.h"
 #include "ui_font_fallback.h"
 #include "ui_text_fit.h"
@@ -25,9 +26,7 @@ static inline lv_obj_t *studio_text(lv_obj_t *parent,const char *text,int x,int 
 }
 static inline lv_obj_t *studio_rule(lv_obj_t *parent,int x,int y,int w,int h)
 {
-    lv_obj_t *o=studio_plane(parent,x,y,w,h);
-    lv_obj_set_style_bg_color(o,UI_BORDER,0);
-    lv_obj_set_style_bg_opa(o,LV_OPA_COVER,0);return o;
+    return ui_create_divider(parent,x,y,w,h);
 }
 static inline void studio_action_fit_label(lv_event_t *event)
 {

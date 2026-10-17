@@ -6,6 +6,8 @@
 #include "custom_theme.h"
 #include "telemetry_history.h"
 #include "settings_system_info.h"
+#include "esp_heap_caps.h"
+#include "ui_settings_components.h"
 static unsigned history_reads;
 static void (*history_hook)(void);
 static bool counted_history_get(size_t index,telemetry_sample_t *sample){history_reads++;if(history_hook){void(*hook)(void)=history_hook;history_hook=NULL;hook();}return telemetry_history_get(index,sample);}
@@ -18,14 +20,15 @@ static void replace_history_host(void){ui_telemetry_hide();ui_telemetry_show();}
 static moonraker_state_t state;
 static int64_t clock_us;
 static unsigned back_page,back_nav,invalidations,info_reads;
+static bool memory_zero;
 static void(*info_read_hook)(void);
 static void info_read(void){info_reads++;if(info_read_hook){void(*hook)(void)=info_read_hook;info_read_hook=NULL;hook();}}
 static lv_obj_t *replacement_info_label,*replacement_info_parent;
 static void rebind_info(void){replacement_info_label=lv_label_create(replacement_info_parent);lv_label_set_text(replacement_info_label,"REPLACEMENT");settings_system_info_bind_heap_label(replacement_info_label);}
 const char *esp_get_idf_version(void){info_read();return "host-test";}
-size_t heap_caps_get_free_size(unsigned caps){(void)caps;info_read();return 100000;}
-size_t heap_caps_get_minimum_free_size(unsigned caps){(void)caps;info_read();return 90000;}
-size_t heap_caps_get_largest_free_block(unsigned caps){(void)caps;info_read();return 80000;}
+size_t heap_caps_get_free_size(unsigned caps){info_read();return memory_zero?0:caps==MALLOC_CAP_SPIRAM?32U*1024*1024:100000;}
+size_t heap_caps_get_minimum_free_size(unsigned caps){info_read();return memory_zero?0:caps==MALLOC_CAP_SPIRAM?31U*1024*1024:90000;}
+size_t heap_caps_get_largest_free_block(unsigned caps){(void)caps;info_read();return memory_zero?0:80000;}
 static unsigned timers(void){unsigned n=0;lv_timer_t *t=NULL;while((t=lv_timer_get_next(t)))n++;return n;}
 static unsigned objects(lv_obj_t *p){unsigned n=1;for(uint32_t i=0;i<lv_obj_get_child_count(p);i++)n+=objects(lv_obj_get_child(p,i));return n;}
 int64_t esp_timer_get_time(void){info_read();return clock_us;}
@@ -39,14 +42,25 @@ bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
 static uint16_t raster[1024*600];static int screen_width=1024;
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*screen_width+x]=*v++;lv_display_flush_ready(d);}
 static void invalidated(lv_event_t *e){(void)e;invalidations++;}
-static void screenshot(unsigned theme,unsigned view){const char *folder=getenv("TELEMETRY_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/telemetry-theme%u-view%u.ppm",folder,theme,view);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+static void screenshot(unsigned theme,unsigned view){const char *folder=getenv("TELEMETRY_SCREENSHOTS");if(!folder)return;lv_tick_inc(250);lv_timer_handler();lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/telemetry-theme%u-view%u.ppm",folder,theme,view);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);if(a.x1<b.x1||a.x2>b.x2||a.y1<b.y1||a.y2>b.y2){fprintf(stderr,"outside %s %d,%d..%d,%d parent %d,%d..%d,%d\n",lv_obj_check_type(child,&lv_label_class)?lv_label_get_text(child):"object",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void descendants(lv_obj_t *parent){for(uint32_t i=0;i<lv_obj_get_child_count(parent);i++){lv_obj_t *c=lv_obj_get_child(parent,i);if(lv_obj_has_flag(c,LV_OBJ_FLAG_HIDDEN))continue;inside(c,parent);descendants(c);}}
 static lv_point_t touch;static bool pressed;
 static void read_touch(lv_indev_t *i,lv_indev_data_t *d){(void)i;d->point=touch;d->state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;}
 static void tap(lv_indev_t *i,lv_obj_t *button){lv_obj_update_layout(lv_screen_active());lv_area_t a;lv_obj_get_coords(button,&a);touch=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 static void ready_state(void){state=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true,.nozzle_temp=205,.nozzle_target=205,.bed_temp=60,.bed_target=60,.air_temp=30,.chamber_temp=35,.humidity=45,.heater_target=40,.live_velocity=120,.live_flow=8.3,.speed_factor=100,.flow_factor=98,.part_fan_speed=70,.drybox_fan_speed=55,.hotend_count=3,.capabilities={.discovered=true,.has_heated_bed=true,.has_drybox_center_sensor=true,.has_drybox_environment_sensor=true,.has_drybox_heater=true,.has_part_fan=true,.has_drybox_fan=true}};strcpy(state.active_hotend,"extruder");strcpy(state.printer_state,"printing");for(unsigned i=0;i<3;i++){snprintf(state.hotends[i].object_name,sizeof(state.hotends[i].object_name),"extruder%u",i);state.hotends[i].temperature=205+i*10;state.hotends[i].target=205+i*10;}strcpy(state.hotends[0].object_name,"extruder");}
-int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
+int main(void){
+ bool seen[CHANNEL_NONE]={0};
+ for(unsigned view=0;view<3;view++)for(unsigned chart=0;chart<(view==UI_TELEMETRY_HEAT?3:4);chart++){
+  unsigned channel=s_view_channels[view][chart];assert(channel<CHANNEL_NONE&&!seen[channel]);seen[channel]=true;
+ }
+ for(unsigned channel=0;channel<CHANNEL_NONE;channel++)assert(seen[channel]);
+ assert(s_view_channels[UI_TELEMETRY_HEAT][2]==CHANNEL_PART_FAN);
+ assert(s_view_channels[UI_TELEMETRY_ENVIRONMENT][0]==CHANNEL_CENTER);
+ assert(s_view_channels[UI_TELEMETRY_ENVIRONMENT][1]==CHANNEL_AIR);
+ assert(s_view_channels[UI_TELEMETRY_ENVIRONMENT][2]==CHANNEL_HUMIDITY);
+ assert(s_view_channels[UI_TELEMETRY_ENVIRONMENT][3]==CHANNEL_DRYBOX_FAN);
+ lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
 for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned size=0;size<3;size++){
  screen_width=(int[]){1024,640,480}[size];lv_display_set_resolution(d,screen_width,size?400:600);
  ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
@@ -62,13 +76,20 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  assert(lv_obj_get_style_shadow_width(lv_dropdown_get_list(s_range),0)==0);
  lv_dropdown_close(s_range);inside(s_panel,lv_screen_active());
  for(uint32_t i=0;i<lv_obj_get_child_count(s_panel);i++)inside(lv_obj_get_child(s_panel,i),s_panel);
- for(unsigned i=0;i<4;i++)descendants(s_charts[i].card);
+ for(unsigned i=0;i<4;i++)if(!lv_obj_has_flag(s_charts[i].card,LV_OBJ_FLAG_HIDDEN))descendants(s_charts[i].card);
  int32_t *values=lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual);
  assert(values[299]==2050 && strstr(lv_label_get_text(s_charts[0].value),"205.0"));
  assert(strstr(lv_label_get_text(s_status),"LIVE"));
  for(unsigned view=0;view<3;view++){
   tap(pointer,s_tabs[view]);assert(s_view==view);lv_obj_update_layout(s_panel);
-  for(unsigned i=0;i<4;i++)descendants(s_charts[i].card);
+  assert(lv_obj_has_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN)==(view!=UI_TELEMETRY_HEAT));
+  assert(lv_obj_has_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN)==(view==UI_TELEMETRY_MOTION));
+  for(unsigned chart=0;chart<4;chart++) {
+   assert(lv_obj_has_flag(s_charts[chart].card,LV_OBJ_FLAG_HIDDEN)==(view==UI_TELEMETRY_HEAT&&chart==3));
+   assert(lv_chart_get_point_count(s_charts[chart].chart)==s_window);
+  }
+  for(unsigned tab=0;tab<3;tab++){assert(lv_obj_has_state(s_tabs[tab],LV_STATE_CHECKED)==(tab==view));assert(lv_obj_get_height(s_tabs[tab])>=48);}
+  for(unsigned i=0;i<4;i++)if(!lv_obj_has_flag(s_charts[i].card,LV_OBJ_FLAG_HIDDEN))descendants(s_charts[i].card);
   if(!size && density==1 && large)screenshot(theme,view);
  }
  tap(pointer,s_tabs[0]);assert(s_view==UI_TELEMETRY_HEAT);
@@ -76,7 +97,7 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  /* A discovery reorder and active tool change must retain the named trace. */
  moonraker_hotend_t swap=state.hotends[0];state.hotends[0]=state.hotends[2];state.hotends[2]=swap;strcpy(state.active_hotend,"extruder1");clock_us+=2000000;ui_telemetry_refresh(&state,clock_us);assert(!strcmp(s_hotend,"extruder2"));assert(lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual)[299]==2250);
  lv_dropdown_set_selected(s_range,0);lv_obj_send_event(s_range,LV_EVENT_VALUE_CHANGED,NULL);assert(s_window==60 && lv_chart_get_point_count(s_charts[0].chart)==60);
- tap(pointer,s_hold_button);assert(s_held);int32_t held[60];memcpy(held,lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual),sizeof(held));
+ tap(pointer,s_hold_button);assert(s_held&&lv_obj_has_state(s_hold_button,LV_STATE_CHECKED));int32_t held[60];memcpy(held,lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual),sizeof(held));
  state.hotends[0].temperature=227;clock_us+=10000000;ui_telemetry_refresh(&state,clock_us);assert(!memcmp(held,lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual),sizeof(held)));assert(strstr(lv_label_get_text(s_charts[0].value),"227.0"));assert(lv_obj_has_state(s_range,LV_STATE_DISABLED));assert(!strcmp(lv_label_get_text(s_charts[0].time),"HELD"));
  tap(pointer,s_hold_button);assert(!s_held);values=lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual);assert(values[59]==2270 && values[58]==LV_CHART_POINT_NONE && values[54]==2250);
  state.live_data_ok=false;state.moonraker_ok=false;clock_us+=4000000;ui_telemetry_refresh(&state,clock_us);assert(strstr(lv_label_get_text(s_status),"OFFLINE"));assert(strstr(lv_label_get_text(s_charts[0].value),"--"));assert(lv_chart_get_series_y_array(s_charts[0].chart,s_charts[0].actual)[59]==LV_CHART_POINT_NONE);
@@ -106,6 +127,40 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  lv_obj_delete(info);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before);
  info=lv_obj_create(lv_screen_active());lv_obj_t *idf_only=lv_label_create(info);settings_system_info_bind_idf_label(idf_only);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before+1&&!strcmp(lv_label_get_text(idf_only),"host-test"));
  info_read_hook=settings_system_info_unbind;settings_system_info_refresh();lv_obj_delete(info);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before);
+ /* The same SDK readings populate independently labelled memory cells. */
+ info=ui_settings_section_create(lv_screen_active(),"System information",0,300);
+ static const char *const heap_names[]={"Free now","Lowest","Largest block"};
+ static const char *const psram_names[]={"Free now","Lowest"};
+ lv_obj_t *heap_cells[3],*psram_cells[2];
+ ui_settings_section_add_metrics_row(info,"Internal RAM","Lowest free since startup",heap_names,3,48,heap_cells);
+ ui_settings_section_add_metrics_row(info,"PSRAM","Lowest free since startup",psram_names,2,48+UI_SETTINGS_ROW_HEIGHT+1,psram_cells);
+ settings_system_info_bind_heap_metrics(heap_cells[0],heap_cells[1],heap_cells[2]);
+ settings_system_info_bind_psram_metrics(psram_cells[0],psram_cells[1]);
+ reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before+5);
+ assert(!strcmp(lv_label_get_text(heap_cells[0]),"97.7 KiB"));
+ assert(!strcmp(lv_label_get_text(heap_cells[1]),"87.9 KiB"));
+ assert(!strcmp(lv_label_get_text(heap_cells[2]),"78.1 KiB"));
+ assert(!strcmp(lv_label_get_text(psram_cells[0]),"32.0 MiB"));
+ assert(!strcmp(lv_label_get_text(psram_cells[1]),"31.0 MiB"));
+ lv_obj_update_layout(info);
+ if(!size) {
+  for(unsigned i=0;i<3;i++) {
+   lv_obj_t *column=lv_obj_get_parent(heap_cells[i]),*metrics=lv_obj_get_parent(column),*row=lv_obj_get_parent(metrics);
+   inside(heap_cells[i],column);inside(column,metrics);inside(metrics,row);
+   lv_point_t measured;lv_text_get_size(&measured,lv_label_get_text(heap_cells[i]),lv_obj_get_style_text_font(heap_cells[i],0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+   assert(measured.x<=lv_obj_get_width(heap_cells[i]));
+  }
+  for(unsigned i=0;i<2;i++) {
+   inside(psram_cells[i],lv_obj_get_parent(psram_cells[i]));
+   lv_area_t heap_area,psram_area;lv_obj_get_coords(heap_cells[i],&heap_area);lv_obj_get_coords(psram_cells[i],&psram_area);
+   assert(heap_area.x1==psram_area.x1&&heap_area.x2==psram_area.x2);
+  }
+ }
+ lv_refr_now(d);invalidations=0;settings_system_info_refresh();assert(invalidations==0);
+ memory_zero=true;settings_system_info_refresh();assert(!strcmp(lv_label_get_text(heap_cells[2]),"0 B"));memory_zero=false;
+ lv_obj_delete(heap_cells[0]);settings_system_info_refresh();assert(!strcmp(lv_label_get_text(heap_cells[1]),"87.9 KiB"));
+ info_read_hook=settings_system_info_unbind;settings_system_info_refresh();
+ lv_obj_delete(info);reads_before=info_reads;settings_system_info_refresh();assert(info_reads==reads_before);
  ui_telemetry_show();lv_obj_delete(s_panel);assert(!s_panel&&!s_charts[0].chart);ui_telemetry_show();lv_obj_t *header=lv_obj_get_child(s_panel,0);tap(pointer,lv_obj_get_child(header,1));assert(back_page==UI_SHELL_PAGE_DEVICES && back_nav==UI_SHELL_PAGE_TOOLS);ui_telemetry_hide();
 }
 /* Physics/data checks independent of theme geometry. */
@@ -133,10 +188,13 @@ for(unsigned i=0;i<1400;i++) {
  ui_telemetry_refresh(&state,clock_us);
 }
 assert(telemetry_history_count()==300);
-for(unsigned n=0;n<4;n++) {
+for(unsigned n=0;n<s_visible_chart_count;n++) {
  int32_t *a=lv_chart_get_series_y_array(s_charts[n].chart,s_charts[n].actual);
  for(unsigned i=0;i<300;i++)assert(a[i]!=LV_CHART_POINT_NONE);
 }
+assert(s_visible_chart_count==3&&lv_obj_has_flag(s_charts[3].card,LV_OBJ_FLAG_HIDDEN));
+int32_t *unused=lv_chart_get_series_y_array(s_charts[3].chart,s_charts[3].actual);
+for(unsigned i=0;i<300;i++)assert(unused[i]==LV_CHART_POINT_NONE);
 telemetry_sample_t previous,current;
 for(size_t i=1;i<300;i++) {
  assert(telemetry_history_get(i-1,&previous)&&telemetry_history_get(i,&current));
@@ -155,4 +213,4 @@ lv_obj_delete(s_range);assert(!s_range);range_cb(NULL);lv_obj_delete(s_hold_butt
 lv_obj_delete(s_charts[0].chart);assert(!s_chart_host&&!s_charts[0].chart);ui_telemetry_refresh(&state,clock_us);ui_telemetry_charts_refresh(clock_us,false);ui_telemetry_hide();ui_telemetry_show();
 lv_obj_delete(s_graph_host);assert(!s_graph_host&&!s_chart_host);ui_telemetry_refresh(&state,clock_us);ui_telemetry_hide();range_cb(NULL);hotend_cb(NULL);hold_cb(NULL);scale_cb(NULL);
 ui_telemetry_hide();telemetry_history_reset();state.live_data_ok=state.moonraker_ok=false;ui_telemetry_refresh(&state,clock_us);ui_telemetry_show();assert(strstr(lv_label_get_text(s_history_status),"Reconnect"));state.moonraker_ok=true;ui_telemetry_refresh(&state,clock_us);assert(strstr(lv_label_get_text(s_history_status),"Klipper"));ui_telemetry_hide();
-lv_display_delete(d);lv_deinit();puts("PASS: modern telemetry native bounds/scroll, three views, range/hold, real touches, named hotend identity, time gaps, missing capabilities, offline/reset, no-op refresh and owner lifecycle across all five themes/densities/text sizes/viewports");}
+lv_display_delete(d);lv_deinit();puts("PASS: modern telemetry native bounds/scroll, three views, range/hold, real touches, named hotend identity, time gaps, missing capabilities, offline/reset, no-op refresh and owner lifecycle across all five themes/densities/text sizes/viewports, plus individually labelled system-memory metrics, KiB/MiB/zero values, aligned native columns and safe partial deletion/unbinding");}

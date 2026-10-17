@@ -12,8 +12,8 @@ stubs={
 'esp_log.h':'#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n',
 'esp_timer.h':'#pragma once\n#include <stdint.h>\nint64_t esp_timer_get_time(void);\n',
 'esp_crt_bundle.h':'#pragma once\n#include "esp_err.h"\nesp_err_t esp_crt_bundle_attach(void*);\n',
-'esp_http_client.h':'#pragma once\n#include <stdbool.h>\n#include "esp_err.h"\ntypedef struct { const char *url; int timeout_ms; bool keep_alive_enable; esp_err_t(*crt_bundle_attach)(void*); int buffer_size; int buffer_size_tx; } esp_http_client_config_t;\n',
-'esp_https_ota.h':'#pragma once\n#include "esp_http_client.h"\ntypedef void *esp_https_ota_handle_t;\ntypedef struct {const esp_http_client_config_t *http_config;} esp_https_ota_config_t;\n#define ESP_ERR_HTTPS_OTA_IN_PROGRESS 1\nesp_err_t esp_https_ota_begin(const esp_https_ota_config_t*,esp_https_ota_handle_t*);\nesp_err_t esp_https_ota_perform(esp_https_ota_handle_t);\nesp_err_t esp_https_ota_finish(esp_https_ota_handle_t);\nesp_err_t esp_https_ota_abort(esp_https_ota_handle_t);\nbool esp_https_ota_is_complete_data_received(esp_https_ota_handle_t);\nint esp_https_ota_get_image_len_read(esp_https_ota_handle_t);\nint esp_https_ota_get_image_size(esp_https_ota_handle_t);\n',
+'esp_http_client.h':'#pragma once\n#include <stdbool.h>\n#include "esp_err.h"\ntypedef void *esp_http_client_handle_t;\nesp_err_t esp_http_client_set_timeout_ms(esp_http_client_handle_t,int);\ntypedef struct { const char *url; int timeout_ms; bool keep_alive_enable; esp_err_t(*crt_bundle_attach)(void*); int buffer_size; int buffer_size_tx; } esp_http_client_config_t;\n',
+'esp_https_ota.h':'#pragma once\n#include "esp_http_client.h"\ntypedef void *esp_https_ota_handle_t;\ntypedef struct {const esp_http_client_config_t *http_config; esp_err_t(*http_client_init_cb)(esp_http_client_handle_t);} esp_https_ota_config_t;\n#define ESP_ERR_HTTPS_OTA_IN_PROGRESS 1\nesp_err_t esp_https_ota_begin(const esp_https_ota_config_t*,esp_https_ota_handle_t*);\nesp_err_t esp_https_ota_perform(esp_https_ota_handle_t);\nesp_err_t esp_https_ota_finish(esp_https_ota_handle_t);\nesp_err_t esp_https_ota_abort(esp_https_ota_handle_t);\nbool esp_https_ota_is_complete_data_received(esp_https_ota_handle_t);\nint esp_https_ota_get_image_len_read(esp_https_ota_handle_t);\nint esp_https_ota_get_image_size(esp_https_ota_handle_t);\n',
 'esp_ota_ops.h':'#pragma once\n',
 'esp_system.h':'#pragma once\nvoid esp_restart(void);\n',
 'nvs.h':'#pragma once\n#include <stddef.h>\n#include "esp_err.h"\ntypedef unsigned nvs_handle_t;\n#define NVS_READONLY 0\n#define NVS_READWRITE 1\nesp_err_t nvs_open(const char*,int,nvs_handle_t*);\nesp_err_t nvs_get_str(nvs_handle_t,const char*,char*,size_t*);\nesp_err_t nvs_set_str(nvs_handle_t,const char*,const char*);\nesp_err_t nvs_commit(nvs_handle_t);\nvoid nvs_close(nvs_handle_t);\n',
@@ -27,7 +27,7 @@ fixture=r'''
 #include "ota_manager.c"
 static int64_t clock_us;
 static bool locked,task_accept=true,exclusive=true,ready=true,complete=true;
-static int mode,reads,aborts,finishes,releases,reboots,pumps,closes;
+static int mode,reads,aborts,finishes,releases,reboots,pumps,closes,read_timeout;
 static char status[160],transfer_text[112];
 static int pumped_bytes,pumped_total,pumped_percent;
 static jmp_buf reboot;
@@ -57,22 +57,28 @@ esp_err_t esp_https_ota_begin(const esp_https_ota_config_t *config,esp_https_ota
  assert(!locked&&config->http_config->buffer_size==4096&&config->http_config->buffer_size_tx==2048);
  assert(config->http_config->crt_bundle_attach==esp_crt_bundle_attach&&config->http_config->keep_alive_enable&&config->http_config->timeout_ms==15000);
  assert(!strcmp(config->http_config->url,"https://fixture/fw.bin"));
+ assert(config->http_client_init_cb&&config->http_client_init_cb((void*)2)==ESP_OK);
  clock_us+=2000000;
  if(mode==1)return ESP_FAIL;
  *out=(void*)1;return ESP_OK;
 }
+esp_err_t esp_http_client_set_timeout_ms(esp_http_client_handle_t h,int ms){assert(h==(void*)2&&!locked&&ms==1000&&reads==1);read_timeout=ms;return mode==10?ESP_FAIL:ESP_OK;}
 esp_err_t esp_https_ota_perform(esp_https_ota_handle_t h){assert(h==(void*)1&&!locked);clock_us+=1000000;reads++;
- if(mode==2&&reads==2)ota_manager_cancel();
+ if(reads>1)assert(read_timeout==1000);
+ if((mode==2||mode==7)&&reads==2)ota_manager_cancel();
+ if(mode==9)return ESP_ERR_HTTPS_OTA_IN_PROGRESS;
+ if(mode==7)return ESP_ERR_HTTPS_OTA_IN_PROGRESS;
+ if(mode==8)return reads<6?ESP_ERR_HTTPS_OTA_IN_PROGRESS:ESP_OK;
  if(mode==3&&reads==2)return ESP_FAIL;
  return reads<4?ESP_ERR_HTTPS_OTA_IN_PROGRESS:ESP_OK;
 }
-int esp_https_ota_get_image_len_read(esp_https_ota_handle_t h){assert(h==(void*)1&&!locked);return reads*4096;}
+int esp_https_ota_get_image_len_read(esp_https_ota_handle_t h){assert(h==(void*)1&&!locked);return (mode==7||mode==9?1:mode==8?(reads<4?1:reads-2):reads)*4096;}
 int esp_https_ota_get_image_size(esp_https_ota_handle_t h){assert(h==(void*)1&&!locked);return mode==4?-1:16384;}
 bool esp_https_ota_is_complete_data_received(esp_https_ota_handle_t h){assert(h==(void*)1);return complete;}
 esp_err_t esp_https_ota_finish(esp_https_ota_handle_t h){assert(h==(void*)1&&!s_cancel_allowed);finishes++;ota_manager_cancel();assert(!s_cancel_requested);return mode==5?ESP_FAIL:ESP_OK;}
 esp_err_t esp_https_ota_abort(esp_https_ota_handle_t h){assert(h==(void*)1);aborts++;return ESP_OK;}
 void esp_restart(void){reboots++;longjmp(reboot,1);}
-static void reset(int m){mode=m;reads=aborts=finishes=releases=reboots=pumps=closes=0;clock_us=1000000;complete=ready=exclusive=task_accept=true;s_task_running=s_cancel_requested=s_cancel_complete=false;}
+static void reset(int m){mode=m;read_timeout=0;reads=aborts=finishes=releases=reboots=pumps=closes=0;clock_us=1000000;complete=ready=exclusive=task_accept=true;s_task_running=s_cancel_requested=s_cancel_complete=false;}
 int main(void){
  for(volatile int m=0;m<=6;m++){
   reset(m);if(m==6)complete=false;
@@ -92,11 +98,15 @@ int main(void){
   if(m==0||m==4)assert(strstr(transfer_text,"Average: 4.0 KiB/s | Elapsed: 6 s"));
   char frozen[112];snprintf(frozen,sizeof(frozen),"%s",transfer_text);clock_us+=5000000;ota_manager_pump_ui();assert(!strcmp(frozen,transfer_text));
  }
+ reset(7);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==2&&aborts==1&&!finishes&&s_cancel_complete&&releases==1&&s_worker_http==NULL);
+ reset(8);assert(ota_manager_start("https://fixture/fw.bin"));if(!setjmp(reboot))update_task(NULL);assert(reboots==1&&finishes==1&&reads==6&&!aborts&&s_worker_http==NULL);s_task_running=false;
+ reset(10);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==1&&aborts==1&&!finishes&&!s_task_running&&releases==1&&s_worker_http==NULL);
+ reset(9);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==16&&aborts==1&&!finishes&&!s_task_running&&releases==1&&s_worker_http==NULL);
  reset(0);task_accept=false;assert(!ota_manager_start("https://fixture/fw.bin"));assert(progress_snapshot().ended);ota_manager_pump_ui();assert(strstr(status,"Unable to start"));
  reset(0);exclusive=false;assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(!reads&&!aborts&&!releases&&!s_task_running);
  reset(0);ready=false;assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(!reads&&!aborts&&releases==1&&!s_task_running);
  reset(0);assert(ota_manager_start("https://fixture/fw.bin"));ota_manager_cancel();update_task(NULL);assert(!reads&&!reboots);ota_manager_pump_ui();assert(closes==1);
- puts("PASS: actual OTA worker buffer/TLS configuration, firmware counters, known/unknown size, transfer rate/frozen elapsed, restart, cancellation, SDK failures, incomplete image, task failure, lane timeouts and snapshot lock boundaries");
+ puts("PASS: actual OTA worker buffer/TLS configuration, firmware counters, known/unknown size, transfer rate/frozen elapsed, restart, cancellation during a stalled short read, transient stalls, 15s no-progress deadline, timeout-setting failure, SDK failures, incomplete image, task failure, lane timeouts and snapshot lock boundaries");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='ota-transfer-') as directory:

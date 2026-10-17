@@ -1,4 +1,5 @@
 #include "ui_telemetry_components.h"
+#include "ui_widgets.h"
 #include "ui_theme.h"
 #include "ui_font_fallback.h"
 #include "ui_text_fit.h"
@@ -18,6 +19,10 @@ lv_obj_t *telemetry_create_metric_card(lv_obj_t *parent,const char *title,lv_col
 {
     lv_obj_t *card=lv_obj_create(parent);
     ui_apply_surface_role(card,UI_SURFACE_TELEMETRY_CARD);
+    if(ui_theme_is_studio()) {
+        ui_apply_surface_role(card,UI_SURFACE_TRANSPARENT);
+        ui_apply_divider_border(card,LV_BORDER_SIDE_BOTTOM);
+    }
     lv_obj_set_style_pad_all(card,12,0);
     lv_obj_set_style_pad_row(card,8,0);
     lv_obj_clear_flag(card,LV_OBJ_FLAG_SCROLLABLE);

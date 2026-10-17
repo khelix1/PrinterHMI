@@ -90,6 +90,8 @@ ui_page_state_t *ui_page_state_create_owned(
 
     state->icon = lv_label_create(body);
     ui_apply_text_heading(state->icon);
+    /* Theme text fonts may omit LVGL symbols (notably Studio Inter). */
+    lv_obj_set_style_text_font(state->icon, &lv_font_montserrat_32, 0);
     state->spinner = lv_spinner_create(body);
     lv_obj_set_size(state->spinner, 34, 34);
     state->title = lv_label_create(body);
@@ -158,7 +160,7 @@ void ui_page_state_show(ui_page_state_t *state,
     }
 
     STATE_UPDATE(icon,ui_value_set_text(state->icon, icon));
-    STATE_UPDATE(icon,lv_obj_set_style_text_font(state->icon,UI_FONT_HEADING,0));
+    STATE_UPDATE(icon,lv_obj_set_style_text_font(state->icon,&lv_font_montserrat_32,0));
     STATE_UPDATE(icon,ui_value_set_color(state->icon, color,0));
     STATE_UPDATE(title,ui_value_set_text(state->title, title ? title : ui_text("")));
     STATE_UPDATE(detail,ui_value_set_text(state->detail, detail ? detail : ui_text("")));

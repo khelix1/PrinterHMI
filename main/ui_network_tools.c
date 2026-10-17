@@ -1,3 +1,4 @@
+#include "ui_widgets.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -213,6 +214,10 @@ void ui_network_tools_add_wifi_ssid_button(lv_obj_t *parent,const char *ssid,int
     char row[96];snprintf(row,sizeof(row),"%s\nSignal %d dBm",ssid,rssi);
     lv_obj_t *button=ui_button_create(parent,UI_BUTTON_OUTLINED,row);
     if(!button){free(copy);return;}
+    if(ui_theme_is_studio()) {
+        ui_apply_surface_role(button,UI_SURFACE_TRANSPARENT);
+        ui_apply_divider_border(button,LV_BORDER_SIDE_BOTTOM);
+    }
     lv_obj_set_size(button,LV_PCT(100),LV_SIZE_CONTENT);lv_obj_set_style_min_height(button,64,0);
     lv_obj_add_event_cb(button,wifi_row_deleted,LV_EVENT_DELETE,copy);
     if(selected_cb)lv_obj_add_event_cb(button,selected_cb,LV_EVENT_CLICKED,copy);
@@ -222,7 +227,7 @@ void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,lv_obj_t **status_la
 {
     if(!popup||!status_label||!list)return;
     if(*popup){lv_obj_move_foreground(*popup);if(*status_label)ui_value_set_text(*status_label,status_text?status_text:"");return;}
-    *popup=ui_form_dialog("WIFI NETWORKS",860,540,UI_POPUP_STANDARD);
+    *popup=ui_form_dialog("Wi-Fi networks",860,540,UI_POPUP_STANDARD);
     if(!*popup)return;
     network_form_owner_t *owner=network_form_own(popup,status_label,list);if(!owner)return;
     lv_obj_t *body=ui_form_body(*popup);lv_obj_clear_flag(body,LV_OBJ_FLAG_SCROLLABLE);
@@ -230,9 +235,9 @@ void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,lv_obj_t **status_la
     *list=lv_obj_create(body);lv_obj_remove_style_all(*list);
     lv_obj_set_size(*list,LV_PCT(100),0);lv_obj_set_flex_grow(*list,1);
     lv_obj_set_flex_flow(*list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(*list,8,0);
-    lv_obj_set_scroll_dir(*list,LV_DIR_VER);lv_obj_set_scrollbar_mode(*list,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(*list,LV_DIR_VER);lv_obj_set_scrollbar_mode(*list,LV_SCROLLBAR_MODE_OFF);
     network_field_own(owner,*status_label);network_field_own(owner,*list);
-    ui_form_action(*popup,UI_BUTTON_CLOSE,"CLOSE",close_cb,NULL);ui_form_finish(*popup);
+    ui_form_action(*popup,UI_BUTTON_CLOSE,"Close",close_cb,NULL);ui_form_finish(*popup);
 }
 
 void ui_network_tools_close_wifi_scan_popup(lv_obj_t **scan_popup,
@@ -266,7 +271,7 @@ void ui_network_tools_show_wifi_password_popup_window(lv_obj_t **password_popup,
 {
     if(!password_popup||!password_textarea||!selected_ssid||!selected_ssid[0])return;
     if(*password_popup){lv_obj_move_foreground(*password_popup);return;}
-    *password_popup=ui_form_dialog("WIFI PASSWORD",960,568,UI_POPUP_STANDARD);
+    *password_popup=ui_form_dialog("Wi-Fi password",960,568,UI_POPUP_STANDARD);
     if(!*password_popup)return;
     network_form_owner_t *owner=network_form_own(password_popup,password_textarea,NULL);if(!owner)return;
     lv_obj_t *body=ui_form_body(*password_popup);
@@ -278,8 +283,8 @@ void ui_network_tools_show_wifi_password_popup_window(lv_obj_t **password_popup,
     owner->keyboard=keyboard;
     network_field_own(owner,*password_textarea);network_field_own(owner,keyboard);network_field_own(owner,status);
     ui_popup_keyboard_actions(keyboard,save_cb,close_cb);
-    ui_form_action(*password_popup,UI_BUTTON_CANCEL,"BACK",close_cb,NULL);
-    ui_form_action(*password_popup,UI_BUTTON_PRIMARY,"CONNECT",save_cb,NULL);
+    ui_form_action(*password_popup,UI_BUTTON_CANCEL,"Back",close_cb,NULL);
+    ui_form_action(*password_popup,UI_BUTTON_PRIMARY,"Connect",save_cb,NULL);
     ui_form_finish(*password_popup);
     lv_obj_scroll_to_view(*password_textarea,LV_ANIM_OFF);
 }
@@ -413,7 +418,7 @@ static void save_cb(lv_event_t *e)
 void ui_network_port_popup_show(int current_port,ui_network_port_save_cb_t saved)
 {
     if(s_moon_port_popup){lv_obj_move_foreground(s_moon_port_popup);return;}
-    s_moon_port_popup=ui_form_dialog("MOONRAKER PORT",680,540,UI_POPUP_STANDARD);
+    s_moon_port_popup=ui_form_dialog("Moonraker port",680,540,UI_POPUP_STANDARD);
     if(!s_moon_port_popup)return;
     ++s_port_epoch;s_save_cb=saved;lv_obj_add_event_cb(s_moon_port_popup,port_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_t *body=ui_form_body(s_moon_port_popup);char value[16];snprintf(value,sizeof(value),"%d",current_port);
@@ -425,8 +430,8 @@ void ui_network_port_popup_show(int current_port,ui_network_port_save_cb_t saved
     lv_obj_t *fields[]={s_moon_port_ta,s_port_status,s_port_keyboard};
     for(size_t i=0;i<3;i++)lv_obj_add_event_cb(fields[i],port_field_deleted,LV_EVENT_DELETE,NULL);
     ui_popup_keyboard_actions(keyboard,save_cb,close_cb);
-    ui_form_action(s_moon_port_popup,UI_BUTTON_CANCEL,"CANCEL",close_cb,NULL);
-    ui_form_action(s_moon_port_popup,UI_BUTTON_PRIMARY,"SAVE",save_cb,NULL);ui_form_finish(s_moon_port_popup);
+    ui_form_action(s_moon_port_popup,UI_BUTTON_CANCEL,"Cancel",close_cb,NULL);
+    ui_form_action(s_moon_port_popup,UI_BUTTON_PRIMARY,"Save",save_cb,NULL);ui_form_finish(s_moon_port_popup);
     lv_obj_scroll_to_view(s_moon_port_ta,LV_ANIM_OFF);
 }
 
@@ -441,8 +446,8 @@ static void close_test_popup_cb(lv_event_t *e)
 
 void ui_network_tools_show_test_moonraker_popup(const char *title,const char *message,bool ok)
 {
-    lv_obj_t *popup=ui_form_dialog(title?title:"CONNECTION TEST",720,400,ok?UI_POPUP_STANDARD:UI_POPUP_DANGER);
+    lv_obj_t *popup=ui_form_dialog(title?title:"Connection test",720,400,ok?UI_POPUP_STANDARD:UI_POPUP_DANGER);
     if(!popup)return;
     ui_form_text(ui_form_body(popup),message,UI_FONT_BODY,UI_TEXT);
-    ui_form_action(popup,UI_BUTTON_CLOSE,"CLOSE",close_test_popup_cb,NULL);ui_form_finish(popup);
+    ui_form_action(popup,UI_BUTTON_CLOSE,"Close",close_test_popup_cb,NULL);ui_form_finish(popup);
 }

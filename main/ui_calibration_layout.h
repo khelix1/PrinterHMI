@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
 #include "lvgl.h"
 
 typedef struct {
@@ -21,3 +22,18 @@ void ui_calibration_layout_set_card(ui_calibration_card_refs_t *refs,
                                     size_t macro_count);
 void ui_calibration_layout_set_action_label(lv_obj_t *button,
                                             const char *text);
+
+/* Two aligned action rows, shared by Motion diagnostics and measurements.
+ * Call after the section's final width/height and padding have been set. */
+static inline void ui_calibration_layout_motion_action(lv_obj_t *button,
+                                                       unsigned column,
+                                                       bool upper)
+{
+    if(!button)return;
+    lv_obj_t *section=lv_obj_get_parent(button);
+    lv_obj_update_layout(section);
+    int width=(lv_obj_get_content_width(section)-48)/3;
+    if(width<44)width=44;
+    lv_obj_set_size(button,width,44);
+    lv_obj_align(button,LV_ALIGN_BOTTOM_LEFT,16+(int)column*(width+8),upper?-62:-12);
+}

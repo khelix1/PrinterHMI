@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"esp_log.h").write_text("#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n")
     (tmp/"esp_wifi_types.h").write_text("#pragma once\n#include <stdint.h>\ntypedef struct { uint8_t ssid[33]; int8_t rssi; } wifi_ap_record_t;\n")
     (tmp/"esp_wifi.h").write_text("#pragma once\n#include \"esp_wifi_types.h\"\n#include \"esp_err.h\"\nesp_err_t esp_wifi_scan_start(void*,bool);\nesp_err_t esp_wifi_scan_get_ap_num(uint16_t*);\nesp_err_t esp_wifi_scan_get_ap_records(uint16_t*,wifi_ap_record_t*);\nesp_err_t esp_wifi_sta_get_ap_info(wifi_ap_record_t*);\n")
-    (tmp/"esp_netif_ip_addr.h").write_text("#pragma once\n#include <stdint.h>\ntypedef struct { uint32_t addr; } esp_ip4_addr_t;\n")
+    (tmp/"esp_netif_ip_addr.h").write_text("#pragma once\n#include <stdint.h>\ntypedef struct { uint32_t addr; } esp_ip4_addr_t;\n#define IPSTR \"%u.%u.%u.%u\"\n#define IP2STR(a) (unsigned)((a)->addr & 255), (unsigned)(((a)->addr >> 8) & 255), (unsigned)(((a)->addr >> 16) & 255), (unsigned)(((a)->addr >> 24) & 255)\n")
     (tmp/"esp_netif.h").write_text("#pragma once\n#include \"esp_netif_ip_addr.h\"\n#include \"esp_err.h\"\ntypedef void esp_netif_t;\ntypedef struct { esp_ip4_addr_t ip; } esp_netif_ip_info_t;\nesp_netif_t *esp_netif_get_handle_from_ifkey(const char*);\nesp_err_t esp_netif_get_ip_info(esp_netif_t*,esp_netif_ip_info_t*);\n")
     (tmp/"freertos").mkdir()
     (tmp/"freertos/FreeRTOS.h").write_text("#pragma once\n#define pdPASS 1\n#define pdMS_TO_TICKS(n) (n)\n")

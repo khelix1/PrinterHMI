@@ -1,3 +1,4 @@
+#include "ui_widgets.h"
 #include "ui_appearance_popups.h"
 
 #include "theme_manager.h"
@@ -138,14 +139,16 @@ static lv_obj_t *appearance_popup(const char *title,
     lv_obj_set_size(s_body,LV_PCT(100),0);lv_obj_set_flex_grow(s_body,1);
     lv_obj_set_flex_flow(s_body,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(s_body,0,0);
     lv_obj_set_style_pad_row(s_body,10,0);lv_obj_set_scroll_dir(s_body,LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_body,LV_SCROLLBAR_MODE_OFF);
     appearance_field_own(s_body);
     lv_obj_t *hint=lv_label_create(s_body);lv_label_set_text(hint,message);
     s_feedback=hint;appearance_field_own(hint);
     ui_apply_custom_label_style(hint,UI_FONT_BODY,UI_TEXT_DIM);
     lv_obj_set_width(hint,LV_PCT(100));lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
     lv_obj_t *footer=lv_obj_create(s_popup);lv_obj_remove_style_all(footer);
-    lv_obj_set_size(footer,LV_PCT(100),48);lv_obj_clear_flag(footer,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *close=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CLOSE,LV_SYMBOL_CLOSE " CLOSE",0,0,160,48,appearance_close_cb,NULL,NULL);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
+    lv_obj_set_size(footer,LV_PCT(100),58);lv_obj_clear_flag(footer,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *close=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CLOSE,LV_SYMBOL_CLOSE " Close",0,0,160,48,appearance_close_cb,NULL,NULL);
     lv_obj_center(close);
     return s_popup;
 }
@@ -181,7 +184,7 @@ void ui_appearance_popups_show_accent(ui_appearance_changed_cb_t changed_cb)
     const int32_t list_height = 16 + (UI_ACCENT_COUNT - 1) * row_step + row_height;
     const int32_t popup_height = list_height + 170;
     if (!appearance_popup(
-            "ACCENT COLOR",
+            "Accent color",
             "Choose an accent. Status, warning, and danger colors remain semantic.",
             720, popup_height)) return;
 
@@ -197,7 +200,7 @@ void ui_appearance_popups_show_accent(ui_appearance_changed_cb_t changed_cb)
             accent_select_cb, (void *)(uintptr_t)accent);
         s_rows[accent]=row;appearance_field_own(row);
         lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
-        lv_obj_set_style_min_height(row,row_height<44?44:row_height,0);
+        lv_obj_set_style_min_height(row,row_height<48?48:row_height,0);
         lv_obj_set_style_pad_ver(row,10,0);
         lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
         lv_obj_t *label=lv_obj_get_child(row,0);
@@ -238,7 +241,7 @@ void ui_appearance_popups_show_density(ui_appearance_changed_cb_t changed_cb)
     const int32_t list_height = 16 + 2 * row_step + row_height;
     const int32_t popup_height = list_height + 170;
     if (!appearance_popup(
-            "DISPLAY DENSITY",
+            "Display density",
             "Choose typography and spacing independently of the theme.",
             640, popup_height)) return;
 
@@ -254,7 +257,7 @@ void ui_appearance_popups_show_density(ui_appearance_changed_cb_t changed_cb)
             density_select_cb, (void *)(uintptr_t)density);
         s_rows[density]=row;appearance_field_own(row);
         lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
-        lv_obj_set_style_min_height(row,row_height<44?44:row_height,0);
+        lv_obj_set_style_min_height(row,row_height<48?48:row_height,0);
         lv_obj_set_style_pad_ver(row,10,0);
         lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
         lv_obj_t *label=lv_obj_get_child(row,0);
@@ -312,7 +315,7 @@ void ui_appearance_popups_show_accessibility(
     const int32_t list_height = 16 + 3 * row_step + row_height;
     const int32_t popup_height = list_height + 170;
     if (!appearance_popup(
-            "ACCESSIBILITY",
+            "Accessibility",
             "Tap an option to toggle it. The interface will refresh immediately.",
             720, popup_height)) return;
 
@@ -338,7 +341,7 @@ void ui_appearance_popups_show_accessibility(
             accessibility_toggle_cb, (void *)(uintptr_t)option);
         s_rows[option]=row;appearance_field_own(row);
         lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
-        lv_obj_set_style_min_height(row,row_height<44?44:row_height,0);
+        lv_obj_set_style_min_height(row,row_height<48?48:row_height,0);
         lv_obj_set_style_pad_ver(row,10,0);
         lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
         lv_obj_t *label=lv_obj_get_child(row,0);

@@ -50,7 +50,12 @@ static void check(void)
         assert(!strcmp(lv_label_get_text(owner->title),"Panel title"));
         assert(lv_obj_has_flag(owner->spinner,LV_OBJ_FLAG_HIDDEN)==(kind!=UI_PAGE_STATE_LOADING));
         assert(lv_obj_has_flag(owner->icon,LV_OBJ_FLAG_HIDDEN)==(kind==UI_PAGE_STATE_LOADING));
-        assert(lv_obj_get_style_text_font(owner->icon,0)==UI_FONT_HEADING);
+        if(kind!=UI_PAGE_STATE_LOADING){
+            lv_font_glyph_dsc_t glyph;
+            const uint32_t codepoints[]={0,0xF07B,0xF1EB,0xF071};
+            assert(lv_font_get_glyph_dsc(lv_obj_get_style_text_font(owner->icon,0),&glyph,codepoints[kind],0));
+            assert(!glyph.is_placeholder && glyph.box_w>0 && glyph.box_h>0);
+        }
         ui_page_state_hide(owner);assert(lv_obj_has_flag(owner->root,LV_OBJ_FLAG_HIDDEN));
     }
     fail_metadata=true;assert(!create()&&owner==old&&metadata_live==1);

@@ -1718,7 +1718,7 @@ static bool setup_connect_wifi(const char *ssid, const char *password)
 
 static void app_open_setup_wizard(void)
 {
-    ui_setup_wizard_show(setup_connect_wifi);
+    ui_setup_wizard_show_with_appearance_callback(setup_connect_wifi,app_theme_changed);
 }
 
 static void settings_open_setup_wizard_bridge(lv_event_t *event)
@@ -2803,7 +2803,7 @@ static void dashboard_restore_active_profile_preview(void)
         image->header.stride!=image->header.w*sizeof(uint16_t) || image->data_size<(size_t)image->header.w*image->header.h*sizeof(uint16_t)){
         bool had_canvas=dash_thumb_canvas!=NULL;
         ui_dashboard_thumb_delete_canvas();
-        if(dashboard_preview_current(epoch+(had_canvas?1U:0U),generation,profile,NULL))ui_dashboard_thumb_set_placeholder("PRINT\nTHUMBNAIL\n\nNo preview loaded");
+        if(dashboard_preview_current(epoch+(had_canvas?1U:0U),generation,profile,NULL))ui_dashboard_thumb_set_placeholder("Model preview\n\nNo preview loaded");
         return;
     }
     char copied[160]="";if(strlen(file)<sizeof(copied))safe_copy(copied,sizeof(copied),file);

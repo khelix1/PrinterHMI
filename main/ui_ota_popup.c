@@ -23,6 +23,7 @@ static lv_obj_t *s_ota_popup = NULL;
 
 static lv_obj_t *s_progress_popup = NULL;
 static lv_obj_t *s_progress_bar = NULL;
+static int32_t s_progress_bar_target;
 static lv_obj_t *s_progress_label = NULL;
 static lv_obj_t *s_progress_pct_label = NULL;
 static lv_obj_t *s_progress_bytes_label = NULL;
@@ -43,11 +44,7 @@ static void ota_quiesce_camera(void)
     /* The persistent MJPEG request shares the network transport with OTA. */
     ui_dashboard_set_camera_quiesced(true);
     ui_camera_set_setup_active(true);
-    /* Wait for the MJPEG worker to finish releasing the shared transport
-     * before the GitHub release-catalog request starts. */
-    for (int wait_ms = 0; wait_ms < 2000 && camera_stream_busy(); wait_ms += 50) {
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
+    /* Transport ownership is awaited by catalog/update workers, never LVGL. */
     s_camera_quiesced = true;
 }
 
@@ -115,6 +112,35 @@ static void progress_cancel_cb(lv_event_t *e)
     cancel();
 }
 
+/* Retarget from the displayed value: LVGL's built-in bar animation starts
+ * a replacement from the previous destination, causing jumps at 50ms pumps. */
+static void progress_bar_frame(void *bar, int32_t value)
+{
+    if (bar == s_progress_bar && s_progress_visible)
+        ui_value_set_bar(bar, value);
+}
+
+static void progress_bar_set_target(int32_t value)
+{
+    if (!s_progress_bar || value == s_progress_bar_target) return;
+    s_progress_bar_target = value;
+    int32_t displayed = lv_bar_get_value(s_progress_bar);
+    lv_anim_delete(s_progress_bar, progress_bar_frame);
+    if (value <= displayed) {
+        ui_value_set_bar(s_progress_bar, value);
+        return;
+    }
+    lv_anim_t animation;
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, s_progress_bar);
+    lv_anim_set_exec_cb(&animation, progress_bar_frame);
+    lv_anim_set_values(&animation, displayed, value);
+    lv_anim_set_duration(&animation, 150);
+    lv_anim_set_path_cb(&animation, lv_anim_path_linear);
+    lv_anim_start(&animation);
+    /* LVGL removes animations keyed to the bar when that object is deleted. */
+}
+
 static void progress_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
@@ -134,21 +160,22 @@ void ui_ota_progress_show(ui_ota_cancel_cb_t cancel_cb)
 {
     if(s_progress_popup){lv_obj_move_foreground(s_progress_popup);return;}
     s_progress_cancel_cb=cancel_cb;s_progress_cancel_pending=false;
-    s_progress_popup=ui_ota_dialog("FIRMWARE UPDATE",760,440,UI_POPUP_STANDARD);
+    s_progress_popup=ui_ota_dialog("Firmware update",760,440,UI_POPUP_STANDARD);
     if(!s_progress_popup)return;
     lv_obj_add_event_cb(s_progress_popup,progress_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_t *body=ui_ota_body(s_progress_popup);
     s_progress_label=ui_ota_text(body,"Checking server...",UI_FONT_BODY,UI_TEXT);
     s_progress_pct_label=ui_ota_text(body,"0%",UI_FONT_TITLE,UI_ACCENT_BRIGHT);
     s_progress_bar=lv_bar_create(body);lv_obj_set_size(s_progress_bar,LV_PCT(100),32);
-    lv_bar_set_range(s_progress_bar,0,100);lv_obj_set_style_anim_duration(s_progress_bar,250,0);
+    lv_bar_set_range(s_progress_bar,0,10000);s_progress_bar_target=0;
     s_progress_bytes_label=ui_ota_text(body,"0.00 MB",UI_FONT_BODY,UI_TEXT_DIM);
     ui_ota_text(body,"Keep the controller powered during installation. The controller restarts after a successful update.",UI_FONT_CAPTION,UI_TEXT_DIM);
     s_progress_transfer_label=ui_ota_text(body,"Average: -- | Elapsed: 0 s",UI_FONT_CAPTION,UI_TEXT_DIM);
-    s_progress_cancel_btn=ui_ota_action(s_progress_popup,UI_POPUP_ACTION_CANCEL,"CANCEL",progress_cancel_cb,NULL);
+    s_progress_cancel_btn=ui_ota_action(s_progress_popup,UI_POPUP_ACTION_CANCEL,"Cancel",progress_cancel_cb,NULL);
     lv_obj_t *fields[]={s_progress_bar,s_progress_label,s_progress_pct_label,s_progress_bytes_label,s_progress_transfer_label,s_progress_cancel_btn};
     for(size_t i=0;i<6;i++)lv_obj_add_event_cb(fields[i],progress_field_deleted,LV_EVENT_DELETE,NULL);
     s_progress_visible=true;
+    ui_ota_finish(s_progress_popup);
 }
 
 void ui_ota_progress_set_transfer(const char *text)
@@ -167,7 +194,7 @@ void ui_ota_progress_pump(const char *status_text,
 
     if(s_progress_cancel_btn) {
         bool finished=!ota_manager_is_running() && percent<100;
-        ui_value_set_text(lv_obj_get_child(s_progress_cancel_btn,0),finished ? "CLOSE" : "CANCEL");
+        ui_value_set_text(lv_obj_get_child(s_progress_cancel_btn,0),finished ? "Close" : "Cancel");
         if((cancel_enabled && !s_progress_cancel_pending) || finished)lv_obj_remove_state(s_progress_cancel_btn,LV_STATE_DISABLED);
         else lv_obj_add_state(s_progress_cancel_btn,LV_STATE_DISABLED);
     }
@@ -177,10 +204,14 @@ void ui_ota_progress_pump(const char *status_text,
 
     if(s_progress_label)ui_value_set_text(s_progress_label,status_text && status_text[0] ? status_text : "Checking server...");
 
-    if (s_progress_bar) {
-        if(lv_bar_get_value(s_progress_bar)!=percent)
-            lv_bar_set_value(s_progress_bar,percent,LV_ANIM_ON);
+    /* Hundredths of a percent keep byte progress moving between integer
+     * label updates. Reserve the final percent for validation as before. */
+    int32_t bar_value = percent * 100;
+    if (bytes_read > 0 && content_length > 0 && percent > 0 && percent < 99) {
+        int64_t precise = (int64_t)bytes_read * 10000 / content_length;
+        bar_value = precise > 9900 ? 9900 : (int32_t)precise;
     }
+    progress_bar_set_target(bar_value);
 
     if (s_progress_pct_label) {
         char pct[16];
@@ -300,7 +331,7 @@ static void start_cb(lv_event_t *e)
     /* Reserve the asynchronous callback before transferring any ownership. */
     if (lv_async_call(deferred_start_cb, NULL) != LV_RESULT_OK) {
         ui_popup_feedback(ui_ota_body(s_ota_popup), UI_STATUS_DANGER,
-                          "UPDATE NOT STARTED", "Could not queue update. Your URL is retained; try again.");
+                          "Update not started", "Could not queue update. Your URL is retained; try again.");
         return;
     }
 
@@ -368,7 +399,7 @@ static void remote_cb(lv_event_t *e)
     if (s_remote_pending || s_deferred_start_popup || !s_remote_cb || !s_ota_popup) return;
     if (lv_async_call(remote_transition, NULL) != LV_RESULT_OK) {
         ui_popup_feedback(ui_ota_body(s_ota_popup), UI_STATUS_DANGER,
-                          "RELEASES NOT OPENED", "Could not queue dialog. Your URL is retained; try again.");
+                          "Releases not opened", "Could not queue dialog. Your URL is retained; try again.");
         return;
     }
     s_remote_pending = true;
@@ -405,7 +436,7 @@ void ui_ota_popup_show(const char *current_url,const char *firmware_info,size_t 
     if(s_deferred_start_popup){lv_obj_move_foreground(s_deferred_start_popup);return;}
     if(s_ota_popup){lv_obj_move_foreground(s_ota_popup);return;}
     s_start_cb=start_cb_fn;s_remote_cb=remote_cb_fn;
-    s_ota_popup=ui_ota_dialog("UPDATE FROM URL",960,540,UI_POPUP_STANDARD);
+    s_ota_popup=ui_ota_dialog("Update from URL",960,540,UI_POPUP_STANDARD);
     if(!s_ota_popup){s_start_cb=NULL;s_remote_cb=NULL;ota_resume_camera();return;}
     ++s_ota_epoch;
     lv_obj_add_event_cb(s_ota_popup,editor_deleted,LV_EVENT_DELETE,NULL);
@@ -418,13 +449,14 @@ void ui_ota_popup_show(const char *current_url,const char *firmware_info,size_t 
     lv_obj_set_height(s_ota_url_ta,56);
     s_ota_kb=ui_popup_add_keyboard(body,s_ota_url_ta,LV_PCT(100),224,LV_ALIGN_TOP_LEFT,0,0,LV_KEYBOARD_MODE_TEXT_LOWER);
     lv_obj_set_style_min_height(s_ota_kb,180,0);
-    ui_ota_action(s_ota_popup,UI_POPUP_ACTION_CANCEL,"CANCEL",close_cb,NULL);
-    ui_ota_action(s_ota_popup,UI_POPUP_ACTION_SECONDARY,"RELEASES",remote_cb,NULL);
-    ui_ota_action(s_ota_popup,UI_POPUP_ACTION_CONFIRM,"START UPDATE",start_cb,NULL);
+    ui_ota_action(s_ota_popup,UI_POPUP_ACTION_CANCEL,"Cancel",close_cb,NULL);
+    ui_ota_action(s_ota_popup,UI_POPUP_ACTION_SECONDARY,"Releases",remote_cb,NULL);
+    ui_ota_action(s_ota_popup,UI_POPUP_ACTION_CONFIRM,"Start update",start_cb,NULL);
     lv_obj_add_event_cb(s_ota_url_ta,editor_field_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_add_event_cb(s_ota_kb,editor_field_deleted,LV_EVENT_DELETE,NULL);
     ui_popup_keyboard_actions(s_ota_kb,start_cb,close_cb);
     ui_popup_pin_keyboard(s_ota_popup,s_ota_kb);
+    ui_ota_finish(s_ota_popup);
 }
 
 static lv_obj_t *s_start_failure;
@@ -439,20 +471,10 @@ static void start_failure_close(lv_event_t *event)
 void ui_ota_start_failure(const char *message)
 {
     if (s_start_failure) lv_obj_delete(s_start_failure);
-    int width = lv_display_get_horizontal_resolution(NULL) - 32;
-    int height = lv_display_get_vertical_resolution(NULL) - 32;
-    if (width > 650) width = 650;
-    if (height > 340) height = 340;
-    s_start_failure = ui_popup_create(lv_layer_top(), width, height, UI_POPUP_STANDARD);
+    s_start_failure = ui_ota_dialog("Update not started",650,340,UI_POPUP_DANGER);
     if (!s_start_failure) { ota_resume_camera(); return; }
     lv_obj_add_event_cb(s_start_failure,start_failure_deleted,LV_EVENT_DELETE,NULL);
-    lv_obj_set_flex_flow(s_start_failure,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_start_failure,16,0);
-    lv_obj_set_style_pad_row(s_start_failure,12,0);
-    lv_obj_t *body=lv_obj_create(s_start_failure);
-    lv_obj_remove_style_all(body);
-    lv_obj_set_size(body,LV_PCT(100),0);lv_obj_set_flex_grow(body,1);
-    lv_obj_set_flex_flow(body,LV_FLEX_FLOW_COLUMN);lv_obj_set_scroll_dir(body,LV_DIR_VER);
-    ui_popup_feedback(body,UI_STATUS_DANGER,"UPDATE NOT STARTED",message);
-    ui_popup_add_action_at(s_start_failure,UI_POPUP_ACTION_CLOSE,"CLOSE",0,0,128,48,start_failure_close,NULL,NULL);
+    ui_ota_text(ui_ota_body(s_start_failure),message,UI_FONT_BODY,UI_TEXT);
+    ui_ota_action(s_start_failure,UI_POPUP_ACTION_CLOSE,"Close",start_failure_close,NULL);
+    ui_ota_finish(s_start_failure);
 }

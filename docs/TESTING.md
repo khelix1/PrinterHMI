@@ -1481,3 +1481,335 @@ Apply `apply_adaptive_file_preview.py` after inline file details, run `./tools/b
 Verify both orders: metadata arrives before the thumbnail, and metadata changes after an image is already displayed. The image must remain centered, proportional and within the preview after box resizing. Fullscreen preview, Cancel, and Print > Cancel review remain unchanged. Do not start a print solely for this check.
 
 The actual Files matrix covers common metadata without scroll, preview height greater than the old 176-pixel box, non-overlap, long-data minimum height and restored height after short updates. A real LVGL image child checks transformed image bounds across resizing. Run the normal and full-LVGL AddressSanitizer fixtures; inspect the native Studio large-text rendering as well. Actual OTA/panel rendering remains acceptance.
+
+## Files toolbar acceptance
+
+Apply apply_files_toolbar_polish.py after checkpoint 6dc2e79, build with ./tools/build_idf6_hosted3.sh and update through the existing OTA server. Check all themes and large text: Up, Search, sort and Refresh remain readable; an applied search highlights Search and shows its query in the breadcrumb. Open and cancel the editor: the applied search must stay active. Clear the query: the folder breadcrumb and Up availability must return to their normal state. Check sort cycling, long paths, folder navigation and unchanged smooth scrolling.
+
+The responsive Files host matrix covers state transitions, saved folder restoration, sort captions and existing geometry/input/lifetime regressions. Host checks do not establish physical touch or OTA acceptance.
+
+## Empty-search symbol acceptance
+
+Apply apply_page_state_symbol_font_fix.py after Files toolbar polish, build with ./tools/build_idf6_hosted3.sh, then update through OTA. Search Files for an unmatched filename: the empty-results panel should show a folder icon instead of a rectangle, with its message readable. Clear search and verify normal browsing. Check Studio and other themes; offline/error status icons use the same corrected font. No print is required.
+
+The page-state safety fixture checks the actual folder, Wi-Fi and warning glyphs are present and not placeholders in every theme/density/text setting, in addition to its existing ownership regressions. Run the responsive Files matrix for layout coverage.
+
+## Camera control polish acceptance
+
+Apply apply_camera_control_visual_polish.py after the shared status symbol fix. Build with ./tools/build_idf6_hosted3.sh and update through OTA. On Camera, inspect Configure, View, camera selection, Fullscreen and Retry captions in your theme and large text. An unavailable configured camera should show Retry; fullscreen hides it and exit restores it. A missing camera configuration should retain its existing setup feedback. Long camera names should stay still in the toolbar; open the picker to identify cameras.
+
+Check Configure > Cancel, View > Close, picker > Close and page navigation. When a configured camera is available, verify rotation/mirroring, reset and fullscreen fit; real transport/performance needs that hardware. The host Camera matrix checks selector refresh silence, Retry visibility through fullscreen, dialog bounds and existing frame/action/ownership regressions.
+
+## Direct Camera Configure acceptance
+
+Apply apply_camera_configure_direct_handoff.py after Camera control polish. Build with ./tools/build_idf6_hosted3.sh and update through OTA. Camera > Configure should open only Camera setup. Cancel returns straight to Camera, with no Edit printer or Manage printers underneath. Reopen, edit a camera name/URL and choose Use camera: it saves directly to that printer; reopen to check persistence. No separate printer-editor Save is needed. A failed save must retain the current dialog and values for retry.
+
+Check name/URL keyboards (Done and Cancel), Find/Test when available, View/selection cleanup and page navigation. Camera setup entered from Edit printer should still return to Edit printer. Cancel abandons the current unsaved fields; existing explicit Make default, Remove and slot-switch save behavior is retained. Repeat at large text/density and in your theme. Persistence across reboot remains a device check.
+
+Run profiles_layout_test.py and camera_pipeline_test.py against LVGL 9.5.0. PROFILE_CAMERA_DIRECT_ONLY=1 selects the new direct-entry matrix across five themes, three densities, both text sizes and three viewports; the default profile matrix includes these checks too. Full-LVGL AddressSanitizer coverage checks the direct path with leak detection disabled for this host environment.
+
+## Tools entry polish acceptance
+
+Apply apply_tools_entry_visual_polish.py after the direct Camera Configure handoff. Build with ./tools/build_idf6_hosted3.sh and update through OTA. Tools should keep its familiar four entries, now with flat sections, lower separators, sentence-case titles and consistent icons. Inspect your theme, density and large-text settings. Open Calibration, Bed mesh, Devices and Macros, then return; no printer command is required.
+
+Disconnected/busy explanations must remain visible as before. On narrower/large-text layouts, verify scrolling reaches every entry and stays responsive. The responsive Tools host matrix checks glyph availability/resolved size, content bounds, wrapping, offline-to-connected feedback and existing hide/reopen geometry across five themes, three densities, both text sizes, three widths and custom theme metrics.
+
+## Tools divider and Calibration labels
+
+Apply apply_tools_divider_calibration_labels.py after Tools entry polish, build with ./tools/build_idf6_hosted3.sh and update through OTA. Tools should show a thin center separator in its two-column layout, with unchanged entry hit areas. At narrow single-column widths the separator must disappear. Check theme/density and large text.
+
+Open Calibration and inspect the page headings, detected-tool summaries, availability counts and actions. Capability-dependent controls and existing layouts should remain familiar. Opening and cancelling a dialog is sufficient; no heating, motion or calibration command is required for appearance verification.
+
+The Tools responsive fixture checks the actual divider bounds, one-column hiding and deletion across themes, density, text, width and custom metrics. Existing calibration dialog/button-fit tests and standalone compilation cover the label changes.
+
+## Shared divider consistency acceptance
+
+Apply apply_shared_divider_consistency.py after Tools divider/Calibration labels. Build with ./tools/build_idf6_hosted3.sh and update through OTA. In each theme, compare the printer chooser center/lower separators, Tools center/lower separators, Files rows/Studio inspector divider and Calibration internal rules. Default lines should share the theme border color and brightness; their dimensions and inset positions remain page-owned. Check large text/density, one-column Tools hiding, and normal navigation/taps. Press/focus/selection feedback may intentionally differ from decorative lines.
+
+The chooser and Tools fixtures compare actual theme-resolved color/opacity. Existing Files, Studio layout and calibration checks cover shared-helper call sites and unchanged geometry. No print, heat or motion command is needed for device visual acceptance.
+
+## Shared Files/Macros search acceptance
+
+Apply apply_macro_shared_search_polish.py after shared divider consistency, build with ./tools/build_idf6_hosted3.sh and update through OTA. Macros should show sentence-case page/status/action labels. Apply a search: Search gains the same active border as Files. Reopen and cancel a draft query: the existing applied search and highlight remain. Clear search: the full list and normal Search appearance return. Repeat the equivalent Files checks.
+
+Inspect long macro names, favorites, large text/density, parameter editor and the Review dialog. Cancel before Run; no macro execution is needed for visual acceptance. Macro names and generated command text must preserve their original case and values. Host Files/Macros fixtures check active filter state, editor Cancel, Clear and existing layout, owner-generation, parameter/review and command guards.
+
+## Macros scroll surface acceptance
+
+Apply apply_macro_scroll_surface_cleanup.py after Macros/shared search polish, build with ./tools/build_idf6_hosted3.sh and update through OTA. Macros should have no visible list scrollbar or enclosing card border, with unchanged macro buttons. Swipe through the list and back: scrolling must still work and a swipe must not open a macro. Clear search should be disabled without a filter, enabled after applying one and disabled again after clearing. Cancelled search edits must preserve the applied filter.
+
+Check favorites, long macro names, large text/density, Files and Tools surfaces, and the existing Review/Cancel flow. No macro execution is required. The native-pointer host matrix checks scrolling without a scrollbar and without selection/commands, along with clear-button state and existing Files/Macros/Tools regressions.
+
+## Studio default and within-theme consistency
+
+Apply apply_studio_default_theme.py after Macros scroll cleanup, build with ./tools/build_idf6_hosted3.sh and update through OTA. Existing valid saved themes should remain selected. New settings or missing/invalid theme data now choose Studio Dark. To use Studio on an already configured unit, choose it in Appearance; do not erase settings just to test the default. Reboot and verify your explicit selection persists.
+
+During consistency passes, review every page against its own theme's colors, brightness, dividers, fonts, padding, icons and feedback. Repeat large text/density and relevant dialog/empty/offline states. Theme-specific layouts remain deliberate; shared items should use theme roles rather than page-local lookalikes. The source change centralizes the default and preserves existing theme IDs and preferences; it does not claim that every page has completed visual review.
+
+Run theme_default_test.py with LVGL sources for settings/dispatcher coverage, and live_appearance_test.py for existing all-theme appearance transitions. The NVS host fixture tests persistence logic; hardware reboot/OTA acceptance remains local.
+
+## Temporary two-theme chooser acceptance
+
+Apply apply_two_theme_picker_scope.py after Studio default, build with ./tools/build_idf6_hosted3.sh and update through OTA. Appearance should show only Operator and Studio Dark, with no Custom themes entry. Select each, close/reopen the chooser and reboot as convenient to verify the saved choice. Studio remains the default for new/missing/invalid settings; existing valid saved choices are preserved. No theme code, custom files or saved IDs are removed.
+
+Check both visible previews, selection feedback, Close, large text/density and narrow layouts. Current visual work focuses on these two themes. The theme-dialog host matrix checks visible entries and ID routing plus existing switch/layout/cleanup cases. Theme-default tests retain all saved-theme compatibility coverage, including hidden choices.
+
+## Calibration visual acceptance — Studio Dark and Operator
+
+Run `tools/audit/calibration_dialog_layout_test.py --variant PAGE` with the usual
+`--lvgl-dir` / `--lvgl-lib` host arguments. This exercises the actual landing page
+and its child owners in both currently visible themes, all densities and text
+sizes, with discovery pending, limited capabilities and all capabilities. It
+checks visible bounds, overlapping labels/actions, summary clearance, 44px action
+height and flat Studio sections. `CALIBRATION_SCREENSHOTS` captures both text
+sizes at native resolution and comfortable density. Existing dialog variants
+retain five-theme regression coverage.
+
+Build with `./tools/build_idf6_hosted3.sh`, update by OTA, then inspect Calibration
+in Studio Dark and Operator. Studio should have shared center/horizontal rules
+and no cards. Operator should retain its own card treatment with more space
+above the controls. Check Motion row alignment, long capability summaries and
+large text. Open and cancel available dialogs; no heating, motion or calibration
+command is required for this visual check. Recheck the release size budget.
+
+## Devices and Macros visual follow-up
+
+Run `devices_text_layout_test.py` and `responsive_layout_test.py --variant MACROS
+--variant TOOLS` under `tools/audit` with the usual host LVGL arguments. Devices
+checks actual header controls for overlap and pointer routing, shared flat Studio
+entry styling, six complete native entries, hidden vertical scrollbar, scroll and
+pagination reach, complete value labels, and stale/offline/lifetime behavior.
+Set `DEVICES_SCREENSHOTS` for Devices renders; `RESPONSIVE_SCREENSHOTS` captures
+Macros/Tools fixtures. Fixtures use synthetic printer and macro data.
+
+After build and OTA, review Devices and Macros in Studio Dark and Operator,
+including large text. Confirm Studio entries are flat with consistent dividers,
+Operator retains its styling, long names/readings stay legible, and category,
+page and touch-scroll navigation work. Verify Macro Search/Clear and favorite
+markers; open and cancel parameter review without running a command. Recheck the
+firmware release-size budget before publishing.
+
+## Devices category buttons and shared active filters
+
+Run the Devices text-layout audit and responsive Files/Macros variants. Check
+all eight category buttons, including zero-count categories, selected state,
+disabled Previous, Next/Previous page changes and near-bottom-edge taps on the
+Studio rail. Selected controls must use the current theme's UI_CONTROL fill
+and shared accent underline/border. The eight 44px Studio targets remain
+disjoint. After OTA, check these controls in Studio Dark and Operator, then
+verify active Search styling in Files and Macros. No printer command is needed.
+
+## Console visual consistency
+
+Run `tools/audit/console_modern_layout_test.py` with the usual LVGL host paths.
+Its native constructors cover supported Studio Dark/Operator plus legacy themes,
+all densities/text sizes, high contrast/reduced motion and narrow viewports.
+Check flat Studio history styling/shared dividers, button label bounds, shared
+checked Search/temperature-filter state, Reset, history scrolling/Follow and
+existing editor/send/lifetime regressions. `CONSOLE_SCREENSHOTS` exports fixture
+renders at native resolution and large text.
+
+After build and OTA, review Console in both visible themes, including large text.
+Scroll history, toggle Follow and temperature visibility, apply/cancel Search,
+and Reset filters. Studio history should be flat; Operator keeps its themed
+history card. Confirm active filters use theme colors and labels remain readable.
+Open and cancel the command editor; no printer command is required for visual
+acceptance. Monitor the firmware release-size budget before publishing.
+
+## Drybox consistency and banner padding
+
+Run `studio_pages_test.py`, `live_widget_refresh_test.py` and
+`command_surfaces_safety_test.py` under `tools/audit`, with the usual LVGL host
+paths. Drybox page checks cover Studio Dark and Operator at every density/text
+size, complete reading-label widths, actual child bounds and offline controls.
+`STUDIO_SCREENSHOTS` now also emits `drybox-operator-native.ppm`. Run the
+responsive NETWORK variant after changes to the shared simple-banner layout.
+
+After build and OTA, inspect Drybox in both themes, including large text. Confirm
+matching Studio reading dividers/title styling, complete heater/fan readings,
+Operator banner content inside its shell, and unchanged program-control layout.
+Review active/offline states when available; no heating command is required for
+visual acceptance. Confirm Network's banner remains legible. Check release size
+before publishing.
+
+## Drybox status text size follow-up
+
+After OTA, confirm the Studio Drybox status at upper right is at least as large
+as the Drybox title, including Heating/Monitoring. Check both text sizes and
+longer Unavailable/Offline states when available. Status colors and control
+eligibility must retain their existing behavior.
+
+## Settings title and action-label consistency
+
+Run `button_text_fit_test.py` for actual Settings action-row labels in every
+theme/density/text size and `display_settings_safety_test.py` for existing display
+callbacks and standalone compilation. After OTA, inspect Settings in Studio Dark
+and Operator: title size, section/action labels, divider appearance and scrolling
+to the bottom. Open/cancel normal settings dialogs; no reset, reboot or firmware
+operation is required for visual acceptance. Studio keeps flat rows and Operator
+keeps its own section styling.
+
+## Settings scrollbar and Network visual pass
+
+After build and OTA, confirm Settings has no side scrollbar and still scrolls
+through all sections by touch. Review Network in Studio Dark and Operator with
+both text sizes: shared title/column hierarchy, matching divider colors, complete
+SSID/signal labels and 48px scan targets. Studio result entries should be flat;
+Operator retains its own button treatment. Check scan/Manage printers routing
+without changing credentials. Run the responsive NETWORK audit for five-theme
+scan-row bounds, action routing, scan-result ownership and empty-state teardown.
+
+## Printer visual consistency
+
+Run `button_text_fit_test.py`, the PRINTER fixture in `studio_pages_test.py`,
+and `printer_direct_action_safety_test.py` with the usual host LVGL arguments.
+The page-body fixture now covers Studio and Operator controls/readings/preview,
+including all densities/text sizes; `STUDIO_SCREENSHOTS` adds
+`printer-operator-body-native.ppm`. The font-fit audit checks complete labels,
+minimum reading size, icon/label separation, row bounds and stable pressed frames.
+
+After build and OTA, inspect Printer in both themes, including large text:
+Toolhead/Home/Pause/Resume/Object/Stop labels and spacing, reading-card headings,
+active fan contrast, the shared preview divider and the empty preview wording.
+Confirm the accepted preview/temperature arrangement remains familiar. Open and
+cancel Toolhead/temperature/tuning dialogs; no homing, heating or print command
+is required for visual review. Check release size before publishing.
+
+### Dashboard visual consistency
+
+Run `studio_layout_test.py`, `button_text_fit_test.py`, `dashboard_camera_safety_test.py`, `active_preview_safety_test.py`, `dashboard_offline_test.py` and `live_widget_refresh_test.py` under `tools/audit`, supplying the host LVGL source/archive arguments when unmanaged. Native Dashboard renders cover Studio Dark and Operator at all densities and both text sizes. Check Operator timing lines fit fully below the preview and banner children remain inside the shell after status refresh.
+
+After the IDF build, update through OTA. Review Dashboard in Studio Dark and Operator, including large text: empty model preview, Camera/Thumbnail captions, reading headings, Operator timing/footer and banner alignment. Open/close a loaded preview and navigate away/back. Camera streaming needs a configured camera and remains a separate hardware check. Visual review needs no print, heat, motion or cancellation command. Keep the 3 MiB release budget in view; this patch adds no assets. Panel acceptance remains pending until confirmed.
+
+### Toolhead dialog visual consistency
+
+Run `tools/audit/toolhead_dialog_safety_test.py` and `tools/audit/button_text_fit_test.py` with host LVGL source/archive arguments when unmanaged. The Toolhead suite checks complete button labels and centering, 48px minimum touch height, active panel/checked tab synchronization, no scrolling at native 1024x600, smaller-view touch fallback, pinned footer, exact commands, rejected-send retries, duplicate suppression and cleanup/printer-switch guards across themes/densities/text sizes.
+
+After building and OTA, open Printer > Toolhead control in Studio Dark and Operator, including large text. Review Move, Filament and Z offset; all controls should fit without scrolling at native resolution, with a stationary Close button. Check flat Studio sections, shared selection outlines, readable labels and no side scrollbar. Switching tabs and selecting step sizes is sufficient for visual review; do not jog, home, extrude, retract, reset or change the actual offset for this check. No print command is needed. Retain the 3 MiB release budget; no new fonts or image assets are included.
+
+### Thermal control dialog visual consistency
+
+Run `tools/audit/hotend_layout_test.py`, `tools/audit/button_text_fit_test.py` and `tools/audit/printer_direct_action_safety_test.py` with the host LVGL source/archive arguments when unmanaged. Hotend fixtures cover normal/large text, all densities, all compatibility themes and 1024/640/480px widths, live no-op updates, named-heater selection, reordering/removal, active-print temperature/fan dispatch and teardown. Preset coverage includes the selected 60 C bed state and button/label bounds.
+
+After building and OTA, review nozzle, bed, part-fan and multi-hotend dialogs in Studio Dark and Operator, including large text. Check current/target reading sections, selected preset outline, complete labels, pinned Back/Close, chooser scrolling and custom-temperature keyboard open/cancel. Studio should have flat sections and shared divider colors; Operator retains its section styling. Close controls without sending temperature/fan/activation commands for this visual check. Retain the 3 MiB release budget; no new font/image assets are included. Panel acceptance remains pending until confirmed.
+
+### Filament sensor and cancellation dialog visual consistency
+
+Run `filament_sensor_safety_test.py`, `sensor_status_layout_test.py`, `cancel_layout_test.py`, `object_layout_test.py` and `button_text_fit_test.py` from `tools/audit` with host LVGL source/archive arguments when unmanaged. Coverage includes long sensor/object names, failure feedback, complete controls, pinned footer/scroll behavior, native and smaller viewports, exact sensor/cancel/exclusion commands, rejected retries, pending acknowledgement/timeout, no-op live refresh and printer/owner fencing.
+
+After the IDF build and OTA, review Filament sensors in Studio Dark and Operator, including large text. Studio rows should be flat with shared divider colors, state/action captions readable and Close fixed while scrolling. Open and back out of the Stop print and Cancel object confirmations only when an existing active job makes them available; do not start a print merely for this visual check. No sensor toggles, print cancellation or object exclusion are required. Confirm target names and warning text remain explicit. Retain the 3 MiB release budget; no new fonts/images included. Panel acceptance remains pending until confirmed.
+
+### Filament recovery visual consistency
+
+Run `tools/audit/filament_recovery_test.py` and `tools/audit/button_text_fit_test.py` with host LVGL source/archive arguments when unmanaged. Recovery coverage checks all actions, exact commands, selected nozzle target and limits, macro availability, paused/homed/hot/sensor gates, missing/unknown/truncated sensors, rejected retries, cooldown across reopen, reentrant callbacks, printer switching and field/root teardown. Layout coverage includes all compatibility themes, densities/text sizes, 1024/640/480px widths, native no-scroll fit and body-font minimum for action labels, touch fallback and pinned Close.
+
+After the IDF build and OTA, review Filament recovery in Studio Dark and Operator, including large text, when the dialog is already available. Confirm the larger selected target, shared divider, complete labels, wider Resume, no side scrollbar and fixed Close. Changing the selected target alone sends no heater command; close without Heat/Unload/Load/Purge/Resume for a visual-only check. Do not create a runout or pause an active job solely for this review. Keep the 3 MiB release budget in view; no new fonts/images are included. Panel acceptance remains pending until confirmed.
+
+### Calibration and diagnostics visual batch
+
+Run `calibration_dialog_layout_test.py` without a variant restriction, plus `motion_layout_test.py`, `bed_mesh_profiles_layout_test.py`, `diagnostics_batch_safety_test.py` and `button_text_fit_test.py` under `tools/audit`, with host LVGL source/archive arguments when unmanaged. The full calibration suite checks PAGE, FEEDBACK, OTAFAILURE, PID, MANUAL, MOTION, PROBE, ENDSTOP, RESULTS, PA, CUSTOM and GEOMETRY and standalone translation units. Other suites cover calculator values/retained edits and keyboard bounds, live/offline diagnostics, exact bed-mesh commands, rejected retry, captured names, deletion/replacement and printer/owner fencing.
+
+After the IDF build and OTA, review Motion limits, TMC drivers, Axis distance calculator, Probe accuracy, Live endstops and Bed-mesh profiles in Studio Dark and Operator, including large text. Check headings/actions, shared footer rules, complete labels, fixed Close/Back and touch scrolling without side scrollbars. Calculator editing/Calculate is local. Probe and bed-mesh confirmation/keyboard dialogs can be opened and cancelled when available; no probe run, profile load/save/removal, restart, heater or motion command is required for this visual review. Retain the 3 MiB release budget; this batch adds no fonts/images. Panel acceptance remains pending until confirmed.
+
+### Monitoring visual batch
+
+Run `telemetry_modern_layout_test.py`, `event_history_layout_test.py` and `button_text_fit_test.py` from `tools/audit` with host LVGL source/archive arguments when unmanaged. The telemetry fixture checks a duplicate-free, complete eleven-channel inventory, three visible Heat plots versus four Motion/Environment plots, synchronized reusable chart buffers, selected tab/Hold states and 48px tab height along with three view layouts, touches, ranges, held traces, named hotend identity, capability gaps, offline/reset, no-op refresh and teardown. History tests retain complete rows and pinned actions, Hold/Follow, ring replacement, clear and reentrant deletion/replacement behavior.
+
+After building and OTA, review Telemetry Heat, Motion and Environment plus Event history in Studio Dark and Operator, including large text. Check that Drybox air appears only under Environment, with the three Heat plots and all four plots in each other view retained. Check flat Studio sections/shared divider color, selected tabs, target/held outlines, readable action labels and touch scrolling without side scrollbars. Toggle Hold/Resume live and history Hold/Follow to verify the displayed state; these are local display controls. Clear removes displayed local event history, so leave it alone during a visual-only review. No printer/heat/motion command is needed. Retain the 3 MiB release budget; no new fonts/images added. Panel acceptance remains pending until confirmed.
+
+The graph consolidation also passed the telemetry host suite with AddressSanitizer and UndefinedBehaviorSanitizer (leak checks disabled for the host runtime). Visible traces remain complete under sampling jitter; the unused Heat slot stays hidden/empty and reusable chart buffers track range changes.
+
+### Graph tab grouping follow-up
+
+Run `tools/audit/telemetry_modern_layout_test.py` with the host LVGL arguments. The maintained inventory assertions require all eleven channels exactly once, printer part fan under Thermal and all four drybox measurements under Drybox. Per-view checks verify the hotend selector only in Thermal and the target control in Thermal/Drybox, together with visible chart counts, reusable point-buffer sizes, selected-state/touch behavior, held/range traces, jitter bins, missing capabilities, no-op refresh and teardown.
+
+After build and OTA, check Thermal (nozzle, bed, part fan), Motion (velocity, volumetric flow, speed/flow overrides) and Drybox (center, air, humidity, drybox fan) in both visible themes, including large text. Scroll to inspect lower plots. Verify Targets on/Detail only works in Drybox as well as Thermal. These are local graph controls; no printer command is needed. Panel acceptance remains pending until confirmed.
+
+### Calibration workflow label consistency
+
+Run `tools/audit/calibration_dialog_layout_test.py` without a variant restriction and `tools/audit/button_text_fit_test.py` with host LVGL source/archive arguments when unmanaged. Existing tests cover all workflow routes, exact commands, rejected retries, captured owners, duplicate/reentrant actions, external deletion, session replacement, SAVE_CONFIG acceptance/confirmation and printer changes, alongside layout/scroll/pinned-footer checks in all themes/densities/text sizes/viewports.
+
+After the IDF build and OTA, review PID heater/target/warning screens, pressure-advance setup, manual-probe/axis-twist controls, screws tilt/gantry confirmation and calibration results/save confirmation when available in Studio Dark and Operator, including large text. Open/back out without starting heat, motion, probing, tower setup, acceptance or SAVE_CONFIG. Do not create a calibration session only to expose later result screens; leave those for the next legitimate workflow. Check readable sentence-case headings/actions and unchanged explicit safety warnings. No new fonts/images included; retain the 3 MiB release budget. Panel acceptance remains pending until confirmed.
+
+### Settings arrangement and dialog visual batch
+
+Run `settings_dialog_layout_test.py`, `theme_dialog_layout_test.py`, `live_appearance_test.py`, `network_backup_dialog_test.py`, `about_dialog_layout_test.py`, `display_settings_safety_test.py` and `button_text_fit_test.py` under `tools/audit`, using the host LVGL source/archive arguments when unmanaged. Preserve fault/owner coverage for brightness/sleep, no-op/deferred theme selection, invalid port/password handling, restore review, encrypted-worker overlap, failure retries and deletion/replacement.
+
+After build and OTA, review Settings in Studio Dark and Operator, including large text. Confirm Display & appearance is first, sleep follows brightness, Notifications & history is next, and Maintenance is lower down. Scroll to check every group and retained values. Open appearance, Wi-Fi/port, About and backup dialogs; check flat Studio sections, shared divider color, complete labels, keyboard/pinned footer bounds and touch scrolling without side scrollbars. Backup creation must occupy the first grid row, restore the second and removal its own final row. Open/cancel review dialogs without resetting, rebooting, restarting Klipper, reconnecting, writing/restoring or deleting backups during a visual-only check. Retain the 3 MiB release budget; no new font/image assets included. Panel acceptance remains pending until confirmed.
+
+
+### OTA responsiveness panel check
+
+Build with tools/build_idf6_hosted3.sh and install through the existing OTA path. In Studio Dark and Operator, open Firmware update with Camera inactive and streaming if available: the dialog should appear without waiting for camera teardown. Initial Stable/Nightly metadata still requires a network fetch; switch channels repeatedly, close/reopen and verify loaded releases reappear without a fresh request. Use Refresh to fetch newer releases, including retry after an error. Press Custom URL during loading and after results appear; the editor/keyboard should open on the next UI turn, retain the saved URL and return safely to Releases. Repeated taps must not duplicate dialogs or downloads.
+
+Cancel an actual transfer after image bytes begin advancing, including a deliberately paused server if available. Expect Cancelling feedback immediately and worker cleanup after the active body read returns (one-second read timeout, not a hard end-to-end latency guarantee). Confirm no reboot, unchanged running firmware and that another update can start. Connection/TLS/redirect and initial image-header reads may still take longer; do not infer these are interruptible from the body-read test. Final validation/boot selection remains non-cancellable. Also test a short network stall that recovers and an established transfer with no byte progress for 15 seconds, which should fail cleanly. Keep power connected. Record build firmware size against the 3 MiB release budget. Host tests cannot establish device responsiveness or network timing.
+
+Host validation: tools/audit/ota_transfer_test.py; calibration_dialog_layout_test.py --variant OTAFAILURE; camera_pipeline_test.py. These use actual project C with deterministic SDK/network stubs and actual LVGL for UI checks; no firmware is fetched or flashed by the host tests.
+
+
+### OTA progress smoothness follow-up
+
+Apply after apply_ota_responsiveness.py. During a known-length firmware download in Studio Dark and Operator, check that the bar moves between whole-number percentage changes and frequent updates do not cause jumps. Pause the server and confirm the bar stops at reported progress rather than advancing on its own. Verify integer percentage/bytes remain readable, validation stays below 100% until success, cancellation retains immediate feedback, and failure/reset/reopening clears the old value/animation. Unknown-length transfers retain stage-based progress. This changes presentation only, not download throughput. Host OTAFAILURE checks cover interpolation, repeated snapshots and animation cleanup; build, firmware size and OTA panel acceptance remain required.
+
+
+### About credits and AI acknowledgment
+
+In Studio Dark and Operator, open About from Settings, including large text. Verify installed firmware/version/source/build identity; scroll through Created by khelix, AI-assisted development, open-source foundations, supporting libraries, fonts/artwork, printer ecosystem, development tools and source/notices. Ensure all text is reachable, Studio stays flat with shared rules, Operator keeps its surfaces, and Close remains pinned/tappable throughout. Close/reopen repeatedly and confirm no old dialog remains. Documentation/license files do not add runtime assets, but check built firmware size against the 3 MiB release budget as usual.
+
+Host validation: about_dialog_layout_test.py covers real LVGL layout, full credit presence, scrolling, pointer Close, delete/reopen/reentrancy and separate translation-unit compilation for all three firmware channels and five compatibility themes/densities/text sizes/viewport widths. software_credits_test.py verifies all locked components have entries and local license/notice links resolve with original author notices. It does not establish complete linked-binary license compliance or replace panel verification.
+
+
+### OTA visual consistency panel check
+
+Review Firmware releases, Stable/Nightly, release details, Custom URL with keyboard, progress and update-not-started feedback in Studio Dark and Operator, including large text. Studio release rows should be flat with the same divider color as other shared sections; Operator keeps its row surfaces. Check readable selected tabs, complete sentence-case action labels, a shared divider above each pinned footer, touch scrolling without side bars, and keyboard/action separation. Scroll release notes to the end; selected version, nightly/reinstall/downgrade warnings and retained settings guidance must remain available. Check normal/failed/cancelled progress and safe close/reopen. Use an intended firmware image only for the actual OTA check; host fixtures exercise failure/install callbacks without downloading firmware.
+
+Host validation: calibration_dialog_layout_test.py --variant OTAFAILURE, with standalone translation-unit compilation and all prior lifetime, async, cache, smooth-progress and cancel assertions. Native captures settle checked-tab transitions before rendering; they are project-source LVGL fixtures, not panel screenshots. No asset/font additions; verify the firmware size against the 3 MiB release budget after building.
+
+
+### System information readability panel check
+
+In Studio Dark and Operator, including large text, scroll Settings to System information. Confirm Uptime appears first, Internal RAM and PSRAM have individually labelled Free now/Lowest readings aligned in columns, Internal RAM additionally shows Largest block, and ESP-IDF version appears last. Ensure values/captions remain readable within their rows and shared divider/surface styling matches surrounding Settings. Lowest is the lowest free memory since startup, not used memory; Largest block is the largest contiguous internal allocation. KiB/MiB represent 1024-based units. Values should refresh quietly while idle, remain correct after navigation/theme changes and leave no stale labels after reopening.
+
+Host validation: telemetry_modern_layout_test.py now links the actual shared Settings metric rows and system-info owner. It checks separate values/units/zero, native column alignment, label bounds/width, no invalidations for unchanged snapshots, partial deletion, SDK-read reentrancy and unbinding alongside the existing graph suite. An instrumented LVGL archive and AddressSanitizer/UndefinedBehaviorSanitizer run exercise the same fixture (leak detection disabled). display_settings_safety_test.py and settings_dialog_layout_test.py cover unchanged brightness/sleep, reboot/reset guards and dialog lifetimes. Native full Settings page QA uses mocked SDK values; actual panel verification and the 3 MiB build-size check remain separate.
+
+
+### Installer-style Setup and discovery panel check
+
+In Studio Dark and Operator, including larger text, open Setup center and visit Welcome → Network → Time zone → Display & appearance → Printer → Camera → Review. Check the selected navigator state, center divider, pinned Continue/Finish and Back/Set up later controls, and direct step selection. Back on Welcome is disabled. Touch scrolling remains available without side bars; all four Display groups should be visible together at 1024×600.
+
+Choose a time zone and verify the selected row, clock/event-history local time, and Settings > Time & region after closing Setup. Reopen Setup to confirm persistence. On Display, switch Studio Dark/Operator and standard/larger text; the wizard must return to Display and the shell/Settings behind it must match when closed. Existing contrast/transparency/motion preferences must survive text-size changes. Drag brightness and release to save; select a sleep timeout, then check the same values in Settings and after reopening/rebooting. Review must show the saved zone, theme, text size, brightness and timeout. Set up later retains choices already saved. Camera is optional; finishing still requires Wi-Fi plus a configured printer. No language selection is offered.
+
+Scan Wi-Fi/cameras and discover Moonraker from printer setup. Results should fill the available width and remaining height; a long result list should scroll while actions remain pinned. Studio uses flat rows/shared rules; Operator keeps its own surfaces. Select a discovered endpoint, cancel/reopen and retry discovery to confirm no old results or overlays survive. Keyboard and password actions must remain separate and tappable.
+
+Host checks: setup_center_layout_test.py exercises the actual Setup owner with mocked services across compatibility themes/densities/text/viewport widths, including missing catalog entries, save failure/retry, brightness release, sleep choice, preserved accessibility flags, deferred application rebuild, queue cancellation before persistence, deletion/reopen and existing Wi-Fi/camera/completion lifetime cases. discovery_states_test.py covers full native result bounds, many-result scrolling, fixed footer, real pointer selection at short viewports and request/worker lifetime fences. display_settings_safety_test.py additionally verifies Settings' time-zone label refresh alongside transactional display storage/SDK faults. live_appearance_test.py and profile_discovery_bridge_test.py cover shared appearance and profile discovery behavior. Native images are real LVGL host fixtures with simulated services, not panel captures. Build/OTA and the 3 MiB size check are still required.
+
+
+### Setup Network/Printer connection summaries
+
+In Studio Dark and Operator, including larger text, visit Setup > Network while connected. Check the actual SSID and display address against your router/Network page. Refresh status must update these facts without opening discovery or a password keyboard. Change network should open the existing scan/password flow. With Wi-Fi unavailable, expect No network connected/Not connected; while associated but awaiting DHCP, expect Waiting for an address. Back/Continue and Set up later stay pinned and usable.
+
+With a saved profile, Setup > Printer should show the active printer name, HTTP/HTTPS endpoint and only an API-key-presence caption. Edit printer must open the active profile, including a profile other than slot 1. Use the existing editor to discover, test, cancel or save; returning to Setup must show the resulting active configuration. An unconfigured profile should offer Add printer and explain the shared editor's options. Review should say Connected for Wi-Fi and Saved for printer/camera configuration, without claiming a live printer response merely because a profile exists. Existing Finish requirements remain unchanged.
+
+Host checks: setup_center_layout_test.py covers those summary states, address formatting, secure/plain endpoints, secret redaction, active-profile editor dispatch, native layout bounds and prior setup lifecycle/persistence cases across themes/densities/text/viewport widths. profile_discovery_bridge_test.py covers the retained request-bound main/profile bridge. Native source-based LVGL renders use simulated services, not panel captures. Check firmware size after building, then update over OTA and verify on the panel.
+
+
+### Setup Camera summary and discovery states
+
+In Studio Dark and Operator, including larger text, open Setup > Camera. With a saved camera, check its saved name (or Custom camera for a mismatched/unnamed default), printer and Discover and test action. Saved configuration is not described as a current successful stream test. Camera URLs/credentials should not appear in the summary. Continue should reach Review. Without a camera, check the optional-setup guidance; without a printer, Set up printer should navigate to the Printer step.
+
+Discover cameras. Scanning... should be disabled until the request completes; repeated touches must not replace the owned request. With no enabled webcam, expect a visible No cameras found explanation, Scan again and Skip camera/Continue. Scan again should retry. With results, select a row and check Testing..., failed-stream retry instructions or verified dimensions with Use camera. A failed test must restore Scan again. Test a known working stream before Use camera; reopen the Camera step and check the resulting saved summary. Existing default/stream storage-failure retry feedback stays available. Switching printers while results are pending must retire old verification and offer discovery for the active printer.
+
+Camera discovery already imports returned settings via the shared controller, including the slot-zero stream bridge. Continue navigates onward after those imports; it does not restore a pre-scan configuration. The Continue/Skip action itself must not initiate an additional camera save. Finish still requires only Wi-Fi and a saved printer profile. Close/reopen, navigate Back and return to Camera; footers remain pinned, full result lists touch-scroll without side bars, Studio stays flat and Operator keeps its surfaces.
+
+Host checks: setup_center_layout_test.py exercises real LVGL Setup states with typed service fixtures, save/start/test failures, duplicate busy requests, default matching and credential redaction, catalog-read owner replacement, no additional save on Continue, field/poll retirement, footer/summary bounds and prior lifecycle/persistence checks. discovery_states_test.py exercises the actual camera discovery worker's captured-printer and late-result rules alongside Moonraker discovery. Native source-based fixtures simulate services; a physical camera and OTA/panel check are still needed for live stream acceptance. Verify the firmware against the 3 MiB release budget after building.
+
+
+### Setup Welcome/Review/completion closeout
+
+In Studio Dark and Operator, including larger text, open Setup center with saved configuration and without it. Welcome should show the connected SSID and active printer name at 1024×600, status at the right, and an optional camera. Long names must stay on one line with truncation in these compact rows; use Network/Printer to inspect the full value. Small viewports show the compact title/status layout. Back remains disabled on Welcome, Continue advances, and selecting a navigator step still works.
+
+Review should show the actual network/profile, camera saved/optional status, current time zone and a readable one-line native display summary containing theme, text size, brightness and sleep. All rows/summary values should fit the native content area with Finish pinned. The text should explain that choices save as you go and Finish marks setup complete. Finishing with missing essentials must still show feedback; failed completion storage must retain Review and allow retry.
+
+After a successful Finish, expect Setup complete, saved-choice guidance and a reference to the Printer page for live status. Done must remain pinned/tappable; close/reopen Setup and confirm saved values persist. The completion message should not imply a live verified printer connection merely because its profile is configured. Existing camera discovery imports and verified-save behavior remain as documented in the preceding check.
+
+Host validation: setup_center_layout_test.py adds actual summary value assertions, native Welcome/Review bounds, single-line compact row cells/display summary, completion action/label bounds and close/reopen during review's network read. It retains all prior setup owner, failed save, missing-essential, camera, display/theme and discovery bridge fixtures. Instrumented LVGL can exercise the same suite under AddressSanitizer/UndefinedBehaviorSanitizer with leak detection disabled. Native captures simulate SDK/services and are not physical panel screenshots. Build with the normal script, check the 3 MiB release budget, then OTA and verify on the panel.

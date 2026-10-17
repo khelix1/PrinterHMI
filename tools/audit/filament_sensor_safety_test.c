@@ -48,12 +48,12 @@ static void safety(void){
  assert(strstr(lv_label_get_text(s_filament_status_labels[0]),"Send failed"));assert(!lv_obj_has_state(s_filament_toggle_buttons[0],LV_STATE_DISABLED));
  refresh_filament_list(NULL);assert(strstr(lv_label_get_text(s_filament_status_labels[0]),"Send failed"));
  accepted=true;click(s_filament_toggle_buttons[0]);assert(sends==before+2&&!strcmp(sent,"SET_FILAMENT_SENSOR SENSOR=sensor0 ENABLE=0"));
- click(s_filament_toggle_buttons[0]);assert(sends==before+2);assert(!strcmp(lv_label_get_text(s_filament_toggle_labels[0]),"UPDATING"));
+ click(s_filament_toggle_buttons[0]);assert(sends==before+2);assert(!strcmp(lv_label_get_text(s_filament_toggle_labels[0]),"Updating"));
  close_filament_list_cb(NULL);assert(timers()==base&&!s_filament_send&&!s_filament_row_count&&!s_filament_toggle_buttons[0]);open();click(s_filament_toggle_buttons[0]);assert(sends==before+2);
  for(unsigned i=0;i<12;i++){refresh_filament_list(NULL);}
  assert(lv_obj_has_state(s_filament_toggle_buttons[0],LV_STATE_DISABLED));
  lv_tick_inc(5000);refresh_filament_list(NULL);assert(strstr(lv_label_get_text(s_filament_status_labels[0]),"unconfirmed"));click(s_filament_toggle_buttons[0]);assert(sends==before+3);
- sensors.sensors[0].enabled=false;refresh_filament_list(NULL);assert(!lv_obj_has_state(s_filament_toggle_buttons[0],LV_STATE_DISABLED));assert(!strcmp(lv_label_get_text(s_filament_toggle_labels[0]),"ENABLE"));
+ sensors.sensors[0].enabled=false;refresh_filament_list(NULL);assert(!lv_obj_has_state(s_filament_toggle_buttons[0],LV_STATE_DISABLED));assert(!strcmp(lv_label_get_text(s_filament_toggle_labels[0]),"Enable"));
  reset();open();moonraker_filament_sensor_t swap=sensors.sensors[0];sensors.sensors[0]=sensors.sensors[2];sensors.sensors[2]=swap;click(s_filament_toggle_buttons[0]);assert(!strcmp(sent,"SET_FILAMENT_SENSOR SENSOR=sensor0 ENABLE=0"));
  for(unsigned during=1;during<=5;during++){reset();open();mode=during;before=sends;click(s_filament_toggle_buttons[0]);assert(sends==before+1&&!s_filament_dispatching);
   if(during==2)assert(!s_filament_list_popup&&!s_filament_refresh_timer&&!s_filament_send);

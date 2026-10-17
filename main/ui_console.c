@@ -13,6 +13,7 @@
 #include "lvgl.h"
 #include "moonraker.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
 #include "ui_theme.h"
@@ -209,7 +210,7 @@ static void update_connection(void)
     moonraker_state_t state;moonraker_state_snapshot(&state);
     bool live=state.moonraker_ok;
     const char *name=moonraker_config_active_profile_name();
-    char caption[192];snprintf(caption,sizeof(caption),"%s | %s",name&&name[0]?name:"Active printer",live?"LINKED":"OFFLINE");
+    char caption[192];snprintf(caption,sizeof(caption),"%s | %s",name&&name[0]?name:"Active printer",live?"Connected":"Offline");
     if(ui_value_set_text(s_connection,caption)){ui_text_fit_single_line(s_connection,UI_FONT_CAPTION);
     lv_label_set_long_mode(s_connection,LV_LABEL_LONG_CLIP);}
     ui_value_set_color(s_connection,live?UI_OK_BRIGHT:UI_DANGER_BRIGHT,0);
@@ -250,8 +251,8 @@ static void update_follow_button(void)
         lv_label_set_text(
             s_follow_label,
             s_follow
-                ? ui_text("FOLLOW ON")
-                : ui_text("FOLLOW OFF"));
+                ? ui_text("Follow on")
+                : ui_text("Follow off"));
     }
 
     if (s_follow_label) { ui_text_fit_single_line(s_follow_label,UI_FONT_BODY_LARGE);
@@ -302,7 +303,7 @@ static void search_done_cb(lv_event_t *event)
     uint32_t expected_epoch=s_console_epoch+1;
     close_search_popup();
     if(s_console_epoch!=expected_epoch || !s_root || !s_search_label)return;
-    lv_label_set_text(s_search_label, s_query[0] ? "SEARCH*" : "SEARCH");
+    ui_button_set_filter_active(lv_obj_get_parent(s_search_label),s_query[0]!=0);
     ui_text_fit_single_line(s_search_label,UI_FONT_BODY_LARGE);
     lv_label_set_long_mode(s_search_label,LV_LABEL_LONG_CLIP);
     rebuild_output();
@@ -387,11 +388,11 @@ static void search_cb(lv_event_t *event)
     (void)event;if(!s_root || s_command_dispatching)return;
     if(s_search_popup){lv_obj_move_foreground(s_search_popup);
     return;}
-    s_search_popup=editor_popup("FILTER CONSOLE TEXT");if(!s_search_popup)return;
+    s_search_popup=editor_popup("Search Console");if(!s_search_popup)return;
     lv_obj_add_event_cb(s_search_popup,search_deleted,LV_EVENT_DELETE,NULL);
     s_search_input=editor_input(s_search_popup,sizeof(s_query)-1,"Match message text",s_query);
     lv_obj_t *actions=plain(s_search_popup,LV_FLEX_FLOW_ROW_WRAP);
-    console_action(actions,"CANCEL",UI_BUTTON_CANCEL,128,search_cancel_cb);console_action(actions,"APPLY",UI_BUTTON_PRIMARY,128,search_done_cb);
+    console_action(actions,"Cancel",UI_BUTTON_CANCEL,128,search_cancel_cb);console_action(actions,"Apply",UI_BUTTON_PRIMARY,128,search_done_cb);
     s_search_keyboard=editor_keyboard(s_search_popup,s_search_input,search_keyboard_cb);
     lv_obj_add_event_cb(s_search_input,editor_field_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_add_event_cb(s_search_keyboard,editor_field_deleted,LV_EVENT_DELETE,NULL);
@@ -408,8 +409,9 @@ static void filter_cb(lv_event_t *event)
 static void update_temperature_button(void)
 {
     if (!s_root || !s_temperature_label || !s_temperature_button) return;
-    lv_label_set_text(s_temperature_label, s_hide_temperatures ? "TEMPS OFF" : "TEMPS ON");
-    ui_button_apply_kind(s_temperature_button, s_hide_temperatures ? UI_BUTTON_SECONDARY : UI_BUTTON_OUTLINED);
+    lv_label_set_text(s_temperature_label, s_hide_temperatures ? "Temps hidden" : "Temps shown");
+    ui_button_apply_kind(s_temperature_button,UI_BUTTON_OUTLINED);
+    ui_button_set_filter_active(s_temperature_button,s_hide_temperatures);
     ui_text_fit_single_line(s_temperature_label,UI_FONT_BODY_LARGE);
     lv_label_set_long_mode(s_temperature_label,LV_LABEL_LONG_CLIP);
 }
@@ -431,7 +433,7 @@ static void reset_filters_cb(lv_event_t *event)
     s_query[0] = 0;
     lv_dropdown_set_selected(s_filter_dropdown, 0);
     update_temperature_button();
-    lv_label_set_text(s_search_label, "SEARCH");
+    ui_button_set_filter_active(lv_obj_get_parent(s_search_label),false);
     rebuild_output();
 }
 
@@ -444,11 +446,12 @@ static void create_filters(void)
     lv_dropdown_set_options(s_filter_dropdown,"All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
     lv_dropdown_set_selected(s_filter_dropdown,(uint32_t)s_filter);
     lv_obj_add_event_cb(s_filter_dropdown,filter_cb,LV_EVENT_VALUE_CHANGED,NULL);
-    s_temperature_button=console_action(s_filters,"TEMPS ON",UI_BUTTON_OUTLINED,116,temperature_cb);
+    s_temperature_button=console_action(s_filters,"Temps shown",UI_BUTTON_OUTLINED,160,temperature_cb);
     s_temperature_label=lv_obj_get_child(s_temperature_button,0);update_temperature_button();
-    lv_obj_t *search=console_action(s_filters,s_query[0]?"SEARCH*":"SEARCH",UI_BUTTON_OUTLINED,104,search_cb);
+    lv_obj_t *search=console_action(s_filters,"Search",UI_BUTTON_OUTLINED,104,search_cb);
     s_search_label=lv_obj_get_child(search,0);
-    console_action(s_filters,"RESET",UI_BUTTON_SECONDARY,96,reset_filters_cb);
+    ui_button_set_filter_active(search,s_query[0]!=0);
+    console_action(s_filters,"Reset filters",UI_BUTTON_SECONDARY,144,reset_filters_cb);
 }
 
 static void retire_command(void)
@@ -593,14 +596,14 @@ static void open_command_cb(lv_event_t *event)
     return;}
     s_command_owner=moonraker_config_generation();
     s_history_cursor=SIZE_MAX;
-    s_command_popup=editor_popup("SEND KLIPPER COMMAND");if(!s_command_popup)return;
+    s_command_popup=editor_popup("Send command");if(!s_command_popup)return;
     lv_obj_add_event_cb(s_command_popup,command_deleted,LV_EVENT_DELETE,NULL);
     s_command_input=editor_input(s_command_popup,CONSOLE_COMMAND_MAX,"G-code or macro, for example: STATUS","");
     s_command_actions=plain(s_command_popup,LV_FLEX_FLOW_ROW_WRAP);
-    console_action(s_command_actions,"CLOSE",UI_BUTTON_CLOSE,96,close_command_cb);
-    console_action(s_command_actions,"PREV",UI_BUTTON_SECONDARY,96,history_prev_cb);
-    console_action(s_command_actions,"NEXT",UI_BUTTON_SECONDARY,96,history_next_cb);
-    s_command_send=console_action(s_command_actions,"SEND",UI_BUTTON_PRIMARY,96,send_command_cb);
+    console_action(s_command_actions,"Close",UI_BUTTON_CLOSE,96,close_command_cb);
+    console_action(s_command_actions,"Previous",UI_BUTTON_SECONDARY,96,history_prev_cb);
+    console_action(s_command_actions,"Next",UI_BUTTON_SECONDARY,96,history_next_cb);
+    s_command_send=console_action(s_command_actions,"Send",UI_BUTTON_PRIMARY,96,send_command_cb);
     s_command_feedback=lv_label_create(s_command_popup);
     lv_obj_set_width(s_command_feedback,LV_PCT(100));
     lv_obj_set_height(s_command_feedback,2*UI_FONT_CAPTION->line_height);
@@ -649,7 +652,7 @@ void ui_console_show(ui_console_command_cb_t command_callback)
     lv_obj_set_style_pad_row(s_root,8,0);
     s_header=plain(s_root,LV_FLEX_FLOW_ROW);
     lv_obj_t *title=lv_label_create(s_header);
-    lv_label_set_text(title,"CONSOLE");
+    lv_label_set_text(title,"Console");
     ui_apply_text_title(title);
     ui_value_set_color(title,UI_TEXT,0);
     lv_obj_set_flex_grow(title,1);
@@ -663,7 +666,10 @@ void ui_console_show(ui_console_command_cb_t command_callback)
     ui_apply_custom_label_style(s_connection,UI_FONT_CAPTION,UI_TEXT_DIM);
     create_filters();
     s_output=lv_obj_create(s_root);
-    ui_apply_card_style(s_output);
+    if(ui_theme_is_studio()) {
+        ui_apply_scroll_surface(s_output);
+        ui_apply_divider_border(s_output,LV_BORDER_SIDE_TOP|LV_BORDER_SIDE_BOTTOM);
+    } else ui_apply_card_style(s_output);
     lv_obj_set_width(s_output,LV_PCT(100));
     lv_obj_set_height(s_output,0);
     lv_obj_set_flex_grow(s_output,1);
@@ -671,13 +677,13 @@ void ui_console_show(ui_console_command_cb_t command_callback)
     lv_obj_set_style_pad_all(s_output,10,0);
     lv_obj_set_style_pad_row(s_output,8,0);
     lv_obj_set_scroll_dir(s_output,LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(s_output,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(s_output,LV_SCROLLBAR_MODE_OFF);
     lv_obj_add_event_cb(s_output,history_scroll,LV_EVENT_SCROLL_BEGIN,NULL);
     s_footer=plain(s_root,LV_FLEX_FLOW_ROW_WRAP);
-    s_command_button=console_action(s_footer,"COMMAND",UI_BUTTON_PRIMARY,136,open_command_cb);
-    s_follow_button=console_action(s_footer,s_follow?"FOLLOW ON":"FOLLOW OFF",UI_BUTTON_SUCCESS,136,follow_cb);
+    s_command_button=console_action(s_footer,"Command",UI_BUTTON_PRIMARY,136,open_command_cb);
+    s_follow_button=console_action(s_footer,s_follow?"Follow on":"Follow off",UI_BUTTON_SUCCESS,136,follow_cb);
     s_follow_label=lv_obj_get_child(s_follow_button,0);
-    console_action(s_footer,"CLEAR",UI_BUTTON_DANGER,96,clear_cb);
+    console_action(s_footer,"Clear",UI_BUTTON_DANGER,96,clear_cb);
     update_follow_button();
     rebuild_output();
     update_connection();

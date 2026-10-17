@@ -9,7 +9,7 @@ root=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--lvgl-dir",type=Path)
 parser.add_argument("--lvgl-lib",type=Path,help="Optional host LVGL archive built with these font/stdlib flags")
-parser.add_argument("--variant",choices=["FEEDBACK","OTAFAILURE","PID","MANUAL","MOTION","PROBE","ENDSTOP","RESULTS","PA","CUSTOM","GEOMETRY"],help="Run one maintained dialog audit")
+parser.add_argument("--variant",choices=["PAGE","FEEDBACK","OTAFAILURE","PID","MANUAL","MOTION","PROBE","ENDSTOP","RESULTS","PA","CUSTOM","GEOMETRY"],help="Run one maintained dialog audit")
 args=parser.parse_args()
 candidates=[args.lvgl_dir] if args.lvgl_dir else list((root/"managed_components").glob("*lvgl*"))
 lvgl=next((p for p in candidates if p and (p/"src/core/lv_obj.c").is_file()),None)
@@ -47,9 +47,10 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         return str(obj)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         objects=list(pool.map(compile_ui,sources))
-    for variant in ([args.variant] if args.variant else ["FEEDBACK","OTAFAILURE","PID","MANUAL","MOTION","PROBE","ENDSTOP","RESULTS","PA","CUSTOM","GEOMETRY"]):
+    for variant in ([args.variant] if args.variant else ["PAGE","FEEDBACK","OTAFAILURE","PID","MANUAL","MOTION","PROBE","ENDSTOP","RESULTS","PA","CUSTOM","GEOMETRY"]):
         executable=tmp/variant.lower()
-        subprocess.run([*common,"-DTEST_"+variant,'-DTEST_NAME="'+variant.lower()+'"',str(root/"tools/audit/calibration_dialog_layout_test.c"),*objects,str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
+        page_sources=["ui_calibration_layout.c","ui_calibration_motion.c","ui_motion_diagnostics.c","ui_calibration_geometry.c","ui_calibration_pid.c","ui_calibration_pressure_advance.c","ui_calibration_manual_probe.c","ui_calibration_results.c","ui_calibration_custom.c","ui_probe_accuracy.c"] if variant=="PAGE" else []
+        subprocess.run([*common,"-DTEST_"+variant,'-DTEST_NAME="'+variant.lower()+'"',str(root/"tools/audit/calibration_dialog_layout_test.c"),*[str(root/"main"/p) for p in page_sources],*objects,str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
         subprocess.run([str(executable)],check=True)
     # Compile every changed calibration owner independently, including the
     # page's Probe/Z and Axis Twist confirmation constructors.

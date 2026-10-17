@@ -3,6 +3,16 @@
 #include "lvgl.h"
 #include "ui_theme.h"
 
+/* Decorative separators share UI_BORDER at full opacity in every theme.
+ * Callers own geometry; border separators preserve their control's surface. */
+lv_obj_t *ui_create_divider(lv_obj_t *parent,int x,int y,int width,int height);
+void ui_apply_divider_border(lv_obj_t *obj,lv_border_side_t side);
+
+/* Opaque flat scrolling viewport; callers own padding, scrolling and bars. */
+void ui_apply_scroll_surface(lv_obj_t *obj);
+/* Flat entry surface with the shared bottom divider; geometry remains caller-owned. */
+void ui_apply_flat_entry(lv_obj_t *obj);
+
 lv_obj_t *ui_create_panel(lv_obj_t *parent);
 lv_obj_t *ui_create_card(lv_obj_t *parent);
 lv_obj_t *ui_create_label(lv_obj_t *parent, const char *text, lv_color_t color);

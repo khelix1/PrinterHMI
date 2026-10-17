@@ -275,7 +275,7 @@ static void run_pid_tune_cb(
 
     ui_calibration_pid_close();
     s_context->show_results(
-        "PID CALIBRATION",
+        "PID calibration",
         "The heater is cycling. Keep the machine attended.\n\n"
         "Apply & Restart will appear only after Klipper reports a successful result requiring SAVE_CONFIG.");
     s_context->refresh_results();
@@ -334,7 +334,7 @@ static void show_pid_target_popup(bool defaults)
 
     pid_register_popup();
     lv_obj_set_user_data(*s_context->popup, (void *)(uintptr_t)s_pid_owner);
-    ui_cal_dialog_title(*s_context->popup, ui_text("CONFIRM PID CALIBRATION"));
+    ui_cal_dialog_title(*s_context->popup, ui_text("Confirm PID calibration"));
 
 
     *s_context->target_label =
@@ -354,9 +354,9 @@ static void show_pid_target_popup(bool defaults)
 
 
 
-    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", back_to_pid_heaters_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", back_to_pid_heaters_cb, NULL, NULL);
 
-    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", pid_start_warning_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", pid_start_warning_cb, NULL, NULL);
 }
 
 
@@ -376,13 +376,13 @@ static void pid_start_warning_cb(lv_event_t *event)
     if (!*s_context->popup) return;
     pid_register_popup();
     lv_obj_set_user_data(*s_context->popup, (void *)(uintptr_t)s_pid_owner);
-    ui_cal_dialog_title(*s_context->popup, ui_text("START PID HEAT CYCLE?"));
+    ui_cal_dialog_title(*s_context->popup, ui_text("Start PID heat cycle?"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(*s_context->popup), "The selected heater will cycle repeatedly at the chosen target. Keep the printer attended, clear the area, and do not start a print until calibration completes.");
 
     s_pid_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_context->popup), "");
-    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", back_to_pid_target_cb, NULL, NULL);
-    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_DANGER, LV_SYMBOL_PLAY " START HEAT", run_pid_tune_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", back_to_pid_target_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_DANGER, LV_SYMBOL_PLAY " Start heat", run_pid_tune_cb, NULL, NULL);
 }
 
 
@@ -492,7 +492,7 @@ void ui_calibration_pid_event(
 
     pid_register_popup();
     lv_obj_set_user_data(*s_context->popup, (void *)(uintptr_t)s_pid_owner);
-    ui_cal_dialog_title(*s_context->popup, ui_text("SELECT HEATER FOR PID"));
+    ui_cal_dialog_title(*s_context->popup, ui_text("Select heater for PID"));
 
 
     lv_obj_t *list =
@@ -508,5 +508,5 @@ void ui_calibration_pid_event(
 
 
 
-    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_pid_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CLOSE, "Close", close_pid_popup_cb, NULL, NULL);
 }

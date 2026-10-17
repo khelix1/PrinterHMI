@@ -50,15 +50,22 @@ static lv_obj_t *make_action_button(
     }
 
     lv_obj_t *icon = lv_obj_get_child(button, 0);
-    lv_obj_set_style_text_font(icon, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(icon, &lv_font_montserrat_18, 0);
     lv_obj_set_style_pad_hor(button, 4, 0);
-    lv_obj_set_style_pad_column(button, 2, 0);
+    lv_obj_set_style_pad_column(button, 6, 0);
     lv_obj_set_size(button, width, height);
 
     lv_obj_set_pos(
         button,
         x,
         y);
+    lv_obj_update_layout(button);
+    lv_obj_send_event(button,LV_EVENT_SIZE_CHANGED,NULL);
+    lv_obj_t *label=lv_obj_get_child(button,1);
+    if(label){
+        ui_text_fit_single_line(label,UI_FONT_BODY_LARGE);
+        lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+    }
 
     if (callback) {
         lv_obj_add_event_cb(
@@ -83,7 +90,7 @@ void ui_printer_actions_create(
     }
 
     if(ui_theme_is_studio()) {
-        actions->motion=studio_action(parent,"Toolhead Control",0,0,220,52,motion_cb,"MOTION");
+        actions->motion=studio_action(parent,"Toolhead control",0,0,220,52,motion_cb,"MOTION");
         actions->home=studio_action(parent,"Home",232,0,128,52,command_cb,"HOME_ALL");
         actions->pause=studio_action(parent,"Pause",372,0,128,52,command_cb,"PAUSE");
         actions->resume=studio_action(parent,"Resume",512,0,128,52,command_cb,"RESUME");
@@ -96,11 +103,11 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_SETTINGS,
-            "MOTION",
+            "Toolhead",
             "MOTION",
             0,
             2,
-            128,
+            140,
             50,
             UI_ACCENT_CYAN,
             motion_cb);
@@ -109,9 +116,9 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_HOME,
-            "HOME",
+            "Home",
             "HOME_ALL",
-            140,
+            152,
             2,
             104,
             50,
@@ -122,9 +129,9 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_PAUSE,
+            "Pause",
             "PAUSE",
-            "PAUSE",
-            256,
+            268,
             2,
             116,
             50,
@@ -135,9 +142,9 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_PLAY,
+            "Resume",
             "RESUME",
-            "RESUME",
-            384,
+            396,
             2,
             136,
             50,
@@ -148,9 +155,9 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_LIST,
-            "OBJECT",
+            "Object",
             "CANCEL_OBJECT",
-            532,
+            544,
             2,
             124,
             50,
@@ -161,11 +168,11 @@ void ui_printer_actions_create(
         make_action_button(
             parent,
             LV_SYMBOL_STOP,
-            "CANCEL",
+            "Stop",
             "CANCEL_PRINT",
-            668,
+            680,
             2,
-            128,
+            116,
             50,
             UI_DANGER_BRIGHT,
             command_cb);

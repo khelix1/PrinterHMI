@@ -436,7 +436,7 @@ static void build_environment_panel(
 
     ui_create_operator_card_heading(
         panel,
-        "ENVIRONMENT",
+        "Environment",
         22,
         18);
 
@@ -455,16 +455,12 @@ static void build_environment_panel(
 
     lv_obj_t *unit = make_text(
         panel,
-        "%RH",
-        UI_FONT_TITLE,
+        "% RH",
+        UI_FONT_CAPTION,
         UI_ACCENT_CYAN);
 
-    lv_obj_align_to(
-        unit,
-        page->humidity_label,
-        LV_ALIGN_OUT_BOTTOM_MID,
-        0,
-        -4);
+    /* Unit and condition share a caption row below the numeric value. */
+    lv_obj_set_pos(unit,100,105);
 
     s_humidity_condition_label = make_text(
         panel,
@@ -483,8 +479,8 @@ static void build_environment_panel(
 
     lv_obj_set_pos(
         s_humidity_condition_label,
-        132,
-        111);
+        160,
+        105);
 
     s_humidity_bar = lv_bar_create(panel);
     lv_obj_set_size(s_humidity_bar, 300, 7);
@@ -497,7 +493,7 @@ static void build_environment_panel(
 
     lv_obj_t *air_title = make_text(
         panel,
-        "AIR TEMP",
+        "Air temp",
         UI_FONT_BODY,
         UI_TEXT);
 
@@ -520,7 +516,7 @@ static void build_environment_panel(
 
     lv_obj_t *center_title = make_text(
         panel,
-        "CENTER TEMP",
+        "Center temp",
         UI_FONT_BODY,
         UI_TEXT);
 
@@ -555,7 +551,7 @@ static void build_system_panel(
 
     ui_create_operator_card_heading(
         panel,
-        "DRYING SYSTEM",
+        "Drying system",
         22,
         18);
 
@@ -574,7 +570,7 @@ static void build_system_panel(
 
     lv_obj_t *target_caption = make_text(
         panel,
-        "TARGET TEMPERATURE",
+        "Target temperature",
         UI_FONT_CAPTION,
         UI_TEXT_DIM);
 
@@ -595,7 +591,7 @@ static void build_system_panel(
 
     lv_obj_t *heater_title = make_text(
         panel,
-        "HEATER",
+        "Heater",
         UI_FONT_BODY_LARGE,
         UI_TEXT);
 
@@ -639,7 +635,7 @@ static void build_system_panel(
 
     lv_obj_t *fan_title = make_text(
         panel,
-        "FAN",
+        "Fan",
         UI_FONT_BODY_LARGE,
         UI_TEXT);
 
@@ -674,7 +670,7 @@ static void build_program_panel(
 
     lv_obj_t *heading = make_text(
         panel,
-        "MATERIAL PROGRAM",
+        "Material program",
         UI_FONT_BODY_LARGE,
         UI_TEXT_DIM);
 
@@ -736,7 +732,7 @@ static void build_program_panel(
         make_program_button(
         panel,
         LV_SYMBOL_PAUSE,
-        "HOLD",
+        "Hold",
         "DRY_HOLD",
         330,
         140,
@@ -747,7 +743,7 @@ static void build_program_panel(
         make_program_button(
         panel,
         LV_SYMBOL_PLAY,
-        "RESUME",
+        "Resume",
         "DRY_RESUME",
         486,
         140,
@@ -758,7 +754,7 @@ static void build_program_panel(
         make_program_button(
         panel,
         LV_SYMBOL_STOP,
-        "STOP",
+        "Stop",
         "DRY_STOP",
         642,
         140,
@@ -770,11 +766,12 @@ static void studio_drybox_create(ui_drybox_page_t *page)
 {
     lv_obj_t *p=page->panel;
     lv_obj_t *banner=studio_plane(p,0,0,976,64);
-    studio_text(banner,"Drybox",0,0,640,&ui_studio_font_48,UI_TEXT);
-    page->banner_label=studio_text(banner,"READY",716,14,260,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    studio_text(banner,"Drybox",0,0,640,UI_FONT_TITLE,UI_TEXT);
+    page->banner_label=studio_text(banner,"READY",716,0,260,UI_FONT_TITLE,UI_TEXT_DIM);
+    lv_obj_set_style_text_align(page->banner_label,LV_TEXT_ALIGN_RIGHT,0);
     studio_text(p,"Air",0,82,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->air_label=studio_text(p,"-- C",0,114,260,&ui_studio_font_48,UI_TEXT);
-    studio_rule(p,0,194,260,1);
+    studio_rule(p,0,196,260,1);
     studio_text(p,"Center",0,222,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->center_label=studio_text(p,"-- C",0,254,260,&ui_studio_font_48,UI_TEXT);
     s_studio_humidity_arc=lv_arc_create(p);
@@ -849,7 +846,7 @@ bool ui_drybox_page_create(
 
     ui_page_title_create(
         page->panel,
-        "DRYBOX",
+        "Drybox",
         layout->subtitle);
 
     /*
@@ -1005,7 +1002,7 @@ void ui_drybox_page_refresh(
         }
 
         if (page->heater_label) {
-            ui_value_set_text(page->heater_label, ui_text("OFFLINE"));
+            ui_value_set_text(page->heater_label, ui_text("Offline"));
             set_label_color(page->heater_label, UI_TEXT_DIM);
         }
 
@@ -1108,7 +1105,7 @@ void ui_drybox_page_refresh(
     if (page->heater_label) {
         ui_value_set_text(
             page->heater_label,
-            state->heater_on ? ui_text("HEATING") : ui_text("OFF"));
+            state->heater_on ? ui_text("Heating") : ui_text("Off"));
 
         set_label_color(
             page->heater_label,

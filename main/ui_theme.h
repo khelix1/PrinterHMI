@@ -29,6 +29,9 @@ typedef enum {
     UI_THEME_STUDIO_DARK
 } ui_theme_id_t;
 
+/* Default for new/unreadable settings; persisted selections keep their IDs. */
+#define UI_THEME_DEFAULT UI_THEME_STUDIO_DARK
+
 typedef enum {
     UI_ACCENT_DEFAULT = 0,
     UI_ACCENT_ID_CYAN,

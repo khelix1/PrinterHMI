@@ -1,4 +1,6 @@
 #include "ui_printer_popups.h"
+#include "ui_widgets.h"
+#include "ui_button.h"
 #include "ui_printer_toolhead.h"
 #include "ui_value_update.h"
 #include "moonraker_config_controller.h"
@@ -155,7 +157,7 @@ static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
     if (!s_cancel_confirm_popup) return;
     ++s_cancel_epoch;
     lv_obj_add_event_cb(s_cancel_confirm_popup, cancel_confirm_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_cancel_confirm_popup, ui_text("CANCEL PRINT?"));
+    lv_obj_t *body = control_layout(s_cancel_confirm_popup, ui_text("Stop print?"));
     lv_obj_t *warning = lv_label_create(body);
     lv_label_set_text(warning, "This will stop the active print job.");
     ui_apply_custom_label_style(warning, UI_FONT_BODY, UI_TEXT);
@@ -168,9 +170,9 @@ static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
     if (s_cancel_pending && s_cancel_sent_owner == s_cancel_owner && lv_tick_elaps(s_cancel_sent_at) < 5000)
         cancel_feedback("Cancel already sent. Check the printer before retrying.");
     lv_obj_t *footer = control_footer(s_cancel_confirm_popup);
-    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
+    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back",
         0, 0, 150, 48, close_cancel_confirm_cb, NULL, NULL);
-    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " CANCEL",
+    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Stop print",
         0, 0, 150, 48, confirm_cancel_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(cancel, 1);
 }
@@ -295,7 +297,7 @@ static void show_object_confirm(const char *name)
     if (!s_object_confirm_popup) return;
     ++s_object_epoch;
     lv_obj_add_event_cb(s_object_confirm_popup, object_confirm_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_object_confirm_popup, ui_text("CANCEL OBJECT?"));
+    lv_obj_t *body = control_layout(s_object_confirm_popup, ui_text("Cancel object?"));
     lv_obj_t *message = lv_label_create(body);
     lv_label_set_text(message, "Stop printing only this object? The rest of the print continues.");
     ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
@@ -310,9 +312,9 @@ static void show_object_confirm(const char *name)
     lv_obj_set_width(s_object_status, LV_PCT(100));
     lv_obj_add_event_cb(s_object_status, object_status_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *footer = control_footer(s_object_confirm_popup);
-    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
+    lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back",
         0, 0, 170, 48, close_object_confirm_cb, NULL, NULL);
-    lv_obj_t *exclude = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " EXCLUDE",
+    lv_obj_t *exclude = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Exclude",
         0, 0, 170, 48, confirm_cancel_object_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(exclude, 1);
 }
@@ -718,7 +720,7 @@ static void show_cancel_object_list(void)
         heap_caps_free(s_exclude_snapshot); s_exclude_snapshot = NULL; return;
     }
     lv_obj_add_event_cb(s_object_list_popup, object_list_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_object_list_popup, ui_text("CANCEL OBJECT"));
+    lv_obj_t *body = control_layout(s_object_list_popup, ui_text("Cancel object"));
     char status[128];
     if (s_exclude_snapshot->truncated) snprintf(status, sizeof(status),
         "Select an object to stop. Showing the first %u objects.", (unsigned)MOONRAKER_EXCLUDE_MAX_OBJECTS);
@@ -765,9 +767,9 @@ static void show_cancel_object_list(void)
         else { s_object_rows[i] = row; lv_obj_add_event_cb(row, object_row_event_cb, LV_EVENT_ALL, object); }
     }
     lv_obj_t *footer = control_footer(s_object_list_popup);
-    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 160, 48, close_object_list_cb, NULL, NULL);
-    s_exclude_action_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " EXCLUDE",
+    s_exclude_action_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Exclude",
         0, 0, 230, 48, exclude_selected_cb, NULL, NULL);
     lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(s_exclude_action_button, 1);
     lv_obj_add_state(s_exclude_action_button, LV_STATE_DISABLED);
@@ -1135,7 +1137,7 @@ static void open_custom_temp_cb(lv_event_t *event)
     }
     lv_obj_t *footer = control_footer(s_custom_temp_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK", 0, 0, 160, 48, close_custom_temp_cb, NULL, NULL);
+        LV_SYMBOL_LEFT " Back", 0, 0, 160, 48, close_custom_temp_cb, NULL, NULL);
     lv_obj_t *set = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM,
         LV_SYMBOL_OK " SET", 0, 0, 160, 48, set_custom_temp_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1);
@@ -1149,10 +1151,7 @@ static lv_obj_t *control_popup_button(lv_obj_t *parent, const char *text,
     lv_obj_t *button = ui_popup_add_action_at(parent,
         off ? UI_POPUP_ACTION_DANGER : UI_POPUP_ACTION_CHOICE,
         text, 0, 0, 1, 58, gcode_button_event_cb, (void *)cmd, NULL);
-    if (button && selected) {
-        lv_obj_set_style_border_color(button, UI_ACCENT_CYAN, 0);
-        lv_obj_set_style_border_width(button, ui_theme_accessible_border_width(3), 0);
-    }
+    ui_button_set_filter_active(button, selected);
     return button;
 }
 
@@ -1169,6 +1168,11 @@ static lv_obj_t *control_value_card(lv_obj_t *parent, const char *caption,
     lv_obj_set_style_border_side(card, LV_BORDER_SIDE_LEFT, 0);
     lv_obj_set_style_border_width(card, 4, 0);
     lv_obj_set_style_border_color(card, value_color, 0);
+    if (ui_theme_is_studio()) {
+        ui_apply_surface_role(card, UI_SURFACE_TRANSPARENT);
+        ui_apply_divider_border(card, LV_BORDER_SIDE_BOTTOM);
+        lv_obj_set_style_pad_all(card, 14, 0);
+    }
     lv_obj_t *caption_label = lv_label_create(card);
     lv_label_set_text(caption_label, caption);
     ui_apply_custom_label_style(caption_label, UI_FONT_BODY, UI_TEXT_MUTED);
@@ -1206,13 +1210,13 @@ static void show_control_popup(const char *title, double current_value,
     if (current_value > -100.0) snprintf(current_text, sizeof(current_text), "%.0f %s", current_value, unit);
     else snprintf(current_text, sizeof(current_text), "-- %s", unit);
     if (target_value > 0.0) snprintf(target_text, sizeof(target_text), "%.0f %s", target_value, unit);
-    else if (target_value >= 0.0) snprintf(target_text, sizeof(target_text), "OFF");
+    else if (target_value >= 0.0) snprintf(target_text, sizeof(target_text), "Off");
     else snprintf(target_text, sizeof(target_text), "-- %s", unit);
     lv_obj_t *cards = control_grid(body, show_target ? 2 : 1);
-    control_value_card(cards, show_target ? "CURRENT" : "CURRENT SPEED", current_text, UI_TEXT);
+    control_value_card(cards, show_target ? "Current" : "Current speed", current_text, UI_TEXT);
     if (show_target) {
         lv_obj_t *target_card = control_value_card(cards,
-            custom_command_prefix ? "TARGET / TAP TO SET" : "TARGET", target_text, UI_ACCENT_CYAN);
+            custom_command_prefix ? "Target - tap to set" : "Target", target_text, UI_ACCENT_CYAN);
         if (custom_command_prefix) {
             lv_obj_add_flag(target_card, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_style_border_color(target_card, UI_ACCENT_CYAN, LV_STATE_PRESSED);
@@ -1220,7 +1224,7 @@ static void show_control_popup(const char *title, double current_value,
         }
     }
     lv_obj_t *hint = lv_label_create(body);
-    lv_label_set_text(hint, ui_text("CHOOSE A PRESET"));
+    lv_label_set_text(hint, ui_text("Choose a preset"));
     ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
     lv_obj_set_width(hint, LV_PCT(100));
     lv_obj_t *presets = control_grid(body, 3);
@@ -1231,7 +1235,7 @@ static void show_control_popup(const char *title, double current_value,
             target_value >= 0 && difference < 0.6);
     }
     lv_obj_t *footer = control_footer(popup);
-    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK",
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back",
         0, 0, 160, 48, close_popup_event_cb, popup, NULL);
 }
 
@@ -1364,7 +1368,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
     lv_obj_set_width(s_hotend_confirm_status, LV_PCT(100));
     lv_obj_t *footer = control_footer(s_hotend_activate_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK", 0, 0, 170, 48, close_hotend_activate_cb, NULL, NULL);
+        LV_SYMBOL_LEFT " Back", 0, 0, 170, 48, close_hotend_activate_cb, NULL, NULL);
     s_hotend_confirm_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM,
         LV_SYMBOL_OK " ACTIVATE", 0, 0, 170, 48, confirm_hotend_activate_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(s_hotend_confirm_button, 1);
@@ -1413,7 +1417,7 @@ static void refresh_hotend_list(lv_timer_t *timer)
         if (hotend->temperature > -100.0) snprintf(temperature, sizeof(temperature), "%.1f / %.1f C", hotend->temperature, hotend->target);
         else snprintf(temperature, sizeof(temperature), "-- / -- C");
         ui_value_set_text(s_hotend_temp_labels[i], temperature);
-        ui_value_set_text(s_hotend_activate_labels[i], hotend->active ? ui_text(LV_SYMBOL_OK " ACTIVE") : ui_text("MAKE ACTIVE"));
+        ui_value_set_text(s_hotend_activate_labels[i], hotend->active ? ui_text(LV_SYMBOL_OK " ACTIVE") : ui_text("Make active"));
         bool disabled = hotend->active || activation_locked || s_hotend_pending ||
             s_hotend_dispatching || !hotend_name_safe(hotend->object_name);
         if (disabled) lv_obj_add_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
@@ -1475,7 +1479,7 @@ static void hotend_temperature_event_cb(lv_event_t *event)
         "215 C",
         "230 C",
         "250 C",
-        "OFF",
+        "Off",
     };
 
     static const double values[] = {
@@ -1499,7 +1503,7 @@ static void hotend_temperature_event_cb(lv_event_t *event)
     snprintf(
         s_hotend_title,
         sizeof(s_hotend_title),
-        "T%u TEMPERATURE",
+        "T%u temperature",
         (unsigned)index);
 
     snprintf(
@@ -1567,7 +1571,7 @@ void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
     s_hotend_list_popup = ui_popup_create(lv_layer_top(), control_width(760), control_height(500), UI_POPUP_STANDARD);
     if (!s_hotend_list_popup) { s_hotend_row_count = 0; return; }
     lv_obj_add_event_cb(s_hotend_list_popup, hotend_list_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_hotend_list_popup, ui_text("HOTEND CONTROL"));
+    lv_obj_t *body = control_layout(s_hotend_list_popup, ui_text("Hotend control"));
     static const int32_t action_columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static const int32_t action_rows[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
     for (size_t i = 0; i < s_hotend_row_count; ++i) {
@@ -1575,6 +1579,10 @@ void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
         s_hotend_row_names[i][sizeof(s_hotend_row_names[i]) - 1] = '\0';
         lv_obj_t *row = lv_obj_create(body);
         ui_apply_surface_role(row, UI_SURFACE_SECTION);
+        if (ui_theme_is_studio()) {
+            ui_apply_surface_role(row, UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(row, LV_BORDER_SIDE_BOTTOM);
+        }
         lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_pad_all(row, 12, 0);
@@ -1600,17 +1608,17 @@ void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
         lv_obj_set_grid_dsc_array(actions, action_columns, action_rows);
         lv_obj_set_style_pad_column(actions, UI_GAP_CARD, 0);
         s_hotend_temp_buttons[i] = ui_popup_add_action_at(actions, UI_POPUP_ACTION_CHOICE,
-            ui_text("SET TEMP"), 0, 0, 1, ui_theme_is_studio() ? 72 : 52,
+            ui_text("Set temp"), 0, 0, 1, ui_theme_is_studio() ? 72 : 52,
             hotend_temperature_event_cb, (void *)(uintptr_t)i, NULL);
         s_hotend_activate_buttons[i] = ui_popup_add_action_at(actions, UI_POPUP_ACTION_CONFIRM,
-            ui_text("MAKE ACTIVE"), 0, 0, 1, ui_theme_is_studio() ? 72 : 52,
+            ui_text("Make active"), 0, 0, 1, ui_theme_is_studio() ? 72 : 52,
             hotend_activate_event_cb, (void *)(uintptr_t)i,
             &s_hotend_activate_labels[i]);
         lv_obj_set_grid_cell(s_hotend_temp_buttons[i], LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
         lv_obj_set_grid_cell(s_hotend_activate_buttons[i], LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_START, 0, 1);
     }
     lv_obj_t *footer = control_footer(s_hotend_list_popup);
-    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 170, 48, close_hotend_list_cb, NULL, NULL);
     refresh_hotend_list(NULL);
     s_hotend_refresh_timer = lv_timer_create(refresh_hotend_list, 500, NULL);
@@ -1632,7 +1640,7 @@ void ui_printer_popups_show_part_fan(
     };
 
     static const char *labels[] = {
-        "OFF",
+        "Off",
         "25%",
         "50%",
         "75%",
@@ -1641,7 +1649,7 @@ void ui_printer_popups_show_part_fan(
 
     static const double values[] = {0, 25, 50, 75, 100};
 
-    show_control_popup("PART COOLING FAN",
+    show_control_popup("Part cooling fan",
                        current_fan_percent,
                        current_fan_percent,
                        "%",
@@ -1678,12 +1686,12 @@ void ui_printer_popups_show_nozzle(
         "215 C",
         "230 C",
         "250 C",
-        "OFF"
+        "Off"
     };
 
     static const double values[] = {180, 200, 215, 230, 250, 0};
 
-    show_control_popup("NOZZLE TEMPERATURE",
+    show_control_popup("Nozzle temperature",
                        current_temp,
                        target_temp,
                        "C",
@@ -1692,7 +1700,7 @@ void ui_printer_popups_show_nozzle(
                        labels,
                        values,
                        6,
-                       "CUSTOM NOZZLE TEMP",
+                       "Custom nozzle temperature",
                        "M104 S",
                        300);
 }
@@ -1720,12 +1728,12 @@ void ui_printer_popups_show_bed(
         "70 C",
         "80 C",
         "100 C",
-        "OFF"
+        "Off"
     };
 
     static const double values[] = {50, 60, 70, 80, 100, 0};
 
-    show_control_popup("BED TEMPERATURE",
+    show_control_popup("Bed temperature",
                        current_temp,
                        target_temp,
                        "C",
@@ -1734,7 +1742,7 @@ void ui_printer_popups_show_bed(
                        labels,
                        values,
                        6,
-                       "CUSTOM BED TEMP",
+                       "Custom bed temperature",
                        "M140 S",
                        120);
 }
@@ -1874,15 +1882,15 @@ static void refresh_filament_list(lv_timer_t *timer)
                 request = -1;
             }
         }
-        const char *status = reason[0] ? "PRINTER UNAVAILABLE" : s_filament_feedback[i][0] ? s_filament_feedback[i] :
-            !sensor->enabled ? "DISABLED" : !sensor->status_known ? "CHECKING" :
-            sensor->filament_detected ? "FILAMENT PRESENT" : "RUNOUT";
+        const char *status = reason[0] ? "Printer unavailable" : s_filament_feedback[i][0] ? s_filament_feedback[i] :
+            !sensor->enabled ? "Disabled" : !sensor->status_known ? "Checking" :
+            sensor->filament_detected ? "Filament present" : "Runout";
         ui_value_set_text(s_filament_status_labels[i], status);
         ui_value_set_color(s_filament_status_labels[i], reason[0] || s_filament_feedback[i][0] ? UI_DANGER_BRIGHT :
             !sensor->enabled || !sensor->status_known ? UI_TEXT :
             sensor->filament_detected ? UI_OK_BRIGHT : UI_DANGER_BRIGHT, 0);
-        bool changed = ui_value_set_text(label, request >= 0 ? ui_text("UPDATING") :
-            sensor->enabled ? ui_text("DISABLE") : ui_text("ENABLE"));
+        bool changed = ui_value_set_text(label, request >= 0 ? ui_text("Updating") :
+            sensor->enabled ? ui_text("Disable") : ui_text("Enable"));
         if (changed) ui_button_apply_kind(button, sensor->enabled ? UI_BUTTON_WARNING : UI_BUTTON_SUCCESS);
         if (request >= 0 || reason[0] || s_filament_dispatching ||
             (!s_control_send && !s_filament_send) ||
@@ -1960,7 +1968,7 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
         control_height(480), UI_POPUP_STANDARD);
     if (!s_filament_list_popup) { s_filament_send = NULL; s_filament_row_count = 0; return; }
     lv_obj_add_event_cb(s_filament_list_popup, filament_list_popup_deleted_cb, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_filament_list_popup, ui_text("FILAMENT SENSOR CONTROL"));
+    lv_obj_t *body = control_layout(s_filament_list_popup, ui_text("Filament sensors"));
     static const int32_t columns[] = {LV_GRID_FR(1), LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
     static const int32_t rows[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
     for (size_t i = 0; i < s_filament_row_count; ++i) {
@@ -1969,6 +1977,10 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
         s_filament_row_names[i][sizeof(s_filament_row_names[i]) - 1] = '\0';
         lv_obj_t *row = lv_obj_create(body);
         ui_apply_surface_role(row, UI_SURFACE_SECTION);
+        if (ui_theme_is_studio()) {
+            ui_apply_surface_role(row, UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(row, LV_BORDER_SIDE_BOTTOM);
+        }
         lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
         lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_pad_all(row, 12, 0);
@@ -1982,18 +1994,18 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
         lv_obj_set_grid_cell(info, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
         char name[96];
         bool motion = strncmp(sensor->object_name, "filament_motion_sensor ", strlen("filament_motion_sensor ")) == 0;
-        snprintf(name, sizeof(name), "%s (%s)", filament_sensor_display_name(sensor->object_name), motion ? "MOTION" : "SWITCH");
+        snprintf(name, sizeof(name), "%s (%s)", filament_sensor_display_name(sensor->object_name), motion ? "motion" : "switch");
         lv_obj_t *label = lv_label_create(info);
         lv_label_set_text(label, name);
         ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT);
         lv_obj_set_width(label, LV_PCT(100));
         s_filament_status_labels[i] = lv_label_create(info);
-        lv_label_set_text(s_filament_status_labels[i], ui_text("CHECKING"));
+        lv_label_set_text(s_filament_status_labels[i], ui_text("Checking"));
         ui_apply_custom_label_style(s_filament_status_labels[i], UI_FONT_BODY_LARGE, UI_TEXT);
         lv_obj_set_width(s_filament_status_labels[i], LV_PCT(100));
         s_filament_toggle_buttons[i] = ui_popup_add_action_at(row,
             sensor->enabled ? UI_POPUP_ACTION_CHOICE : UI_POPUP_ACTION_CONFIRM,
-            sensor->enabled ? ui_text("DISABLE") : ui_text("ENABLE"), 0, 0,
+            sensor->enabled ? ui_text("Disable") : ui_text("Enable"), 0, 0,
             ui_theme_density_metric(150, 170, 190), 52, filament_toggle_event_cb,
             (void *)(uintptr_t)i, &s_filament_toggle_labels[i]);
         ui_button_apply_kind(s_filament_toggle_buttons[i], sensor->enabled ? UI_BUTTON_WARNING : UI_BUTTON_SUCCESS);
@@ -2006,7 +2018,7 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
         lv_obj_set_width(note, LV_PCT(100));
     }
     lv_obj_t *footer = control_footer(s_filament_list_popup);
-    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 170, 48, close_filament_list_cb, NULL, NULL);
     refresh_filament_list(NULL);
     s_filament_refresh_timer = lv_timer_create(refresh_filament_list, 500, NULL);

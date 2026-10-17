@@ -1,3 +1,4 @@
+#include "ui_widgets.h"
 #include "ui_settings_popups.h"
 #include "ui_text.h"
 #include "ui_value_update.h"
@@ -109,6 +110,7 @@ static lv_obj_t *settings_dialog_layout(lv_obj_t *popup, const char *title)
     lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     return body;
 }
 
@@ -116,7 +118,9 @@ static lv_obj_t *settings_dialog_footer(lv_obj_t *popup)
 {
     lv_obj_t *footer = lv_obj_create(popup);
     lv_obj_remove_style_all(footer);
-    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_size(footer, LV_PCT(100), LV_SIZE_CONTENT);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER,
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -234,7 +238,7 @@ void reset_settings_cb(lv_event_t *e)
     }
     ++s_settings_epoch;
     lv_obj_add_event_cb(s_reset_settings_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = settings_dialog_layout(s_reset_settings_popup, ui_text("RESET SETTINGS?"));
+    lv_obj_t *body = settings_dialog_layout(s_reset_settings_popup, ui_text("Reset settings?"));
     lv_obj_t *warning = lv_label_create(body);
     lv_label_set_text(warning, "This will erase saved WiFi, Moonraker, OTA URL, "
         "and preferences.\n\nFirmware, OTA slots, and rollback recovery "
@@ -245,9 +249,9 @@ void reset_settings_cb(lv_event_t *e)
     ui_apply_custom_label_style(s_reset_status,UI_FONT_BODY,UI_DANGER_BRIGHT);
     lv_obj_set_width(s_reset_status,LV_PCT(100));preference_field_own(s_reset_status);
     lv_obj_t *footer = settings_dialog_footer(s_reset_settings_popup);
-    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " CANCEL",
+    lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " Cancel",
         0, 0, 160, 48, reset_settings_cancel_cb, NULL, NULL);
-    lv_obj_t *erase = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " ERASE",
+    lv_obj_t *erase = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " Erase",
         0, 0, 160, 48, reset_settings_confirm_cb, NULL, NULL);
     s_reset_confirm=erase;preference_field_own(erase);
     lv_obj_set_flex_grow(cancel, 1); lv_obj_set_flex_grow(erase, 1);
@@ -276,15 +280,15 @@ void ui_settings_popups_show_reboot(void)
     if(!s_reboot_popup)return;
     ++s_settings_epoch;
     lv_obj_add_event_cb(s_reboot_popup,settings_dialog_deleted,LV_EVENT_DELETE,NULL);
-    lv_obj_t *body=settings_dialog_layout(s_reboot_popup,"REBOOT CONTROLLER?");
+    lv_obj_t *body=settings_dialog_layout(s_reboot_popup,"Reboot controller?");
     lv_obj_t *warning=lv_label_create(body);
     lv_label_set_text(warning,"Restart the PrinterHMI touchscreen controller? Its connections and services will be interrupted while it restarts.");
     ui_apply_custom_label_style(warning,UI_FONT_BODY,UI_TEXT);lv_obj_set_width(warning,LV_PCT(100));
     s_reboot_status=lv_label_create(body);lv_label_set_text(s_reboot_status,"");
     ui_apply_custom_label_style(s_reboot_status,UI_FONT_BODY,UI_DANGER_BRIGHT);lv_obj_set_width(s_reboot_status,LV_PCT(100));preference_field_own(s_reboot_status);
     lv_obj_t *footer=settings_dialog_footer(s_reboot_popup);
-    lv_obj_t *cancel=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,LV_SYMBOL_CLOSE " CANCEL",0,0,160,48,reboot_cancel_cb,NULL,NULL);
-    s_reboot_confirm=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,"REBOOT",0,0,160,48,reboot_confirm_cb,NULL,NULL);
+    lv_obj_t *cancel=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,LV_SYMBOL_CLOSE " Cancel",0,0,160,48,reboot_cancel_cb,NULL,NULL);
+    s_reboot_confirm=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,"Reboot",0,0,160,48,reboot_confirm_cb,NULL,NULL);
     preference_field_own(s_reboot_confirm);
     lv_obj_set_flex_grow(cancel,1);lv_obj_set_flex_grow(s_reboot_confirm,1);
     if(s_controller_restart_accepted)lv_obj_add_state(s_reboot_confirm,LV_STATE_DISABLED);
@@ -342,7 +346,7 @@ void ui_settings_popups_show_timezone(
     if (!s_timezone_popup) { s_timezone_changed_cb = NULL; return; }
     ++s_settings_epoch;
     lv_obj_add_event_cb(s_timezone_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = settings_dialog_layout(s_timezone_popup, ui_text("TIME ZONE"));
+    lv_obj_t *body = settings_dialog_layout(s_timezone_popup, ui_text("Time zone"));
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, ui_text("Select local time zone. Daylight-saving rules apply automatically."));
     s_timezone_status=hint;preference_field_own(hint);
@@ -367,7 +371,7 @@ void ui_settings_popups_show_timezone(
         lv_obj_set_width(label, LV_PCT(100));
     }
     lv_obj_t *footer = settings_dialog_footer(s_timezone_popup);
-    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 160, 48, timezone_close_cb, NULL, NULL);
 }
 
@@ -577,7 +581,7 @@ static void custom_theme_remove_cb(lv_event_t *event)
     if (!s_custom_remove_popup) return;
     ++s_settings_epoch;
     lv_obj_add_event_cb(s_custom_remove_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = settings_dialog_layout(s_custom_remove_popup, ui_text("REMOVE CUSTOM THEME?"));
+    lv_obj_t *body = settings_dialog_layout(s_custom_remove_popup, ui_text("Remove custom theme?"));
     lv_obj_t *message = lv_label_create(body);
     lv_label_set_text_fmt(message, "Remove \"%s\" from the SD card?\n\nBuilt-in themes are protected and cannot be removed.", summary->name);
     ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
@@ -586,9 +590,9 @@ static void custom_theme_remove_cb(lv_event_t *event)
     ui_apply_custom_label_style(s_remove_status,UI_FONT_BODY,UI_DANGER_BRIGHT);
     lv_obj_set_width(s_remove_status,LV_PCT(100));preference_field_own(s_remove_status);
     lv_obj_t *footer = settings_dialog_footer(s_custom_remove_popup);
-    lv_obj_t *keep = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " KEEP",
+    lv_obj_t *keep = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " Keep",
         0, 0, 160, 48, custom_remove_cancel_cb, NULL, NULL);
-    lv_obj_t *remove = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE",
+    lv_obj_t *remove = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " Remove",
         0, 0, 180, 48, custom_remove_confirm_cb, (void *)(uintptr_t)index, NULL);
     lv_obj_set_flex_grow(keep, 1); lv_obj_set_flex_grow(remove, 1);
     theme_footer_fit(footer);
@@ -674,7 +678,7 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
     if (!s_custom_theme_popup) return;
     ++s_settings_epoch;
     lv_obj_add_event_cb(s_custom_theme_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = settings_dialog_layout(s_custom_theme_popup, ui_text("CUSTOM THEMES"));
+    lv_obj_t *body = settings_dialog_layout(s_custom_theme_popup, ui_text("Custom themes"));
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, count ? ui_text("Select a theme, then Apply. Remove deletes only its SD-card file.") :
         ui_text("No valid themes found in /sdcard/PrinterHMI/themes."));
@@ -710,13 +714,13 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
     int32_t width = ui_theme_density_metric(136, 144, 152);
-    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, width, 48, custom_theme_close_cb, NULL, NULL);
     s_custom_status=hint;preference_field_own(hint);
     for(size_t i=0;i<CUSTOM_THEME_MAX_COUNT;i++)preference_field_own(s_custom_rows[i]);
-    s_custom_apply_action = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " APPLY",
+    s_custom_apply_action = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " Apply",
         0, 0, width, 48, custom_theme_apply_cb, NULL, NULL);
-    s_custom_remove_action = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " REMOVE",
+    s_custom_remove_action = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_TRASH " Remove",
         0, 0, width, 48, custom_theme_remove_cb, NULL, NULL);
     lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(s_custom_apply_action, 1); lv_obj_set_flex_grow(s_custom_remove_action, 1);
     theme_footer_fit(footer);
@@ -752,7 +756,7 @@ static void theme_popup_create_async(void *user_data)
     lv_obj_set_style_shadow_width(s_theme_popup, 0, 0);
     ++s_settings_epoch;++s_theme_epoch;
     lv_obj_add_event_cb(s_theme_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = settings_dialog_layout(s_theme_popup, ui_text("INTERFACE THEME"));
+    lv_obj_t *body = settings_dialog_layout(s_theme_popup, ui_text("Interface theme"));
     lv_obj_set_style_bg_color(body, lv_obj_get_style_bg_color(s_theme_popup, 0), 0);
     lv_obj_set_style_bg_opa(body, LV_OPA_COVER, 0);
     lv_obj_t *hint = lv_label_create(body);
@@ -769,6 +773,8 @@ static void theme_popup_create_async(void *user_data)
     lv_obj_set_style_pad_column(grid, UI_GAP_CARD, 0);
     lv_obj_set_style_pad_row(grid, UI_GAP_CARD, 0);
     for (int theme = UI_THEME_CLASSIC; theme <= UI_THEME_STUDIO_DARK; ++theme) {
+        /* Temporary presentation scope; persisted IDs/backends stay intact. */
+        if(theme!=UI_THEME_OPERATOR && theme!=UI_THEME_STUDIO_DARK)continue;
         lv_obj_t *preview = ui_theme_preview_create(grid, theme,
             !theme_manager_custom_active() && theme == (int)theme_manager_active(), 0, 0, 340, 250,
             theme == UI_THEME_OPERATOR_SHELL ? operator_shell_select_cb : theme_select_cb, (void *)(uintptr_t)theme);
@@ -778,10 +784,12 @@ static void theme_popup_create_async(void *user_data)
     lv_obj_set_height(footer, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
-    lv_obj_t *custom = ui_popup_add_action_at(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SD_CARD " CUSTOM THEMES",
+    lv_obj_t *custom = ui_popup_add_action_at(footer, UI_POPUP_ACTION_SECONDARY, LV_SYMBOL_SD_CARD " Custom themes",
         0, 0, ui_theme_density_metric(236, 248, 260), 48, custom_theme_manager_show_cb, NULL, NULL);
-    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 144, 48, theme_close_cb, NULL, NULL);
+    /* Keep the custom-theme flow available in source for later restoration. */
+    lv_obj_add_flag(custom,LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_flex_grow(custom, 1); lv_obj_set_flex_grow(close, 1);
     theme_footer_fit(footer);
 }

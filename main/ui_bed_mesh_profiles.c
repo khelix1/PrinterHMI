@@ -291,7 +291,7 @@ static void show_profile_confirmation(bool removing)
         ? "Remove profile \"%s\"?\n\nSAVE_CONFIG will restart Klipper."
         : "Save the current mesh as \"%s\"?\n\nAn existing profile with this name will be replaced. SAVE_CONFIG will restart Klipper.",
         s.pending_profile_name);
-    s.profile_confirm = ui_form_dialog(ui_text(removing ? "REMOVE BED MESH?" : "SAVE BED MESH?"),
+    s.profile_confirm = ui_form_dialog(ui_text(removing ? "Remove bed mesh?" : "Save bed mesh?"),
         620, 370, removing ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
     if (!s.profile_confirm) { s.pending_profile_name[0] = '\0'; return; }
     lv_obj_add_event_cb(s.profile_confirm, profile_popup_deleted, LV_EVENT_DELETE, NULL);
@@ -299,9 +299,9 @@ static void show_profile_confirmation(bool removing)
     ui_form_text(ui_form_body(s.profile_confirm), message, UI_FONT_BODY, UI_TEXT);
     s.confirm_connection_label = ui_form_text(ui_form_body(s.profile_confirm), "", UI_FONT_BODY, UI_TEXT_DIM);
     watch_profile_ref(s.confirm_connection_label);
-    ui_form_action(s.profile_confirm, UI_BUTTON_SECONDARY, LV_SYMBOL_LEFT " BACK", close_profile_confirm_cb, NULL);
+    ui_form_action(s.profile_confirm, UI_BUTTON_SECONDARY, LV_SYMBOL_LEFT " Back", close_profile_confirm_cb, NULL);
     s.actions[3] = ui_form_action(s.profile_confirm, removing ? UI_BUTTON_DANGER : UI_BUTTON_PRIMARY,
-        removing ? LV_SYMBOL_TRASH " REMOVE & RESTART" : LV_SYMBOL_SAVE " SAVE & RESTART",
+        removing ? LV_SYMBOL_TRASH " Remove & restart" : LV_SYMBOL_SAVE " Save & restart",
         removing ? confirm_remove_profile_cb : confirm_save_profile_cb, NULL);
     watch_profile_ref(s.actions[3]);
     ui_bed_mesh_profiles_refresh_availability();
@@ -332,18 +332,18 @@ static void save_as_profile_cb(lv_event_t *event)
     if (s.profile_editor) { lv_obj_move_foreground(s.profile_editor); return; }
     if (!profile_command_ready(s.connection_label)) return;
     if (!s.mesh_valid) { ui_value_set_text(s.connection_label, "No current mesh is available to save."); return; }
-    s.profile_editor = ui_form_dialog(ui_text("SAVE BED MESH PROFILE"), 760, 560, UI_POPUP_STANDARD);
+    s.profile_editor = ui_form_dialog(ui_text("Save bed-mesh profile"), 760, 560, UI_POPUP_STANDARD);
     if (!s.profile_editor) return;
     lv_obj_add_event_cb(s.profile_editor, profile_popup_deleted, LV_EVENT_DELETE, NULL);
-    ui_form_text(ui_form_body(s.profile_editor), "PROFILE NAME", UI_FONT_CAPTION, UI_TEXT_DIM);
+    ui_form_text(ui_form_body(s.profile_editor), "Profile name", UI_FONT_CAPTION, UI_TEXT_DIM);
     s.profile_name_input = ui_form_input(ui_form_body(s.profile_editor), "example: textured_plate", "", false, BED_MESH_PROFILE_NAME_MAX - 1);
     lv_textarea_set_accepted_chars(s.profile_name_input, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-");
     s.editor_feedback = ui_form_text(ui_form_body(s.profile_editor), "", UI_FONT_CAPTION, UI_TEXT_DIM);
     watch_profile_ref(s.profile_name_input);
     watch_profile_ref(s.editor_feedback);
     ui_form_keyboard(s.profile_editor, s.profile_name_input, LV_KEYBOARD_MODE_TEXT_LOWER);
-    ui_form_action(s.profile_editor, UI_BUTTON_SECONDARY, LV_SYMBOL_CLOSE " CANCEL", close_profile_editor_cb, NULL);
-    s.editor_continue = ui_form_action(s.profile_editor, UI_BUTTON_PRIMARY, "CONTINUE", save_name_continue_cb, NULL);
+    ui_form_action(s.profile_editor, UI_BUTTON_SECONDARY, LV_SYMBOL_CLOSE " Cancel", close_profile_editor_cb, NULL);
+    s.editor_continue = ui_form_action(s.profile_editor, UI_BUTTON_PRIMARY, "Continue", save_name_continue_cb, NULL);
     watch_profile_ref(s.editor_continue);
     ui_form_finish(s.profile_editor);
 }
@@ -370,8 +370,9 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
         if (s.profile_confirm) lv_obj_move_foreground(s.profile_confirm);
         return;
     }
-    s.profile_popup = ui_form_dialog(ui_text("BED MESH PROFILES"), 760, 520, UI_POPUP_STANDARD);
+    s.profile_popup = ui_form_dialog(ui_text("Bed-mesh profiles"), 760, 520, UI_POPUP_STANDARD);
     if (!s.profile_popup) return;
+    lv_obj_set_scrollbar_mode(ui_form_body(s.profile_popup), LV_SCROLLBAR_MODE_OFF);
     ++s_epoch;
     lv_obj_add_event_cb(s.profile_popup, profile_popup_deleted, LV_EVENT_DELETE, NULL);
     s.selected_profile = -1;
@@ -407,10 +408,10 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
             ui_popup_set_selectable_row_selected(row, active);
         }
     }
-    s.actions[0] = ui_form_action(s.profile_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_SAVE " SAVE AS", save_as_profile_cb, NULL);
-    s.actions[1] = ui_form_action(s.profile_popup, UI_BUTTON_PRIMARY, LV_SYMBOL_PLAY " LOAD", load_selected_profile_cb, NULL);
-    s.actions[2] = ui_form_action(s.profile_popup, UI_BUTTON_DANGER, LV_SYMBOL_TRASH " REMOVE", remove_selected_profile_cb, NULL);
-    ui_form_action(s.profile_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_CLOSE " CLOSE", close_profile_popup_cb, NULL);
+    s.actions[0] = ui_form_action(s.profile_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_SAVE " Save as", save_as_profile_cb, NULL);
+    s.actions[1] = ui_form_action(s.profile_popup, UI_BUTTON_PRIMARY, LV_SYMBOL_PLAY " Load", load_selected_profile_cb, NULL);
+    s.actions[2] = ui_form_action(s.profile_popup, UI_BUTTON_DANGER, LV_SYMBOL_TRASH " Remove", remove_selected_profile_cb, NULL);
+    ui_form_action(s.profile_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_CLOSE " Close", close_profile_popup_cb, NULL);
     for (unsigned i = 0; i < 3; ++i) watch_profile_ref(s.actions[i]);
     ui_bed_mesh_profiles_refresh_availability();
     ui_form_finish(s.profile_popup);

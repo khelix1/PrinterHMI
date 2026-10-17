@@ -226,14 +226,14 @@ static void show_restore_confirmation(const char *preflight,bool encrypted)
 {
     if(s_restore_confirmation){lv_obj_move_foreground(s_restore_confirmation);return;}
     s_pending_encrypted_restore=encrypted;
-    s_restore_confirmation=ui_form_dialog(encrypted?"RESTORE ENCRYPTED BACKUP?":"RESTORE CONFIGURATION?",760,480,UI_POPUP_DANGER);
+    s_restore_confirmation=ui_form_dialog(encrypted?"Restore encrypted backup?":"Restore configuration?",760,480,UI_POPUP_DANGER);
     if(!s_restore_confirmation){secure_clear(s_restore_passphrase,sizeof(s_restore_passphrase));return;}
     backup_dialog_own(s_restore_confirmation);lv_obj_t *body=ui_form_body(s_restore_confirmation);
     ui_form_text(body,preflight?preflight:"Backup verified.",UI_FONT_BODY,UI_TEXT);
     ui_form_text(body,"Restore replaces current printer profiles, appearance, display and notification settings. A reboot is required afterward.",UI_FONT_BODY,UI_WARN);
     s_restore_status=ui_form_text(body,"",UI_FONT_BODY,UI_DANGER_BRIGHT);
-    ui_form_action(s_restore_confirmation,UI_BUTTON_CANCEL,"CANCEL",restore_cancel_cb,NULL);
-    ui_form_action(s_restore_confirmation,UI_BUTTON_DANGER,"RESTORE",restore_confirm_cb,NULL);
+    ui_form_action(s_restore_confirmation,UI_BUTTON_CANCEL,"Cancel",restore_cancel_cb,NULL);
+    ui_form_action(s_restore_confirmation,UI_BUTTON_DANGER,"Restore",restore_confirm_cb,NULL);
     backup_field_own(s_restore_status);
     ui_form_finish(s_restore_confirmation);
 }
@@ -310,7 +310,7 @@ static void export_progress_timer_cb(lv_timer_t *timer)
     }
 
     int value = 10;
-    const char *value_text = "WORKING";
+    const char *value_text = "Working";
     if (state == SETTINGS_BACKUP_ENCRYPTED_WORKER_ENCRYPTING ||
         state == SETTINGS_BACKUP_ENCRYPTED_WORKER_VERIFYING) {
         s_export_progress_pulse = (s_export_progress_pulse + 9) % 55;
@@ -353,12 +353,12 @@ static void export_progress_timer_cb(lv_timer_t *timer)
 static void show_export_progress_popup(bool restore_verify)
 {
     if(s_export_progress_popup){lv_obj_move_foreground(s_export_progress_popup);return;}
-    s_export_progress_popup=ui_form_dialog(restore_verify?"VERIFYING BACKUP":"SAVING ENCRYPTED BACKUP",720,400,UI_POPUP_STANDARD);
+    s_export_progress_popup=ui_form_dialog(restore_verify?"Verifying backup":"Saving encrypted backup",720,400,UI_POPUP_STANDARD);
     if(!s_export_progress_popup)return;
     s_export_progress_is_restore_verify=restore_verify;backup_dialog_own(s_export_progress_popup);
     lv_obj_t *body=ui_form_body(s_export_progress_popup);
     s_export_progress_status=ui_form_text(body,restore_verify?"Verifying encrypted backup passphrase and contents...":"Preparing configuration backup...",UI_FONT_BODY,UI_TEXT);
-    s_export_progress_value=ui_form_text(body,"WORKING",UI_FONT_BODY_LARGE,UI_ACCENT_BRIGHT);
+    s_export_progress_value=ui_form_text(body,"Working",UI_FONT_BODY_LARGE,UI_ACCENT_BRIGHT);
     s_export_progress_bar=lv_bar_create(body);lv_obj_set_size(s_export_progress_bar,LV_PCT(100),24);
     lv_bar_set_range(s_export_progress_bar,0,100);lv_bar_set_value(s_export_progress_bar,10,LV_ANIM_OFF);
     ui_form_text(body,"Keep power connected until the backup operation finishes.",UI_FONT_CAPTION,UI_TEXT_DIM);
@@ -401,13 +401,13 @@ static void secret_submit_cb(lv_event_t *event)
 static void show_secret_popup(bool restore)
 {
     if(s_secret_popup){lv_obj_move_foreground(s_secret_popup);return;}
-    s_secret_popup=ui_form_dialog(restore?"OPEN ENCRYPTED BACKUP":"CREATE ENCRYPTED BACKUP",880,568,UI_POPUP_STANDARD);
+    s_secret_popup=ui_form_dialog(restore?"Open encrypted backup":"Create encrypted backup",880,568,UI_POPUP_STANDARD);
     if(!s_secret_popup)return;
     s_secret_is_restore=restore;backup_dialog_own(s_secret_popup);lv_obj_t *body=ui_form_body(s_secret_popup);
-    ui_form_text(body,restore?"BACKUP PASSPHRASE":"NEW PASSPHRASE",UI_FONT_CAPTION,UI_TEXT_DIM);
+    ui_form_text(body,restore?"Backup passphrase":"New passphrase",UI_FONT_CAPTION,UI_TEXT_DIM);
     s_secret_input=ui_form_input(body,"At least 12 characters",NULL,true,BACKUP_PASSPHRASE_MAX);
     if(!restore) {
-        ui_form_text(body,"CONFIRM PASSPHRASE",UI_FONT_CAPTION,UI_TEXT_DIM);
+        ui_form_text(body,"Confirm passphrase",UI_FONT_CAPTION,UI_TEXT_DIM);
         s_secret_confirm=ui_form_input(body,"Enter the same passphrase again",NULL,true,BACKUP_PASSPHRASE_MAX);
         lv_obj_add_event_cb(s_secret_confirm,secret_focus_cb,LV_EVENT_FOCUSED,NULL);
         lv_obj_add_event_cb(s_secret_confirm,secret_focus_cb,LV_EVENT_CLICKED,NULL);
@@ -417,8 +417,8 @@ static void show_secret_popup(bool restore)
     s_secret_status=ui_form_text(body,"",UI_FONT_CAPTION,UI_DANGER_BRIGHT);
     s_secret_keyboard=ui_form_keyboard(s_secret_popup,s_secret_input,LV_KEYBOARD_MODE_TEXT_LOWER);
     ui_popup_keyboard_actions(s_secret_keyboard,secret_submit_cb,secret_cancel_cb);
-    ui_form_action(s_secret_popup,UI_BUTTON_CANCEL,"CANCEL",secret_cancel_cb,NULL);
-    ui_form_action(s_secret_popup,UI_BUTTON_PRIMARY,restore?"VERIFY":"SAVE",secret_submit_cb,NULL);
+    ui_form_action(s_secret_popup,UI_BUTTON_CANCEL,"Cancel",secret_cancel_cb,NULL);
+    ui_form_action(s_secret_popup,UI_BUTTON_PRIMARY,restore?"Verify":"Save",secret_submit_cb,NULL);
     backup_field_own(s_secret_input);backup_field_own(s_secret_confirm);backup_field_own(s_secret_keyboard);backup_field_own(s_secret_status);
     ui_form_finish(s_secret_popup);
     lv_obj_scroll_to_view(s_secret_input,LV_ANIM_OFF);
@@ -475,14 +475,14 @@ static void remove_request_cb(lv_event_t *event)
     (void)event;if(!backup_operation_begin())return;
     s_backup_dispatching=false;
     if(s_remove_confirmation){lv_obj_move_foreground(s_remove_confirmation);return;}
-    s_remove_confirmation=ui_form_dialog("REMOVE ALL BACKUPS?",720,400,UI_POPUP_DANGER);
+    s_remove_confirmation=ui_form_dialog("Remove all backups?",720,400,UI_POPUP_DANGER);
     if(!s_remove_confirmation)return;
     backup_dialog_own(s_remove_confirmation);
     ui_form_text(ui_form_body(s_remove_confirmation),"This permanently removes plain and encrypted configuration backups, including temporary recovery copies, from the SD card. Live printer profiles and interface settings are not changed.",UI_FONT_BODY,UI_TEXT);
     s_remove_status=ui_form_text(ui_form_body(s_remove_confirmation),"",UI_FONT_BODY,UI_DANGER_BRIGHT);
     backup_field_own(s_remove_status);
-    ui_form_action(s_remove_confirmation,UI_BUTTON_CANCEL,"CANCEL",remove_cancel_cb,NULL);
-    ui_form_action(s_remove_confirmation,UI_BUTTON_DANGER,"REMOVE",remove_confirm_cb,NULL);
+    ui_form_action(s_remove_confirmation,UI_BUTTON_CANCEL,"Cancel",remove_cancel_cb,NULL);
+    ui_form_action(s_remove_confirmation,UI_BUTTON_DANGER,"Remove",remove_confirm_cb,NULL);
     ui_form_finish(s_remove_confirmation);
 }
 
@@ -490,31 +490,35 @@ static void remove_request_cb(lv_event_t *event)
 static void backup_action(lv_obj_t *row,ui_button_kind_t kind,const char *text,lv_event_cb_t callback)
 {
     lv_obj_t *button=ui_button_create(row,kind,text);
-    lv_point_t size;lv_text_get_size(&size,text,UI_FONT_BODY,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-    int width=size.x+24>240?size.x+24:240;
-    lv_obj_set_size(button,width,48);lv_obj_set_style_min_width(button,width,0);
-    lv_obj_set_flex_grow(button,1);
-    ui_apply_custom_label_style(lv_obj_get_child(button,0),UI_FONT_BODY,UI_TEXT);
+    unsigned index=lv_obj_get_child_count(row)-1;
+    lv_obj_set_size(button,LV_PCT(100),52);
+    lv_obj_set_grid_cell(button,LV_GRID_ALIGN_STRETCH,index%2,index==4?2:1,LV_GRID_ALIGN_START,index/2,1);
+    lv_obj_add_event_cb(button,ui_form_action_fit,LV_EVENT_SIZE_CHANGED,NULL);
     lv_obj_add_event_cb(button,callback,LV_EVENT_CLICKED,NULL);
 }
 void ui_settings_backup_popup_show(void)
 {
     if(s_popup){lv_obj_move_foreground(s_popup);return;}
-    s_popup=ui_form_dialog("CONFIGURATION BACKUP",880,540,UI_POPUP_STANDARD);
+    s_popup=ui_form_dialog("Configuration backup",880,540,UI_POPUP_STANDARD);
     if(!s_popup)return;
     backup_dialog_own(s_popup);lv_obj_t *body=ui_form_body(s_popup);
-    ui_form_text(body,"PLAIN SD CARD FILE",UI_FONT_CAPTION,UI_TEXT_DIM);
+    ui_form_text(body,"Plain SD card file",UI_FONT_CAPTION,UI_TEXT_DIM);
     ui_form_text(body,SETTINGS_BACKUP_PATH,UI_FONT_BODY,UI_TEXT);
-    ui_form_text(body,"ENCRYPTED SD CARD FILE",UI_FONT_CAPTION,UI_TEXT_DIM);
+    ui_form_text(body,"Encrypted SD card file",UI_FONT_CAPTION,UI_TEXT_DIM);
     ui_form_text(body,SETTINGS_BACKUP_ENCRYPTED_PATH,UI_FONT_BODY,UI_TEXT);
     s_status=ui_form_text(body,"Plain backups exclude Moonraker API keys. Encrypted backups include them.",UI_FONT_BODY,UI_TEXT_DIM);
     lv_obj_t *actions=lv_obj_create(body);ui_responsive_column(actions);
-    lv_obj_set_flex_flow(actions,LV_FLEX_FLOW_ROW_WRAP);lv_obj_set_style_pad_column(actions,8,0);
-    backup_action(actions,UI_BUTTON_PRIMARY,"BACK UP PLAIN",backup_cb);
-    backup_action(actions,UI_BUTTON_PRIMARY,"ENCRYPT",encrypted_backup_request_cb);
-    backup_action(actions,UI_BUTTON_DANGER,"RESTORE PLAIN",restore_request_cb);
-    backup_action(actions,UI_BUTTON_DANGER,"RESTORE ENCRYPTED",encrypted_restore_request_cb);
-    backup_action(actions,UI_BUTTON_DANGER,"REMOVE BACKUPS",remove_request_cb);
+    static const int32_t columns[]={LV_GRID_FR(1),LV_GRID_FR(1),LV_GRID_TEMPLATE_LAST};
+    static const int32_t rows[]={LV_GRID_CONTENT,LV_GRID_CONTENT,LV_GRID_CONTENT,LV_GRID_TEMPLATE_LAST};
+    lv_obj_set_grid_dsc_array(actions,columns,rows);
+    lv_obj_set_style_pad_column(actions,8,0);lv_obj_set_style_pad_row(actions,12,0);
+    backup_action(actions,UI_BUTTON_PRIMARY,"Back up plain",backup_cb);
+    backup_action(actions,UI_BUTTON_PRIMARY,"Back up encrypted",encrypted_backup_request_cb);
+    backup_action(actions,UI_BUTTON_DANGER,"Restore plain",restore_request_cb);
+    backup_action(actions,UI_BUTTON_DANGER,"Restore encrypted",encrypted_restore_request_cb);
+    backup_action(actions,UI_BUTTON_DANGER,"Remove backups",remove_request_cb);
     backup_field_own(s_status);
-    ui_form_action(s_popup,UI_BUTTON_CLOSE,"CLOSE",close_cb,NULL);ui_form_finish(s_popup);
+    ui_form_action(s_popup,UI_BUTTON_CLOSE,"Close",close_cb,NULL);ui_form_finish(s_popup);
+    for(unsigned i=0;i<lv_obj_get_child_count(actions);i++)
+        ui_text_fit_single_line(lv_obj_get_child(lv_obj_get_child(actions,i),0),UI_FONT_BODY);
 }

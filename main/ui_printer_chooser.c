@@ -17,6 +17,7 @@
 #include "moonraker_live_websocket.h"
 #include "printer_preview_cache.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_theme.h"
 #include "ui_page_geometry.h"
 
@@ -279,13 +280,7 @@ static void create_card(int index, int x, int y, int width, int height)
     lv_obj_set_style_bg_color(card->root, UI_CONTROL, LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(card->root, LV_OPA_COVER, LV_STATE_PRESSED);
 
-    lv_obj_t *divider = lv_obj_create(card->root);
-    lv_obj_remove_style_all(divider);
-    lv_obj_set_size(divider, width - 24, 1);
-    lv_obj_set_pos(divider, 9, height - 1);
-    lv_obj_set_style_bg_color(divider, UI_BORDER, 0);
-    lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(divider, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    ui_create_divider(card->root,9,height-1,width-24,1);
 
     lv_obj_add_event_cb(
         card->root,
@@ -653,14 +648,9 @@ void ui_printer_chooser_show(
         create_card(index, section_x + (index % 2) * column_step,
             section_y + (index / 2) * row_step, section_width, section_height);
 
-    lv_obj_t *center_separator = lv_obj_create(s_root);
-    lv_obj_remove_style_all(center_separator);
-    lv_obj_set_size(center_separator, 1, row_step + section_height - 20);
-    lv_obj_set_pos(center_separator,
-        section_x + section_width + (column_step - section_width) / 2, section_y + 8);
-    lv_obj_set_style_bg_color(center_separator, UI_BORDER, 0);
-    lv_obj_set_style_bg_opa(center_separator, LV_OPA_60, 0);
-    lv_obj_clear_flag(center_separator, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    ui_create_divider(s_root,
+        section_x+section_width+(column_step-section_width)/2,section_y+8,
+        1,row_step+section_height-20);
 
     lv_obj_t *root=s_root;uint32_t epoch=s_chooser_epoch;
     refresh_cards();

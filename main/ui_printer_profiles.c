@@ -114,6 +114,8 @@ static editor_test_draft_t s_test_draft;
 static int s_selected_profile = 0;
 static int s_editor_profile = -1;
 static bool s_editor_secure = false;
+static bool s_camera_standalone, s_camera_setup_opening;
+static char s_camera_setup_host[MOONRAKER_CONFIG_HOST_LENGTH], s_camera_setup_port[6];
 static lv_obj_t *s_editor_security_popup = NULL;
 #define EDITOR_PEM_MAX_FILES 6
 static lv_obj_t *s_editor_pem_picker = NULL;
@@ -197,7 +199,7 @@ static void profiles_watch(lv_obj_t *object)
 }
 static bool profiles_action_current(lv_event_t *event,lv_obj_t *button,bool keyboard)
 {
-    if(s_profile_dispatching || s_profile_discovery_dispatching || !s_editor_popup || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
+    if(s_profile_dispatching || s_profile_discovery_dispatching || (!s_editor_popup && !(s_camera_standalone && s_editor_camera_popup)) || !button || lv_obj_has_state(button,LV_STATE_DISABLED))return false;
     if(!event)return true;
     lv_obj_t *target=lv_event_get_target_obj(event);
     return target==lv_event_get_current_target_obj(event) &&
@@ -335,6 +337,9 @@ static void editor_close(void)
     memset(s_editor_camera_slot_buttons,0,sizeof(s_editor_camera_slot_buttons));
     profiles_clear_secret(s_editor_api_key,sizeof(s_editor_api_key));
     s_editor_profile=-1;s_editor_secure=false;
+    s_camera_standalone=false;
+    profiles_clear_secret(s_camera_setup_host,sizeof(s_camera_setup_host));
+    profiles_clear_secret(s_camera_setup_port,sizeof(s_camera_setup_port));
     if(camera_discovery)lv_timer_delete(camera_discovery);
     if(camera_test)lv_timer_delete(camera_test);
     ui_camera_set_setup_active(false);
@@ -955,7 +960,7 @@ static void editor_keyboard_popup_done_cb(lv_event_t *event)
 
 static void editor_keyboard_cancel_cb(lv_event_t *event)
 {
-    if(!s_editor_keyboard_popup || !s_editor_popup || s_profile_dispatching || s_profile_discovery_dispatching)return;
+    if(!s_editor_keyboard_popup || (!s_editor_popup && !(s_camera_standalone && s_editor_camera_popup)) || s_profile_dispatching || s_profile_discovery_dispatching)return;
     if(!event){
         if(!s_key_cancel_action || lv_obj_has_state(s_key_cancel_action,LV_STATE_DISABLED))return;
     }else{
@@ -969,7 +974,7 @@ static void editor_keyboard_cancel_cb(lv_event_t *event)
 
 static void editor_field_focused_cb(lv_event_t *event)
 {
-    if(!event || !s_editor_popup || s_profile_dispatching || s_profile_discovery_dispatching)return;
+    if(!event || (!s_editor_popup && !(s_camera_standalone && s_editor_camera_popup)) || s_profile_dispatching || s_profile_discovery_dispatching)return;
     lv_obj_t *field = lv_event_get_target_obj(event);
     if(lv_event_get_code(event)!=LV_EVENT_CLICKED || field!=lv_event_get_current_target_obj(event) ||
         lv_obj_has_state(field,LV_STATE_DISABLED))return;
@@ -1204,6 +1209,12 @@ static void editor_camera_close(void)
     profiles_clear_secret(&s_camera_test_job,sizeof(s_camera_test_job));
     s_editor_camera_discovery_timer=s_editor_camera_test_timer=NULL;
     memset(s_editor_camera_slot_buttons,0,sizeof(s_editor_camera_slot_buttons));
+    if(s_camera_standalone){
+        s_camera_standalone=false;s_editor_profile=-1;s_editor_secure=false;
+        profiles_clear_secret(s_editor_api_key,sizeof(s_editor_api_key));
+        profiles_clear_secret(s_camera_setup_host,sizeof(s_camera_setup_host));
+        profiles_clear_secret(s_camera_setup_port,sizeof(s_camera_setup_port));
+    }
     if(discovery)lv_timer_delete(discovery);
     if(test)lv_timer_delete(test);
     ui_camera_set_setup_active(false);
@@ -1516,15 +1527,25 @@ static void editor_camera_set_status(const char *text)
 }
 
 
+static const char *camera_find_host(void)
+{
+    return s_camera_standalone ? s_camera_setup_host :
+        s_editor_host ? lv_textarea_get_text(s_editor_host) : NULL;
+}
+static const char *camera_find_port(void)
+{
+    return s_camera_standalone ? s_camera_setup_port :
+        s_editor_port ? lv_textarea_get_text(s_editor_port) : NULL;
+}
 static bool camera_job_current(const camera_job_t *job,bool find,bool generation)
 {
     if(!camera_context_current(&job->draft.context) || !s_editor_camera_stream ||
         strcmp(job->draft.url,lv_textarea_get_text(s_editor_camera_stream)))return false;
     if(generation && job->draft.context.generation!=moonraker_config_generation())return false;
     if(!find)return true;
-    return s_editor_camera_name && s_editor_host && s_editor_port &&
+    return s_editor_camera_name && camera_find_host() && camera_find_port() &&
         !strcmp(job->draft.name,lv_textarea_get_text(s_editor_camera_name)) &&
-        !strcmp(job->host,lv_textarea_get_text(s_editor_host)) && !strcmp(job->port,lv_textarea_get_text(s_editor_port)) &&
+        !strcmp(job->host,camera_find_host()) && !strcmp(job->port,camera_find_port()) &&
         !strcmp(job->key,s_editor_api_key) && job->secure==s_editor_secure;
 }
 static bool camera_job_capture(camera_job_t *job,bool find)
@@ -1534,10 +1555,10 @@ static bool camera_job_capture(camera_job_t *job,bool find)
         job->draft.context.slot>=CAMERA_CATALOG_MAX_CAMERAS)return false;
     strlcpy(job->draft.url,lv_textarea_get_text(s_editor_camera_stream),sizeof(job->draft.url));
     if(!find)return true;
-    if(!s_editor_camera_name || !s_editor_host || !s_editor_port)return false;
+    if(!s_editor_camera_name || !camera_find_host() || !camera_find_port())return false;
     strlcpy(job->draft.name,lv_textarea_get_text(s_editor_camera_name),sizeof(job->draft.name));
-    strlcpy(job->host,lv_textarea_get_text(s_editor_host),sizeof(job->host));
-    strlcpy(job->port,lv_textarea_get_text(s_editor_port),sizeof(job->port));
+    strlcpy(job->host,camera_find_host(),sizeof(job->host));
+    strlcpy(job->port,camera_find_port(),sizeof(job->port));
     strlcpy(job->key,s_editor_api_key,sizeof(job->key));job->secure=s_editor_secure;
     return true;
 }
@@ -1657,9 +1678,8 @@ static void editor_camera_field_focused_cb(lv_event_t *event)
     editor_field_focused_cb(event);
 }
 
-static void editor_camera_open_cb(lv_event_t *event)
+static void editor_camera_open(void)
 {
-    if(!profiles_action_current(event,s_editor_camera_action,false))return;
     if (s_editor_camera_popup) { lv_obj_move_foreground(s_editor_camera_popup); return; }
     s_editor_camera_popup = ui_popup_create_on_screen(profiles_width(800), profiles_height(560), UI_POPUP_STANDARD);
     if (!s_editor_camera_popup) return;
@@ -1724,6 +1744,11 @@ static void editor_camera_open_cb(lv_event_t *event)
     camera_context_t context=camera_context();
     editor_camera_load_slot();
     if(camera_context_current(&context))lv_obj_move_foreground(context.popup);
+}
+
+static void editor_camera_open_cb(lv_event_t *event)
+{
+    if(profiles_action_current(event,s_editor_camera_action,false))editor_camera_open();
 }
 
 static bool editor_save_current(lv_obj_t *popup,uint32_t epoch,int active)
@@ -2082,9 +2107,44 @@ void ui_printer_profiles_open_camera_setup(
     ui_printer_profiles_active_changed_cb_t active_changed_cb,
     ui_printer_profiles_discover_cb_t discover_cb)
 {
-    ui_printer_profiles_show_for_slot(
-        profile_index, active_changed_cb, discover_cb);
-    if (!s_manager_popup) return;
-    manager_edit_cb(NULL);
-    if (s_editor_popup) editor_camera_open_cb(NULL);
+    (void)active_changed_cb;(void)discover_cb;
+    if(s_camera_setup_opening || s_profile_dispatching || s_profile_discovery_dispatching ||
+        profile_index<0 || profile_index>=MOONRAKER_CONFIG_MAX_PROFILES)return;
+    s_camera_setup_opening=true;
+    uint32_t generation=moonraker_config_generation();
+    int active=moonraker_config_active_profile_index();
+    ui_printer_profiles_close_all();
+    uint32_t epoch=s_profile_epoch;
+    moonraker_profile_t snapshot={0};
+#define SETUP_CURRENT() (!s_manager_popup && !s_editor_popup && !s_editor_camera_popup && \
+    epoch==s_profile_epoch && generation==moonraker_config_generation() && \
+    active==moonraker_config_active_profile_index())
+    if(!SETUP_CURRENT())goto finished;
+    const moonraker_profile_t *profile=moonraker_config_profile(profile_index);
+    if(!SETUP_CURRENT() || !profile)goto finished;
+    snapshot=*profile;
+    char names[CAMERA_CATALOG_MAX_CAMERAS][CAMERA_CATALOG_NAME_LENGTH]={0};
+    for(size_t i=0;i<CAMERA_CATALOG_MAX_CAMERAS;++i){
+        camera_catalog_entry_t entry={0};
+        (void)camera_catalog_get(profile_index,i,&entry);
+        if(!SETUP_CURRENT())goto finished;
+        if(entry.name[0])strlcpy(names[i],entry.name,sizeof(names[i]));
+        else snprintf(names[i],sizeof(names[i]),"Camera %u",(unsigned)(i+1));
+    }
+    memcpy(s_editor_camera_names,names,sizeof(names));
+    s_editor_profile=profile_index;s_editor_camera_slot=0;
+    s_editor_secure=snapshot.secure_transport;
+    strlcpy(s_editor_api_key,snapshot.configured?snapshot.api_key:"",sizeof(s_editor_api_key));
+    strlcpy(s_camera_setup_host,snapshot.configured?snapshot.host:"",sizeof(s_camera_setup_host));
+    snprintf(s_camera_setup_port,sizeof(s_camera_setup_port),"%u",
+        (unsigned)(snapshot.configured?snapshot.port:7125));
+    strlcpy(s_editor_camera_url,snapshot.configured?snapshot.camera_stream_url:"",sizeof(s_editor_camera_url));
+    s_camera_standalone=true;
+    ++s_profile_epoch;
+    editor_camera_open();
+    if(!s_editor_camera_popup)editor_camera_close();
+finished:
+    profiles_clear_secret(&snapshot,sizeof(snapshot));
+    s_camera_setup_opening=false;
+#undef SETUP_CURRENT
 }

@@ -15,7 +15,7 @@ firmware assets.
 - Uses the pinned ESP-IDF 6.0.2 container.
 - Applies the tracked ESP-Hosted compatibility patches through the canonical
   `tools/build_idf6_hosted3.sh` entry point.
-- Builds the P4 firmware and enforces the 3 MiB CI firmware-size budget.
+- Builds the P4 firmware and enforces the 7 MiB CI firmware-size budget.
 - Fails if a compiler warning is emitted from PrinterHMI-owned `main/` sources.
 
 The C6 firmware package and all GitHub release publication remain manual

@@ -40,8 +40,18 @@ int main(void){
   lv_obj_t*body=ui_form_body(s_popup),*footer=lv_obj_get_child(s_popup,-1),*button=lv_obj_get_child(footer,0),*label=lv_obj_get_child(button,0);lv_area_t before,after;lv_obj_get_coords(footer,&before);assert(lv_obj_get_height(button)>=48);inside(label,button);
   /* Size notifications bubbled from a child must not treat it as a button. */
   lv_obj_add_flag(label,LV_OBJ_FLAG_EVENT_BUBBLE);lv_obj_send_event(label,LV_EVENT_SIZE_CHANGED,NULL);lv_obj_update_layout(s_popup);inside(label,button);
-  if(!narrow&&density==1&&large)capture(theme,PRINTERHMI_FIRMWARE_CHANNEL);
-  lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(s_popup);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));inside(lv_obj_get_child(lv_obj_get_child(body,-1),-1),body);assert(has_text(lv_obj_get_child(body,-1),"Designed and developed by khelix."));tap(pointer,button);assert(!s_popup&&!lv_obj_get_child_count(lv_layer_top()));
+  if(!narrow&&density==1&&large) {
+   capture(theme,PRINTERHMI_FIRMWARE_CHANNEL);
+   for(unsigned section=4;section<lv_obj_get_child_count(ui_form_body(s_popup));section++) {
+    lv_obj_scroll_to_view(lv_obj_get_child(ui_form_body(s_popup),section),LV_ANIM_OFF);
+    lv_obj_update_layout(s_popup);capture(theme,PRINTERHMI_FIRMWARE_CHANNEL+10*section);
+   }
+   lv_obj_scroll_to_y(ui_form_body(s_popup),0,LV_ANIM_OFF);lv_obj_update_layout(s_popup);
+  }
+  lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(s_popup);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));inside(lv_obj_get_child(lv_obj_get_child(body,-1),-1),body);assert(has_text(lv_obj_get_child(body,-1),"docs/SOFTWARE_CREDITS.md"));
+  const char *credits[]={"Created by khelix","Concept, product direction","AI-assisted development","OpenAI ChatGPT/Codex","release approval remain with khelix","ESP-IDF","ESP-Hosted","LVGL","cJSON","LodePNG","FreeRTOS","lwIP","Mbed TLS","FatFs","Inter Project Authors","Montserrat Project Authors","Fonticons, Inc.","DejaVu","Klipper","Moonraker","PrusaSlicer","Development tools","Source & notices"};
+  for(unsigned credit=0;credit<sizeof(credits)/sizeof(credits[0]);credit++){assert(has_text(s_popup,credits[credit]));}
+  tap(pointer,button);assert(!s_popup&&!lv_obj_get_child_count(lv_layer_top()));
   for(unsigned i=0;i<10;i++){ui_about_popup_show();lv_obj_delete(s_popup);assert(!s_popup);ui_about_popup_close();}
   about_read_hook=cancel_about_read;ui_about_popup_show();assert(!s_popup&&!s_about_building);about_read_hook=nested_about_read;ui_about_popup_show();assert(s_popup&&!s_about_building);ui_about_popup_close();
   ui_about_popup_show();lv_obj_add_event_cb(s_popup,reopen_about_deleted,LV_EVENT_DELETE,NULL);ui_about_popup_close();assert(s_popup);ui_about_popup_close();

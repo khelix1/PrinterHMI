@@ -11,6 +11,15 @@ telemetry, print controls, exclude-object control, a dedicated 3D Bed Mesh
 workspace, detected Klipper macros, a live console, persistent display and
 timezone settings, runtime themes, and OTA firmware updates.
 
+Created and directed by **khelix**, with **AI-assisted development** using
+OpenAI ChatGPT/Codex for implementation, debugging, code review, test development,
+documentation and exploring implementation options. Concept, product direction,
+visual design, feature decisions, hardware verification and release approval
+remain with khelix.
+
+Thanks to the open-source projects, font authors and tools that make PrinterHMI
+possible. See [Software credits](docs/SOFTWARE_CREDITS.md) and [NOTICE](NOTICE).
+
 ## Status
 
 - Firmware version: `7.0.0-dev`

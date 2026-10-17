@@ -113,7 +113,7 @@ void ui_active_print_thumb_set_placeholder(lv_obj_t *card,const char *text)
     active_print_ctx_t *ctx=active_begin(card);if(!ctx)return;
     uint32_t epoch=ctx->epoch;
     if(ctx->preview_label){
-        lv_label_set_text(ctx->preview_label,text?text:"PRINT\nTHUMBNAIL");
+        lv_label_set_text(ctx->preview_label,text?text:"Model preview\n\nNo preview loaded");
         if(!active_current(ctx,epoch))goto finished;
         lv_obj_clear_flag(ctx->preview_label,LV_OBJ_FLAG_HIDDEN);
         if(!active_current(ctx,epoch))goto finished;
@@ -236,6 +236,12 @@ lv_obj_t *ui_active_print_create_profile(
             : h - layout->footer_bottom -
                 layout->preview_y - 12;
 
+    if (ui_theme_get_active() == UI_THEME_OPERATOR && layout->preview_height <= 0) {
+        /* Reserve two readable timing lines instead of clipping a long strip. */
+        preview_height = h - layout->preview_y -
+            (ui_font_with_fallback(UI_FONT_CAPTION)->line_height * 2 + 12);
+    }
+
     if (preview_width < 120) preview_width = 120;
     if (preview_height < 80) preview_height = 80;
 
@@ -271,7 +277,7 @@ lv_obj_t *ui_active_print_create_profile(
      */
     if (!ui_theme_is_studio()) ui_create_operator_card_heading(
         panel,
-        "ACTIVE PRINT",
+        "Active print",
         layout->heading_x,
         layout->heading_y);
 
@@ -312,7 +318,7 @@ lv_obj_t *ui_active_print_create_profile(
 
     lv_label_set_text(
         ctx->preview_label,
-        "PRINT\nTHUMBNAIL");
+        "Model preview\n\nNo preview loaded");
 
     ui_apply_text_body_large(
         ctx->preview_label);
@@ -334,7 +340,9 @@ lv_obj_t *ui_active_print_create_profile(
 
     lv_label_set_text(
         ctx->footer,
-        ui_text("LAYER --/--    ELAPSED --:--    REM --:--"));
+        ui_text(ui_theme_get_active() == UI_THEME_OPERATOR
+            ? "Layer --/--\n--:-- elapsed  |  REM --:--"
+            : "LAYER --/--    ELAPSED --:--    REM --:--"));
 
     lv_obj_set_width(
         ctx->footer,
@@ -398,6 +406,10 @@ lv_obj_t *ui_active_print_create_profile(
         lv_label_set_long_mode(ctx->remaining,LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_size(ctx->remaining,280,LV_SIZE_CONTENT);
         lv_obj_set_pos(ctx->remaining,340,192);
+    } else {
+        /* Anchor timing to the card content area at every text density. */
+        lv_obj_set_style_pad_all(ctx->footer,0,0);
+        lv_obj_align(ctx->footer,LV_ALIGN_BOTTOM_MID,0,-4);
     }
 
     lv_obj_set_user_data(panel, ctx);
@@ -429,7 +441,13 @@ void ui_active_print_set(lv_obj_t *panel,const char *layer,const char *elapsed,c
         lv_label_set_text_fmt(ctx->remaining,"%s elapsed  •  %s",elapsed?elapsed:"--:--",remaining?remaining:"REM --:--");
         if(active_current(ctx,epoch))ui_text_fit_single_line(ctx->remaining,UI_FONT_BODY);
     }else if(ctx->footer){
-        char buf[128];snprintf(buf,sizeof(buf),"LAYER %s    ELAPSED %s    %s",layer?layer:"--/--",elapsed?elapsed:"--:--",remaining?remaining:"REM --:--");lv_label_set_text(ctx->footer,buf);
+        char buf[128];
+        if (ui_theme_get_active() == UI_THEME_OPERATOR) {
+            snprintf(buf,sizeof(buf),"Layer %s\n%s elapsed  |  %s",layer?layer:"--/--",elapsed?elapsed:"--:--",remaining?remaining:"REM --:--");
+        } else {
+            snprintf(buf,sizeof(buf),"LAYER %s    ELAPSED %s    %s",layer?layer:"--/--",elapsed?elapsed:"--:--",remaining?remaining:"REM --:--");
+        }
+        lv_label_set_text(ctx->footer,buf);
     }
 finished:active_end(ctx);
 }

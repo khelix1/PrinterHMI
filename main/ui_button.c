@@ -2,6 +2,19 @@
 #include "ui_text.h"
 
 #include "ui_theme.h"
+#include "ui_value_update.h"
+
+void ui_button_set_filter_active(lv_obj_t *button,bool active)
+{
+    if(!button)return;
+    ui_value_set_bg_color(button,UI_CONTROL,LV_STATE_CHECKED);
+    ui_value_set_bg_opa(button,LV_OPA_COVER,LV_STATE_CHECKED);
+    ui_value_set_border_color(button,UI_ACCENT_CYAN,LV_STATE_CHECKED);
+    ui_value_set_border_width(button,2,LV_STATE_CHECKED);
+    lv_obj_clear_flag(button,LV_OBJ_FLAG_CHECKABLE);
+    if(active)lv_obj_add_state(button,LV_STATE_CHECKED);
+    else lv_obj_remove_state(button,LV_STATE_CHECKED);
+}
 
 static void button_label_resize(lv_event_t *event)
 {

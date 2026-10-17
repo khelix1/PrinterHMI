@@ -117,7 +117,7 @@ static void run_cb(lv_event_t *event)
     uint32_t expected_epoch = s_epoch + 1;
     close_popup();
     if (s_epoch != expected_epoch || owner != moonraker_config_generation()) return;
-    ui_calibration_results_show("PROBE ACCURACY RESULTS", "Waiting for repeated probe measurements...");
+    ui_calibration_results_show("Probe accuracy results", "Waiting for repeated probe measurements...");
     if (owner == moonraker_config_generation()) ui_calibration_results_refresh();
 }
 
@@ -163,20 +163,20 @@ static void open_cb(lv_event_t *event)
     s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 430, UI_POPUP_STANDARD);
     if (!s_popup) { s_popup_send = NULL; s_popup_ready = NULL; return; }
     lv_obj_add_event_cb(s_popup, popup_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(s_popup, "CHECK PROBE ACCURACY?");
+    ui_cal_dialog_title(s_popup, "Check probe accuracy?");
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Runs at the CURRENT probe position.\n"
         "Home XYZ and position the probe over a clear bed area first.\n"
         "The probe will repeat and retract. Nothing is saved.");
-    ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "SAMPLES");
+    ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Samples");
     s_samples = lv_dropdown_create(ui_cal_dialog_body(s_popup));
     lv_dropdown_set_options(s_samples, "5\n10\n20");
     lv_dropdown_set_selected(s_samples, 1);
     lv_obj_set_size(s_samples, LV_PCT(100), 54);
     ui_selector_style(s_samples, UI_FONT_BODY);
     s_status = ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Waiting for homing status...");
-    ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CANCEL, "BACK", close_cb, NULL, NULL);
-    s_run = ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CONFIRM, "RUN CHECK", run_cb, NULL, NULL);
+    ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CANCEL, "Back", close_cb, NULL, NULL);
+    s_run = ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CONFIRM, "Run check", run_cb, NULL, NULL);
     lv_obj_add_event_cb(s_samples, field_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_add_event_cb(s_status, field_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_add_event_cb(s_run, field_deleted, LV_EVENT_DELETE, NULL);
@@ -191,7 +191,7 @@ void ui_probe_accuracy_create(lv_obj_t *card, ui_probe_accuracy_send_cb_t send,
     s_button = NULL;
     s_button_owner = moonraker_config_generation();
     s_send = send; s_ready = ready;
-    s_button = ui_button_create(card, UI_BUTTON_OUTLINED, "ACCURACY");
+    s_button = ui_button_create(card, UI_BUTTON_OUTLINED, "Accuracy");
     if (!s_button) return;
     lv_obj_set_size(s_button, 170, 44);
     lv_obj_align(s_button, LV_ALIGN_BOTTOM_RIGHT, -16, -62);

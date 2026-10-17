@@ -785,6 +785,57 @@ static void profile_modal_layers(void)
  modal_pointer_tap(input);assert(hits==1);
  lv_indev_delete(input);lv_obj_delete(underlay);
 }
+static void direct_camera_generation_changed(void){++config_generation;}
+static void direct_camera_nested_open(void){ui_printer_profiles_open_camera_setup(1,NULL,NULL);}
+static void direct_camera_setup_checks(int theme,bool render)
+{
+ ui_printer_profiles_close_all();reset();
+ strcpy(profiles[0].api_key,"saved-camera-key");
+ unsigned screen_children=lv_obj_get_child_count(lv_screen_active());
+ unsigned top_children=lv_obj_get_child_count(lv_layer_top());
+ unsigned writes=catalog_writes;int profile_saves=saves;
+ ui_printer_profiles_show(active_changed,discover);manager_edit_cb(NULL);editor_camera_open_cb(NULL);
+ click(s_editor_camera_name);assert(s_editor_keyboard_popup);
+ ui_printer_profiles_open_camera_setup(0,active_changed,discover);
+ assert(s_camera_standalone && s_editor_camera_popup && camera_setup);
+ assert(!s_manager_popup && !s_editor_popup && !s_editor_keyboard_popup && !s_editor_host && !s_editor_port);
+ assert(lv_obj_get_child_count(lv_screen_active())==screen_children+2);
+ assert(lv_obj_get_child_count(lv_layer_top())==top_children);
+ layout(s_editor_camera_popup);if(render)snapshot(theme,"camera-direct");
+ camera_job_t job;
+ assert(camera_job_capture(&job,true));assert(!strcmp(job.host,profiles[0].host) && !strcmp(job.port,"7125"));
+ assert(!strcmp(job.key,"saved-camera-key"));profiles_clear_secret(&job,sizeof(job));
+ click(s_editor_camera_name);assert(s_editor_keyboard_popup);
+ lv_textarea_set_text(s_editor_keyboard_value,"Direct camera");editor_keyboard_popup_done_cb(NULL);
+ assert(!s_editor_keyboard_popup && !strcmp(lv_textarea_get_text(s_editor_camera_name),"Direct camera"));
+ click(s_editor_camera_stream);assert(s_editor_keyboard_popup);editor_keyboard_cancel_cb(NULL);assert(!s_editor_keyboard_popup);
+ lv_textarea_set_text(s_editor_camera_stream,"http://direct.local/stream");
+ editor_camera_discover_cb(NULL);assert(s_editor_camera_discovery_timer && discovered_profile==0);
+ lv_timer_t *old_timer=s_editor_camera_discovery_timer;
+ editor_camera_cancel_cb(NULL);editor_camera_discovery_poll_cb(old_timer);
+ assert(!s_camera_standalone && !s_editor_camera_popup && !s_editor_popup && !s_manager_popup && !camera_setup);
+ assert(!s_editor_camera_discovery_timer && !s_editor_api_key[0] && !s_camera_setup_host[0]);
+ assert(catalog_writes==writes && saves==profile_saves);
+ assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
+ ui_printer_profiles_open_camera_setup(1,NULL,NULL);assert(s_camera_standalone && s_editor_profile==1);
+ lv_textarea_set_text(s_editor_camera_name,"Saved direct camera");lv_textarea_set_text(s_editor_camera_stream,"http://saved-direct.local/stream");
+ fail_write_stage=3;editor_camera_save_cb(NULL);fail_write_stage=0;
+ assert(s_editor_camera_popup && s_camera_standalone && strstr(lv_label_get_text(s_editor_camera_status),"Unable to apply"));
+ editor_camera_save_cb(NULL);
+ assert(catalog_writes==writes+2 && camera_set_profile==1 && camera_set_slot==0 && !strcmp(camera_set_name,"Saved direct camera"));
+ assert(!s_editor_camera_popup && !s_editor_popup && !s_manager_popup && !s_camera_standalone && !camera_setup);
+ assert(saves==profile_saves && !s_editor_api_key[0]);
+ assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
+ ui_printer_profiles_open_camera_setup(0,NULL,NULL);click(s_editor_camera_name);assert(s_editor_keyboard_popup);
+ lv_obj_delete(s_editor_camera_popup);assert(!s_editor_keyboard_popup && !s_camera_standalone && !camera_setup && !s_editor_api_key[0]);
+ assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
+ profile_read_hook=direct_camera_generation_changed;ui_printer_profiles_open_camera_setup(0,NULL,NULL);
+ assert(!s_camera_standalone && !s_editor_camera_popup && !s_editor_api_key[0]);
+ camera_get_hook=direct_camera_nested_open;ui_printer_profiles_open_camera_setup(0,NULL,NULL);
+ assert(s_camera_standalone && s_editor_profile==0 && !s_manager_popup && !s_editor_popup);
+ ui_printer_profiles_close_all();
+ assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
+}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buf[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buf,NULL,sizeof(buf),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
 if(getenv("PROFILE_SCROLL_DIAGNOSTIC")){
  for(int theme=0;theme<5;theme++){
@@ -792,6 +843,14 @@ if(getenv("PROFILE_SCROLL_DIAGNOSTIC")){
   ui_printer_profiles_show(active_changed,discover);manager_edit_cb(NULL);profile_scroll_render_check(s_editor_popup,true);ui_printer_profiles_close_all();
  }
  lv_display_delete(d);lv_deinit();return 0;
+}
+if(getenv("PROFILE_CAMERA_DIRECT_ONLY")){
+ for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
+  viewport=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport,size==2?400:600);
+  ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
+  direct_camera_setup_checks(theme,!size&&density==1&&large);
+ }
+ lv_display_delete(d);lv_deinit();puts("PASS: direct Camera setup replaces prior dialogs, uses saved connection, keyboard/Find/Cancel, direct save failure/retry, deleted-owner cleanup and no leftover modals across all themes/densities/text/viewports");return 0;
 }
 for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
 viewport=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport,size==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();int old_saves=saves,old_deletes=deletes,old_changed=changed;
@@ -802,6 +861,6 @@ int old_discovered=discovered;editor_discover_cb(NULL);assert(discovered==old_di
 ui_printer_profiles_set_discovered_endpoint("discovered.local",7128,"Moonraker");assert(!strcmp(lv_textarea_get_text(s_editor_host),"discovered.local"));assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));editor_save_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1&&changed==old_changed+1);assert(!strcmp(profiles[0].host,"discovered.local")&&profiles[0].port==7128);
 manager_edit_cb(NULL);lv_textarea_set_text(s_editor_host,"cancelled.local");editor_cancel_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1);assert(strcmp(profiles[0].host,"cancelled.local"));
 manager_delete_cb(NULL);assert(s_delete_popup);layout(s_delete_popup);if(!size&&density==1&&large)snapshot(theme,"remove");delete_cancel_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes);manager_delete_cb(NULL);storage_ok=false;delete_confirm_cb(NULL);assert(s_delete_popup&&deletes==old_deletes);storage_ok=true;manager_delete_cb(NULL);delete_confirm_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes+1&&active==1&&changed==old_changed+2);manager_delete_cb(NULL);assert(!s_delete_popup);
-ui_printer_profiles_close_all();assert(!s_manager_popup&&!s_manager_list&&!s_editor_popup&&!s_active_changed_cb);reset();ui_printer_profiles_show_for_slot(2,active_changed,discover);assert(s_editor_popup&&s_editor_profile==2);layout(s_editor_popup);editor_test_cb(NULL);assert(!s_editor_test_timer);lv_textarea_set_text(s_editor_host,"test.local");editor_test_cb(NULL);assert(s_editor_test_timer);editor_camera_open_cb(NULL);editor_camera_test_cb(NULL);editor_camera_discover_cb(NULL);assert(discovered_profile==2);config_generation++;editor_camera_test_poll_cb(s_editor_camera_test_timer);editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);assert(!s_editor_camera_test_timer&&!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"changed"));lv_obj_delete(s_editor_popup);assert(!s_editor_popup&&!s_editor_test_timer&&!s_editor_host);manager_edit_cb(NULL);lv_obj_delete(s_manager_popup);assert(!s_editor_popup&&!s_manager_popup&&!s_manager_list);profile_draft_safety();profile_persistence_safety();profile_camera_removal_safety();profile_camera_operation_safety();profile_security_safety();profile_editor_control_safety();profile_discovery_request_safety();
+ui_printer_profiles_close_all();assert(!s_manager_popup&&!s_manager_list&&!s_editor_popup&&!s_active_changed_cb);reset();ui_printer_profiles_show_for_slot(2,active_changed,discover);assert(s_editor_popup&&s_editor_profile==2);layout(s_editor_popup);editor_test_cb(NULL);assert(!s_editor_test_timer);lv_textarea_set_text(s_editor_host,"test.local");editor_test_cb(NULL);assert(s_editor_test_timer);editor_camera_open_cb(NULL);editor_camera_test_cb(NULL);editor_camera_discover_cb(NULL);assert(discovered_profile==2);config_generation++;editor_camera_test_poll_cb(s_editor_camera_test_timer);editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);assert(!s_editor_camera_test_timer&&!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"changed"));lv_obj_delete(s_editor_popup);assert(!s_editor_popup&&!s_editor_test_timer&&!s_editor_host);manager_edit_cb(NULL);lv_obj_delete(s_manager_popup);assert(!s_editor_popup&&!s_manager_popup&&!s_manager_list);profile_draft_safety();profile_persistence_safety();profile_camera_removal_safety();profile_camera_operation_safety();profile_security_safety();profile_editor_control_safety();profile_discovery_request_safety();direct_camera_setup_checks(theme,!size&&density==1&&large);
 }
 profile_modal_layers();lv_display_delete(d);lv_deinit();puts("PASS: camera slot grid/default/selected/action fit and opaque redraw; grouped editor fits panel, host/port alignment and five-digit port; modal native-input blocking/layer order and editor scroll damage skips parent redraws with pinned footer; flat manager rows, separate Active/selected markers, adaptive Add/Edit label and four pinned actions; profile manager/editor/remove layouts in five themes, three densities, both text sizes and three viewports; pinned actions, scroll reach, large fields, selection, discovery, save validation/failure/cancel, remove guards, authentication/security/certificate/camera/keyboard layouts and behavior, numeric/password/length limits, camera slot routing/default/removal and teardown");}

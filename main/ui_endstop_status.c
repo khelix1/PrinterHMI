@@ -120,13 +120,13 @@ void ui_endstop_status_show(void)
     s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 460, UI_POPUP_STANDARD);
     if (!s_popup) return;
     lv_obj_add_event_cb(s_popup, endstop_popup_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(s_popup, "LIVE ENDSTOPS");
+    ui_cal_dialog_title(s_popup, "Live endstops");
 
     lv_obj_t *list = ui_cal_dialog_body(s_popup);
     s_body = ui_cal_dialog_text(list, "Waiting for the first live sample...");
     lv_obj_add_event_cb(s_body, body_deleted, LV_EVENT_DELETE, NULL);
 
-    ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_cb, NULL, NULL);
+    ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CLOSE, "Close", close_cb, NULL, NULL);
     s_timer = lv_timer_create(refresh, 250, NULL);
     refresh(NULL);
 }

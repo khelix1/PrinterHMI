@@ -79,7 +79,7 @@ static lv_color_t fan_value_color(double fan)
     if (fan < 0.0) return UI_TEXT_DIM;
     if (fan <= 0.5) return UI_TEXT_DIM;
     if (fan >= 99.5) return UI_OK_BRIGHT;
-    return UI_ACCENT;
+    return UI_ACCENT_BRIGHT;
 }
 
 static void format_hhmm(char *out, size_t out_sz, double seconds)
@@ -159,7 +159,7 @@ void ui_printer_info_cards_create(
 
     cards->progress = ui_create_operator_info_card(
         parent,
-        "PROGRESS",
+        "Progress",
         "--%",
         card_x[0],
         card_y[0],
@@ -180,7 +180,7 @@ void ui_printer_info_cards_create(
 
     cards->nozzle = ui_create_operator_info_card(
         parent,
-        "NOZZLE",
+        "Nozzle",
         "-- / -- C",
         card_x[1],
         card_y[1],
@@ -189,7 +189,7 @@ void ui_printer_info_cards_create(
 
     cards->bed = ui_create_operator_info_card(
         parent,
-        "BED",
+        "Bed",
         "-- / -- C",
         card_x[2],
         card_y[2],
@@ -198,7 +198,7 @@ void ui_printer_info_cards_create(
 
     cards->part_fan = ui_create_operator_info_card(
         parent,
-        "PART FAN",
+        "Part fan",
         "-- %",
         card_x[3],
         card_y[3],
@@ -207,7 +207,7 @@ void ui_printer_info_cards_create(
 
     cards->elapsed = ui_create_operator_info_card(
         parent,
-        "ELAPSED",
+        "Elapsed",
         "--:--",
         card_x[4],
         card_y[4],
@@ -216,7 +216,7 @@ void ui_printer_info_cards_create(
 
     cards->remaining = ui_create_operator_info_card(
         parent,
-        "REMAINING",
+        "Remaining",
         "--:--",
         card_x[5],
         card_y[5],

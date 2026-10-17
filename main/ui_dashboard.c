@@ -214,7 +214,7 @@ static void dashboard_camera_mode_set(bool enabled)
     dashboard_camera_context_t context=dashboard_camera_context();
     if(dash32_camera_image){if(enabled)lv_obj_clear_flag(dash32_camera_image,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(dash32_camera_image,LV_OBJ_FLAG_HIDDEN);}
     if(dash32_camera_status){if(enabled)lv_obj_clear_flag(dash32_camera_status,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(dash32_camera_status,LV_OBJ_FLAG_HIDDEN);}
-    if(dash32_camera_toggle){lv_obj_t *label=lv_obj_get_child(dash32_camera_toggle,0);if(label)ui_value_set_text(label,enabled?ui_text(LV_SYMBOL_IMAGE " THUMBNAIL"):ui_text(LV_SYMBOL_IMAGE " CAMERA"));}
+    if(dash32_camera_toggle){lv_obj_t *label=lv_obj_get_child(dash32_camera_toggle,0);if(label)ui_value_set_text(label,enabled?ui_text(LV_SYMBOL_IMAGE " Thumbnail"):ui_text(LV_SYMBOL_IMAGE " Camera"));}
     if(!enabled){
         lv_timer_t *timer=dash32_camera_timer;dash32_camera_timer=NULL;if(timer)lv_timer_delete(timer);
         camera_stream_request_stop();
@@ -355,7 +355,7 @@ void ui_dashboard_create(void)
             dash32_active_print);
 
     ui_dashboard_thumb_set_placeholder(
-        "PRINT\nTHUMBNAIL");
+        "Model preview\n\nNo preview loaded");
 
     lv_obj_t *preview_box = ui_dashboard_thumb_box();
     if (preview_box) {
@@ -378,7 +378,7 @@ void ui_dashboard_create(void)
         lv_obj_add_flag(dash32_camera_status, LV_OBJ_FLAG_HIDDEN);
     }
     dash32_camera_toggle = ui_button_create(
-        dash32_active_print, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " CAMERA");
+        dash32_active_print, UI_BUTTON_OUTLINED, LV_SYMBOL_IMAGE " Camera");
     if (dash32_camera_toggle) {
         lv_obj_add_event_cb(dash32_camera_toggle,dashboard_camera_field_deleted,LV_EVENT_DELETE,NULL);
         lv_obj_set_size(dash32_camera_toggle, 172, ui_theme_is_studio() ? 44 : 32);

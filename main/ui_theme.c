@@ -13,11 +13,11 @@
  * UI modules continue to call ui_apply_*() without knowing which
  * concrete theme is active.
  *
- * Operator is the default for newly-created objects.
+ * Studio is the default until a saved theme is loaded.
  * Foundry is the independent Theme A visual test surface.
  */
 
-static ui_theme_id_t s_active_theme = UI_THEME_OPERATOR;
+static ui_theme_id_t s_active_theme = UI_THEME_DEFAULT;
 static ui_accent_id_t s_active_accent = UI_ACCENT_DEFAULT;
 static ui_density_id_t s_active_density = UI_DENSITY_COMFORTABLE;
 static ui_accessibility_t s_accessibility = {0};
@@ -79,7 +79,7 @@ void ui_theme_set_active(ui_theme_id_t theme)
             break;
 
         default:
-            s_active_theme = UI_THEME_OPERATOR;
+            s_active_theme = UI_THEME_DEFAULT;
             break;
     }
 }

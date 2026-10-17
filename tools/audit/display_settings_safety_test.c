@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "ui_settings.c"
+const char *timezone_config_selected_label(void){return "Central Europe";}
 static bool fail_brightness,fail_off,fail_open,fail_set,fail_commit;
 static unsigned hardware_sets,hardware_offs,commits,warnings,reboot_reviews;
 static int hardware_brightness=100;
@@ -39,6 +40,7 @@ static void build_controls(void)
     lv_obj_add_event_cb(s_brightness_slider,settings_brightness_changed_cb,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(s_brightness_slider,settings_brightness_save_cb,LV_EVENT_RELEASED,NULL);
     settings_display_field_own(s_brightness_slider);settings_display_field_own(s_brightness_value);
+    s_timezone_label=lv_label_create(settings_panel);lv_label_set_text(s_timezone_label,"Old zone");settings_display_field_own(s_timezone_label);
     s_reboot_action=lv_button_create(settings_panel);settings_display_field_own(s_reboot_action);lv_obj_add_event_cb(s_reboot_action,settings_reboot_cb,LV_EVENT_CLICKED,NULL);
     s_sleep_action=lv_obj_create(settings_panel);settings_sleep_label=lv_label_create(s_sleep_action);
     lv_label_set_text(settings_sleep_label,settings_sleep_timeout_text());
@@ -69,7 +71,7 @@ int main(void)
         before=commits;storage_hook=nested_save;release();assert(commits==before+1&&stored_brightness==40&&s_saved_display_brightness_percent==40);
         release();assert(commits==before+1);
         hardware_hook=replace_page;preview(60);assert(s_brightness_value&&!strcmp(lv_label_get_text(s_brightness_value),"CURRENT")&&s_display_brightness_percent==60);
-        storage_hook=replace_page;release();assert(stored_brightness==60&&s_saved_display_brightness_percent==60&&!strcmp(lv_label_get_text(s_brightness_value),"CURRENT"));ui_settings_refresh();assert(lv_slider_get_value(s_brightness_slider)==60&&!strcmp(lv_label_get_text(s_brightness_value),"60%"));
+        storage_hook=replace_page;release();assert(stored_brightness==60&&s_saved_display_brightness_percent==60&&!strcmp(lv_label_get_text(s_brightness_value),"CURRENT"));ui_settings_refresh();assert(!strcmp(lv_label_get_text(s_timezone_label),"Central Europe"));assert(lv_slider_get_value(s_brightness_slider)==60&&!strcmp(lv_label_get_text(s_brightness_value),"60%"));
         lv_obj_delete(s_brightness_value);assert(!s_brightness_value);preview(70);release();assert(stored_brightness==70);
         lv_obj_delete(s_brightness_slider);assert(!s_brightness_slider);settings_brightness_changed_cb(NULL);settings_brightness_save_cb(NULL);
         fail_commit=true;before=warnings;sleep_tap();assert(s_sleep_timeout_minutes==0&&stored_sleep==0&&warnings==before+1&&!strcmp(lv_label_get_text(settings_sleep_label),"OFF"));fail_commit=false;

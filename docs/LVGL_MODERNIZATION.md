@@ -1701,3 +1701,388 @@ Both theme paths omit the duplicate filename, Thumbnail status/path diagnostics 
 A local preview-box size observer refits an already loaded image proportionally and recenters an empty placeholder, so late metadata updates do not leave the image clipped or scaled for an obsolete box. New box/filename pointers are retired on deletion with the inspector owner. Rendering settings and printer actions are unchanged. The Files fixture checks common-data fit, spacing, preview growth/shrink/restoration and loaded-image fit, plus all existing ownership/print/redraw cases.
 
 Release follow-up: tools/audit/firmware_size_audit.sh enforces a 3 MiB CI/release budget; both app slots are 7 MiB in partitions.csv. The user reports an image near 2.98 MB. Check exact bytes and growth before release; this visual patch does not change that budget or the partition table.
+
+## Files toolbar polish
+
+After checkpoint 6dc2e79, Files uses sentence-case Up/Search/Refresh, sort captions and search dialog actions in all themes. An applied query gives Search a theme-accent checked border; opening or cancelling its editor does not toggle that state. The breadcrumb shows Search / query during library-wide search and restores the last supplied folder when the query is cleared, including when folder information changes during search. Root reads G-code files. Studio breadcrumbs ellipsize instead of scrolling. Sorting, search scope, callbacks and worker behavior retain their existing contracts.
+
+The real-LVGL Files matrix checks query/folder ordering, root and Up transitions, sort caption mapping, geometry, existing input/lifetime cases and scrolling containment. Panel acceptance remains a local build and OTA step.
+
+## Shared status symbol font correction
+
+Panel acceptance found a missing-glyph rectangle above Files empty-search feedback in Studio. The shared page-state icon used UI_FONT_HEADING, which selects Studio Inter without the folder/Wi-Fi/warning symbol glyphs. Only the icon now uses the already-enabled Montserrat 32 symbol font, both at creation and during updates. Titles, descriptions, status policy and ownership remain unchanged; no new font asset is introduced.
+
+The real-LVGL page-state fixture reproduces the missing glyph on the previous source and checks actual non-placeholder folder/Wi-Fi/warning glyph descriptors across all five themes, densities and text sizes, alongside its existing lifetime/reentrancy checks. Files layout regression coverage and device OTA acceptance remain part of the patch workflow.
+
+## Camera control visual polish
+
+Camera page actions, view/picker headings, rotation/mirror choices and default markers now use sentence case. Connecting/Live/Camera unavailable status strings use the same wording style, with Retry detection and fullscreen hide/restore using the corresponding unavailable prefix. Camera selection retains its saved default and callbacks; rotation/mirror persistence, frame transforms, streaming and viewport geometry retain their contracts. The selected-camera toolbar name uses a single-line static ellipsis rather than continuous marquee motion; its line height follows the actual button font, preventing large-text wrapping outside the button. A bounded logical/rendered caption pair avoids redundant refreshes after LVGL inserts dots. The label is watched and retired with the page, and callback fences protect layout updates; the picker retains the camera names.
+
+The actual Camera fixture checks repeated long-name selector refreshes cause no invalidations and preserve ellipsis, plus unavailable Retry visibility through fullscreen and return. Existing dialog layout and native action/lifetime/transform checks remain across themes, density, text and supported viewport combinations. A physical camera is not connected on the user's current setup: host frame tests do not establish real stream performance.
+
+## Direct Camera Configure handoff
+
+Panel review identified that Camera Configure constructed Manage printers, Edit printer and Camera setup as a stack. The direct Camera setup entry now closes prior profile dialogs and builds only Camera setup, using a copied saved profile connection for Find. Camera Configure also retires its View/selection dialogs before launching and aborts if their deletion replaces or hides the page. Cancel/Use camera returns directly to the calling page; Use camera retains the existing direct catalog/profile persistence and failure feedback, without an outer editor Save. Camera setup launched inside Edit printer retains its intentional return to that editor.
+
+Standalone camera controls and the keyboard share the existing action/owner checks. Closing/deleting the standalone panel retires its jobs, keyboard and copied connection/key data. Generation/profile/epoch checks fence catalog reads during construction and reject reentrant direct opens. The public helper's callback parameters remain for source compatibility; this camera-only entry does not activate a printer or edit its connection. Review found this helper is the single direct Camera setup launcher; chooser/Setup Center profile editing and nested confirmation/keyboard flows retain their return paths. No global layer deletion is added.
+
+Host checks cover replacing a prior manager/editor/camera/keyboard stack with one modal, zero leftover modal/blocker children on cancel/save/delete, saved connection capture for Find, direct keyboard completion/cancel, save failure/retry targeting the selected profile and no outer profile save, stale request cleanup and interrupted/reentrant construction. The existing full profile and Camera regressions also pass; targeted direct-entry AddressSanitizer coverage uses full pinned LVGL instrumentation. Firmware build, OTA and panel acceptance remain local.
+
+## Tools entry visual polish
+
+Tools keeps its four entries, ordering, geometry and callbacks. Outlined rounded cards become flat sections with lower separators on UI_BG; titles use Calibration, Bed mesh, Devices and Macros. The scrolling surface is opaque to match the entries, including in Glass. Existing theme press/focus feedback and connection/idle explanations remain. The four standalone icons use already-enabled Montserrat 32 instead of inheriting a text font; Studio's text-font symbol fallback previously rendered smaller icons. No font asset or printer command is added.
+
+The real-LVGL Tools matrix checks actual non-placeholder symbol glyphs at a readable resolved font size, alongside existing page/entry bounds, wrapping, narrow viewport, theme/density/text and connection feedback regressions. Native Studio and other-theme renders are reviewed; panel touch and appearance remain local OTA acceptance.
+
+## Tools divider and Calibration label polish
+
+Tools now has a non-interactive one-pixel center separator between its two columns, inset within the entries viewport and colored with UI_BORDER_SOFT. It follows layout/size changes and hides when responsive entries stack into a single column. The rule lives outside the entry flow and retires with its owner, preserving all four entry hit areas and callbacks.
+
+Calibration landing headings, tool summaries, action captions and availability counts use sentence case while retaining technical acronyms. Existing card geometry, capability visibility, command strings, command policy, dialogs and persistence remain unchanged. Host checks cover divider placement/one-column hiding across the Tools matrix, existing calibration button-fit and dialog flows, and standalone calibration compilation. Device OTA/visual acceptance remains local.
+
+## Shared divider consistency pass
+
+The consistency review found chooser center separators used UI_BORDER at 60% opacity, Tools separators used UI_BORDER_SOFT, and Studio rules used opaque UI_BORDER. Shared ui_create_divider and ui_apply_divider_border helpers now own the decorative surface/border contract: UI_BORDER at full opacity, one-pixel thickness for line/border callers, and non-interactive decorative objects. Pages retain their geometry and responsive visibility. The existing Operator card-divider and Studio rule APIs delegate to the same constructor. Chooser, Tools and Files row separators use these shared items; no asset is added.
+
+Theme/accessibility colors still come from UI_BORDER. Existing press/focus/selection styling remains intentional control feedback. Host checks compare actual separator colors/opacities in the chooser/Tools matrices and exercise Files, Studio page layouts and shared card/dialog geometry. This pass is scoped to these divider paths, not a claim that every application detail has been visually reviewed.
+
+For subsequent visual work, prefer existing shared widgets, layout helpers and theme roles before adding local styling. Review color/opacity, thickness, spacing, typography, icon size and control feedback together every few visual batches, including all themes, density and large text. Extend a shared item when multiple pages need the same treatment.
+
+## Macros labels and shared search feedback
+
+Files and Macros now share ui_button_set_filter_active for query-owned checked-border feedback. Macros uses the same stable Search caption as Files instead of SEARCH*, with Cancel preserving the applied query and Clear search removing the active state. Shared styling uses guarded value setters and does not make the action a toggle. The Macros search label is watched so independent deletion retires its handle.
+
+Macros page/status captions and editor/review actions use sentence case. Macro names, favorites, parameter names/values, command construction, review requirements and command policy remain unchanged. Host Files/Macros layout and action/lifetime matrices cover shared-state transitions, cancel/clear behavior and existing layout/command guards. Screenshots used for visual review are real LVGL host renders with synthetic fixture data; they do not establish device responsiveness or live transport behavior.
+
+## Macros scroll surface cleanup
+
+Macros hides its list scrollbar while retaining vertical touch scrolling. The enclosing card frame is replaced by the shared opaque flat scroll surface, also used by Files and Tools through ui_apply_scroll_surface. Padding, row geometry, macro names, favorites and review/command policy remain unchanged; the helper owns surface appearance while callers retain scroll directions and bar visibility. Clear search is disabled without an applied query and re-enabled when a filter is applied. Its handle is watched/retired with the page.
+
+The real-LVGL Macros matrix exercises a native pointer drag with the bar hidden, requiring positive list movement, no opened parameter dialog and no sent command. Existing search-state, cancel/clear and parameter/review regressions remain. Files and Tools retain their established layout and redraw checks under the shared surface helper. Panel smoothness and touch acceptance remain local OTA checks.
+
+## Theme identity and temporary Studio default
+
+Visual consistency is assessed within each theme across pages: colors/opacity, typography, spacing, dividers, icons and control feedback should agree with that theme's own roles/tokens and layout language. Foundry, Operator, Glass, Operator Shell and Studio retain distinct identities. Shared widgets must resolve the active theme; consistency does not mean making every theme look like Studio. Review page/dialog/empty/offline/large-text/density states periodically as visual batches progress.
+
+UI_THEME_DEFAULT now centralizes the temporary Studio Dark default for startup, missing/unreadable/invalid saved settings, invalid dispatcher input and fallback after removing an active custom theme. Numeric theme IDs and valid persisted choices are unchanged. Existing explicit theme/accent/density/accessibility choices remain honored. Changing the default does not force an OTA-updated unit away from its saved selection.
+
+The theme-default host test links the real settings manager and dispatcher against a transactional NVS fixture. It verifies fresh/missing/error/invalid settings, all valid saved themes, secondary preference retention, explicit save/reload and save-failure/custom-removal fallback. Physical persistence/reboot remains a device acceptance step.
+
+## Temporary two-theme chooser scope
+
+Appearance now offers only Operator (Theme B) and Studio Dark previews. Foundry, Glass and Operator Shell preview objects are not constructed; the Custom themes entry is hidden for this temporary scope. Their implementations, saved IDs and custom files remain intact. This is a presentation-only change: valid saved selections, including a previously selected hidden theme, continue to load. No settings migration or forced switch is added. Studio remains the default established by the preceding patch. Visual development/review currently focuses on Studio Dark and Operator, checking each against its own theme identity.
+
+The theme-dialog fixture checks exactly two preview objects, correct ID routing, absent hidden-theme handles and hidden Custom entry, while retaining deferred/no-op/failed switching, layout and legacy custom-dialog regression coverage. The existing theme-default fixture continues to validate saved choices without migration.
+
+## Calibration landing-page visual pass
+
+Studio Dark uses four flat sections with the shared opaque theme dividers; no
+card borders, radii, shadows or separate card fill remain on this landing page.
+Operator retains its themed cards, with a shorter banner and taller sections.
+Both themes reserve a 24px summary line and at least 12px of separation before
+visible actions. Motion diagnostics and measurement actions share a three-column,
+two-row layout and the theme's button font preference. Pressure-advance actions
+now have the same 44px height as the other landing controls. Workflow eligibility,
+confirmation, command dispatch and saved calibration behavior are unchanged.
+
+The PAGE calibration audit instantiates the actual page and all child owners at
+1024x600 in Studio Dark and Operator, across densities, text sizes and discovery/
+capability states. It checks flat Studio styling, complete child bounds, label/
+button separation and action size. Host renders use fixture printer data; OTA
+and panel acceptance remain required.
+
+## Devices and Macros visual consistency follow-up
+
+Studio Devices uses compact flat entries with the shared bottom divider, plus
+viewport dividers between categories and readings and between reading columns.
+The native viewport fits six full entries; twelve entries remain allocated at
+most per page and touch scrolling reaches the rest. Operator keeps its cards.
+The list uses the shared opaque scroll surface without a vertical scrollbar;
+the horizontal Operator category strip remains swipeable. Devices controls and
+pagination use sentence case, and Operator header status clears its action row.
+Studio Devices/Macros titles now use the shared title font token.
+
+Studio Macro entries use the same shared flat-entry treatment as Devices and
+Tools. Operator keeps its button treatment. Favorites, search, parameter review,
+command confirmation and touch-scroll cancellation retain their existing behavior.
+The shared flat-entry helper consolidates the already accepted Tools styling.
+
+Host checks cover actual Devices header pointer routing, six visible Studio
+entries, complete live-value labels, pagination/scrolling, offline/profile guards
+and both supported themes plus legacy-theme regressions. Macro/Tools checks cover
+flat-entry styling, responsive bounds and existing command/lifetime behavior.
+OTA/panel review remains the acceptance gate.
+
+## Devices category-button follow-up
+
+Studio category controls now use flat rail entries and the shared active-filter
+underline. Adjacent 44px rows have no expanded click area, so their targets do
+not overlap. Operator retains its separated category buttons. The shared active-
+filter helper explicitly owns its checked background using UI_CONTROL at full
+opacity, preventing LVGL's built-in checked color from leaking into Devices or
+Files/Macro Search. The underline retains UI_ACCENT_CYAN. Native pointer tests
+cover all categories, empty categories, near-row-edge taps, disabled Previous,
+and Next/Previous routing across themes/densities/text sizes.
+
+## Console visual consistency pass
+
+Studio Console history now uses the shared opaque scroll surface and theme
+dividers above/below the history instead of a separate rounded card. Operator
+retains its history-card treatment. Both viewports retain touch scrolling and
+Follow behavior without a side scrollbar. Page, connection, filter and editor
+labels use sentence case; command strings and Console messages are untouched.
+
+Search keeps a stable label and uses the shared checked filter state. The hidden-
+temperatures filter uses the same checked styling and explicit Temps shown/hidden
+captions. Reset clears those checked states. Existing command ownership, offline
+handling, rejected-input retention, history anchoring, row reuse and send paths
+are unchanged. The frame audit now preserves pre-existing button state while
+checking presses/focus; explicitly styled checked filter borders may be 2px while
+outer button geometry remains fixed.
+
+## Drybox visual consistency and compact-banner bounds
+
+Drybox keeps its accepted layouts and program controls in both visible themes.
+Studio now uses the shared page-title token, right-aligned status, and matching
+reading-divider heights. Operator headings/actions use sentence case; humidity unit/condition captions
+share a row without overlapping the value or bar. Short Air
+temp/Center temp captions preserve clearance from right-aligned readings. Heater
+value captions use Heating/Off/Offline without changing transport state tokens.
+
+The actual Operator page audit exposed compact-banner children extending beyond
+the shell after theme status padding was applied. The shared status banner now
+sizes/aligns its accent and bottom strip within the content area; simple-banner
+state/message labels are centered vertically. Dashboard's separate Studio layout
+remains handled by its existing path. Shared simple banners, including Network,
+receive the same bounds correction. Status classification and program commands
+remain unchanged.
+
+The native page fixture now exercises Drybox in Studio Dark and Operator across
+all densities/text sizes, with complete reading-label and offline-control checks.
+The live-refresh fixture now supplies current owner/readiness state required by
+the lifecycle code, retaining its repeated-refresh/no-invalidation checks.
+
+## Drybox status prominence
+
+Studio Drybox status uses the same shared title font and top baseline as the
+Drybox heading, retaining right alignment and its 260px field. Operator already
+uses its title font for status. Status colors and machine-state parsing remain
+unchanged. Heating/Monitoring and longer status captions must remain complete
+at both text sizes.
+
+## Settings visual consistency follow-up
+
+Studio Settings uses the shared page-title font token, retaining its existing
+flat row layout. Settings headings and launcher actions use sentence case;
+Operator keeps its themed sections. Operator section dividers now delegate to
+the shared divider builder at the same dimensions/positions. Settings ordering,
+scrolling, dialogs and persistence behavior are unchanged. Host source-derived
+row/label checks cover both visible themes plus legacy regressions; final page
+appearance remains an OTA acceptance check.
+
+## Settings scrolling and Network visual consistency
+
+Settings hides the side scrollbar while retaining its existing vertical touch
+scrolling and content extent. Network uses the shared Studio title font and a
+consistent body-large font for its three column headings. Studio scan results
+reuse flat entries/shared dividers; Operator keeps themed cards and buttons.
+Scan rows are 48px high in both themes. Network page headings/actions and scan
+feedback use sentence case; SSIDs, host values and connection-state tokens are
+unchanged. Discovery, credentials and connection routing are unchanged.
+
+The existing responsive Network audit now checks scan-row touch size and child
+bounds in legacy themes as well as Studio. Host fixtures still cover scan/profile
+routing, selected SSID ownership, empty scan results and cleanup. Panel review
+is required for final appearance and touch feel.
+
+Compact banner states also fit onto one line at large text sizes. Message width
+is resolved after the initial shell layout, avoiding an initially one-pixel
+message field. The shared fit/update helpers keep unchanged refreshes quiet.
+
+Network connected indicators use the theme's bright success foreground, matching
+other status text. Scan SSIDs stay on one line with their existing overflow
+policy, keeping the signal reading aligned and the row visually uncluttered.
+
+## Printer page visual consistency
+
+Printer retains its preview and temperature layout. Operator's preview/detail
+separator now uses the shared full-opacity divider instead of a separate soft
+color. Preview placeholders and reading-card headings use consistent wording and
+sentence case. The Studio launcher reads Toolhead control; Operator's launcher
+reads Toolhead, and its Stop label matches the Studio action. Command keys are
+unchanged.
+
+Operator action icons reuse the enabled 18px symbol font, with clearer icon/text
+spacing and explicit single-line fitting after resolved shared icon sizing. The
+Toolhead entry receives 12px from Stop's surplus width; the row's outer footprint
+and 12px button gaps remain the same. Labels stay at or above body-text size in
+the maintained font-fit checks. Running fan values use the bright accent
+foreground for readability; off/unknown/full-speed semantics are retained.
+
+The maintained native fixture now renders the Operator Printer body in addition
+to Studio, using real layout/readings/actions/preview constructors and mock
+printer values. Its application shell/header are outside the fixture. Native
+button-fit and dispatch/lifetime audits retain legacy-theme coverage.
+
+### Dashboard visual consistency
+
+Operator keeps its card layout, with sentence-case page, card, reading and action captions. Command keys remain PAUSE, RESUME, CANCEL_OBJECT and CANCEL_PRINT. Studio keeps its flat composition and existing shared rules. Camera/Thumbnail labels and the empty model-preview message now follow Printer's wording.
+
+The full Dashboard banner explicitly clears theme padding after status styling, preserving its outer-shell coordinates; simple message banners keep their separate content-area layout. The Operator preview reserves space for two readable timing lines, anchored inside the card, instead of clipping the long footer. No font or image assets added. Preview ownership, cache, fullscreen and camera transport contracts are retained.
+
+Native LVGL Dashboard fixtures render both visible themes, all densities and normal/large text. Operator checks include preview/footer separation, complete timing-line width, child bounds and all four print action routes. Screenshots use actual shell/page constructors with fixture data and mocked service callbacks; they do not replace OTA panel acceptance.
+
+### Toolhead dialog visual consistency
+
+Toolhead uses sentence-case headings, tabs and action captions. Studio sections use the shared transparent surface and bottom-divider helper instead of boxed sections; Operator keeps its themed section surfaces. Tabs and selected XY/Z/extrusion distances use the shared checked selection helper, matching the established filter treatment. Query/callback state still owns selection; changing tabs or distances sends no command. The dialog body hides its scrollbar while preserving touch scrolling on small displays.
+
+The existing 52px controls, all motion/filament/Z-offset step values, command keys, sender guards and pinned Close footer are retained. No assets added. Native dialog fixtures cover every tab, normal and large text, all densities, both visible themes and compatibility themes. Selected tab state is checked explicitly; screenshots allow theme transitions to settle before capture. OTA panel acceptance remains separate.
+
+### Thermal control dialog visual consistency
+
+Temperature and fan preset dialogs use sentence-case headings, reading captions and actions. The target label reads “Target - tap to set”; custom-temperature behavior is retained. Studio current/target sections and hotend chooser rows use the shared transparent surface and divider border; Operator keeps its themed sections and reading accent. Preset selection uses the shared checked selection helper instead of a private border treatment. Off remains a danger action.
+
+Temperature limits, named heater commands, target values, fan presets, hotend activation guards and pinned footer behavior are retained. No assets added. The real hotend layout fixture now also checks the selected bed preset and preset button bounds, rendering actual preset controls in both visible themes. Existing all-theme/density/text/viewport checks, live no-op refresh, hotend reordering/removal, print/pause adjustments and teardown still apply. Host renders use fixture data and mocked transport; OTA acceptance remains separate.
+
+### Filament sensor and cancellation dialog visual consistency
+
+Studio filament-sensor rows now use the shared transparent surface and bottom-divider helper. Operator retains its themed sections. The shorter “Filament sensors” title and sentence-case state/action labels follow the other polished controls. Motion/switch type descriptors use normal case; sensor object names and ENABLE command arguments remain untouched.
+
+Whole-print confirmation now says “Stop print?” with a “Stop print” action, matching the Printer/Dashboard controls. Object cancellation retains its separate confirmation, explicit object name and explanation that the rest of the print continues; its headings and Back/Exclude/Close actions use sentence case. Shared Back captions, including custom temperature entry, follow that convention. Warning copy, danger roles, command ownership, retries, duplicate suppression and readiness checks are retained. No assets added.
+
+Host fixtures check both visible themes and compatibility themes, all densities/text sizes and smaller viewport fallback. Existing sensor acknowledgement/timeout, name binding, quiet refresh, reordering/removal and cleanup tests pass alongside whole-print and 48-object cancellation fixtures. Rendered samples use fixture state and mocked transport; OTA panel acceptance remains separate.
+
+### Filament recovery visual consistency
+
+Recovery uses a shorter sentence-case heading, caption and action labels. The selected nozzle target uses the shared large body font. Action labels are fitted from that same preferred font after the grid has its final width, avoiding premature tiny text. A shared bottom-divider border separates the temperature controls from recovery actions, and Resume spans the two remaining columns on the final row. The existing 54px action height and fixed Close footer are retained. The body hides its scrollbar while preserving smaller-display touch scrolling.
+
+No recovery macro, temperature limit, selected-target default, cooldown, sender/owner guard, homing/heat/sensor readiness gate or resume route changed. No assets added. Native and smaller-viewport fixtures verify complete button text, touch targets, wider Resume, fixed footer and native no-scroll fit across all themes/densities/text sizes, including rejected-send feedback. Host rendering uses fixture telemetry and mocked transport; hardware acceptance remains separate.
+
+### Calibration and diagnostics visual batch
+
+Motion limits, TMC driver diagnostics, axis-distance calculator/editor, probe accuracy, live endstops and bed-mesh profile list/save/confirmation dialogs now use sentence-case headings and actions. Technical status tokens, reported values, object/profile names, command identifiers and prominent safety instructions remain intact.
+
+The shared calibration dialog footer uses the shared top-divider border with 8px separation before its pinned actions. Motion diagnostics uses the same divider and spacing, with a content-sized footer so the rule/padding do not consume button height. Calibration and motion bodies, and the bed-mesh profile list body, hide side scrollbars while preserving touch scrolling and reachability. Existing flat Studio compositions and Operator surfaces are retained; no assets added.
+
+Validation includes all twelve maintained calibration variants and standalone translation-unit compilation, real Calibration page fixtures in both visible themes, motion and bed-mesh profile layout/lifecycle suites, diagnostics batch safety and complete-button-label checks. Compatibility themes, densities/text sizes and smaller viewports remain covered. Native fixture renders for both visible themes were inspected for the six reviewed surfaces, with shared-footer samples also checked in PID/manual-probe dialogs. Service callbacks and telemetry in these renders are mocked; OTA panel acceptance remains separate.
+
+### Monitoring visual batch
+
+Telemetry Heat/Motion/Environment sections and event-history rows use flat transparent sections with shared bottom-divider borders in Studio. Operator retains its metric/history surfaces. Telemetry tabs and held/target states use the shared checked selection helper instead of private tab colors. Telemetry buttons and selectors have 48px touch height. Graph and event-list side scrollbars are hidden while touch scrolling remains available.
+
+Event history uses sentence-case heading/actions, shared footer divider/spacing and checked Hold state. Hold/Follow label fitting is refreshed after text changes. Severity markers and colors retain their meaning. Chart samples/ranges, target inclusion, gap/offline representation, named hotend binding, follow/hold retention and history clearing/lifecycle behavior are retained. No assets added.
+
+Graph inventory: the shared Telemetry engine owns all time-series plots; Devices > Graphs routes to it. Drybox air was repeated in Heat and Environment. Heat now contains named nozzle, bed and drybox-center temperatures; Environment owns drybox air, humidity, part fan and drybox fan; Motion owns velocity, volumetric flow, speed override and flow override. All eleven distinct channels appear exactly once across the views. Named hotend selection remains available. Actual speed/flow and their percentage overrides are distinct; the two fans are different devices. The existing four reusable chart slots are retained, with the unused Heat slot hidden and buffer sizes synchronized when ranges change. No additional histories or graph instances are added.
+
+Real telemetry and event-history fixtures cover both visible and compatibility themes, all densities/text sizes, native and smaller viewports, actual touch routes, graph ranges/held traces, quiet refresh, owner teardown and ring replacement. Selection state is checked explicitly; telemetry snapshots allow state transitions to settle before capture. Native renders of all three graph views and history in both visible themes were inspected. Host transport/data are mocked; OTA acceptance remains separate.
+
+### Graph tabs grouped by system
+
+The graph grouping is now Thermal, Motion and Drybox. Thermal contains the selected nozzle temperature, bed temperature and printer part-cooling fan. Motion contains actual velocity, actual volumetric flow, speed override and flow override. Drybox contains its center temperature/heater target, air temperature, humidity and fan. This supersedes the initial Heat/Environment grouping: the drybox center moves out of printer thermal controls, and the printer part fan moves out of drybox monitoring. All eleven distinct series remain present exactly once.
+
+The target-scale control is available in both Thermal and Drybox, so the drybox heater target remains usable after the move. The hotend selector is limited to Thermal; Motion has no irrelevant target control. Existing internal view IDs and sample/history formats remain compatible. No new chart slots/assets or history buffers are introduced.
+
+### Calibration workflow label consistency
+
+PID heater selection/target/heat confirmation, pressure-advance tower setup/armed state, manual probing, screws tilt/gantry leveling and calibration-result/save confirmations now use sentence-case workflow headings and action labels. PID and Klipper command acronyms remain intact. Probe/Z and axis-twist caller-provided titles and accept labels follow the same convention, so actual entry points do not reintroduce uppercase defaults.
+
+The existing shared calibration modal structure, flat Studio layout, Operator surfaces, footer divider and pinned actions are retained. Explicit attended-heating, probe/motion and SAVE_CONFIG/restart warnings are unchanged. No command, macro, target/step value, readiness gate, confirmation step, sender/callback ownership, saved state or asset changes are included.
+
+Validation uses the full twelve-variant calibration owner/layout suite and separate translation-unit compilation, plus complete button-label checks across compatibility themes, densities/text sizes and smaller viewports. Native fixture renders of PID, pressure advance, manual probe, geometry and result/save dialogs were reviewed in both visible themes. Fixtures may supply their own titles/accept labels to verify that caller-owned wording is preserved. OTA panel acceptance remains separate.
+
+### Settings arrangement and dialog visual batch
+
+Both themes now present Settings in the same functional order: Display & appearance, Notifications & history, Connections, Time & region, Storage & backup, Firmware & updates, Setup center, Maintenance, System information, About. Sleep timeout moves beside brightness; notifications move alongside event history. Reboot, Klipper restart and factory reset share the lower Maintenance section. Each theme retains its own section appearance; Studio stays flat. Callback bindings, saved settings and confirmation behavior are retained.
+
+Backup choices now occupy a fixed two-column grid: plain/encrypted creation first, plain/encrypted restore second, and backup removal on its own full-width final row. Labels explicitly say “Back up encrypted.” Current file paths, credential-inclusion guidance, nested review dialogs, encryption/restore worker guards and retry behavior are retained. Labels fit after the grid resolves its width.
+
+Appearance, theme/time-zone/reset/reboot, Wi-Fi/password/port, backup/passphrase/progress and About dialogs use sentence-case headings/actions. Studio About sections and Wi-Fi rows use the shared transparent surface/divider helper; Operator keeps its surfaces. Settings/appearance footers use shared divider borders and spacing. Their scroll bodies and the Wi-Fi list hide side scrollbars while retaining touch scrolling. Appearance choice rows have a 48px minimum. The built-in chooser still exposes only Studio Dark and Operator; legacy/custom theme support and saved IDs are retained. Build date/time formatting is bounded to the SDK fields, matching About's handling. No assets added.
+
+Validation includes Settings, theme/appearance, network/backup, About, display fault/lifetime and complete-button-label suites across themes/densities/text sizes and smaller viewports. Full Settings page QA invokes the real ui_settings_show_page constructor with mocked SDK/services, checking section order/non-overlap and the sleep/notifications parent groups, and inspecting native large-text renders in both visible themes. Dialog fixtures cover filenames/SSIDs, keyboards, pinned actions, failures/retries, worker overlap, deferred theme changes and cleanup. Host fixtures do not replace OTA panel acceptance.
+
+
+### OTA responsiveness
+
+Opening OTA now signals camera shutdown without waiting on LVGL: the Camera setup path uses camera_stream_request_stop, and the OTA popup no longer polls for two seconds. The camera worker retains its shared transport until teardown completes; the existing catalog shared-lane and update exclusive-lane waits stay on their workers. Reopening uses a ready in-memory release catalog instead of downloading it again. Stable/Nightly continue filtering existing rows locally; Refresh explicitly fetches newer releases. A failed/idle catalog still retries on reopening. While a Custom URL transition is queued, catalog rendering is skipped and the status immediately acknowledges opening the URL editor; owner/epoch and async-failure guards remain in place.
+
+The OTA worker captures its HTTP client through the SDK initialization callback, then changes body reads to a one-second timeout after the first image-header perform. ESP-IDF 6 returns IN_PROGRESS for body-read EAGAIN, allowing the worker to check Cancel between reads. Fifteen seconds without image-byte progress fails the transfer instead of retrying indefinitely. Connection/TLS/redirect setup and the first image-header perform retain SDK blocking behavior and the original 15-second socket timeout; cancellation there can still take longer (the SDK header reader can retry internally). Only the worker touches/cleans up the SDK client. Finalization still disables Cancel before image validation/boot selection. No new assets or fonts.
+
+Host checks exercise busy-camera UI entry without delays, cached reopening, repeated local channel switches, Custom URL transition priority and repeated ownership/deletion paths, plus short-read configuration, stalled-read cancellation, transient stalls, the no-progress deadline and all prior transfer failure/finalization cases. Camera pipeline/lifetime and separate translation-unit compilation are checked. Build, real network latency and panel acceptance remain separate.
+
+
+### Smooth OTA progress
+
+The OTA bar uses a 0..10000 range and byte-derived hundredths of a percent during known-length downloads; the text retains integer percentages, and validation still reserves the final percent. Unknown-length downloads retain their existing bounded stage value. A short linear animation retargets from the currently displayed value instead of LVGL's previous animation destination, preventing jumps when the 50ms UI pump supplies newer progress. Identical snapshots do not restart the animation or invalidate an unchanged bar. Failure/reset values apply immediately; deletion removes animations with the owning bar. No additional task, timer, font or image asset is added. Actual transfer speed is unchanged.
+
+The real LVGL OTA fixture verifies fractional byte progress under an unchanged integer label, no jump on mid-animation retarget, completion despite repeated identical snapshots, the validation limit and deletion with an active animation across themes/text sizes/viewports. Device smoothness remains pending panel verification.
+
+
+### About: project authorship, AI assistance and software credits
+
+About preserves installed firmware identity and adds explicit khelix authorship/direction and OpenAI ChatGPT/Codex development-tool acknowledgment. Concept, product direction, visual design, feature decisions, hardware verification and release approval remain attributed to khelix; implementation, debugging, review, test development, documentation and implementation-option assistance are identified as AI-assisted work. Third-party authorship remains separate.
+
+Credits now cover Espressif/LVGL foundations, supporting SDK libraries and cJSON/LodePNG, fonts and logo lettering, separately running Klipper/Moonraker/PrusaSlicer, and development/hosting tools. docs/SOFTWARE_CREDITS.md inventories all 19 locked components with roles and versions, retained upstream notices, font notices and local modifications. NOTICE and README link the reference and acknowledge AI assistance. Selected upstream library/font notice copies and ESP-IDF 6.0.2's copyright inventory are retained under docs/licenses, outside the firmware image. This is a credits reference, not a complete linked-binary license audit; exact build/source notices remain authoritative.
+
+The existing shared About sections retain flat Studio dividers, Operator surfaces, touch scrolling and pinned Close. Host tests exercise all channels/themes/densities/text sizes/viewports, expanded credit visibility, last-section scroll reach, actual pointer closure, deleted/reentrant owners and standalone compilation. Native large-text renders of authorship/foundation/font/source sections were reviewed in Studio Dark and Operator. A dependency inventory check fails if a locked component lacks credit or a referenced local notice is missing. Panel/build/size acceptance remains pending; no fonts or images are added to firmware.
+
+
+### OTA visual consistency
+
+The release browser, release/install confirmation, Custom URL editor, update progress and start-failure message use sentence-case headings, relations and actions. Stable/Nightly use the shared checked-filter helper; Studio release rows are transparent entries with the shared bottom divider, while Operator retains its outlined rows and installed marker. Release versions, identity, notes and install/reinstall/downgrade/nightly warnings remain visible in the existing scroll flow.
+
+The shared OTA layout now supplies a top divider and 8px spacing above its pinned footer; body/list side scrollbars are hidden with touch scrolling retained. A shared final fit resolves action text after flex/keyboard geometry, and the tabs fit the body font at their resolved widths. The previously separate start-failure popup now uses the same header/body/footer helper with danger styling, its existing Close callback and camera resumption. No new fonts or assets; catalog caching, network ownership, safe finalization, cancel guards and smooth byte progress remain in place.
+
+The actual OTA owner fixture passes across all five compatibility themes, densities/text sizes and three viewports, including local channel filtering/cached reopening, complete action bounds, native readable tab text, keyboard/footer checks, animation/failure/cancel paths, async rejection and owner deletion/reentrancy. Standalone owner compilation passes. Native fixtures were reviewed in Studio Dark and Operator with transition settling before captures; fixture releases/identity are simulated. Build/OTA panel acceptance remains pending.
+
+
+### System information readability
+
+Settings keeps the same four-row System information section but orders it by operational use: Uptime, Internal RAM, PSRAM, ESP-IDF version. The internal memory row exposes Free now, Lowest and Largest block as separate labelled columns; PSRAM's Free now and Lowest align with the same columns. Lowest describes free memory since startup; the largest block remains explicitly separate from total free memory. Values use correct binary KiB/MiB units rather than KB/MB for 1024-based formatting.
+
+A shared read-only Settings metric-row helper reuses the existing themed row surfaces and dividers, with three aligned metric slots, per-cell captions and body-sized values. Studio remains flat, Operator keeps its surfaces, and the section height does not grow. The system-info owner adds independently bound metric labels while preserving the existing aggregate label API, SDK sampling, epoch checks, no-op refresh behavior, deletion/rebind handling and full unbinding. No additional timer, assets or fonts.
+
+Validation includes actual system-info SDK/label refresh through the telemetry audit, independently populated current/lowest/largest values, KiB/MiB/zero formatting, matching native column coordinates, label/ancestor bounds and text width, unchanged-refresh invalidations, partial label deletion and unbinding during reads. The complete telemetry suite passes across themes/densities/text sizes/viewports, with AddressSanitizer/UndefinedBehaviorSanitizer host validation. Display-settings safety and maintenance/reset/time-zone dialog audits pass; those maintenance layouts already use the shared styling and need no source change. Native full Settings constructor renders with mocked services were reviewed for System information in Studio Dark and Operator; section order/non-overlap is retained. Build/size/OTA panel acceptance remains pending.
+
+
+### Installer-style Setup center and full-height discovery
+
+Setup now has seven selectable steps: Welcome, Network, Time zone, Display & appearance, Printer, Camera and Review. A smaller shared heading reserves space for the tasks, the navigator uses the shared checked state and divider, and Back returns to the previous step. Wi-Fi and a configured printer remain the two essentials; camera setup stays optional. No language selector is shown. Welcome and Review show readiness rather than adding another summary below the seven-step navigator.
+
+Time zone uses the existing Settings catalog and persistence service, with shared selectable rows and a scrollable list. Catalog indexes are retained even if an entry is unavailable. A successful selection updates the checked row and current-zone feedback; a storage failure retains the previous selection. Settings refresh now also refreshes its time-zone value after external changes.
+
+Display & appearance provides the two exposed themes (Studio Dark and Operator), standard/larger text, 10–100% brightness and Never/5/15/30-minute sleep. All four groups fit the native viewport, with touch scrolling on smaller layouts. Brightness saves on release using the existing paired brightness/sleep restore service; sleep uses the same service. Failed saves retain the saved values. Theme/text writes and reconstruction run together after the button event unwinds; a closed/replaced owner cancels a queued choice before it writes. The main application supplies its existing appearance-rebuild callback so persistent surfaces behind Setup also use the saved appearance; Setup then returns to Display. Other accessibility flags are preserved when changing text size. Review shows the saved region and display summary. Reopening uses the current saved values.
+
+Studio choices and review rows stay flat with shared rules; Operator keeps its themed surfaces. The brightness slider uses the shared theme style, and button text is fitted after final flex geometry. Footer dividers and touch scrolling without sidebars match the surrounding dialogs. Wi-Fi and camera result lists fill the available stage. The shared Moonraker discovery popup grows to 860×540 where space permits and its result list fills the remaining body instead of a fixed 160px strip. A font-derived minimum keeps wrapped results touchable on short screens; Retry/Close remain pinned. Request identities, transport and scan ownership are unchanged.
+
+Host validation covers all five compatibility themes, three densities, both text sizes and three viewport widths, preference save failures/retries, sparse catalog indexes, captured/replaced owners, deferred appearance reconstruction and cancellation before persistence. Discovery validates actual pointer selection, eight-result scrolling, full native list width/height and a stationary footer, including short-screen fallback. Existing display-persistence, appearance and profile-discovery bridge checks pass. Native large-text LVGL fixtures are reviewed in Studio Dark and Operator; services and transport are mocked. No new image/font assets. Firmware build, the 3 MiB release budget and OTA/panel acceptance remain separate.
+
+
+### Setup connection summaries and active-printer editing
+
+The Network step now shows the connected SSID and display IPv4 address, or explicit disconnected/waiting-for-address feedback. Change network/Find a network still opens the existing scan/password flow. Refresh status refreshes the read-only facts without starting a scan. Reads are guarded against replacement of the Setup owner. The shared fact rows use flat Studio dividers and Operator surfaces, with wrapping for descriptive values and hidden side scrollbars.
+
+The Printer step shows the saved active profile name and HTTP/HTTPS Moonraker endpoint. Its access caption reports only whether an API key is saved, never the key itself. Saved configuration is explicitly distinguished from live Printer-page connection status. The unconfigured state points to the shared editor's discovery, connection test and security options. Edit printer now opens the active profile slot rather than always slot zero, retaining the existing request-bound discovery bridge and shared editor lifecycle. Review labels Wi-Fi as Connected and printer/camera configuration as Saved; completion requirements are unchanged.
+
+The real Setup host fixture checks disconnected/connected/address-pending states, exact address formatting, active slot 2 editing, secure/plain endpoints, API-key redaction, native fact/action bounds, both exposed themes plus compatibility themes/densities/text sizes/viewport widths, and all prior preference/Wi-Fi/camera/completion lifetime cases. The profile-discovery bridge audit remains in place. No new assets/fonts or network requests are introduced by these summaries. Firmware build, OTA/panel verification and the 3 MiB release budget remain separate checks.
+
+
+### Setup Camera summary, empty states and busy actions
+
+The Camera step now matches the Network/Printer summaries. A saved camera shows its catalog name when its saved default matches the configured stream, otherwise Custom camera, plus its printer. Stream URLs are never rendered, including URLs containing credentials. The saved state offers Discover and test plus Continue; the unconfigured state explains that a camera is optional and how to discover/test it. Without a printer profile, Set up printer navigates directly to the Printer step. The shared fact rows retain flat Studio dividers and Operator surfaces.
+
+Discovery and stream testing show a disabled Scanning.../Testing... action while their owned poll is active. Repeated discovery requests leave that poll intact rather than discarding it and retrying the backend. Completion/failure restores Scan again or the verified Use camera action. No-camera results now include a visible empty-state explanation and retry guidance instead of an unexplained blank list. Test failure explicitly permits retrying the selected camera. The scanning footer offers Continue when a camera URL is currently configured and Skip camera otherwise; using either does not itself request another camera save. A printer-generation change retires verification and restores discovery actions.
+
+The existing controller behavior remains: consuming discovery imports returned camera settings into the catalog, including its slot-zero URL bridge. Continue therefore describes navigation after those imports, not restoration of the pre-scan camera. Use camera retains the existing verified default/stream persistence and failure feedback; this change does not alter controller storage semantics, transport, worker ownership or completion requirements. Saved-summary catalog reads are guarded against Setup/printer replacement. The additional scan action participates in the existing field-retirement handling, and final footer text uses the shared fit after flex layout.
+
+The real Setup host fixture covers saved/mismatched-custom summaries, URL credential redaction, optional/no-printer/empty states, discovery/test start failure, failed stream retry, repeated requests while busy, guarded catalog reads, navigation without an additional save, native summary/control bounds and all prior save/reentrant/owner/persistence cases across five compatibility themes, densities, text sizes and viewport widths. Native large-text fixtures cover both exposed themes. Worker discovery regression checks remain separate; firmware build, OTA/panel acceptance and the 3 MiB release budget are still required. No assets/fonts or new workers/timers are added.
+
+
+### Setup Welcome, Review and completion closeout
+
+Welcome and Review share the existing 48px readiness rows with a native-width value column for the connected SSID and active printer name. Network status remains Connected, profile/camera status remains Saved, and the camera stays optional. Compact viewports retain the two-column title/status layout. Summary cells are explicitly one line with dots for overlong names; the full values remain on their dedicated Network/Printer steps. Studio keeps shared flat dividers and Operator keeps its themed row surfaces.
+
+Welcome explains direct step navigation and that saved choices remain in place on exit. Review explicitly separates immediate preference saves from the Finish action, which marks onboarding complete. Time zone remains visible, and a compact caption includes display theme, standard/larger text, brightness and sleep timeout on one native line. The two exposed theme names use consistent casing. Connected-network sampling for the new value column is guarded against Setup/printer replacement before constructing any summary rows or Finish action.
+
+The completion message is now Setup complete and directs the user to Settings for saved choices and the Printer page for live connection status. It does not infer a currently working printer from a stored profile. Done retains the shared pinned footer/divider and is fitted after final layout. Completion storage, essential checks, save/retry behavior and optional camera handling are unchanged. No extra timer, assets/fonts or storage writes.
+
+Host validation checks actual review SSID/profile values, all saved display fields, native Welcome/Review child bounds, single-line row cells, a one-line native display summary, completion/footer/action bounds and owner replacement during review sampling, alongside the full existing setup/persistence/camera suite across five compatibility themes, densities, text sizes and viewport widths. Native large-text source fixtures are reviewed in Studio Dark and Operator. Firmware build/size, OTA and panel acceptance remain separate.

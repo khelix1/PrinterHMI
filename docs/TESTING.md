@@ -2075,3 +2075,28 @@ physical panel screenshots. No command, persistence, transport, theme exposure
 or preview-cache behavior changes. Build locally, OTA, and verify these dialogs
 in both exposed themes, including large text and chooser scrolling after a theme
 change. Check reboot/reset presentation with Cancel. Partition budget: 7 MiB.
+
+### Accent, density and accessibility dialog visual closeout
+
+Accent color, Display density and Accessibility use the shared divided title,
+caption guidance and theme-owned popup/row spacing. Choice rows are left-aligned
+with stable padding applied after the shared selection skin. Studio retains flat
+rows/dividers and Operator retains its own selectable surfaces. Accessibility
+places a separate On/Off caption below each complete option name; its preferred
+height includes both text lines so all four options fit at 1024 x 600. Narrow
+screens retain vertical scrolling without a visible side scrollbar and pinned
+Close. Opaque popup/body rendering and the existing scroll-anchor restore remain.
+
+The native live-appearance suite passes across five themes, three densities,
+normal/large text and 1024 x 600, 640 x 480 and 480 x 320 viewports. It checks title
+and footer bounds, row/state alignment and text, native-size accessibility reach,
+no underlying page redraw during popup scrolling, immediate rebuild/reopen,
+contrast/transparency/motion toggles, failed saves/queueing, duplicate actions,
+callback reentry/deletion, scroll restoration and object/timer cleanup. Separate
+appearance-owner compilation treats warnings as errors. Optional native raster
+captures were reviewed for the three dialogs in Studio and Operator with normal
+and large text; SDK/persistence and accent-name sources are mocked fixtures,
+not physical panel screenshots. No preference values, save/callback behavior,
+transport, commands, fonts or theme exposure change. Build and OTA locally, then
+verify all three dialogs in both exposed themes, including changed density,
+large text, scrolling and Close. Firmware partition budget remains 7 MiB.

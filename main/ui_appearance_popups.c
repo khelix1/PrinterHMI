@@ -6,6 +6,7 @@
 #include "ui_theme.h"
 #include "ui_scroll_anchor.h"
 #include "ui_value_update.h"
+#include "ui_form_dialog.h"
 
 #include "esp_log.h"
 
@@ -128,22 +129,23 @@ static lv_obj_t *appearance_popup(const char *title,
     lv_obj_set_style_shadow_width(s_popup,0,0);
     lv_obj_add_event_cb(s_popup,appearance_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_popup,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_popup,UI_PAD_CARD,0);
-    lv_obj_set_style_pad_row(s_popup,12,0);
+    lv_obj_set_style_pad_all(s_popup,UI_PAD_POPUP,0);
+    lv_obj_set_style_pad_row(s_popup,UI_GAP_ROW,0);
     lv_obj_t *heading=lv_label_create(s_popup);lv_label_set_text(heading,title);
     ui_apply_custom_label_style(heading,UI_FONT_TITLE,UI_TEXT);
     lv_obj_set_width(heading,LV_PCT(100));lv_label_set_long_mode(heading,LV_LABEL_LONG_WRAP);
+    ui_form_divide_title(s_popup);
     s_body=lv_obj_create(s_popup);ui_apply_surface_role(s_body,UI_SURFACE_TRANSPARENT);
     lv_obj_set_style_bg_color(s_body,lv_obj_get_style_bg_color(s_popup,0),0);
     lv_obj_set_style_bg_opa(s_body,LV_OPA_COVER,0);
     lv_obj_set_size(s_body,LV_PCT(100),0);lv_obj_set_flex_grow(s_body,1);
     lv_obj_set_flex_flow(s_body,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_all(s_body,0,0);
-    lv_obj_set_style_pad_row(s_body,10,0);lv_obj_set_scroll_dir(s_body,LV_DIR_VER);
+    lv_obj_set_style_pad_row(s_body,UI_GAP_ROW,0);lv_obj_set_scroll_dir(s_body,LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_body,LV_SCROLLBAR_MODE_OFF);
     appearance_field_own(s_body);
     lv_obj_t *hint=lv_label_create(s_body);lv_label_set_text(hint,message);
     s_feedback=hint;appearance_field_own(hint);
-    ui_apply_custom_label_style(hint,UI_FONT_BODY,UI_TEXT_DIM);
+    ui_apply_custom_label_style(hint,UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_obj_set_width(hint,LV_PCT(100));lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
     lv_obj_t *footer=lv_obj_create(s_popup);lv_obj_remove_style_all(footer);
     ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
@@ -199,14 +201,16 @@ void ui_appearance_popups_show_accent(ui_appearance_changed_cb_t changed_cb)
             8, 8 + accent * row_step, 640, row_height,
             accent_select_cb, (void *)(uintptr_t)accent);
         s_rows[accent]=row;appearance_field_own(row);
+        ui_popup_set_selectable_row_selected(row, (ui_accent_id_t)accent == active);
         lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
         lv_obj_set_style_min_height(row,row_height<48?48:row_height,0);
+        lv_obj_set_style_pad_hor(row,UI_PAD_CARD,0);
         lv_obj_set_style_pad_ver(row,10,0);
+        lv_obj_set_style_pad_row(row,4,0);
         lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
         lv_obj_t *label=lv_obj_get_child(row,0);
         lv_obj_set_width(label,LV_PCT(100));lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
-        ui_popup_set_selectable_row_selected(
-            row, (ui_accent_id_t)accent == active);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
     }
 }
 
@@ -256,24 +260,17 @@ void ui_appearance_popups_show_density(ui_appearance_changed_cb_t changed_cb)
             8, 8 + density * row_step, 560, row_height,
             density_select_cb, (void *)(uintptr_t)density);
         s_rows[density]=row;appearance_field_own(row);
+        ui_popup_set_selectable_row_selected(row, (ui_density_id_t)density == active);
         lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
         lv_obj_set_style_min_height(row,row_height<48?48:row_height,0);
+        lv_obj_set_style_pad_hor(row,UI_PAD_CARD,0);
         lv_obj_set_style_pad_ver(row,10,0);
+        lv_obj_set_style_pad_row(row,4,0);
         lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
         lv_obj_t *label=lv_obj_get_child(row,0);
         lv_obj_set_width(label,LV_PCT(100));lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
-        ui_popup_set_selectable_row_selected(
-            row, (ui_density_id_t)density == active);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
     }
-}
-
-static const char *toggle_text(const char *label, bool enabled)
-{
-    static char buffers[4][64];
-    static unsigned next = 0;
-    char *buffer = buffers[next++ % 4];
-    lv_snprintf(buffer, 64, "%s   |   %s", label, enabled ? "ON" : "OFF");
-    return buffer;
 }
 
 static void accessibility_toggle_cb(lv_event_t *event)
@@ -312,8 +309,9 @@ void ui_appearance_popups_show_accessibility(
     s_kind=APPEARANCE_ACCESSIBILITY;
     const int32_t row_height = ui_theme_density_metric(40, 48, 56);
     const int32_t row_step = ui_theme_density_metric(47, 56, 64);
-    const int32_t list_height = 16 + 3 * row_step + row_height;
-    const int32_t popup_height = list_height + 170;
+    /* Reserve both the option name and state caption at the active text size. */
+    const int32_t popup_height = 202 + 4 * (UI_FONT_BODY_LARGE->line_height +
+        UI_FONT_CAPTION->line_height + 28) + 4 * UI_GAP_ROW;
     if (!appearance_popup(
             "Accessibility",
             "Tap an option to toggle it. The interface will refresh immediately.",
@@ -324,10 +322,10 @@ void ui_appearance_popups_show_accessibility(
 
     ui_accessibility_t value = theme_manager_accessibility();
     const char *labels[] = {
-        toggle_text("Large text", value.large_text),
-        toggle_text("High contrast", value.high_contrast),
-        toggle_text("Reduced transparency", value.reduced_transparency),
-        toggle_text("Reduced motion", value.reduced_motion),
+        "Large text",
+        "High contrast",
+        "Reduced transparency",
+        "Reduced motion",
     };
     const bool enabled[] = {
         value.large_text, value.high_contrast,
@@ -340,13 +338,18 @@ void ui_appearance_popups_show_accessibility(
             640, row_height,
             accessibility_toggle_cb, (void *)(uintptr_t)option);
         s_rows[option]=row;appearance_field_own(row);
+        ui_popup_set_selectable_row_selected(row, enabled[option]);
         lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
         lv_obj_set_style_min_height(row,row_height<48?48:row_height,0);
+        lv_obj_set_style_pad_hor(row,UI_PAD_CARD,0);
         lv_obj_set_style_pad_ver(row,10,0);
+        lv_obj_set_style_pad_row(row,4,0);
         lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
         lv_obj_t *label=lv_obj_get_child(row,0);
         lv_obj_set_width(label,LV_PCT(100));lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
-        ui_popup_set_selectable_row_selected(row, enabled[option]);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_t *state=ui_form_text(row,enabled[option]?"On":"Off",UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_obj_set_style_text_align(state,LV_TEXT_ALIGN_LEFT,0);
     }
 }
 

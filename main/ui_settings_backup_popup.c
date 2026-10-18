@@ -124,7 +124,9 @@ static void backup_dialog_deleted(lv_event_t *event)
     }
 }
 static void backup_dialog_own(lv_obj_t *popup)
-{++s_backup_epoch;lv_obj_add_event_cb(popup,backup_dialog_deleted,LV_EVENT_DELETE,NULL);}
+{
+    ui_form_divide_title(popup);
+    lv_obj_set_style_pad_row(popup,8,0);++s_backup_epoch;lv_obj_add_event_cb(popup,backup_dialog_deleted,LV_EVENT_DELETE,NULL);}
 static void secret_status(const char *text)
 {
     if(s_secret_status){ui_value_set_text(s_secret_status,text);lv_obj_scroll_to_view(s_secret_status,LV_ANIM_OFF);}
@@ -357,7 +359,7 @@ static void show_export_progress_popup(bool restore_verify)
     if(!s_export_progress_popup)return;
     s_export_progress_is_restore_verify=restore_verify;backup_dialog_own(s_export_progress_popup);
     lv_obj_t *body=ui_form_body(s_export_progress_popup);
-    s_export_progress_status=ui_form_text(body,restore_verify?"Verifying encrypted backup passphrase and contents...":"Preparing configuration backup...",UI_FONT_BODY,UI_TEXT);
+    s_export_progress_status=ui_form_text(body,restore_verify?"Verifying encrypted backup passphrase and contents...":"Preparing configuration backup...",UI_FONT_CAPTION,UI_TEXT_DIM);
     s_export_progress_value=ui_form_text(body,"Working",UI_FONT_BODY_LARGE,UI_ACCENT_BRIGHT);
     s_export_progress_bar=lv_bar_create(body);lv_obj_set_size(s_export_progress_bar,LV_PCT(100),24);
     lv_bar_set_range(s_export_progress_bar,0,100);lv_bar_set_value(s_export_progress_bar,10,LV_ANIM_OFF);

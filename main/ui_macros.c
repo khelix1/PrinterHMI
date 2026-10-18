@@ -16,6 +16,7 @@
 #include "ui_widgets.h"
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_responsive_layout.h"
@@ -314,6 +315,7 @@ static lv_obj_t *macro_dialog(const char *text, lv_obj_t **body)
     lv_obj_set_width(title, LV_PCT(100));
     lv_obj_set_height(title, UI_FONT_TITLE->line_height);
     lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    ui_form_divide_title(popup);
     *body = lv_obj_create(popup);
     lv_obj_remove_style_all(*body);
     lv_obj_set_size(*body, LV_PCT(100), 0);
@@ -360,7 +362,7 @@ static lv_obj_t *macro_body_text(lv_obj_t *body, const char *text)
 {
     lv_obj_t *label = lv_label_create(body);
     lv_label_set_text(label, text);
-    ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT_DIM);
+    ui_apply_custom_label_style(label, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(label, LV_PCT(100));
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     return label;
@@ -460,8 +462,10 @@ static void review_macro_cb(lv_event_t *event)
     s_confirm = macro_dialog("Run macro?", &body);
     if (!s_confirm) { s_pending_macro[0] = 0; return; }
     s_macros->reviewed = true;
-    macro_body_text(body, "Review the command before running:");
-    macro_body_text(body, s_macros->pending_command);
+    macro_body_text(body, "Runs on the selected printer. Review the complete command before Run.");
+    lv_obj_t *command=macro_body_text(body,s_macros->pending_command);
+    ui_apply_custom_label_style(command,UI_FONT_BODY,UI_TEXT_BRIGHT);
+    lv_obj_set_style_text_line_space(command,4,0);
     s_macros->run_action=macro_actions(s_confirm, LV_SYMBOL_PLAY " Run", close_confirm_cb, run_macro_cb);
     lv_obj_add_event_cb(s_macros->run_action,macro_run_deleted,LV_EVENT_DELETE,NULL);
     macro_run_availability();

@@ -52,6 +52,7 @@ static void capture(int theme)
 static void check_layout(void)
 {
     lv_obj_update_layout(s_popup);inside(s_popup,lv_screen_active());
+    assert(lv_obj_get_style_border_side(lv_obj_get_child(s_popup,0),0)==LV_BORDER_SIDE_BOTTOM);
     lv_obj_t *footer=lv_obj_get_child(s_popup,2);
     inside(footer,s_popup);inside(s_list,s_popup);
     for(unsigned i=0;i<lv_obj_get_child_count(footer);i++) {

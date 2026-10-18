@@ -96,7 +96,7 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
   fixture.toolhead_position_valid=true;fixture.toolhead_x=280;fixture.toolhead_y=260;fixture.toolhead_z=300;fixture.z_offset=-0.125;
   refresh_live_labels();lv_obj_update_layout(s_toolhead_popup);
   assert(!strcmp(lv_label_get_text(s_offset_label),"-0.125 mm"));
-  assert(!strcmp(lv_label_get_text(s_position_label),"X  280.00      Y  260.00      Z  300.000 mm"));
+  assert(!strcmp(lv_label_get_text(s_position_label),"X 280.00 | Y 260.00 | Z 300.000 mm"));
   unsigned baseline_sends=sends;lv_timer_t *baseline_timer=s_refresh_timer;
   for(unsigned tab=0;tab<3;tab++) {
    if(width==1024) {
@@ -134,7 +134,7 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
    pressed=false;lv_indev_read(pointer);lv_obj_update_layout(s_toolhead_popup);assert(lv_obj_get_scroll_y(body)>0);
    lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));
   }
-  lv_obj_t *last=find_label(s_tab_panels[2],"Reset");assert(last);
+  lv_obj_t *last=find_label(s_tab_panels[2],"Reset offset");assert(last);
   /* Preserve exact commands through the new grid buttons. */
   lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);click(steps[0]);assert(step==1);
   lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"X+ " LV_SYMBOL_RIGHT)));assert(!strcmp(sent,"G91\nG1 X1.00 F6000\nG90"));

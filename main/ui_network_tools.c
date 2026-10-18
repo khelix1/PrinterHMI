@@ -69,6 +69,8 @@ static void network_form_deleted(lv_event_t *event)
 }
 static network_form_owner_t *network_form_own(lv_obj_t **popup,lv_obj_t **first,lv_obj_t **second)
 {
+    ui_form_divide_title(*popup);
+    lv_obj_set_style_pad_row(*popup,8,0);
     network_form_owner_t *owner=calloc(1,sizeof(*owner));
     if(!owner){lv_obj_delete(*popup);*popup=NULL;return NULL;}
     *owner=(network_form_owner_t){.popup=popup,.first=first,.second=second,.references=1,
@@ -207,20 +209,30 @@ void ui_network_tools_clear_wifi_popup_network_buttons(lv_obj_t *list, lv_obj_t 
     }
 }
 
+static void wifi_style_selected(lv_obj_t *row,bool selected)
+{
+    ui_popup_set_selectable_row_selected(row,selected);
+    lv_obj_set_style_pad_all(row,12,0);
+    lv_obj_set_style_pad_row(row,4,0);
+}
 void ui_network_tools_add_wifi_ssid_button(lv_obj_t *parent,const char *ssid,int rssi,int y,lv_event_cb_t selected_cb)
 {
     (void)y;if(!parent||!ssid||!ssid[0])return;
     char *copy=strdup(ssid);if(!copy)return;
-    char row[96];snprintf(row,sizeof(row),"%s\nSignal %d dBm",ssid,rssi);
-    lv_obj_t *button=ui_button_create(parent,UI_BUTTON_OUTLINED,row);
+    lv_obj_t *button=ui_popup_add_selectable_row(parent,ssid,0,0,LV_PCT(100),64,selected_cb,copy);
     if(!button){free(copy);return;}
-    if(ui_theme_is_studio()) {
-        ui_apply_surface_role(button,UI_SURFACE_TRANSPARENT);
-        ui_apply_divider_border(button,LV_BORDER_SIDE_BOTTOM);
-    }
-    lv_obj_set_size(button,LV_PCT(100),LV_SIZE_CONTENT);lv_obj_set_style_min_height(button,64,0);
+    lv_obj_set_height(button,LV_SIZE_CONTENT);lv_obj_set_style_min_height(button,64,0);
+    lv_obj_set_flex_flow(button,LV_FLEX_FLOW_COLUMN);
+    wifi_style_selected(button,false);
+    lv_obj_t *name=lv_obj_get_child(button,0);
+    lv_label_set_long_mode(name,LV_LABEL_LONG_WRAP);
+    lv_obj_set_size(name,LV_PCT(100),LV_SIZE_CONTENT);
+    lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_LEFT,0);
+    ui_apply_custom_label_style(name,UI_FONT_BODY,UI_TEXT_BRIGHT);
+    char signal[48];snprintf(signal,sizeof(signal),"Signal: %d dBm",rssi);
+    lv_obj_t *reading=ui_form_text(button,signal,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_style_text_align(reading,LV_TEXT_ALIGN_LEFT,0);
     lv_obj_add_event_cb(button,wifi_row_deleted,LV_EVENT_DELETE,copy);
-    if(selected_cb)lv_obj_add_event_cb(button,selected_cb,LV_EVENT_CLICKED,copy);
 }
 
 void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,lv_obj_t **status_label,lv_obj_t **list,const char *status_text,lv_event_cb_t close_cb)
@@ -231,7 +243,7 @@ void ui_network_tools_show_wifi_scan_popup(lv_obj_t **popup,lv_obj_t **status_la
     if(!*popup)return;
     network_form_owner_t *owner=network_form_own(popup,status_label,list);if(!owner)return;
     lv_obj_t *body=ui_form_body(*popup);lv_obj_clear_flag(body,LV_OBJ_FLAG_SCROLLABLE);
-    *status_label=ui_form_text(body,status_text,UI_FONT_BODY,UI_TEXT_DIM);
+    *status_label=ui_form_text(body,status_text,UI_FONT_CAPTION,UI_TEXT_DIM);
     *list=lv_obj_create(body);lv_obj_remove_style_all(*list);
     lv_obj_set_size(*list,LV_PCT(100),0);lv_obj_set_flex_grow(*list,1);
     lv_obj_set_flex_flow(*list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(*list,8,0);
@@ -275,8 +287,8 @@ void ui_network_tools_show_wifi_password_popup_window(lv_obj_t **password_popup,
     if(!*password_popup)return;
     network_form_owner_t *owner=network_form_own(password_popup,password_textarea,NULL);if(!owner)return;
     lv_obj_t *body=ui_form_body(*password_popup);
-    ui_form_text(body,selected_ssid,UI_FONT_BODY,UI_TEXT);
-    *password_textarea=ui_form_input(body,"WiFi password; leave blank for an open network",NULL,true,64);
+    ui_form_text(body,selected_ssid,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
+    *password_textarea=ui_form_input(body,"Wi-Fi password; leave blank for an open network",NULL,true,64);
     lv_obj_t *status=ui_form_text(body,"Connect requests a network change. Connection status remains on Network.",UI_FONT_CAPTION,UI_TEXT_DIM);
     if(password_popup==&s_wifi_password_popup)s_wifi_password_status=status;
     lv_obj_t *keyboard=ui_form_keyboard(*password_popup,*password_textarea,LV_KEYBOARD_MODE_TEXT_LOWER);
@@ -320,7 +332,7 @@ void ui_network_tools_select_wifi_ssid(lv_obj_t *btn,
     snprintf(selected_ssid, selected_ssid_size, "%s", ssid);
 
     if (selected_btn && *selected_btn) {
-        ui_popup_set_selectable_row_selected(
+        wifi_style_selected(
             *selected_btn,
             false);
     }
@@ -330,14 +342,14 @@ void ui_network_tools_select_wifi_ssid(lv_obj_t *btn,
     }
 
     if (selected_btn && *selected_btn) {
-        ui_popup_set_selectable_row_selected(
+        wifi_style_selected(
             *selected_btn,
             true);
     }
 
     if (status_buf && status_buf_size > 0) {
         snprintf(status_buf, status_buf_size,
-                 "Selected WiFi:\n%s\n\nEnter password to connect.",
+                 "Selected network: %s",
                  selected_ssid);
     }
 
@@ -420,6 +432,8 @@ void ui_network_port_popup_show(int current_port,ui_network_port_save_cb_t saved
     if(s_moon_port_popup){lv_obj_move_foreground(s_moon_port_popup);return;}
     s_moon_port_popup=ui_form_dialog("Moonraker port",680,540,UI_POPUP_STANDARD);
     if(!s_moon_port_popup)return;
+    ui_form_divide_title(s_moon_port_popup);
+    lv_obj_set_style_pad_row(s_moon_port_popup,8,0);
     ++s_port_epoch;s_save_cb=saved;lv_obj_add_event_cb(s_moon_port_popup,port_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_t *body=ui_form_body(s_moon_port_popup);char value[16];snprintf(value,sizeof(value),"%d",current_port);
     s_moon_port_ta=ui_form_input(body,"Port 1 to 65535",value,false,5);
@@ -448,6 +462,8 @@ void ui_network_tools_show_test_moonraker_popup(const char *title,const char *me
 {
     lv_obj_t *popup=ui_form_dialog(title?title:"Connection test",720,400,ok?UI_POPUP_STANDARD:UI_POPUP_DANGER);
     if(!popup)return;
-    ui_form_text(ui_form_body(popup),message,UI_FONT_BODY,UI_TEXT);
+    ui_form_divide_title(popup);
+    lv_obj_t *result=ui_form_text(ui_form_body(popup),message,UI_FONT_BODY,UI_TEXT);
+    lv_obj_set_style_text_line_space(result,4,0);
     ui_form_action(popup,UI_BUTTON_CLOSE,"Close",close_test_popup_cb,NULL);ui_form_finish(popup);
 }

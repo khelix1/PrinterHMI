@@ -2055,31 +2055,25 @@ void ui_printer_popups_show_printer_status(
 {
     char body[1024];
 
-    snprintf(body,
-             sizeof(body),
+    snprintf(body,sizeof(body),
              "State: %s\n"
-             "File: %.255s\n"
              "Progress: %s\n"
-             "Elapsed: %s\n"
-             "Remaining: %s\n"
              "Nozzle: %.1f / %.1f C\n"
              "Bed: %.1f / %.1f C\n"
-             "Moonraker: %s",
+             "Elapsed: %s\n"
+             "Remaining: %s\n"
+             "Moonraker: %s\n\n"
+             "File: %.255s",
              state ? state : "--",
-             (file && file[0]) ? file : "No active file",
              progress ? progress : "-- %",
+             nozzle_temp,nozzle_target,bed_temp,bed_target,
              elapsed ? elapsed : "--:--",
              remaining ? remaining : "--:--",
-             nozzle_temp,
-             nozzle_target,
-             bed_temp,
-             bed_target,
-             moonraker_connected
-                 ? "CONNECTED"
-                 : "OFFLINE");
+             moonraker_connected ? "Connected" : "Offline",
+             (file && file[0]) ? file : "No active file");
 
     ui_dashboard_status_popup_show(
-        "PRINTER STATUS",
+        "Printer status",
         body);
 }
 

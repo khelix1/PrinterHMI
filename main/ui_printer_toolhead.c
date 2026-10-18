@@ -95,9 +95,9 @@ static void toolhead_send(const char *command)
     moonraker_state_snapshot(&state);
     const char *error = printer_connection_reason(&state);
     if (error[0]) {
-        snprintf(s_toolhead_feedback, sizeof(s_toolhead_feedback), "OFFLINE");
+        snprintf(s_toolhead_feedback, sizeof(s_toolhead_feedback), "Offline");
         s_toolhead_feedback_at = lv_tick_get();
-        lv_label_set_text(s_homed_label, "OFFLINE");
+        lv_label_set_text(s_homed_label, "Offline");
         return;
     }
     lv_obj_t *popup = s_toolhead_popup;
@@ -116,9 +116,9 @@ static void toolhead_send(const char *command)
         owner != moonraker_config_generation()) return;
     s_toolhead_cooldown = accepted;
     snprintf(s_toolhead_feedback, sizeof(s_toolhead_feedback), "%s",
-        accepted ? "SENT" : "NOT SENT");
+        accepted ? "Sent" : "Not sent");
     s_toolhead_feedback_at = lv_tick_get();
-    lv_label_set_text(s_homed_label, accepted ? "SENT" : "NOT SENT");
+    lv_label_set_text(s_homed_label, accepted ? "Sent" : "Not sent");
 }
 
 void ui_printer_toolhead_init(void)
@@ -187,7 +187,7 @@ static void toolhead_panels_resize(lv_event_t *event)
 
 static void toolhead_caption(lv_obj_t *parent, const char *text)
 {
-    ui_form_text(parent, ui_text(text), UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_form_text(parent, ui_text(text), UI_FONT_CAPTION, UI_TEXT_DIM);
 }
 
 static void apply_selected(lv_obj_t *button, bool selected)
@@ -321,13 +321,13 @@ static void refresh_live_labels(void)
     if (s_position_label) {
         if (state.toolhead_position_valid) {
             char position[96];
-            snprintf(position, sizeof(position), "X  %.2f      Y  %.2f      Z  %.3f mm",
+            snprintf(position, sizeof(position), "X %.2f | Y %.2f | Z %.3f mm",
                 state.toolhead_x, state.toolhead_y, state.toolhead_z);
             lv_label_set_text(s_position_label, position);
         } else {
             lv_label_set_text(
                 s_position_label,
-                ui_text("X  --.--      Y  --.--      Z  --.--- mm"));
+                ui_text("X --.-- | Y --.-- | Z --.--- mm"));
         }
     }
 
@@ -349,7 +349,7 @@ static void refresh_live_labels(void)
 
         lv_label_set_text_fmt(
             s_homed_label,
-            "HOMED  %s",
+            "Homed: %s",
             axes[0] ? axes : "--");
     }
 
@@ -462,6 +462,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     lv_obj_t *popup =
         ui_form_dialog(ui_text("Toolhead control"), 960, 568, UI_POPUP_STANDARD);
     if (!popup) return;
+    ui_form_divide_title(popup);
     s_toolhead_popup = popup;
     s_toolhead_owner = moonraker_config_generation();
     ++s_toolhead_epoch;
@@ -479,7 +480,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     lv_obj_set_style_pad_row(body, 6, 0);
     lv_obj_t *readings = toolhead_grid(body, toolhead_readings);
     s_position_label = ui_form_text(readings, "", UI_FONT_VALUE_SMALL, UI_TEXT_BRIGHT);
-    s_homed_label = ui_form_text(readings, "", UI_FONT_BODY, UI_ACCENT_CYAN);
+    s_homed_label = ui_form_text(readings, "", UI_FONT_CAPTION, UI_ACCENT_CYAN);
     lv_obj_set_grid_cell(s_position_label, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
     lv_obj_set_grid_cell(s_homed_label, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_START, 0, 1);
     lv_obj_t *tabs = toolhead_grid(body, toolhead_three);
@@ -531,7 +532,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     for (unsigned i = 0; i < 5; ++i)
         s_extrusion_buttons[i] = toolhead_button(steps, UI_BUTTON_OUTLINED,
             s_extrusion_values[i], extrusion_step_cb, s_extrusion_values[i], i, 0);
-    toolhead_caption(filament_panel, "Filament");
+    toolhead_caption(filament_panel, "Extrusion direction");
     lv_obj_t *filament = toolhead_grid(filament_panel, toolhead_two);
     toolhead_button(filament, UI_BUTTON_OUTLINED, "Extrude", extrude_cb, "EXTRUDE", 0, 0);
     toolhead_button(filament, UI_BUTTON_OUTLINED, "Retract", extrude_cb, "RETRACT", 1, 0);
@@ -539,7 +540,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     lv_obj_t *offset_panel = toolhead_section(body);
     s_tab_panels[2] = offset_panel;
     lv_obj_add_flag(offset_panel, LV_OBJ_FLAG_HIDDEN);
-    toolhead_caption(offset_panel, "Runtime Z offset");
+    toolhead_caption(offset_panel, "Runtime Z offset (mm)");
     s_offset_label = ui_form_text(offset_panel, "", UI_FONT_VALUE_SMALL, UI_TEXT_BRIGHT);
     lv_obj_set_style_text_align(s_offset_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_t *offset = toolhead_grid(offset_panel, toolhead_five);
@@ -550,7 +551,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
         toolhead_button(offset, UI_BUTTON_OUTLINED, positive[i], z_offset_cb, positive[i], i, 1);
     }
     offset = toolhead_grid(offset_panel, toolhead_one);
-    toolhead_button(offset, UI_BUTTON_SECONDARY, "Reset", z_offset_cb, "RESET", 0, 0);
+    toolhead_button(offset, UI_BUTTON_SECONDARY, "Reset offset", z_offset_cb, "RESET", 0, 0);
 
     apply_selected(s_tab_buttons[0], true);
     refresh_step_highlights();

@@ -2485,18 +2485,18 @@ static void test_moonraker_now(void)
                  "Host: %s:%d\nHTTP: %d\nStatus: connected\n\nMoonraker responded to /server/info.",
                  moonraker_config_host(), moonraker_config_port(), code);
         ui_network_tools_show_test_moonraker_popup(
-            "MOONRAKER CONNECTED",
+            "Moonraker connected",
             msg,
             true);
     } else {
         snprintf(msg, sizeof(msg),
-                 "Host: %s:%d\nHTTP: %d\nError: %s\n\nCheck IP, port, WiFi, or Moonraker service.",
+                 "Host: %s:%d\nHTTP: %d\nError: %s\n\nCheck IP, port, Wi-Fi, or Moonraker service.",
                  moonraker_config_host(),
                  moonraker_config_port(),
                  code,
                  esp_err_to_name(err));
         ui_network_tools_show_test_moonraker_popup(
-            "MOONRAKER FAILED",
+            "Moonraker failed",
             msg,
             false);
     }

@@ -524,7 +524,7 @@ static void run(int width){
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);
  macro_popup_bounds(s_confirm,width);
  for(size_t i=0;i<MACRO_PARAMETER_MAX+MACRO_PARAMETER_EXTRA;i++)assert(lv_obj_get_height(s_macros->parameter_fields[i])>=48);
- assert(lv_obj_get_height(lv_obj_get_child(s_confirm,0))==UI_FONT_TITLE->line_height);
+ assert(lv_obj_get_height(lv_obj_get_child(s_confirm,0))==UI_FONT_TITLE->line_height+12);
  snapshot(s_confirm);
  lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);
  assert(s_macros->editor);macro_popup_bounds(s_macros->editor,width);
@@ -532,7 +532,7 @@ static void run(int width){
  lv_textarea_set_text(s_macros->editor_value,"205");editor_done_cb(NULL);
  assert(!strcmp(lv_textarea_get_text(s_macros->parameter_fields[0]),"205"));
  review_macro_cb(NULL);assert(s_confirm && strstr(s_macros->pending_command,"PARAM_0=205"));
- macro_popup_bounds(s_confirm,width);
+ macro_popup_bounds(s_confirm,width);snapshot(s_confirm);
  unsigned before=macro_sends;config_generation++;run_macro_cb(NULL);
  assert(macro_sends==before && s_confirm);close_confirm();
  /* Simulate the page rebuild after changing the selected printer. */
@@ -576,7 +576,7 @@ static void snapshot(lv_obj_t *root){
 #elif defined(TEST_NETWORK)
  const char *page=network_empty_capture?"network-empty":"network";
 #else
- const char *page=root==s_macros->editor?"macros-search":root==s_confirm?"macros-parameters":"macros";
+ const char *page=root==s_macros->editor?"macros-search":root==s_confirm?(s_macros->reviewed?"macros-review":"macros-parameters"):"macros";
 #endif
  snprintf(path,sizeof(path),"%s/%s-theme%u.ppm",folder,page,theme_case);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",a.x2-a.x1+1,a.y2-a.y1+1);for(int y=a.y1;y<=a.y2;y++)for(int x=a.x1;x<=a.x2;x++){uint16_t v=raster[y*1024+x];unsigned char c[3]={(unsigned char)(((v>>11)&31)*255/31),(unsigned char)(((v>>5)&63)*255/63),(unsigned char)((v&31)*255/31)};fwrite(c,1,3,f);}fclose(f);
 }

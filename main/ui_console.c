@@ -16,6 +16,7 @@
 #include "ui_widgets.h"
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_theme.h"
 #include "ui_text_fit.h"
 #include "ui_value_update.h"
@@ -362,6 +363,7 @@ static lv_obj_t *editor_popup(const char *title)
     ui_value_set_color(heading,UI_TEXT,0);
     ui_text_fit_single_line(heading,UI_FONT_TITLE);
     lv_label_set_long_mode(heading,LV_LABEL_LONG_CLIP);
+    ui_form_divide_title(popup);
     return popup;
 }
 static lv_obj_t *editor_input(lv_obj_t *popup,int max,const char *placeholder,const char *text)

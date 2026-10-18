@@ -77,7 +77,10 @@ static void network(void)
     layout(s_wifi_scan_popup);assert(lv_obj_get_child_count(s_wifi_scan_list)==20);
     lv_obj_t *row=lv_obj_get_child(s_wifi_scan_list,19);lv_obj_scroll_to_view(row,LV_ANIM_OFF);lv_obj_update_layout(row);
     inside(lv_obj_get_child(row,0),row);assert(strstr(lv_label_get_text(lv_obj_get_child(row,0)),(char *)aps[19].ssid));
-    lv_obj_send_event(row,LV_EVENT_CLICKED,NULL);assert(!strcmp(selected_ssid,(char *)aps[19].ssid));
+    inside(lv_obj_get_child(row,1),row);assert(strstr(lv_label_get_text(lv_obj_get_child(row,1)),"dBm"));
+    assert(lv_label_get_long_mode(lv_obj_get_child(row,0))==LV_LABEL_LONG_WRAP);
+    lv_obj_send_event(row,LV_EVENT_CLICKED,NULL);assert(!strcmp(selected_ssid,(char *)aps[19].ssid));lv_obj_update_layout(row);
+    assert(lv_obj_get_style_pad_left(row,0)==12);inside(lv_obj_get_child(row,0),row);inside(lv_obj_get_child(row,1),row);
     ui_network_tools_wifi_password_show_owned(selected_ssid,noop,noop);layout(s_wifi_password_popup);
     keyboard_layout_check(s_wifi_password_popup,lv_obj_get_child(s_wifi_password_popup,2),s_wifi_password_textarea);
     assert(lv_textarea_get_password_mode(s_wifi_password_textarea));assert(lv_textarea_get_max_length(s_wifi_password_textarea)==64);
@@ -97,7 +100,7 @@ static void network(void)
     ui_network_tools_wifi_scan_render_owned(scan_status,sizeof(scan_status),aps,2,2,noop,selected);
     lv_obj_send_event(lv_obj_get_child(s_wifi_scan_list,0),LV_EVENT_CLICKED,NULL);lv_obj_delete(s_wifi_selected_btn);assert(!s_wifi_selected_btn);
     lv_obj_delete(s_wifi_scan_status_label);assert(!s_wifi_scan_status_label);ui_network_tools_wifi_scan_show_owned("retry",noop);ui_network_tools_wifi_scan_close_owned();
-    ui_network_tools_show_test_moonraker_popup("CONNECTION TEST FAILED","Complete connection error and troubleshooting details remain reachable with large text in a narrow viewport.",false);
+    ui_network_tools_show_test_moonraker_popup("Moonraker failed","Complete connection error and troubleshooting details remain reachable with large text in a narrow viewport.",false);
     lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);layout(popup);
     lv_obj_send_event(lv_obj_get_child(lv_obj_get_child(popup,-1),0),LV_EVENT_CLICKED,NULL);
 }

@@ -7,6 +7,7 @@
 #include "lvgl.h"
 #include "operator_event_log.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_theme.h"
 #include "ui_button.h"
 #include "ui_widgets.h"
@@ -29,14 +30,14 @@ static const char *event_level_text(
 {
     switch (level) {
     case OPERATOR_EVENT_ERROR:
-        return "ERROR";
+        return "Error";
 
     case OPERATOR_EVENT_WARNING:
-        return "WARN";
+        return "Warning";
 
     case OPERATOR_EVENT_INFO:
     default:
-        return "INFO";
+        return "Info";
     }
 }
 
@@ -53,7 +54,7 @@ static lv_color_t event_level_color(
 
     case OPERATOR_EVENT_INFO:
     default:
-        return UI_TEXT_BRIGHT;
+        return UI_TEXT_DIM;
     }
 }
 
@@ -175,6 +176,11 @@ static void rebuild_event_list_impl(void)
         lv_obj_set_style_border_width(row,1,0);
         lv_obj_set_style_border_color(row,UI_BORDER_SOFT,0);
         lv_obj_set_style_radius(row,UI_RADIUS_ACTION,0);
+        if(!ui_theme_is_studio()) {
+            ui_apply_surface_role(row,UI_SURFACE_SECTION);
+            lv_obj_set_style_pad_all(row,12,0);
+            lv_obj_set_style_pad_row(row,6,0);
+        }
         if(ui_theme_is_studio()) {
             ui_apply_surface_role(row,UI_SURFACE_TRANSPARENT);
             ui_apply_divider_border(row,LV_BORDER_SIDE_BOTTOM);
@@ -297,7 +303,7 @@ static void action_fit(lv_event_t *event)
 static lv_obj_t *history_action(lv_obj_t *footer,ui_button_kind_t kind,const char *text,lv_event_cb_t cb)
 {
     lv_obj_t *button=ui_button_create(footer,kind,text);
-    lv_obj_set_size(button,148,48);lv_obj_set_flex_grow(button,1);
+    lv_obj_set_size(button,148,48);lv_obj_set_style_min_width(button,148,0);lv_obj_set_flex_grow(button,1);
     lv_obj_add_event_cb(button,action_fit,LV_EVENT_SIZE_CHANGED,NULL);
     lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,NULL);
     return button;
@@ -320,6 +326,7 @@ void ui_event_history_popup_show(void)
     lv_label_set_text(title,"Event history");lv_obj_set_width(title,LV_PCT(100));
     ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
     lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    ui_form_divide_title(s_popup);
     s_list=lv_obj_create(s_popup);lv_obj_add_event_cb(s_list,history_field_deleted,LV_EVENT_DELETE,NULL);lv_obj_remove_style_all(s_list);
     lv_obj_set_size(s_list,LV_PCT(100),0);lv_obj_set_flex_grow(s_list,1);
     lv_obj_set_flex_flow(s_list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_list,8,0);
@@ -331,7 +338,8 @@ void ui_event_history_popup_show(void)
     s_follow_button=history_action(footer,UI_BUTTON_OUTLINED,"Hold",follow_cb);
     ui_button_set_filter_active(s_follow_button,false);
     lv_obj_add_event_cb(s_follow_button,history_field_deleted,LV_EVENT_DELETE,NULL);
-    history_action(footer,UI_BUTTON_DANGER,"Clear",clear_cb);
+    lv_obj_t *clear=history_action(footer,UI_BUTTON_DANGER,"Clear history",clear_cb);
+    if(clear)lv_obj_set_style_min_width(clear,220,0);
     history_action(footer,UI_BUTTON_CLOSE,"Close",close_cb);
     uint32_t epoch=s_history_epoch;
     rebuild_event_list();

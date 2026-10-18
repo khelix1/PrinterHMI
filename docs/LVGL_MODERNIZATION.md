@@ -2243,3 +2243,27 @@ Native control, hotend, sensor/status, cancel-print and cancel-object audits cov
 Studio object cancellation uses its flat preview well/list and shared selectable-row styling, including after selection changes; Operator retains its existing panel/row treatment. Object status prefixes use sentence case, excluded names remain readable, and list scrolling hides its side scrollbar. Object names, geometry, map picking and exclusion confirmations are unchanged.
 
 Filament recovery uses the shared divided form title. Paused/nozzle status stays prominent; sensor readiness, instructions and target captions use the caption font. Printer/sensor warnings and rejected-command feedback use semantic theme colors. The five recovery actions, target-step controls, safety conditions, cooldowns and macro commands are unchanged. Native object/recovery audits cover themes, density/text settings, native and narrow views, Studio flat-row persistence, map/list selection, scrolling/footers, exact dispatch, rejection/retry, readiness and owner/deletion cases. Local firmware build and OTA verification remain required; partition budget remains 7 MiB.
+
+### Toolhead Move, Filament and Z-offset visual closeout
+
+Toolhead control now uses the shared form title divider, shared caption font/color for section labels, and sentence-case Homed/Sent/Not sent/Offline feedback. Position coordinates use compact separators, leaving more room for the live readout. Filament and Z-offset captions identify direction and units; Reset offset names the affected setting. Studio retains flat sections and Operator its existing panels. All tabs, jog/extrusion/Z-offset increments and command behavior remain unchanged.
+
+Native Toolhead regression coverage retains full no-scroll reach at 1024 x 600, all buttons and selected steps, pinned Close, narrower-screen scrolling, command generation, rejection/retry, duplicate suppression, reentrant callbacks, endpoint changes and teardown across themes, densities and text sizes. Local firmware build and OTA panel verification remain required; partition budget remains 7 MiB.
+
+### Printer status and event history visual pass
+
+The shared printer/status dialog uses the divided form title, a matching footer divider, sentence-case default title/Close, more readable message spacing and hidden side scrollbar while retaining full text and vertical scrolling. Printer status uses sentence-case connection labels and puts live state/progress/temperatures/timing before the full filename. Event history uses the same title divider and theme-owned Operator row surfaces while Studio stays flat; time/severity captions use readable Info/Warning/Error labels and semantic colors, and Clear history identifies its scope. Follow/Hold, chronology, ring-buffer refresh, clear behavior and data are unchanged.
+
+Native sensor/status and event-history suites cover themes, density/text settings and native/narrow views, full long filenames/messages, scrolling with pinned actions, follow/hold and ring rollover, quiet refresh, clear, repeat-open and deletion/reentry. Source/installer hashes and whitespace checks pass. Local firmware build and OTA panel verification remain required; partition budget remains 7 MiB.
+
+### Macro and Console command-dialog visual consistency
+
+Macro parameters/review/search/edit and Console command/search editors use the shared form title divider, preserving their pinned keyboard/action layouts. Macro instructions and parameter names use caption typography, while the exact reviewed command has stronger contrast and readable line spacing. Review guidance identifies the selected printer and asks for review of the full command. Page layouts, favorites, command construction, parameter values, history and transport/owner behavior are unchanged.
+
+Native Macro and Console suites cover themes, density/text settings and narrow viewports, complete commands/parameters, keyboard/footer bounds, search/history, rejected-command retention, reentry, printer switching and deletion. Macro review renders are captured separately from parameter entry. Local firmware build and OTA verification remain required; partition budget remains 7 MiB.
+
+### Settings network and backup dialog visual pass
+
+Wi-Fi scan/password, Moonraker port/test and configuration backup dialogs use the shared divided form title. Wi-Fi rows separate the full wrapping SSID from a signal caption, retain shared flat Studio/selectable Operator styling and keep alignment stable on selection. Selected-network status is shorter; password entry emphasizes the selected SSID. Connection-test text has readable line spacing. Backup creation/verification progress separates its caption from the larger progress value; restore/removal warnings and passphrase controls remain unchanged.
+
+Native Network/Backup checks cover themes, densities/text sizes and narrow views, full SSIDs/signal captions and stable selection padding, keyboards/pinned actions, port validation, passphrase validation, backup/restore worker ownership, failed operations, nested callbacks and deletion cleanup. No network requests, backup contents, storage/security policy, validation or transport behavior changes. Local firmware build and OTA verification remain required; partition budget remains 7 MiB.

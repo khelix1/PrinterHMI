@@ -16,6 +16,7 @@
 #include "ui_dashboard_page.h"
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_camera.h"
 #include "camera_stream_controller.h"
 #include "camera_catalog_controller.h"
@@ -575,9 +576,11 @@ void ui_dashboard_status_popup_show(const char *title_text, const char *body)
     lv_obj_set_style_pad_all(s_dashboard_status_popup, UI_PAD_POPUP, 0);
     lv_obj_set_style_pad_row(s_dashboard_status_popup, UI_GAP_CARD, 0);
     lv_obj_t *title = lv_label_create(s_dashboard_status_popup);
-    lv_label_set_text(title, title_text ? title_text : ui_text("STATUS"));
+    lv_label_set_text(title, title_text ? title_text : ui_text("Status"));
     ui_apply_custom_label_style(title, UI_FONT_TITLE, UI_TEXT_BRIGHT);
     lv_obj_set_width(title, LV_PCT(100));
+    lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    ui_form_divide_title(s_dashboard_status_popup);
     lv_obj_t *scroll = lv_obj_create(s_dashboard_status_popup);
     lv_obj_remove_style_all(scroll);
     lv_obj_set_size(scroll, LV_PCT(100), 0);
@@ -585,16 +588,21 @@ void ui_dashboard_status_popup_show(const char *title_text, const char *body)
     lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
     lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(scroll, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(scroll,LV_SCROLLBAR_MODE_OFF);
     lv_obj_t *message = lv_label_create(scroll);
     lv_label_set_text(message, body ? body : "--");
     ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_width(message, LV_PCT(100));
+    lv_label_set_long_mode(message,LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_line_space(message,6,0);
     lv_obj_t *footer = lv_obj_create(s_dashboard_status_popup);
     lv_obj_remove_style_all(footer);
-    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_size(footer, LV_PCT(100), LV_SIZE_CONTENT);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer,8,0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " CLOSE",
+    ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 160, 48, dashboard_status_close_cb, NULL, NULL);
 }
 

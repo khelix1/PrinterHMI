@@ -2,6 +2,7 @@
 #include "ui_settings_popups.h"
 #include "ui_text.h"
 #include "ui_value_update.h"
+#include "ui_form_dialog.h"
 
 #include "ui_popup.h"
 #include "ui_theme.h"
@@ -96,18 +97,19 @@ static lv_obj_t *settings_dialog_layout(lv_obj_t *popup, const char *title)
 {
     lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(popup, UI_PAD_POPUP, 0);
-    lv_obj_set_style_pad_row(popup, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(popup, UI_GAP_ROW, 0);
     lv_obj_t *label = lv_label_create(popup);
     lv_label_set_text(label, title);
     ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
     lv_obj_set_width(label, LV_PCT(100));
+    ui_form_divide_title(popup);
     lv_obj_t *body = lv_obj_create(popup);
     lv_obj_remove_style_all(body);
     lv_obj_set_width(body, LV_PCT(100));
     lv_obj_set_height(body, 0);
     lv_obj_set_flex_grow(body, 1);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
@@ -240,13 +242,15 @@ void reset_settings_cb(lv_event_t *e)
     lv_obj_add_event_cb(s_reset_settings_popup, settings_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = settings_dialog_layout(s_reset_settings_popup, ui_text("Reset settings?"));
     lv_obj_t *warning = lv_label_create(body);
-    lv_label_set_text(warning, "This will erase saved WiFi, Moonraker, OTA URL, "
-        "and preferences.\n\nFirmware, OTA slots, and rollback recovery "
-        "will NOT be erased.");
+    lv_label_set_text(warning, "This will erase saved Wi-Fi, Moonraker, OTA URL, "
+        "and preferences.");
     ui_apply_custom_label_style(warning, UI_FONT_BODY, UI_TEXT);
     lv_obj_set_width(warning, LV_PCT(100));
+    lv_obj_set_style_text_line_space(warning, 4, 0);
+    ui_form_text(body, "Firmware, OTA slots, and rollback recovery will be kept.",
+        UI_FONT_CAPTION, UI_TEXT_DIM);
     s_reset_status=lv_label_create(body);lv_label_set_text(s_reset_status,"");
-    ui_apply_custom_label_style(s_reset_status,UI_FONT_BODY,UI_DANGER_BRIGHT);
+    ui_apply_custom_label_style(s_reset_status,UI_FONT_CAPTION,UI_DANGER_BRIGHT);
     lv_obj_set_width(s_reset_status,LV_PCT(100));preference_field_own(s_reset_status);
     lv_obj_t *footer = settings_dialog_footer(s_reset_settings_popup);
     lv_obj_t *cancel = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_CLOSE " Cancel",
@@ -284,8 +288,9 @@ void ui_settings_popups_show_reboot(void)
     lv_obj_t *warning=lv_label_create(body);
     lv_label_set_text(warning,"Restart the PrinterHMI touchscreen controller? Its connections and services will be interrupted while it restarts.");
     ui_apply_custom_label_style(warning,UI_FONT_BODY,UI_TEXT);lv_obj_set_width(warning,LV_PCT(100));
+    lv_obj_set_style_text_line_space(warning,4,0);
     s_reboot_status=lv_label_create(body);lv_label_set_text(s_reboot_status,"");
-    ui_apply_custom_label_style(s_reboot_status,UI_FONT_BODY,UI_DANGER_BRIGHT);lv_obj_set_width(s_reboot_status,LV_PCT(100));preference_field_own(s_reboot_status);
+    ui_apply_custom_label_style(s_reboot_status,UI_FONT_CAPTION,UI_DANGER_BRIGHT);lv_obj_set_width(s_reboot_status,LV_PCT(100));preference_field_own(s_reboot_status);
     lv_obj_t *footer=settings_dialog_footer(s_reboot_popup);
     lv_obj_t *cancel=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,LV_SYMBOL_CLOSE " Cancel",0,0,160,48,reboot_cancel_cb,NULL,NULL);
     s_reboot_confirm=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,"Reboot",0,0,160,48,reboot_confirm_cb,NULL,NULL);
@@ -350,7 +355,7 @@ void ui_settings_popups_show_timezone(
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, ui_text("Select local time zone. Daylight-saving rules apply automatically."));
     s_timezone_status=hint;preference_field_own(hint);
-    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_apply_custom_label_style(hint, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(hint, LV_PCT(100));
     size_t selected = timezone_config_selected_index();
     for (size_t index = 0; index < timezone_config_count(); ++index) {
@@ -365,10 +370,14 @@ void ui_settings_popups_show_timezone(
         lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_hor(row, UI_PAD_CARD, 0);
         lv_obj_set_style_pad_ver(row, 10, 0);
+        lv_obj_set_style_pad_row(row, 4, 0);
         lv_obj_t *label = lv_obj_get_child(row, 0);
-        lv_label_set_text_fmt(label, "%s   |   %s", entry->label, entry->abbreviation);
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(label, LV_PCT(100));
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_t *abbreviation = ui_form_text(row, entry->abbreviation,
+            UI_FONT_CAPTION, UI_TEXT_DIM);
+        lv_obj_set_style_text_align(abbreviation, LV_TEXT_ALIGN_LEFT, 0);
     }
     lv_obj_t *footer = settings_dialog_footer(s_timezone_popup);
     ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
@@ -682,7 +691,7 @@ static void custom_theme_manager_show_cb(lv_event_t *event)
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, count ? ui_text("Select a theme, then Apply. Remove deletes only its SD-card file.") :
         ui_text("No valid themes found in /sdcard/PrinterHMI/themes."));
-    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_apply_custom_label_style(hint, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(hint, LV_PCT(100));
     for (size_t index = 0; index < count; ++index) {
         const custom_theme_summary_t *summary = theme_manager_custom_summary(index);
@@ -762,7 +771,7 @@ static void theme_popup_create_async(void *user_data)
     lv_obj_t *hint = lv_label_create(body);
     s_theme_status=hint;preference_field_own(hint);
     lv_label_set_text(hint, ui_text("Tap a preview to apply it across the interface."));
-    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_apply_custom_label_style(hint, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(hint, LV_PCT(100));
     lv_obj_t *grid = lv_obj_create(body);
     lv_obj_remove_style_all(grid);

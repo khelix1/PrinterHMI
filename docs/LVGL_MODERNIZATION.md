@@ -2267,3 +2267,28 @@ Native Macro and Console suites cover themes, density/text settings and narrow v
 Wi-Fi scan/password, Moonraker port/test and configuration backup dialogs use the shared divided form title. Wi-Fi rows separate the full wrapping SSID from a signal caption, retain shared flat Studio/selectable Operator styling and keep alignment stable on selection. Selected-network status is shorter; password entry emphasizes the selected SSID. Connection-test text has readable line spacing. Backup creation/verification progress separates its caption from the larger progress value; restore/removal warnings and passphrase controls remain unchanged.
 
 Native Network/Backup checks cover themes, densities/text sizes and narrow views, full SSIDs/signal captions and stable selection padding, keyboards/pinned actions, port validation, passphrase validation, backup/restore worker ownership, failed operations, nested callbacks and deletion cleanup. No network requests, backup contents, storage/security policy, validation or transport behavior changes. Local firmware build and OTA verification remain required; partition budget remains 7 MiB.
+
+### Settings preference and controller dialog visual pass
+
+Interface theme, time zone, reboot and reset dialogs now use the shared form
+title divider and compact theme-owned row spacing. Theme and time-zone guidance
+uses caption typography. Time-zone names wrap above separate, left-aligned
+abbreviations in shared selectable rows; Studio keeps flat dividers and Operator
+its own surfaces. Reset separates erased settings from the caption explaining
+that firmware, OTA slots and rollback recovery are kept. Reboot/reset feedback
+uses caption typography, with readable main warning line spacing.
+
+Native Settings and Theme dialog suites pass across five fixture themes, three
+densities, normal/large text and native/narrow viewports (including a short
+Settings viewport). Checks include divided titles, separate body/footer bounds,
+time-zone name/caption alignment, pinned actions, scrolling without visible
+side scrollbars, persistence failures/retries, reboot/reset dispatch guards,
+repeat-open/deletion/reentry and theme selection/teardown. The Theme suite also
+retains its no-underlying-page-draw check during chooser scrolling, cached
+preview cleanup/fallback and hidden custom-theme regression coverage. Large-text
+simulated LVGL renders were reviewed for all four exposed dialogs in Studio and
+Operator. These are host fixtures with mocked SDK/persistence boundaries, not
+physical panel screenshots. No command, persistence, transport, theme exposure
+or preview-cache behavior changes. Build locally, OTA, and verify these dialogs
+in both exposed themes, including large text and chooser scrolling after a theme
+change. Check reboot/reset presentation with Cancel. Partition budget: 7 MiB.

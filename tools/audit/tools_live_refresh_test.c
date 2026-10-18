@@ -38,7 +38,11 @@ uint32_t endstop_status_controller_begin(uint32_t owner){endstops.waiting=true;e
 void endstop_status_controller_failed(const char *message){endstops.waiting=false;strcpy(endstops.error,message);}
 static void invalidated(lv_event_t *e){(void)e;invalidations++;}
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){(void)a;(void)p;lv_display_flush_ready(d);}
-static void same(lv_obj_t *l,const char *t){assert(!strcmp(lv_label_get_text(l),t));}
+static void same(lv_obj_t *l,const char *t){
+ const char *actual=lv_label_get_text(l);
+ if(strcmp(actual,t))fprintf(stderr,"Expected: %s\nActual: %s\n",t,actual);
+ assert(!strcmp(actual,t));
+}
 static void quiet(lv_display_t *d,void (*cb)(lv_timer_t *)){
  lv_refr_now(d);invalidations=0;for(int i=0;i<100;i++)cb(NULL);assert(!invalidations);
 }
@@ -48,20 +52,22 @@ int main(void){
  motion_ui_state_t storage={0};s=&storage;
  for(unsigned theme=0;theme<4;theme++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
-  memset(s,0,sizeof(*s));memset(&motion,0,sizeof(motion));memset(&state,0,sizeof(state));generation++;s->owner=generation;
+  memset(s,0,sizeof(*s));memset(&motion,0,sizeof(motion));memset(&state,0,sizeof(state));generation++;s->owner=generation;motion.owner_generation=generation;
   s->popup=lv_obj_create(lv_screen_active());s->status=lv_label_create(s->popup);s->body=lv_label_create(s->popup);s->driver_selector=lv_dropdown_create(s->popup);
   for(unsigned i=0;i<4;i++)s->limits[i]=lv_label_create(s->popup);
   s->view=VIEW_DRIVERS;state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"ready");
-  motion_refresh(NULL);same(s->status,"WAITING FOR DRIVER DISCOVERY");quiet(d,motion_refresh);
-  motion.discovered=true;motion_refresh(NULL);same(s->status,"NO TMC DRIVERS DETECTED");quiet(d,motion_refresh);
+  motion.owner_generation=generation-1;motion_refresh(NULL);same(s->status,"Waiting for current printer readings.");assert(lv_obj_has_state(s->driver_selector,LV_STATE_DISABLED));quiet(d,motion_refresh);
+  motion.owner_generation=generation;
+  motion_refresh(NULL);same(s->status,"Waiting for driver discovery");quiet(d,motion_refresh);
+  motion.discovered=true;motion_refresh(NULL);same(s->status,"No TMC drivers detected");quiet(d,motion_refresh);
   motion.driver_count=2;strcpy(motion.drivers[0].name,"stepper_x");strcpy(motion.drivers[1].name,"stepper_y");motion.drivers[0].status_valid=true;motion.drivers[0].run_valid=true;motion.drivers[0].run_current=0.8;
-  motion_refresh(NULL);same(s->status,"NO MONITORED FAULT FLAGS REPORTED");assert(!lv_obj_has_state(s->driver_selector,LV_STATE_DISABLED));quiet(d,motion_refresh);
-  motion.drivers[0].warning=true;motion_refresh(NULL);same(s->status,"DRIVER WARNING REPORTED");assert(lv_color_eq(lv_obj_get_style_text_color(s->status,0),UI_WARN));quiet(d,motion_refresh);
-  motion.drivers[0].fault=true;motion_refresh(NULL);same(s->status,"DRIVER FAULT REPORTED");assert(lv_color_eq(lv_obj_get_style_text_color(s->status,0),theme==UI_THEME_CLASSIC?UI_TEXT_ERROR:UI_DANGER_BRIGHT));quiet(d,motion_refresh);
+  motion_refresh(NULL);same(s->status,"No monitored fault flags reported");assert(!lv_obj_has_state(s->driver_selector,LV_STATE_DISABLED));quiet(d,motion_refresh);
+  motion.drivers[0].warning=true;motion_refresh(NULL);same(s->status,"Driver warning reported");assert(lv_color_eq(lv_obj_get_style_text_color(s->status,0),UI_WARN));quiet(d,motion_refresh);
+  motion.drivers[0].fault=true;motion_refresh(NULL);same(s->status,"Driver fault reported");assert(lv_color_eq(lv_obj_get_style_text_color(s->status,0),theme==UI_THEME_CLASSIC?UI_TEXT_ERROR:UI_DANGER_BRIGHT));quiet(d,motion_refresh);
   lv_dropdown_set_selected(s->driver_selector,1);motion_driver_snapshot_t swapped=motion.drivers[0];motion.drivers[0]=motion.drivers[1];motion.drivers[1]=swapped;motion_refresh(NULL);assert(lv_dropdown_get_selected(s->driver_selector)==0);quiet(d,motion_refresh);
-  state.live_data_ok=false;motion_refresh(NULL);same(s->status,"LIVE DRIVER DATA UNAVAILABLE");assert(lv_obj_has_state(s->driver_selector,LV_STATE_DISABLED));quiet(d,motion_refresh);
+  state.live_data_ok=false;motion_refresh(NULL);same(s->status,"Waiting for Klipper.");assert(lv_obj_has_state(s->driver_selector,LV_STATE_DISABLED));quiet(d,motion_refresh);
   state.live_data_ok=true;s->view=VIEW_LIMITS;motion.limit_valid[0]=true;motion.limits[0]=200;motion_refresh(NULL);same(s->limits[0],"200.00 mm/s");quiet(d,motion_refresh);
-  motion.limits[0]=250;motion_refresh(NULL);same(s->limits[0],"250.00 mm/s");generation++;motion_refresh(NULL);same(s->status,"PRINTER CHANGED: CLOSE AND REOPEN");quiet(d,motion_refresh);
+  motion.limits[0]=250;motion_refresh(NULL);same(s->limits[0],"250.00 mm/s");generation++;motion_refresh(NULL);same(s->status,"Printer changed. Close and reopen.");quiet(d,motion_refresh);
   s->view=VIEW_DRIVERS;motion_refresh(NULL);quiet(d,motion_refresh);close_popup();assert(!s->popup && !s->status);
   s_popup=lv_obj_create(lv_screen_active());s_body=lv_label_create(s_popup);s_owner=generation;now=1000000;s_next_query=now+2000000;websocket=true;state.live_data_ok=true;strcpy(state.printer_state,"ready");
   memset(&endstops,0,sizeof(endstops));endstops.valid=true;endstops.count=1;strcpy(endstops.items[0].name,"x");endstop_refresh(NULL);assert(strstr(lv_label_get_text(s_body),"x:  OPEN"));quiet(d,endstop_refresh);

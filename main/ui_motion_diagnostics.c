@@ -169,7 +169,7 @@ static void mode_cb(lv_event_t *event)
     close_editor();
     if (s_epoch != expected_epoch || !owns_printer() || !s->mode || !s->pitch || !s->count || !s->result) return;
     bool screw = lv_dropdown_get_selected(s->mode) == 1;
-    label_text(s->pitch_label, screw ? "THREAD PITCH (mm)" : "Belt pitch (mm)");
+    label_text(s->pitch_label, screw ? "Thread pitch (mm)" : "Belt pitch (mm)");
     label_text(s->count_label, screw ? "Thread starts" : "Pulley teeth");
     lv_textarea_set_text(s->pitch, "2");
     lv_textarea_set_text(s->count, screw ? "4" : "20");
@@ -218,7 +218,9 @@ static lv_obj_t *layout_body(lv_obj_t *popup, const char *title)
     lv_obj_t *label = lv_label_create(popup);
     lv_label_set_text(label, title);
     ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
-    lv_obj_set_size(label, LV_PCT(100), UI_FONT_TITLE->line_height);
+    lv_obj_set_size(label, LV_PCT(100), UI_FONT_TITLE->line_height+12);
+    ui_apply_divider_border(label,LV_BORDER_SIDE_BOTTOM);
+    lv_obj_set_style_pad_bottom(label,10,0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_t *body = lv_obj_create(popup);
     lv_obj_remove_style_all(body);
@@ -277,7 +279,10 @@ static void field_cb(lv_event_t *event)
     s->editor = ui_form_dialog("Edit measurement", 640, 480, UI_POPUP_STANDARD);
     if (!s->editor) { s->editor_target = NULL; return; }
     lv_obj_add_event_cb(s->editor, editor_deleted, LV_EVENT_DELETE, NULL);
-    s->editor_value = ui_form_input(ui_form_body(s->editor), "Measurement",
+    lv_obj_t *measurement_label=target==s->pitch?s->pitch_label:s->count_label;
+    const char *measurement=measurement_label?lv_label_get_text(measurement_label):"Measurement";
+    ui_form_text(ui_form_body(s->editor),measurement,UI_FONT_CAPTION,UI_TEXT_DIM);
+    s->editor_value = ui_form_input(ui_form_body(s->editor),measurement,
         lv_textarea_get_text(target), false, 18);
     lv_textarea_set_accepted_chars(s->editor_value, target == s->count ? "0123456789" : "0123456789.");
     s->editor_feedback = ui_form_text(ui_form_body(s->editor), "", UI_FONT_CAPTION, UI_TEXT_DIM);
@@ -319,7 +324,7 @@ static void render_limits(bool live, const char *status_override)
         label_text(s->limits[i], value);
         ui_text_fit_single_line(s->limits[i], UI_FONT_BODY);
     }
-    label_text(s->status, status_override ? status_override : live ? "CURRENT RUNTIME LIMITS" : "LIVE LIMITS UNAVAILABLE");
+    label_text(s->status, status_override ? status_override : live ? "Current runtime limits" : "Live limits unavailable");
     if (live) ui_value_set_color(s->status, UI_TEXT_BRIGHT, 0); else ui_value_set_color(s->status, UI_TEXT_DIM, 0);
 }
 
@@ -330,7 +335,7 @@ static void render_drivers(bool live, const char *status_override)
     if (!s->driver_selector || !s->body || !s->status) return;
     if (!live) {
         lv_obj_add_state(s->driver_selector, LV_STATE_DISABLED);
-        label_text(s->status, status_override ? status_override : "LIVE DRIVER DATA UNAVAILABLE");
+        label_text(s->status, status_override ? status_override : "Live driver data unavailable");
         ui_value_set_color(s->status, UI_TEXT_DIM, 0);
         label_text(s->body, "The printer is offline or not ready.\nWaiting for fresh driver readings...");
         return;
@@ -361,7 +366,7 @@ static void render_drivers(bool live, const char *status_override)
     if (!s->snapshot.driver_count) {
         set_driver_options(s->snapshot.discovered ? "No TMC drivers reported" : "Waiting for drivers...");
         lv_obj_add_state(s->driver_selector, LV_STATE_DISABLED);
-        label_text(s->status, s->snapshot.discovered ? "NO TMC DRIVERS DETECTED" : "WAITING FOR DRIVER DISCOVERY");
+        label_text(s->status, s->snapshot.discovered ? "No TMC drivers detected" : "Waiting for driver discovery");
         ui_value_set_color(s->status, UI_TEXT_DIM, 0);
         label_text(s->body, "TMC diagnostics require drivers exposed by Klipper over UART or SPI.\nStandalone drivers do not report this data.");
         return;
@@ -374,8 +379,8 @@ static void render_drivers(bool live, const char *status_override)
     format_value(run, sizeof(run), driver->run_valid, driver->run_current, "A RMS");
     format_value(hold, sizeof(hold), driver->hold_valid, driver->hold_current, "A RMS");
     format_value(temperature, sizeof(temperature), driver->temperature_valid, driver->temperature, "C");
-    const char *status = !driver->status_valid ? "NO DRIVER STATUS SAMPLE" :
-        driver->fault ? "DRIVER FAULT REPORTED" : driver->warning ? "DRIVER WARNING REPORTED" : "NO MONITORED FAULT FLAGS REPORTED";
+    const char *status = !driver->status_valid ? "No driver status sample" :
+        driver->fault ? "Driver fault reported" : driver->warning ? "Driver warning reported" : "No monitored fault flags reported";
     label_text(s->status, status);
     if (driver->fault) ui_value_set_color(s->status, ui_theme_get_active() == UI_THEME_CLASSIC ? UI_TEXT_ERROR : UI_DANGER_BRIGHT, 0);
     else if (driver->warning) ui_value_set_color(s->status, UI_WARN, 0);
@@ -404,8 +409,8 @@ static void refresh(lv_timer_t *timer)
             label_text(s->result, "Printer changed. Close and reopen the calculator.");
             label_text(s->reference, "");
         } else {
-            if (s->view == VIEW_LIMITS) render_limits(false, "PRINTER CHANGED: CLOSE AND REOPEN");
-            else render_drivers(false, "PRINTER CHANGED: CLOSE AND REOPEN");
+            if (s->view == VIEW_LIMITS) render_limits(false, "Printer changed. Close and reopen.");
+            else render_drivers(false, "Printer changed. Close and reopen.");
         }
         return;
     }
@@ -454,26 +459,29 @@ static void show_view(motion_view_t view)
     lv_obj_t *body = layout_body(s->popup, view == VIEW_LIMITS ? "Motion limits" :
         view == VIEW_DRIVERS ? "TMC driver diagnostics" : "Axis distance calculator");
     if (view == VIEW_LIMITS) {
-        s->status = layout_label(body, "WAITING FOR LIVE LIMITS", true);
+        s->status = layout_label(body, "Waiting for live limits", true);
         const char *labels[] = {"Maximum velocity", "Maximum acceleration", "Square-corner velocity", "Minimum cruise ratio"};
         for (size_t i = 0; i < 4; ++i) {
             lv_obj_t *pair = layout_pair(body);
             lv_obj_t *name = layout_label(pair, labels[i], false);
             s->limits[i] = layout_label(pair, "Not reported", false);
             layout_cell(name, 0); layout_cell(s->limits[i], 1);
+            lv_obj_set_style_text_align(s->limits[i],LV_TEXT_ALIGN_RIGHT,0);
+            ui_apply_divider_border(pair,LV_BORDER_SIDE_BOTTOM);
+            lv_obj_set_style_pad_bottom(pair,10,0);
             lv_obj_add_event_cb(s->limits[i], limit_fit, LV_EVENT_SIZE_CHANGED, NULL);
         }
-        layout_label(body, "Live limits may differ from printer.cfg during a print.", false);
+        layout_label(body, "Runtime values may differ from printer.cfg during a print.", true);
     } else if (view == VIEW_DRIVERS) {
         s->driver_selector = lv_dropdown_create(body);
         lv_obj_set_size(s->driver_selector, LV_PCT(100), 54);
         ui_selector_style(s->driver_selector, UI_FONT_BODY);
         lv_dropdown_set_options(s->driver_selector, "Waiting for drivers...");
         lv_obj_add_event_cb(s->driver_selector, driver_selected_cb, LV_EVENT_VALUE_CHANGED, NULL);
-        s->status = layout_label(body, "WAITING FOR DRIVER STATUS", true);
+        s->status = layout_label(body, "Waiting for driver status", true);
         s->body = layout_label(body, "Waiting for data...", false);
     } else {
-        layout_label(body, "Calculate from belt/pulley or leadscrew geometry.\nRetain gear_ratio for geared axes.", false);
+        layout_label(body, "Calculate rotation distance from the axis hardware. Retain gear_ratio for geared axes.", true);
         s->mode = lv_dropdown_create(body);
         lv_obj_set_size(s->mode, LV_PCT(100), 54);
         ui_selector_style(s->mode, UI_FONT_BODY);
@@ -501,7 +509,7 @@ static void show_view(motion_view_t view)
         }
         s->result = layout_label(body, "Enter the hardware measurements, then Calculate.", false);
         s->reference = layout_label(body, "Config reference: waiting for printer data.", true);
-        layout_label(body, "For screws, enter thread pitch and thread-start count.\nNo motion or configuration changes are sent.", true);
+        layout_label(body, "For leadscrews, use thread pitch and the number of starts. No motion or configuration changes are sent.", true);
     }
     lv_obj_t *footer = layout_footer(s->popup);
     lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, "Close",

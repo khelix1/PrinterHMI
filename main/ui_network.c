@@ -171,18 +171,17 @@ static void network_studio_create(const char *banner_text, int port,
     studio_action(s_network.actions_card, "Scan networks", 0, 0, 196, 48, wifi_cb, NULL);
     studio_action(s_network.actions_card, "Manage printers", 208, 0, 200, 48, profiles_cb, NULL);
     s_network.banner = studio_plane(s_network.root, 0, 72, 976, 52);
-    lv_obj_set_style_border_width(s_network.banner, 1, 0);
-    lv_obj_set_style_border_color(s_network.banner, UI_BORDER, 0);
-    lv_obj_set_style_radius(s_network.banner, 12, 0);
-    s_network.banner_state = studio_text(s_network.banner, "OFFLINE", 16, 0, 180, UI_FONT_BODY_LARGE, UI_TEXT_DIM);
+    ui_apply_divider_border(s_network.banner,LV_BORDER_SIDE_BOTTOM);
+    lv_obj_set_style_radius(s_network.banner,0,0);
+    s_network.banner_state = studio_text(s_network.banner, "Offline", 16, 0, 180, UI_FONT_BODY_LARGE, UI_TEXT_DIM);
     lv_obj_align(s_network.banner_state, LV_ALIGN_LEFT_MID, 16, 0);
-    s_network.banner_message = studio_text(s_network.banner, banner_text ? banner_text : "NETWORK OFFLINE", 212, 0, 748, UI_FONT_BODY, UI_TEXT);
+    s_network.banner_message = studio_text(s_network.banner, banner_text ? banner_text : "Network offline", 212, 0, 748, UI_FONT_BODY, UI_TEXT);
     lv_label_set_long_mode(s_network.banner_message, LV_LABEL_LONG_DOT);
     lv_obj_align(s_network.banner_message, LV_ALIGN_LEFT_MID, 212, 0);
     s_network.wifi_card = studio_plane(s_network.root, 0, 140, 270, 284);
     studio_text(s_network.wifi_card, "Wi-Fi", 0, 0, 270, UI_FONT_BODY_LARGE, UI_TEXT);
     s_network.wifi_name = network_studio_row(s_network.wifi_card, "SSID", "--", 52, 270);
-    s_network.wifi_state = network_studio_row(s_network.wifi_card, "Connection", "OFFLINE", 128, 270);
+    s_network.wifi_state = network_studio_row(s_network.wifi_card, "Connection", "Offline", 128, 270);
     s_network.wifi_ip = network_studio_row(s_network.wifi_card, "IP address", "--", 204, 270);
     studio_rule(s_network.root, 282, 140, 1, 284);
     s_network.moonraker_card = studio_plane(s_network.root, 294, 140, 302, 284);
@@ -190,7 +189,7 @@ static void network_studio_create(const char *banner_text, int port,
     s_network.moonraker_host = network_studio_row(s_network.moonraker_card, "Host", "--", 48, 302);
     char value[16];snprintf(value, sizeof(value), "%d", port);
     s_network.moonraker_port = network_studio_row(s_network.moonraker_card, "Port", value, 108, 302);
-    s_network.moonraker_state = network_studio_row(s_network.moonraker_card, "Connection", "DISCONNECTED", 168, 302);
+    s_network.moonraker_state = network_studio_row(s_network.moonraker_card, "Connection", "Disconnected", 168, 302);
     s_network.moonraker_http = network_studio_row(s_network.moonraker_card, "Last HTTP", "--", 228, 302);
     studio_rule(s_network.root, 608, 140, 1, 284);
     s_network.networks_card = studio_plane(s_network.root, 620, 140, 356, 284);
@@ -203,7 +202,7 @@ static void network_studio_create(const char *banner_text, int port,
     lv_obj_set_style_pad_row(s_network.networks_list, UI_GAP_ROW, 0);
     lv_obj_add_flag(s_network.networks_list, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(s_network.networks_list, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(s_network.networks_list, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(s_network.networks_list, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_bg_color(s_network.networks_list, UI_TEXT_MUTED, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(s_network.networks_list, LV_OPA_70, LV_PART_SCROLLBAR);
     lv_obj_set_style_width(s_network.networks_list, 4, LV_PART_SCROLLBAR);
@@ -306,8 +305,8 @@ void ui_network_create_objects(
 
     ui_status_banner_set_simple(
         s_network.banner,
-        "OFFLINE",
-        banner_text ? banner_text : "NETWORK OFFLINE");
+        "Offline",
+        banner_text ? banner_text : "Network offline");
 
     /*
      * Wi-Fi status card.
@@ -343,7 +342,7 @@ void ui_network_create_objects(
         network_make_row(
             s_network.wifi_card,
             "Connection",
-            "OFFLINE",
+            "Offline",
             88,
             &s_network.wifi_state);
 
@@ -355,7 +354,7 @@ void ui_network_create_objects(
 
         network_make_row(
             s_network.wifi_card,
-            "IP Address",
+            "IP address",
             "--",
             124,
             &s_network.wifi_ip);
@@ -416,7 +415,7 @@ void ui_network_create_objects(
         network_make_row(
             s_network.moonraker_card,
             "Connection",
-            "DISCONNECTED",
+            "Disconnected",
             112,
             &s_network.moonraker_state);
 
@@ -545,7 +544,7 @@ void ui_network_create_objects(
 
             lv_obj_set_scrollbar_mode(
                 s_network.networks_list,
-                LV_SCROLLBAR_MODE_AUTO);
+                LV_SCROLLBAR_MODE_OFF);
         }
     }
 
@@ -650,30 +649,30 @@ void ui_network_refresh_objects(
 
     if (s_network.banner_state) {
         lv_label_set_text(s_network.banner_state, moonraker_connected
-            ? "CONNECTED" : (wifi_connected ? "WIFI" : "OFFLINE"));
+            ? "Connected" : (wifi_connected ? "Wi-Fi" : "Offline"));
         lv_obj_set_style_text_color(s_network.banner_state, moonraker_connected ? UI_OK_BRIGHT : UI_TEXT_DIM, 0);
-        lv_label_set_text(s_network.banner_message, banner_text ? banner_text : "NETWORK OFFLINE");
+        lv_label_set_text(s_network.banner_message, banner_text ? banner_text : "Network offline");
     } else if (s_network.banner) {
         ui_status_banner_set_simple(
             s_network.banner,
             moonraker_connected
-                ? "CONNECTED"
-                : (wifi_connected ? "WIFI" : "OFFLINE"),
-            banner_text ? banner_text : "NETWORK OFFLINE");
+                ? "Connected"
+                : (wifi_connected ? "Wi-Fi" : "Offline"),
+            banner_text ? banner_text : "Network offline");
     }
 
     if (s_network.wifi_name) {
         lv_label_set_text(
             s_network.wifi_name,
-            wifi_text ? wifi_text : ui_text("OFFLINE"));
+            wifi_text ? wifi_text : ui_text("Offline"));
     }
 
     if (s_network.wifi_state) {
         lv_label_set_text(
             s_network.wifi_state,
             wifi_connected
-                ? ui_text("CONNECTED")
-                : ui_text("OFFLINE"));
+                ? ui_text("Connected")
+                : ui_text("Offline"));
 
         lv_obj_set_style_text_color(
             s_network.wifi_state,
@@ -699,8 +698,8 @@ void ui_network_refresh_objects(
         lv_label_set_text(
             s_network.moonraker_state,
             moonraker_connected
-                ? ui_text("CONNECTED")
-                : ui_text("DISCONNECTED"));
+                ? ui_text("Connected")
+                : ui_text("Disconnected"));
 
         lv_obj_set_style_text_color(
             s_network.moonraker_state,
@@ -773,9 +772,11 @@ void ui_network_render_scan_results(
     lv_obj_clean(s_network.networks_list);
 
     if (!aps || count == 0 || !selected_cb) {
-        ui_network_set_scan_status(
-            "No networks found");
-
+        ui_network_set_scan_status("No networks found");
+        lv_obj_t *hint=lv_label_create(s_network.networks_list);
+        ui_apply_custom_label_style(hint,UI_FONT_BODY,UI_TEXT_DIM);
+        lv_obj_set_width(hint,LV_PCT(100));lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
+        lv_label_set_text(hint,"Tap Scan networks to retry. Check that Wi-Fi is in range.");
         return;
     }
 

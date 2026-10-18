@@ -113,13 +113,13 @@ static bool drybox_banner_is_offline(const char *banner)
 
 static const char *drybox_status_text(const char *banner)
 {
-    if (text_contains(banner, "UNAVAILABLE")) return "UNAVAILABLE";
-    if (drybox_banner_is_offline(banner)) return "OFFLINE";
+    if (text_contains(banner, "UNAVAILABLE")) return "Unavailable";
+    if (drybox_banner_is_offline(banner)) return "Offline";
     if (text_contains(banner, "ACTIVE") ||
-        text_contains(banner, "DRYING")) return "DRYING";
-    if (text_contains(banner, "HEATING")) return "HEATING";
-    if (text_contains(banner, "READY")) return "READY";
-    return "MONITORING";
+        text_contains(banner, "DRYING")) return "Drying";
+    if (text_contains(banner, "HEATING")) return "Heating";
+    if (text_contains(banner, "READY")) return "Ready";
+    return "Monitoring";
 }
 
 
@@ -200,35 +200,35 @@ static void set_program_button_state(
     }
 
     if (s_program_status_label) {
-        const char *status = "READY";
+        const char *status = "Ready";
 
         if (!online) {
-            status = "OFFLINE";
+            status = "Offline";
         } else {
             switch (active_program) {
                 case DRYBOX_PROGRAM_PLA:
-                    status = "PLA ACTIVE";
+                    status = "PLA active";
                     break;
 
                 case DRYBOX_PROGRAM_PETG:
-                    status = "PETG ACTIVE";
+                    status = "PETG active";
                     break;
 
                 case DRYBOX_PROGRAM_HOLD:
-                    status = "HOLDING";
+                    status = "Holding";
                     break;
 
                 case DRYBOX_PROGRAM_RESUME:
-                    status = "RESUMING";
+                    status = "Resuming";
                     break;
 
                 case DRYBOX_PROGRAM_STOP:
-                    status = "READY";
+                    status = "Ready";
                     break;
 
                 case DRYBOX_PROGRAM_NONE:
                 default:
-                    status = "READY";
+                    status = "Ready";
                     break;
             }
         }
@@ -243,20 +243,20 @@ static void set_program_button_state(
 
 static void set_humidity_presentation(float humidity)
 {
-    const char *condition = "IDEAL";
+    const char *condition = "Ideal";
     lv_color_t color = UI_ACCENT_CYAN;
 
     if (humidity < 10.0f) {
-        condition = "VERY DRY";
+        condition = "Very dry";
         color = UI_ACCENT_INFO;
     } else if (humidity < 25.0f) {
-        condition = "IDEAL";
+        condition = "Ideal";
         color = UI_OK_BRIGHT;
     } else if (humidity < 40.0f) {
-        condition = "MODERATE";
+        condition = "Moderate";
         color = UI_WARN;
     } else {
-        condition = "HIGH";
+        condition = "High";
         color = UI_DANGER_BRIGHT;
     }
 
@@ -464,7 +464,7 @@ static void build_environment_panel(
 
     s_humidity_condition_label = make_text(
         panel,
-        "IDEAL",
+        "Ideal",
         UI_FONT_CAPTION,
         UI_OK_BRIGHT);
 
@@ -767,7 +767,7 @@ static void studio_drybox_create(ui_drybox_page_t *page)
     lv_obj_t *p=page->panel;
     lv_obj_t *banner=studio_plane(p,0,0,976,64);
     studio_text(banner,"Drybox",0,0,640,UI_FONT_TITLE,UI_TEXT);
-    page->banner_label=studio_text(banner,"READY",716,0,260,UI_FONT_TITLE,UI_TEXT_DIM);
+    page->banner_label=studio_text(banner,"Ready",716,0,260,UI_FONT_TITLE,UI_TEXT_DIM);
     lv_obj_set_style_text_align(page->banner_label,LV_TEXT_ALIGN_RIGHT,0);
     studio_text(p,"Air",0,82,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->air_label=studio_text(p,"-- C",0,114,260,&ui_studio_font_48,UI_TEXT);
@@ -787,7 +787,7 @@ static void studio_drybox_create(ui_drybox_page_t *page)
     page->humidity_label=studio_text(p,"--",354,118,244,&ui_studio_font_96,UI_TEXT);
     lv_obj_set_style_text_align(page->humidity_label,LV_TEXT_ALIGN_CENTER,0);
     studio_text(p,"% RH",438,232,112,UI_FONT_TITLE,UI_TEXT_DIM);
-    s_humidity_condition_label=studio_text(p,"NO DATA",396,282,180,UI_FONT_CAPTION,UI_OK_BRIGHT);
+    s_humidity_condition_label=studio_text(p,"No data",396,282,180,UI_FONT_CAPTION,UI_OK_BRIGHT);
     lv_obj_set_style_text_align(s_humidity_condition_label,LV_TEXT_ALIGN_CENTER,0);
     studio_text(p,"Target temperature",716,76,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->target_label=studio_text(p,"-- C",716,110,260,&ui_studio_font_48,UI_TEXT);
@@ -796,7 +796,7 @@ static void studio_drybox_create(ui_drybox_page_t *page)
     studio_text(p,"Fan",856,222,120,UI_FONT_BODY,UI_TEXT_DIM);
     page->heater_label=studio_text(p,"--",716,260,126,UI_FONT_VALUE_SMALL,UI_TEXT);
     page->fan_label=studio_text(p,"--%",856,260,120,UI_FONT_VALUE_SMALL,UI_TEXT);
-    s_program_status_label=studio_text(p,"NO PROGRAM",0,330,280,UI_FONT_BODY,UI_TEXT_DIM);
+    s_program_status_label=studio_text(p,"No program",0,330,280,UI_FONT_BODY,UI_TEXT_DIM);
     studio_rule(p,0,358,976,1);
     const char *names[]={"PLA","PETG","Hold","Resume","Stop"};
     const char *cmds[]={"DRY_PLA","DRY_PETG","DRY_HOLD","DRY_RESUME","DRY_STOP"};
@@ -868,7 +868,7 @@ bool ui_drybox_page_create(
     ui_status_banner_set_simple(
         banner,
         drybox_status_text(banner_text_cb()),
-        "FILAMENT CONDITIONING");
+        "Filament conditioning");
 
     page->banner_label =
         ui_status_banner_state_label(banner);
@@ -948,7 +948,7 @@ void ui_drybox_page_refresh(
             ui_status_banner_set_simple_kind(
                 banner_box,
                 drybox_status_text(display_text),
-                "FILAMENT CONDITIONING",
+                "Filament conditioning",
                 banner_kind);
             if(ui_theme_is_studio()) {
                 lv_obj_set_style_bg_opa(banner_box,LV_OPA_TRANSP,0);
@@ -975,7 +975,7 @@ void ui_drybox_page_refresh(
         if (s_humidity_condition_label) {
             ui_value_set_text(
                 s_humidity_condition_label,
-                ui_text("NO DATA"));
+                ui_text("No data"));
 
             set_label_color(
                 s_humidity_condition_label,

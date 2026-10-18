@@ -160,6 +160,53 @@ static void notification_lifecycle_checks(void)
     assert(!s_preference_popup&&!s_preference_save);preference_save(NULL);preference_toggle(NULL);assert(ui_toast_set_level(UI_NOTIFY_QUIET));
 }
 
+/* Appearance changes must rebuild the persistent top-layer notice as well
+ * as pages, without logging twice, discarding faults or retargeting actions. */
+static void notification_theme_switch_checks(void)
+{
+    ui_toast_close();
+    lv_display_set_resolution(lv_display_get_default(),1024,600);
+    ui_theme_set_active(UI_THEME_OPERATOR);
+    ui_theme_set_density(UI_DENSITY_COMFORTABLE);
+    ui_theme_set_accessibility((ui_accessibility_t){0});
+    assert(ui_toast_set_level(UI_NOTIFY_STANDARD));
+    ui_toast_show_link(UI_STATUS_WARNING,"LINKED FAULT","Review this printer",UI_SHELL_PAGE_CONSOLE);
+    ui_toast_show(UI_STATUS_DANGER,"URGENT FAULT","Keep this fault until dismissed");
+    notice_t saved[NOTICE_CAPACITY];memcpy(saved,s_notices,sizeof(saved));
+    unsigned count=s_notice_count,overflow=s_overflow,logged=log_count;
+    for(unsigned i=0;i<4;i++){
+        ui_theme_set_active(i%2?UI_THEME_OPERATOR:UI_THEME_STUDIO_DARK);
+        ui_theme_set_density(i%2?UI_DENSITY_COMPACT:UI_DENSITY_LARGE);
+        ui_theme_set_accessibility((ui_accessibility_t){.large_text=!(i%2)});
+        ui_toast_refresh_appearance();
+        assert(s_toast&&!s_timer&&s_notice_count==count&&s_overflow==overflow&&log_count==logged);
+        assert(!memcmp(saved,s_notices,sizeof(saved)));
+        bounds(s_toast);
+        lv_obj_t *reference=lv_obj_create(lv_screen_active());ui_apply_popup_style(reference);
+        assert(lv_color_eq(lv_obj_get_style_bg_color(s_toast,0),lv_obj_get_style_bg_color(reference,0)));
+        assert(lv_obj_get_style_radius(s_toast,0)==lv_obj_get_style_radius(reference,0));
+        assert(lv_obj_get_style_border_width(s_toast,0)==lv_obj_get_style_border_width(reference,0));
+        assert(lv_color_eq(lv_obj_get_style_border_color(s_toast,0),ui_status_color(s_notices[0].kind)));
+        const lv_font_t *fonts[]={UI_FONT_CAPTION,UI_FONT_BODY_LARGE,UI_FONT_BODY};
+        lv_color_t colors[]={UI_TEXT_DIM,ui_status_color(s_notices[0].kind),UI_TEXT};
+        for(unsigned j=0;j<3;j++){
+            lv_obj_t *expected=lv_label_create(reference);ui_apply_custom_label_style(expected,fonts[j],colors[j]);
+            lv_obj_t *label=lv_obj_get_child(s_notice_body,j);
+            assert(lv_obj_get_style_text_font(label,0)==lv_obj_get_style_text_font(expected,0));
+            assert(lv_color_eq(lv_obj_get_style_text_color(label,0),colors[j]));
+        }
+        lv_obj_delete(reference);
+        capture("notification-theme-switch");
+    }
+    dismiss_notice(NULL);assert(s_notice_count==1&&s_notice_open);
+    unsigned before=opens;open_notice(NULL);assert(opens==before+1&&opened==UI_SHELL_PAGE_CONSOLE&&!s_notice_count);
+    assert(ui_toast_set_level(UI_NOTIFY_DETAILED));
+    ui_toast_show(UI_STATUS_OK,"SAVED","Optional confirmation");assert(s_toast&&s_timer);
+    ui_toast_refresh_appearance();assert(!s_toast&&!s_timer&&!s_notice_count);
+    ui_toast_refresh_appearance();assert(!s_toast&&!s_timer&&!s_notice_count);
+    assert(ui_toast_set_level(UI_NOTIFY_QUIET));
+}
+
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned narrow=0;narrow<3;narrow++){
   lv_display_set_resolution(d,(int[]){1024,640,480}[narrow],narrow==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large,.reduced_motion=true});has_saved=false;legacy_saved=false;stored=0;fail_write=false;log_count=changes=0;ui_toast_init();assert(!ui_toast_confirmations_enabled());
@@ -208,4 +255,5 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   notification_lifecycle_checks();
   ui_toast_preferences_show(NULL);lv_obj_delete(s_preference_popup);assert(!s_preference_popup&&!s_preference_value);assert(!lv_obj_get_child_count(lv_layer_top()));strcpy(printer,"Printer A");
  }
+ notification_theme_switch_checks();
  lv_display_delete(d);lv_deinit();puts("PASS: global quiet/confirmation policy, persistent faults, deduplication/priority/bounded queue, event history, profile identity, preference persistence/failure, layouts and lifecycle across all themes/densities/text sizes/viewports");return 0;}

@@ -1813,3 +1813,158 @@ Review should show the actual network/profile, camera saved/optional status, cur
 After a successful Finish, expect Setup complete, saved-choice guidance and a reference to the Printer page for live status. Done must remain pinned/tappable; close/reopen Setup and confirm saved values persist. The completion message should not imply a live verified printer connection merely because its profile is configured. Existing camera discovery imports and verified-save behavior remain as documented in the preceding check.
 
 Host validation: setup_center_layout_test.py adds actual summary value assertions, native Welcome/Review bounds, single-line compact row cells/display summary, completion action/label bounds and close/reopen during review's network read. It retains all prior setup owner, failed save, missing-essential, camera, display/theme and discovery bridge fixtures. Instrumented LVGL can exercise the same suite under AddressSanitizer/UndefinedBehaviorSanitizer with leak detection disabled. Native captures simulate SDK/services and are not physical panel screenshots. Build with the normal script, check the 3 MiB release budget, then OTA and verify on the panel.
+
+
+### Files, Camera and Network cross-page consistency
+
+In Studio Dark and Operator, including larger text, check Files loading, no search results, empty folder/library, offline and request-error feedback. Headings should be sentence case with clear guidance and the existing shared icon/state treatment. Loading spinner colors should follow the active theme accent/divider palette. Browse and scroll long lists without a side scrollbar. Open a preview, scroll metadata to the end, and confirm the footer remains pinned. Operator uses File preview/Print details and sentence-case Cancel/Start print; both the confirmation and inspector/expanded-metadata footers use the shared rule/spacing. Studio's inline preview should retain its existing maximum size for the metadata shown. Visual verification does not require starting a print.
+
+On Network, check connected and offline states, Scan networks/Manage printers, long SSIDs/hosts and populated/empty scan results. Values should use Connected/Disconnected/Offline/Wi-Fi with retained SSID/IP/HTTP acronyms. An empty scan gives Scan networks/range guidance. Touch scrolling remains usable without a side bar. Studio has a flat banner rule matching its section dividers; Operator retains its surfaces. Selecting a result still opens the existing connection flow.
+
+On Camera, check unconfigured/connecting/unavailable feedback and the 48px Retry action. Open View and Select camera: footer dividers/spacing should match other forms, Close/Reset stay pinned, content scrolls without a side bar, and native picker names use normal body text rather than an unnecessarily small fitted font. Selected camera/rotation/mirror choices use the shared checked treatment. Studio camera rows remain flat; Operator keeps its surfaces. Check empty selection feedback, cancel/close/reopen, retry and fullscreen exit. Live frames require a physical configured camera and remain a separate panel acceptance check.
+
+Host validation: responsive_layout_test.py --variant FILES --variant NETWORK retains print-confirmation guards, captured callbacks, metadata drag/reach, preview fit, page lifetimes, scroll damage and theme/profile geometry checks, and adds page-state/empty-network/hidden-sidebar fixtures. camera_pipeline_test.py retains catalog-save failure/retry, frame/cache retirement, stale/reentrant/owner fences, view transforms, fullscreen and timer cleanup, with native picker font and form body/footer checks. Native renders are actual LVGL source fixtures using simulated service data. Build normally, verify the 7 MiB CI limit, update through OTA and check both exposed themes on the panel.
+
+
+### Devices, Macros and Calibration consistency panel check
+
+After the guarded patch and local hosted build, install through OTA and check Studio Dark and Operator:
+
+- Devices: swipe/select categories, including categories offscreen in Operator; confirm the strip has no scrollbar and readings remain legible.
+- Macros: open Search, then parameter review; confirm body scrolling, keyboard fit and the shared divider above pinned Cancel/Done or review actions. Cancel safely without running a printer macro.
+- Calibration: inspect Input Shaper, resonance-axis selection and custom-macro dialogs; check sentence-case titles, readable axis labels and pinned footer spacing. Close without starting motion.
+
+Host validation: devices_text_layout_test.py, responsive_layout_test.py --variant MACROS, and every calibration_dialog_layout_test.py variant, using LVGL 9.5.0. Existing command-flow, owner guards and teardown assertions remain active. Firmware partition/budget remains 7 MiB per OTA slot.
+
+
+### Theme consistency retrospective verification
+
+Apply apply_theme_consistency_backpass_v2.py after the accepted Devices/Macros/Calibration patch. Build with tools/build_idf6_hosted3.sh, install through OTA, then sweep Studio Dark and Operator. The firmware budget remains 7 MiB per OTA slot.
+
+Check the shared changes first:
+
+- Compare Tools, Files and the printer chooser headings with Devices/Calibration. Confirm Files retains its preview size and now shows more of its list.
+- Inspect time zones, appearance choices and bed-mesh profiles: Studio lists are flat and divided; Operator keeps its own surfaces. Selection must remain clear.
+- Open profile, toolhead, temperature, hotend, filament-sensor, object and stop dialogs. Confirm the footer divider, fixed actions and scroll reach at default and larger text. Close without sending unnecessary printer commands.
+- Console Search and Send command: keyboard remains usable; actions stay below it. Check history navigation and Cancel/Close without sending a command.
+- Notifications: explanation and three levels are readable, selection uses the active theme color, and Cancel/Save remain pinned. Existing saved preferences and fault policy must persist.
+- Compare graph and empty-camera backgrounds with the other Studio pages. Check graph Hold/Resume live and camera controls.
+- Finish with Dashboard, Printer, Files, Camera, Tools/subpages, Console, Drybox, Settings/Setup and their dialogs in both themes. Check empty/offline states where practical.
+
+Host suite sweep: studio_layout_test.py, studio_pages_test.py, responsive_layout_test.py, chooser_refresh_test.py, devices_text_layout_test.py, profiles_layout_test.py, setup_center_layout_test.py, settings_dialog_layout_test.py, theme_dialog_layout_test.py, network_backup_dialog_test.py, about_dialog_layout_test.py, control_popups_layout_test.py, motion_layout_test.py, hotend_layout_test.py, cancel_layout_test.py, object_layout_test.py, sensor_status_layout_test.py, bed_mesh_profiles_layout_test.py, event_history_layout_test.py, calibration_dialog_layout_test.py, camera_pipeline_test.py, filament_recovery_test.py, notifications_test.py, recovery_dialog_safety_test.py, live_appearance_test.py, display_settings_safety_test.py, shared_popup_safety_test.py, diagnostics_batch_safety_test.py, console_modern_layout_test.py, telemetry_modern_layout_test.py and command_surfaces_safety_test.py.
+
+Maintained fixtures locate Console keyboards by LVGL class after reordering; existing Printer Z-offset captions and the motion-fault assertion follow current display casing. Command, ownership, retry, scrolling and teardown assertions remain active. Representative LVGL renders use simulated printer data. No ESP-IDF firmware build, OTA transfer or physical-panel verification was performed here.
+
+
+### Operator Tools, printer chooser and Macros panel check
+
+After apply_operator_tools_chooser_macros.py, build locally and update through OTA. In Operator:
+
+- Tools: verify the banner and four cards, then open each destination. Check default and larger text.
+- Printer chooser: check configured and empty slots, card alignment, active cyan outline, preview/status fit and Manage printers. Switching the active printer should not move text inside a card.
+- Macros: check the panel header, search/clear, long names, favorites, scrolling and parameter/review/Cancel. No macro needs to run for this visual check.
+
+Switch to Studio and confirm its flat sections and dividers still look correct. Host verification covers responsive Tools/Macros and chooser layout, routing, refresh and ownership checks. Real ESP-IDF build and physical OTA verification were not run here.
+
+### Operator Tools-family header validation
+
+For `apply_operator_tools_headers.py`, host LVGL checks passed for Tools and Macros responsive layouts, Devices layouts, Calibration PAGE layouts and separate translation units, Telemetry layouts/lifecycle/quiet refresh, and Studio pages including Operator Bed Mesh. Coverage includes theme/density/text-size and viewport combinations supported by each fixture. Native simulated LVGL renders were reviewed for Operator and Studio; these are not physical panel screenshots. Calibration retains 44px actions and at least 12px separation between summaries and actions.
+
+After local build and OTA, check matching Operator header alignment, typography and banner styling across Tools, Calibration, Devices, Macros, Bed Mesh and Telemetry. Check large text, live telemetry status and Devices navigation, macro filtering, mesh gestures and controls, and Studio presentation. Firmware uses 7 MiB OTA partitions.
+
+### Full two-theme audit before further visual work
+
+The full host audit passed 42 audit entry points on the cumulative source after `apply_operator_tools_headers.py`, with the notification appearance fix included. This includes batch wrappers that also exercise constituent suites. Coverage spans Dashboard/shell, Printer controls, Files, Camera, Tools/Calibration/Devices/Macros/Bed Mesh, Console, Drybox, Settings/appearance/time zone, Network/backup, setup/discovery, OTA dialogs, About, profiles/chooser, graphs, event history, notifications, shared popups, recovery and preview lifecycles. Fixtures cover Studio and Operator plus retained compatibility themes where supported, densities, large text and viewport variations.
+
+A source scan covered all 86 `ui_*.c` implementations plus related shared headers and application theme-rebuild routing. Native LVGL fixture renders in both themes were reviewed for representative page, dialog, recovery and monitoring states. These are simulated host renders, not physical panel screenshots or proof of hardware rendering/performance.
+
+The new notification regression checks repeated Operator/Studio switches and density/text changes, verifies the current surface/font/colors, byte-identical queued notices, unchanged event logging, retained navigation destinations, and optional-confirmation timer cleanup. A negative run with appearance refresh disabled reproduced the old palette failure. The notification translation unit also compiles with warnings treated as errors.
+
+Two initial legacy checks had stale expectations: Devices/Drybox uppercase status strings and popup actions fixed at exactly 48px. They now check the current sentence-case strings, at least 48px action height, complete labels within buttons, popup bounds and action non-overlap; popup coverage expands from three to all five theme IDs. Both complete suites passed on rerun.
+
+Audit entry points (all final results PASS):
+
+- `responsive_layout_test.py`
+- `calibration_dialog_layout_test.py`
+- `studio_layout_test.py`
+- `studio_pages_test.py`
+- `devices_text_layout_test.py`
+- `chooser_refresh_test.py`
+- `profiles_layout_test.py`
+- `setup_center_layout_test.py`
+- `theme_dialog_layout_test.py`
+- `settings_dialog_layout_test.py`
+- `about_dialog_layout_test.py`
+- `network_backup_dialog_test.py`
+- `live_appearance_test.py`
+- `theme_default_test.py`
+- `button_text_fit_test.py`
+- `control_popups_layout_test.py`
+- `motion_layout_test.py`
+- `hotend_layout_test.py`
+- `cancel_layout_test.py`
+- `object_layout_test.py`
+- `sensor_status_layout_test.py`
+- `console_modern_layout_test.py`
+- `telemetry_modern_layout_test.py`
+- `event_history_layout_test.py`
+- `bed_mesh_profiles_layout_test.py`
+- `notifications_test.py`
+- `filament_recovery_test.py`
+- `display_settings_safety_test.py`
+- `shared_popup_safety_test.py`
+- `recovery_dialog_safety_test.py`
+- `settings_safety_batch_test.py`
+- `diagnostics_batch_safety_test.py`
+- `monitoring_safety_batch_test.py`
+- `page_state_safety_test.py`
+- `live_widget_refresh_test.py`
+- `camera_pipeline_test.py`
+- `active_preview_safety_test.py`
+- `dashboard_camera_safety_test.py`
+- `thumbnail_component_safety_test.py`
+- `lvgl95_modernization_test.py`
+- `touch_navigation_test.py`
+- `offline_navigation_test.py`
+
+After applying `apply_full_theme_audit_closeout.py`, build locally, update through OTA, and switch Studio → Operator → Studio with an existing notification visible. Check that its styling follows the active theme and its text/action target are preserved. Also verify the latest Tools-family headers and large-text layouts on the panel before continuing visual changes. Each OTA partition is 7 MiB.
+
+### Tools content visual polish validation
+
+For `apply_tools_content_visual_polish.py`, passed Devices text/layout and pointer routes, Calibration PAGE and separate translation-unit checks, Macros responsive/lifecycle layouts, shared button text fitting (6030 checks), all four LVGL modernization owner variants, and all six native Studio-page variants. The applicable suites include compatibility themes, three densities, both text sizes, viewport variations and custom metrics/profiles. Native simulated LVGL renders were reviewed for Calibration, Devices and Macros in Studio and Operator.
+
+New assertions verify that all Operator categories fit their grid without horizontal scrolling or overlap, four device cards fit the native viewport, and filters/list/pagination remain separate. Checked-state selection is tested in both exposed themes with native pointer input. Macro rows retain complete wrapped names, left text alignment, separate icon bounds and responsive containment. Calibration purpose descriptions fit in full when tools are available, with the existing 12px separation from 44px actions retained. Shared-button regression checks preserve centered controls and pressed/focused frames.
+
+After local build and OTA, check all eight Operator device filters and counts, selected feedback, list scrolling and pagination. Check macro long names, favorites, filtering and review in both themes; verify Calibration descriptions and capability-based actions. Existing headers and theme surfaces are retained. Each OTA partition is 7 MiB. Nothing is committed or pushed by the patch.
+
+### Devices button-only pagination
+
+`apply_devices_button_paging.py` passes the complete Devices layout/pointer/lifecycle suite across compatibility themes, densities and both text sizes, and the LVGL modernization Devices owner/binding regression. New checks verify that a drag cannot scroll either exposed theme's list, every rendered entry fits, all 96 fixture devices are reachable through native Next/Previous taps, first/last controls disable correctly, page size/ranges match the visible entries, and category changes retain their reset behavior. Updated binding checks use the active theme's page size and validate final partial pages and reused cards. Native simulated Operator/Studio renders were reviewed.
+
+After build and OTA, check four entries per Operator page or six per Studio page, no device-list swiping, category selection, live values and Previous/Next. Apply after `apply_tools_content_visual_polish.py`. Firmware build and physical panel confirmation remain local; each OTA partition is 7 MiB.
+
+### Readable twelve-entry Devices validation
+
+For `apply_devices_readable_twelve.py`, passed the full Devices layout/pointer/lifecycle suite across compatibility themes, densities and text sizes and the LVGL modernization Devices owner/binding regression. Native Operator/Studio simulated renders were reviewed. New checks exercise actual vertical pointer scrolling, reachability of the twelfth entry, complete readings, all 96 fixture devices through eight pages, correct boundary button states, reset-to-top after page changes and retained category reset behavior. The existing header, checked-state, bounds, live/offline/profile and teardown checks remain.
+
+After build and OTA, check two readable columns, twelve devices in each scrollable page, Previous/Next, and current filter/header styling in both themes. Macros remains vertically scrollable. The installer validates both known delivered baselines, repeat/no-op, documentation preservation and refusal of unexpected source edits. Each OTA partition is 7 MiB; nothing is committed or pushed.
+
+### Bed Mesh and Telemetry polish validation
+
+For `apply_mesh_graphs_visual_polish.py`, the native page variants pass, including the populated Bed Mesh fixture in Studio and Operator across densities/text sizes. The Bed Mesh-specific rerun verifies single-line summaries above the canvas, separate height figures with no drawing overlap, empty-state clearing and readout deletion. Native populated/empty mesh and thermal graph renders were reviewed in both exposed themes.
+
+The new renderer check exercises a 333x200 RGB565 canvas (including aligned row stride), four zoom/pan combinations and prefix/suffix memory sentinels. The Bed Mesh variant also passes AddressSanitizer and UndefinedBehaviorSanitizer with application/renderer sources instrumented and the existing host LVGL archive linked. Leak detection is disabled for that run. The populated Studio render reproduced stripes before the renderer dimension fix and renders cleanly afterward. Hardware/PPA verification remains separate.
+
+The full Telemetry layout/lifecycle suite passes across five theme IDs, densities, text sizes and viewport sizes, preserving range/hold, hotend identity, missing data, no-op refresh and ownership checks. Connection/control regression checks pass. Other native page variants passed before the Bed Mesh-specific fixture rerun.
+
+After build and OTA, check a populated bed mesh, pan/zoom/reset/grid, profile changes and calibration confirmation in both themes. Check the profile summary and Min/Max/Range remain readable. Verify Telemetry captions, hold/resume and tab scrolling. Each OTA partition is 7 MiB; nothing is committed or pushed.
+
+### Bed mesh viewport and fitted view
+
+Full-width mesh canvases (Studio 976 x 278, Operator 800 x 304), compact footer controls, and one-line height metrics reclaim the former side rail. Studio profile status shares the title row. The renderer fits the default orbit and height walls to the actual viewport with padding; opening and Reset view use this fitted baseline, while manual zoom/pan/orbit remain available. Native fixtures cover both themes, density/text settings, reset image equality, and odd-stride raster bounds. Build and OTA panel confirmation remain required. Firmware partition budget: 7 MiB.
+
+### Taller mesh and Motion diagnostics visual pass
+
+Bed Mesh gains twenty pixels of canvas height in each exposed theme: Studio 976 x 298, Operator 800 x 324. Its Studio stage uses eight pixels of the existing gap above the navigation shelf; the compact title row and Operator banner reclaim the remaining height. Profile and height summaries, footer actions and navigation remain separate. Default fitting and Reset view use the actual taller canvas.
+
+Motion limits now align readings to the right with shared theme-owned row dividers and a subdued configuration note. Limits, Drivers and Distance use a matching title divider. The Distance introduction is a caption, leadscrew labels use sentence case, and the numeric editor names the measurement being edited. Printer-switch status uses sentence case. Calculation, transport, selection, scrolling and owner/lifetime behavior are unchanged. Native layout/interaction checks cover themes, densities, large text, narrow views, driver transitions and keyboard/edit retention; the Bed Mesh fixture checks navigation clearance and fitted-reset equality. Local build and OTA verification remain required; firmware partition budget is 7 MiB.

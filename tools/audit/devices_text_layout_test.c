@@ -47,6 +47,18 @@ state.moonraker_ok=true;state.live_data_ok=true;strcpy(state.printer_state,"read
 ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});memset(&status,0,sizeof(status));status.discovered=true;status.stored_count=status.total_object_count=96;status.kind_count[DEVICE_KIND_THERMAL]=96;status.generation++;
 for(int i=0;i<96;i++){snprintf(entries[i].display_name,sizeof(entries[i].display_name),"Extruder chamber temperature sensor %d",i);snprintf(entries[i].object_name,sizeof(entries[i].object_name),"temperature_sensor chamber_%d",i);entries[i].kind=DEVICE_KIND_THERMAL;entries[i].live_value_valid=true;strcpy(entries[i].live_value,"205.0 / 205.0 C  ACTIVE");}
 lv_obj_t*root=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(root);lv_obj_set_size(root,ui_theme_is_studio()?976:854,ui_theme_is_studio()?424:528);lv_obj_t*banner=lv_label_create(root);lv_obj_set_width(banner,190);ui_devices_catalog_view_create(root,banner);lv_obj_update_layout(root);
+if(theme==UI_THEME_OPERATOR){
+ assert(!lv_obj_has_flag(s_devices->filter_strip,LV_OBJ_FLAG_SCROLLABLE));
+ assert(lv_obj_get_scroll_right(s_devices->filter_strip)==0);
+ for(unsigned i=0;i<8;i++){
+  lv_obj_t *button=s_devices->filter_buttons[i];inside(button,s_devices->filter_strip);
+  lv_area_t a;lv_obj_get_coords(button,&a);
+  for(unsigned j=0;j<i;j++){lv_area_t b;lv_obj_get_coords(s_devices->filter_buttons[j],&b);assert(a.x2<b.x1||b.x2<a.x1||a.y2<b.y1||b.y2<a.y1);}
+ }
+ lv_area_t filters,list,footer;lv_obj_get_coords(s_devices->filter_strip,&filters);lv_obj_get_coords(s_devices->list,&list);lv_obj_get_coords(s_devices->previous_button,&footer);
+ assert(filters.y2<list.y1&&list.y2<footer.y1);
+ inside(s_devices->rows[3].card,s_devices->list);
+}
 for(int i=0;i<8;i++){lv_obj_t*b=s_devices->filter_buttons[i];assert(lv_obj_get_height(b)>=44);if(ui_theme_is_studio())inside(b,s_devices->filter_strip);single(lv_obj_get_child(b,0),true);}
 for(int i=0;i<12;i++){lv_obj_t*card=s_devices->rows[i].card;assert(card);lv_obj_t*labels[]={s_devices->rows[i].name,s_devices->rows[i].object,s_devices->rows[i].kind,s_devices->rows[i].value};for(int j=0;j<4;j++){single(labels[j],j>=2);inside(labels[j],card);}lv_area_t a,b;lv_obj_get_coords(labels[2],&a);lv_obj_get_coords(labels[3],&b);assert(a.x2<b.x1);}
 if(ui_theme_is_studio()){inside(s_devices->filter_strip,root);inside(s_devices->list,root);inside(s_devices->previous_button,root);inside(s_devices->next_button,root);assert(lv_obj_get_width(s_devices->list)==792 && lv_obj_get_height(s_devices->list)==320 && lv_obj_has_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE));assert(s_devices->page_count==8);
@@ -65,11 +77,11 @@ if(ui_theme_is_studio()){
 assert(lv_obj_get_scrollbar_mode(s_devices->list)==LV_SCROLLBAR_MODE_OFF);
 lv_obj_t *value=s_devices->rows[0].value;
 assert(strstr(lv_label_get_text(value),"205.0"));
-state.moonraker_ok=false;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
-state.moonraker_ok=true;strcpy(state.printer_state,"shutdown");ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
+state.moonraker_ok=false;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"Unavailable"));
+state.moonraker_ok=true;strcpy(state.printer_state,"shutdown");ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"Unavailable"));
 strcpy(state.printer_state,"printing");ui_devices_live_values_update();assert(strstr(lv_label_get_text(value),"205.0"));
 strcpy(state.printer_state,"ready");
-owner_generation++;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"UNAVAILABLE"));
+owner_generation++;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"Unavailable"));
 devices_refresh_timer_cb(s_devices->refresh_timer);assert(lv_obj_has_flag(s_devices->rows[0].card,LV_OBJ_FLAG_HIDDEN));assert(s_devices->empty);
 if(density==1&&large){snapshot(theme,"devices");}status.stored_count=0;status.generation++;ui_devices_catalog_view_refresh();lv_obj_update_layout(root);assert(s_devices->empty);inside(s_devices->empty,s_devices->list);ui_devices_catalog_view_close();assert(!s_devices->refresh_timer&&!s_devices->root);lv_obj_delete(root);
 status.stored_count=96;status.generation++;ui_devices_show(open_graphs);root=s_devices->root;assert(root);lv_obj_update_layout(root);
@@ -95,14 +107,14 @@ for(unsigned selected=0;selected<8;selected++){
  lv_obj_scroll_to_view(button,LV_ANIM_OFF);lv_obj_update_layout(root);
  tap(pointer,button);lv_obj_update_layout(root);
  assert(s_devices->filter==(device_filter_t)selected && s_devices->page_index==0);
- if(ui_theme_is_studio())for(unsigned i=0;i<8;i++){
+ if(ui_theme_is_studio()||theme==UI_THEME_OPERATOR)for(unsigned i=0;i<8;i++){
   lv_obj_t *b=s_devices->filter_buttons[i];
   assert(lv_obj_has_state(b,LV_STATE_CHECKED)==(i==selected));
   lv_style_value_t checked_fill;
   assert(lv_obj_get_local_style_prop(b,LV_STYLE_BG_COLOR,&checked_fill,LV_STATE_CHECKED)==LV_STYLE_RES_FOUND);
   assert(lv_color_eq(checked_fill.color,UI_CONTROL));
-  assert(lv_obj_get_style_radius(b,0)==0);
-  assert(lv_obj_get_style_border_side(b,0)==LV_BORDER_SIDE_BOTTOM);
+  if(ui_theme_is_studio()){assert(lv_obj_get_style_radius(b,0)==0);
+  assert(lv_obj_get_style_border_side(b,0)==LV_BORDER_SIDE_BOTTOM);}
  }
 }
 lv_obj_scroll_to_view(s_devices->filter_buttons[0],LV_ANIM_OFF);lv_obj_update_layout(root);
@@ -118,6 +130,28 @@ if(ui_theme_is_studio())for(unsigned i=0;i<7;i++){
  assert(s_devices->filter==(device_filter_t)i);
 }
 tap(pointer,s_devices->filter_buttons[0]);lv_obj_update_layout(root);
+if(ui_theme_is_studio()||theme==UI_THEME_OPERATOR){
+ assert(devices_page_size()==12&&s_devices->page_count==8);
+ assert(lv_obj_has_flag(s_devices->list,LV_OBJ_FLAG_SCROLLABLE));
+ lv_area_t area;lv_obj_get_coords(s_devices->list,&area);
+ touch=(lv_point_t){(area.x1+area.x2)/2,area.y2-10};pressed=true;lv_indev_read(pointer);
+ for(int i=1;i<=6;i++){touch.y=area.y2-10-i*20;lv_indev_read(pointer);}
+ pressed=false;lv_indev_read(pointer);lv_obj_update_layout(root);
+ assert(lv_obj_get_scroll_y(s_devices->list)>0);
+ lv_obj_scroll_to_y(s_devices->list,10000,LV_ANIM_OFF);lv_obj_update_layout(root);
+ inside(s_devices->rows[11].card,s_devices->list);
+ lv_obj_scroll_to_y(s_devices->list,0,LV_ANIM_OFF);lv_obj_update_layout(root);
+ for(size_t page=0;page<8;page++){
+  assert(s_devices->page_index==page);
+  char name[64];snprintf(name,sizeof(name),"sensor %u",(unsigned)(page*12));
+  assert(strstr(lv_label_get_text(s_devices->rows[0].name),name));
+  tap(pointer,s_devices->next_button);lv_obj_update_layout(root);
+  assert(!lv_obj_get_scroll_y(s_devices->list));
+ }
+ assert(s_devices->page_index==7&&lv_obj_has_state(s_devices->next_button,LV_STATE_DISABLED));
+ for(size_t page=7;page>0;page--){tap(pointer,s_devices->previous_button);lv_obj_update_layout(root);assert(s_devices->page_index==page-1);}
+ assert(lv_obj_has_state(s_devices->previous_button,LV_STATE_DISABLED));
+}
 if(density==1&&large)snapshot(theme,"devices-header");
 ui_devices_show(open_graphs);assert(root==s_devices->root);before=endstop_closes;ui_devices_hide();assert(!s_devices->root && !s_devices->refresh_timer && endstop_closes==before+1);
 unsigned timers=timer_count();

@@ -2653,6 +2653,7 @@ static void app_theme_changed(void)
     ui_shell_set_active_nav(UI_SHELL_PAGE_SETTINGS);
     ui_shell_raise();
     ui_shell_update_status_icons();
+    ui_toast_refresh_appearance();
 }
 
 

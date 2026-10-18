@@ -13,6 +13,7 @@
 #include "ui_form_dialog.h"
 #include "ui_shell.h"
 #include "ui_theme.h"
+#include "ui_widgets.h"
 
 #include "esp_heap_caps.h"
 
@@ -240,7 +241,7 @@ static void camera_mark_unavailable(void)
     camera_release_frame();
     if(!camera_ui_current(&context))return;
     s_camera_last_frame_tick = 0;
-    camera_set_status("Camera unavailable | reconnecting");
+    camera_set_status("Camera unavailable. Reconnecting...");
 }
 
 
@@ -376,14 +377,27 @@ static lv_obj_t *camera_view_group(lv_obj_t *body, bool rotations)
 
 static void camera_view_option(lv_obj_t *group, const char *text, unsigned action, bool active)
 {
-    lv_obj_t *button = ui_button_create(group, active ? UI_BUTTON_PRIMARY : UI_BUTTON_SECONDARY, text);
+    lv_obj_t *button = ui_button_create(group, UI_BUTTON_SECONDARY, text);
     s_view_actions[action] = button;camera_watch(button);
     lv_obj_set_height(button, 48);
     unsigned index = action < 4 ? action : action - 4;
     lv_obj_set_grid_cell(button, LV_GRID_ALIGN_STRETCH, index%2, 1, LV_GRID_ALIGN_STRETCH, index/2, 1);
     lv_obj_add_event_cb(button, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
     lv_obj_add_event_cb(button, camera_view_set_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)action);
-    if (active) lv_obj_add_state(button, LV_STATE_CHECKED);
+    ui_button_set_filter_active(button,active);
+}
+
+static void camera_dialog_finish(lv_obj_t *popup)
+{
+    if(!popup)return;
+    lv_obj_set_scrollbar_mode(ui_form_body(popup),LV_SCROLLBAR_MODE_OFF);
+    lv_obj_t *footer=lv_obj_get_child(popup,-1);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
+    ui_form_finish(popup);
+    if(popup==s_view_popup)for(unsigned i=0;i<7;++i)
+        if(s_view_actions[i])lv_obj_send_event(s_view_actions[i],LV_EVENT_SIZE_CHANGED,NULL);
+    if(popup==s_camera_picker_popup)for(unsigned i=0;i<CAMERA_CATALOG_MAX_CAMERAS;++i)
+        if(s_picker_actions[i])lv_obj_send_event(s_picker_actions[i],LV_EVENT_SIZE_CHANGED,NULL);
 }
 
 static void camera_view_open_cb(lv_event_t *event)
@@ -419,7 +433,7 @@ static void camera_view_open_cb(lv_event_t *event)
     s_view_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);camera_watch(s_view_feedback);
     s_view_close=ui_form_action(s_view_popup, UI_BUTTON_CLOSE, LV_SYMBOL_CLOSE " Close", camera_view_close_cb, NULL);camera_watch(s_view_close);
     s_view_actions[6]=ui_form_action(s_view_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_REFRESH " Reset", camera_view_set_cb, (void *)6);camera_watch(s_view_actions[6]);
-    ui_form_finish(s_view_popup);
+    camera_dialog_finish(s_view_popup);
 }
 
 static void camera_set_viewport(bool fullscreen)
@@ -539,7 +553,7 @@ static void camera_poll_cb(lv_timer_t *timer)
         s_camera_index=index;context.camera=index;
         camera_update_selector();
         if(!camera_ui_current(&context))goto finished;
-        camera_set_status("Connecting | active printer changed");
+        camera_set_status("Connecting to the active printer camera...");
         if(!camera_ui_current(&context))goto finished;
     }
     size_t pixel_size=0;int width=0,height=0;bool ok=false;
@@ -605,15 +619,15 @@ static void camera_poll_cb(lv_timer_t *timer)
             camera_release_frame();
             if(!camera_ui_current(&context))goto finished;
             s_camera_stream_started_tick=0;
-            camera_set_status("No camera is configured for the active printer.");goto finished;
+            camera_set_status("No camera configured. Choose Configure to add one.");goto finished;
         }
     }
     bool started=camera_stream_start(selected.stream_url);
     if(!camera_ui_current(&context))goto finished;
-    if(!started)camera_set_status("Camera unavailable | retrying");
+    if(!started)camera_set_status("Camera unavailable. Retrying...");
     else{
         s_camera_stream_started_tick=now;
-        camera_set_status("Connecting | waiting for camera stream");
+        camera_set_status("Connecting to camera stream...");
     }
 finished:
     heap_caps_free(pixels);
@@ -632,7 +646,7 @@ static void camera_retry_cb(lv_event_t *event)
     camera_release_frame();
     if(!camera_ui_current(&context))goto finished;
     camera_reset_timing();
-    camera_set_status("Connecting | retry requested");
+    camera_set_status("Connecting to camera again...");
     if(camera_ui_current(&context))camera_poll_cb(NULL);
 finished:
     s_camera_dialog_dispatching=false;
@@ -643,7 +657,7 @@ static void camera_start(void)
     if(!camera_page_active() || !s_refresh_timer)return;
     camera_ui_context_t context=camera_ui_context();
     lv_timer_t *timer=s_refresh_timer;
-    camera_set_status("Connecting | waiting for camera stream");
+    camera_set_status("Connecting to camera stream...");
     if(camera_ui_current(&context) && timer==s_refresh_timer)camera_poll_cb(NULL);
 }
 
@@ -777,7 +791,7 @@ static void camera_picker_select_cb(lv_event_t *event)
     camera_reset_timing();
     camera_update_selector();
     if(!camera_review_current(&context,popup,epoch,false))goto finished;
-    camera_set_status("Connecting | switching camera");
+    camera_set_status("Connecting to selected camera...");
     if(!camera_review_current(&context,popup,epoch,false))goto finished;
     camera_picker_close_cb(NULL);
     if(camera_ui_current(&context))camera_poll_cb(NULL);
@@ -811,17 +825,21 @@ static void camera_picker_open_cb(lv_event_t *event)
         s_picker_urls[index][sizeof(s_picker_urls[index])-1] = 0;
         char label[64];
         snprintf(label, sizeof(label), "%s%s", entry.name[0] ? entry.name : "Camera", index == default_index ? " (default)" : "");
-        lv_obj_t *button = ui_button_create(body, index == s_camera_index ? UI_BUTTON_PRIMARY : UI_BUTTON_SECONDARY, label);
+        lv_obj_t *button = ui_button_create(body, UI_BUTTON_SECONDARY, label);
         s_picker_actions[index]=button;camera_watch(button);
         lv_obj_set_size(button, LV_PCT(100), 56);
         lv_obj_add_event_cb(button, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
         lv_obj_add_event_cb(button, camera_picker_select_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)index);
-        if (index == s_camera_index) lv_obj_add_state(button, LV_STATE_CHECKED);
+        if(ui_theme_is_studio()) {
+            ui_apply_surface_role(button,UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(button,LV_BORDER_SIDE_BOTTOM);
+        }
+        ui_button_set_filter_active(button,index==s_camera_index);
         ++rows;
     }
     if (!rows) ui_form_text(body, "No configured cameras. Use Configure to add a camera.", UI_FONT_BODY, UI_TEXT_DIM);
     s_picker_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);camera_watch(s_picker_feedback);
-    ui_form_finish(s_camera_picker_popup);
+    camera_dialog_finish(s_camera_picker_popup);
 }
 
 static void camera_select_next_cb(lv_event_t *event)
@@ -890,7 +908,7 @@ static bool camera_show_page(void)
     lv_obj_add_event_cb(s_image, camera_image_tap_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_size(s_image, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
     lv_obj_align(s_image, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(s_image, UI_BG_DEEP, 0);
+    lv_obj_set_style_bg_color(s_image, ui_theme_is_studio() ? UI_BG : UI_BG_DEEP, 0);
     lv_obj_set_style_bg_opa(s_image, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(s_image, 0, 0);
 
@@ -927,7 +945,7 @@ static bool camera_show_page(void)
     lv_obj_add_event_cb(s_fullscreen_button, camera_fullscreen_cb, LV_EVENT_CLICKED, NULL);
 
     s_retry_button = ui_button_create(s_root, UI_BUTTON_SECONDARY, "Retry");camera_watch(s_retry_button);
-    lv_obj_set_size(s_retry_button, 180, 44);
+    lv_obj_set_size(s_retry_button, 180, 48);
     lv_obj_set_pos(s_retry_button, 20, ui_theme_is_studio() ? 74 : 410);
     lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(s_retry_button, camera_retry_cb, LV_EVENT_CLICKED, NULL);

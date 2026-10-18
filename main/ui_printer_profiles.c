@@ -22,6 +22,7 @@
 #include "printer_profile_health.h"
 #include "ui_popup.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_theme.h"
 #include "ui_printer_chooser.h"
 
@@ -250,7 +251,7 @@ static lv_obj_t *profiles_body(lv_obj_t *popup, const char *title)
     lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_bg_color(body, UI_TEXT_MUTED, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(body, LV_OPA_70, LV_PART_SCROLLBAR);
     lv_obj_set_style_width(body, 4, LV_PART_SCROLLBAR);
@@ -264,6 +265,10 @@ static lv_obj_t *profiles_footer(lv_obj_t *popup)
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
     lv_obj_set_style_pad_row(footer, UI_GAP_ROW, 0);
+    if (ui_popup_find_owner(popup) == popup) {
+        ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+        lv_obj_set_style_pad_top(footer, 8, 0);
+    }
     return footer;
 }
 static lv_obj_t *profiles_action_data(lv_obj_t *parent, ui_popup_action_t kind,
@@ -518,10 +523,10 @@ static void editor_security_pem_picker_open_cb(lv_event_t *event)
     if(!s_editor_pem_picker)return;
     lv_obj_add_event_cb(s_editor_pem_picker,profiles_dialog_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_t *popup=s_editor_pem_picker;
-    s_pem_body=profiles_body(popup,"SELECT CA CERTIFICATE");profiles_watch(s_pem_body);
+    s_pem_body=profiles_body(popup,"Select CA certificate");profiles_watch(s_pem_body);
     lv_obj_t *body=s_pem_body;
     s_pem_status=profiles_label(body,"SD-card root .pem files only",false);
-    s_pem_close=profiles_action(profiles_footer(popup),UI_POPUP_ACTION_CLOSE,"CLOSE",editor_pem_picker_close_cb);
+    s_pem_close=profiles_action(profiles_footer(popup),UI_POPUP_ACTION_CLOSE,"Close",editor_pem_picker_close_cb);
     uint32_t epoch=s_profile_epoch;
     s_profile_dispatching=true;
     DIR *directory=opendir("/sdcard");
@@ -883,7 +888,7 @@ static void manager_delete_cb(lv_event_t *event)
     }
 
     lv_obj_add_event_cb(s_delete_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = profiles_body(s_delete_popup, "REMOVE PRINTER?");
+    lv_obj_t *body = profiles_body(s_delete_popup, "Remove printer?");
 
     char message[256];
     snprintf(
@@ -944,7 +949,7 @@ static void editor_keyboard_popup_done_cb(lv_event_t *event)
         long port=strtol(value?value:"",&end,10);
         if(!value||!value[0]||!end||*end||port<1||port>65535) {
             ui_popup_feedback(lv_obj_get_child(s_editor_keyboard_popup,1),UI_STATUS_WARNING,
-                "INVALID PORT","Enter a port from 1 to 65535. Input has been kept.");
+                "Invalid port","Enter a port from 1 to 65535. Input has been kept.");
             ui_popup_focus_input(s_editor_keyboard_value);return;
         }
     }
@@ -1015,7 +1020,7 @@ static void editor_field_focused_cb(lv_event_t *event)
     lv_obj_add_event_cb(s_editor_keyboard, editor_keyboard_popup_done_cb, LV_EVENT_READY, NULL);
     lv_obj_add_event_cb(s_editor_keyboard, editor_keyboard_cancel_cb, LV_EVENT_CANCEL, NULL);
     lv_obj_t *footer = profiles_footer(s_editor_keyboard_popup);
-    s_key_cancel_action=profiles_action(footer, UI_POPUP_ACTION_CANCEL, "CANCEL", editor_keyboard_cancel_cb);
+    s_key_cancel_action=profiles_action(footer, UI_POPUP_ACTION_CANCEL, "Cancel", editor_keyboard_cancel_cb);
     s_editor_key_done=profiles_action(footer, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_OK " DONE", editor_keyboard_popup_done_cb);
     ui_popup_pin_keyboard(s_editor_keyboard_popup,s_editor_keyboard);
     lv_obj_move_foreground(s_editor_keyboard_popup);
@@ -1317,11 +1322,7 @@ static void editor_camera_update_slot_buttons(void)
         if(!camera_context_current(&context))return;
         ui_value_set_color(marker,configured && default_slot==index ? UI_ACCENT_BRIGHT : UI_TEXT_DIM,0);
         if(!camera_context_current(&context))return;
-        if (index == s_editor_camera_slot) {
-            lv_obj_add_state(button, LV_STATE_CHECKED);
-        } else {
-            lv_obj_clear_state(button, LV_STATE_CHECKED);
-        }
+        ui_button_set_filter_active(button, index == s_editor_camera_slot);
     }
 }
 
@@ -1709,8 +1710,7 @@ static void editor_camera_open(void)
         lv_obj_set_grid_cell(button,LV_GRID_ALIGN_STRETCH,index%columns,1,LV_GRID_ALIGN_STRETCH,index/columns,1);
         lv_obj_set_style_pad_ver(button,6,0);
         lv_obj_set_style_border_width(button,UI_BORDER_STRONG,0);
-        lv_obj_set_style_bg_color(button,UI_CONTROL,LV_STATE_CHECKED);
-        lv_obj_set_style_border_color(button,UI_ACCENT_BRIGHT,LV_STATE_CHECKED);
+        ui_button_set_filter_active(button, false);
         /* Selection is exclusive and owned by update_slot_buttons. A second
          * native tap must not toggle the current slot off. */
         lv_obj_clear_flag(button, LV_OBJ_FLAG_CHECKABLE);

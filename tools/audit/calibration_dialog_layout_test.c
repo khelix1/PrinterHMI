@@ -117,6 +117,11 @@ static void run(void){
     assert(lv_obj_get_style_border_width(section,0)==0);
     assert(lv_obj_get_style_shadow_width(section,0)==0);
    }
+   if(mode==2){
+    assert(sections[i]->purpose&&!strcmp(lv_label_get_text(summary),sections[i]->purpose));
+    lv_point_t size;lv_text_get_size(&size,sections[i]->purpose,lv_obj_get_style_text_font(summary,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    assert(size.x<=lv_obj_get_content_width(summary));
+   }
    lv_area_t text;lv_obj_get_coords(summary,&text);
    for(unsigned j=0;j<lv_obj_get_child_count(section);j++){
     lv_obj_t *button=lv_obj_get_child(section,j);

@@ -152,31 +152,10 @@ void ui_devices_show(
         s_devices->root,
         UI_SURFACE_PAGE_DEEP);
 
-    lv_obj_t *banner = ui_create_operator_banner(
-        s_devices->root,
-        20,
-        20,
-        800,
-        86,
-        UI_STATUS_INFO);
-
-    devices_label(
-        banner,
-        "Devices",
-        UI_FONT_TITLE,
-        UI_TEXT_BRIGHT,
-        20,
-        15,
-        300);
-
-    devices_label(
-        banner,
-        "Active-printer devices and live readings",
-        UI_FONT_CAPTION,
-        UI_TEXT_DIM,
-        20,
-        50,
-        400);
+    lv_obj_t *banner=ui_create_operator_page_header(s_devices->root,"Devices",
+        "Active-printer devices and live readings",UI_PAGE_RAIL_WIDTH);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,0),300,0);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,1),400,0);
 
     s_devices->banner_status = devices_label(
         banner,

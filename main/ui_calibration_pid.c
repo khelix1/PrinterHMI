@@ -89,7 +89,7 @@ bool ui_calibration_pid_printer_ready(void)
         !state.live_data_ok) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID UNAVAILABLE",
+            "PID unavailable",
             "The active printer is offline or not ready.");
         return false;
     }
@@ -98,7 +98,7 @@ bool ui_calibration_pid_printer_ready(void)
         strcmp(state.printer_state, "paused") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID BLOCKED",
+            "PID blocked",
             "PID calibration cannot run during a print.");
         return false;
     }
@@ -107,7 +107,7 @@ bool ui_calibration_pid_printer_ready(void)
         strcmp(state.printer_state, "shutdown") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID BLOCKED",
+            "PID blocked",
             "Clear the printer error before calibration.");
         return false;
     }
@@ -241,7 +241,7 @@ static void run_pid_tune_cb(
         (size_t)written >= sizeof(command)) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID FAILED",
+            "PID failed",
             "The selected heater command is too long.");
         return;
     }
@@ -470,7 +470,7 @@ void ui_calibration_pid_event(
     if (*s_context->heater_count == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_WARNING,
-            "NO PID HEATERS",
+            "No PID heaters",
             "No PID-capable heater objects are available.");
         return;
     }

@@ -91,7 +91,8 @@ static void checks(void){
  click(s->pitch);lv_textarea_set_text(s->editor_value,"bad");editor_done_cb(NULL);assert(s->editor&&lv_label_get_text(s->editor_feedback)[0]);lv_obj_delete(s->pitch);assert(!s->pitch&&!s->editor&&!s->editor_target);calculate_cb(NULL);close_popup();assert(timers()==baseline);
  reset();click(s_actions[1]);click(s->count);lv_obj_delete(s->editor_value);assert(!s->editor_value);editor_done_cb(NULL);close_popup();assert(timers()==baseline);
  for(unsigned view=0;view<3;view++){reset();click(s_actions[view]);assert(s->popup);if(view==0){lv_obj_delete(s->limits[0]);assert(!s->limits[0]);}if(view==2){lv_obj_delete(s->driver_selector);assert(!s->driver_selector);}refresh(NULL);close_popup();assert(timers()==baseline);}
- for(unsigned m=1;m<=3;m++){reset();snapshot_mode=m;click(s_actions[0]);if(m==1)assert(!s->popup&&!s->timer);if(m==2)assert(s->popup&&s->view==VIEW_DISTANCE);if(m==3){refresh(NULL);assert(!s->timer&&strstr(lv_label_get_text(s->status),"CHANGED"));}}
+ for(unsigned m=1;m<=3;m++){reset();snapshot_mode=m;click(s_actions[0]);if(m==1)assert(!s->popup&&!s->timer);if(m==2)assert(s->popup&&s->view==VIEW_DISTANCE);if(m==3){refresh(NULL);assert(!s->timer&&strstr(lv_label_get_text(s->status),"Printer changed"));}}
+ reset();click(s_actions[1]);lv_obj_delete(s->pitch_label);assert(!s->pitch_label);click(s->pitch);assert(s->editor);close_popup();
  reset();generation++;click(s_actions[1]);assert(!s->popup);
  reset();click(s_actions[1]);click(s->pitch);lv_obj_delete(card);card=NULL;assert(!s_card&&!s->popup&&!s->editor&&!s->timer);refresh(NULL);calculate_cb(NULL);
  reset();lv_obj_t*old=card;card=lv_obj_create(lv_screen_active());ui_motion_diagnostics_create(card);click(s_actions[1]);lv_obj_t*popup=s->popup;lv_obj_delete(old);assert(s_card==card&&s->popup==popup);close_popup();lv_obj_delete(card);card=NULL;

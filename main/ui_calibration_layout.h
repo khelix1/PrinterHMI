@@ -7,6 +7,7 @@
 typedef struct {
     lv_obj_t *summary;
     lv_obj_t *status;
+    const char *purpose; /* Static page copy; unavailable/discovery detail stays dynamic. */
 } ui_calibration_card_refs_t;
 
 lv_obj_t *ui_calibration_layout_label(lv_obj_t *parent, const char *text,

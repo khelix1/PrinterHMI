@@ -164,7 +164,7 @@ static void run_input_shaper_cb(lv_event_t *event)
     close_input_shaper_popup();
 
     show_results(
-        "INPUT SHAPER CALIBRATION",
+        "Input Shaper calibration",
         "Klipper is measuring X and Y resonance. Keep the machine attended and do not touch it.\n\n"
         "Apply & Restart will appear only after Klipper reports a successful result requiring SAVE_CONFIG.");
 }
@@ -189,7 +189,7 @@ static void input_shaper_button_cb(
         !s_motion.accelerometer) {
         ui_cal_dialog_notice(
             UI_STATUS_WARNING,
-            "INPUT SHAPER UNAVAILABLE",
+            "Input Shaper unavailable",
             "This printer has not reported both Input Shaper and an accelerometer.");
         return;
     }
@@ -203,14 +203,14 @@ static void input_shaper_button_cb(
     }
 
     motion_register(s_motion.input_shaper_popup);
-    ui_cal_dialog_title(s_motion.input_shaper_popup, ui_text("RUN INPUT SHAPER CALIBRATION?"));
+    ui_cal_dialog_title(s_motion.input_shaper_popup, ui_text("Run Input Shaper calibration?"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_motion.input_shaper_popup), "Klipper will move and vibrate the toolhead across both axes. The machine may be loud.\n\n"
         "Clear the bed and motion area, make sure nothing can contact the printer, and keep the machine attended.");
 
     s_shaper_feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_motion.input_shaper_popup), "");
-    ui_cal_dialog_action(s_motion.input_shaper_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_input_shaper_popup_cb, NULL, NULL);
-    ui_cal_dialog_action(s_motion.input_shaper_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_input_shaper_cb, NULL, NULL);
+    ui_cal_dialog_action(s_motion.input_shaper_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_input_shaper_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_motion.input_shaper_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_input_shaper_cb, NULL, NULL);
 }
 
 
@@ -273,7 +273,7 @@ static void run_resonance_test_cb(lv_event_t *event)
         axis);
 
     show_results(
-        "RESONANCE TEST",
+        "Resonance test",
         waiting);
 }
 
@@ -297,7 +297,7 @@ static void resonance_test_button_cb(
         !s_motion.accelerometer) {
         ui_cal_dialog_notice(
             UI_STATUS_WARNING,
-            "RESONANCE TEST UNAVAILABLE",
+            "Resonance test unavailable",
             "This printer has not reported the required motion measurement stack.");
         return;
     }
@@ -311,15 +311,15 @@ static void resonance_test_button_cb(
     }
 
     motion_register(s_motion.resonance_test_popup);
-    ui_cal_dialog_title(s_motion.resonance_test_popup, ui_text("SELECT RESONANCE TEST AXIS"));
+    ui_cal_dialog_title(s_motion.resonance_test_popup, ui_text("Select resonance test axis"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_motion.resonance_test_popup), "Klipper will move and vibrate the selected axis. The machine may be loud.\n\n"
         "Clear the bed and motion area, then select an axis to begin.");
     s_resonance_feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_motion.resonance_test_popup), "");
-    ui_cal_dialog_choice(s_motion.resonance_test_popup, UI_POPUP_ACTION_CONFIRM, ui_text("TEST X AXIS"), 248, run_resonance_test_cb, (void *)ui_text("X"), NULL);
-    ui_cal_dialog_choice(s_motion.resonance_test_popup, UI_POPUP_ACTION_CONFIRM, ui_text("TEST Y AXIS"), 248, run_resonance_test_cb, (void *)ui_text("Y"), NULL);
+    ui_cal_dialog_choice(s_motion.resonance_test_popup, UI_POPUP_ACTION_CONFIRM, ui_text("Test X axis"), 248, run_resonance_test_cb, (void *)ui_text("X"), NULL);
+    ui_cal_dialog_choice(s_motion.resonance_test_popup, UI_POPUP_ACTION_CONFIRM, ui_text("Test Y axis"), 248, run_resonance_test_cb, (void *)ui_text("Y"), NULL);
 
-    ui_cal_dialog_action(s_motion.resonance_test_popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_resonance_test_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_motion.resonance_test_popup, UI_POPUP_ACTION_CLOSE, "Close", close_resonance_test_popup_cb, NULL, NULL);
 }
 
 
@@ -352,7 +352,7 @@ static void run_accelerometer_check_cb(lv_event_t *event)
     close_accelerometer_check_popup();
 
     show_results(
-        "ACCELEROMETER CHECK",
+        "Accelerometer check",
         "Klipper is sampling accelerometer noise.\n\n"
         "Keep the printer completely still until the axis values appear.");
 }
@@ -376,7 +376,7 @@ static void accelerometer_check_button_cb(
     if (!s_motion.accelerometer) {
         ui_cal_dialog_notice(
             UI_STATUS_WARNING,
-            "SENSOR CHECK UNAVAILABLE",
+            "Sensor check unavailable",
             "This printer has not reported a supported accelerometer.");
         return;
     }
@@ -390,14 +390,14 @@ static void accelerometer_check_button_cb(
     }
 
     motion_register(s_motion.accelerometer_check_popup);
-    ui_cal_dialog_title(s_motion.accelerometer_check_popup, ui_text("CHECK ACCELEROMETER?"));
+    ui_cal_dialog_title(s_motion.accelerometer_check_popup, ui_text("Check accelerometer?"));
 
     ui_cal_dialog_text(ui_cal_dialog_body(s_motion.accelerometer_check_popup), "Klipper will sample the idle noise on every enabled accelerometer axis.\n\n"
         "Keep the printer completely still during the measurement.");
 
     s_sensor_feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_motion.accelerometer_check_popup), "");
-    ui_cal_dialog_action(s_motion.accelerometer_check_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_accelerometer_check_popup_cb, NULL, NULL);
-    ui_cal_dialog_action(s_motion.accelerometer_check_popup, UI_POPUP_ACTION_CONFIRM, "RUN CHECK", run_accelerometer_check_cb, NULL, NULL);
+    ui_cal_dialog_action(s_motion.accelerometer_check_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_accelerometer_check_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_motion.accelerometer_check_popup, UI_POPUP_ACTION_CONFIRM, "Run check", run_accelerometer_check_cb, NULL, NULL);
 }
 
 

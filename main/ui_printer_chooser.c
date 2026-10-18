@@ -280,7 +280,17 @@ static void create_card(int index, int x, int y, int width, int height)
     lv_obj_set_style_bg_color(card->root, UI_CONTROL, LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(card->root, LV_OPA_COVER, LV_STATE_PRESSED);
 
-    ui_create_divider(card->root,9,height-1,width-24,1);
+    if(ui_theme_is_studio())ui_create_divider(card->root,9,height-1,width-24,1);
+    else {
+        ui_apply_card_style(card->root);
+        lv_obj_set_style_pad_all(card->root,0,0);
+        lv_obj_set_style_border_side(card->root,LV_BORDER_SIDE_FULL,0);
+        lv_obj_set_style_border_opa(card->root,LV_OPA_COVER,0);
+        lv_obj_set_style_border_color(card->root,UI_ACCENT_CYAN,LV_STATE_USER_1);
+        /* Active changes color, not content geometry. */
+        lv_obj_set_style_border_width(card->root,
+            lv_obj_get_style_border_width(card->root,0),LV_STATE_USER_1);
+    }
 
     lv_obj_add_event_cb(
         card->root,
@@ -638,17 +648,27 @@ void ui_printer_chooser_show(
     int section_x = 20, section_y = 84, section_width = 390, section_height = 184;
     int column_step = 404, row_step = 198;
     if(ui_theme_is_studio()) {
-        lv_obj_set_pos(title,0,0);lv_obj_set_width(title,640);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
+        lv_obj_set_pos(title,0,0);lv_obj_set_width(title,640);ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
         lv_obj_add_flag(subtitle,LV_OBJ_FLAG_HIDDEN);
         if(manage){lv_obj_set_size(manage,280,44);lv_obj_set_pos(manage,696,0);}
         section_x = 0; section_y = 60; section_width = 480; section_height = 176;
         column_step = 496; row_step = 188;
     }
+    if(!ui_theme_is_studio()) {
+        lv_obj_t *banner=ui_create_operator_banner(s_root,20,20,814,86,UI_STATUS_INFO);
+        lv_obj_set_parent(title,banner);lv_obj_set_pos(title,20,15);
+        ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT_BRIGHT);
+        lv_obj_set_parent(subtitle,banner);lv_obj_set_pos(subtitle,20,48);
+        lv_obj_set_width(subtitle,472);lv_label_set_long_mode(subtitle,LV_LABEL_LONG_DOT);
+        lv_obj_set_height(subtitle,UI_FONT_CAPTION->line_height);
+        if(manage){lv_obj_set_parent(manage,banner);lv_obj_set_pos(manage,516,18);}
+        section_y=122;section_height=176;row_step=188;section_width=397;column_step=417;
+    }
     for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index)
         create_card(index, section_x + (index % 2) * column_step,
             section_y + (index / 2) * row_step, section_width, section_height);
 
-    ui_create_divider(s_root,
+    if(ui_theme_is_studio())ui_create_divider(s_root,
         section_x+section_width+(column_step-section_width)/2,section_y+8,
         1,row_step+section_height-20);
 

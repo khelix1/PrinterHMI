@@ -1031,6 +1031,7 @@ static lv_obj_t *control_layout(lv_obj_t *popup, const char *title)
     lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     return body;
 }
 
@@ -1038,7 +1039,9 @@ static lv_obj_t *control_footer(lv_obj_t *popup)
 {
     lv_obj_t *footer = lv_obj_create(popup);
     lv_obj_remove_style_all(footer);
-    lv_obj_set_size(footer, LV_PCT(100), 48);
+    lv_obj_set_size(footer, LV_PCT(100), LV_SIZE_CONTENT);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER,
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -1354,7 +1357,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
     ++s_hotend_epoch;
     lv_obj_add_event_cb(s_hotend_activate_popup, hotend_activate_deleted, LV_EVENT_DELETE, NULL);
     char title[48], text[180];
-    snprintf(title, sizeof(title), "ACTIVATE T%u?", (unsigned)index);
+    snprintf(title, sizeof(title), "Activate T%u?", (unsigned)index);
     lv_obj_t *body = control_layout(s_hotend_activate_popup, title);
     snprintf(text, sizeof(text), "Make %s the active Klipper hotend?\n\n"
         "This does not move or park a physical toolchanger.", s_hotend_confirm_name);
@@ -1370,7 +1373,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
         LV_SYMBOL_LEFT " Back", 0, 0, 170, 48, close_hotend_activate_cb, NULL, NULL);
     s_hotend_confirm_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_OK " ACTIVATE", 0, 0, 170, 48, confirm_hotend_activate_cb, NULL, NULL);
+        LV_SYMBOL_OK " Activate", 0, 0, 170, 48, confirm_hotend_activate_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(s_hotend_confirm_button, 1);
 }
 static void refresh_hotend_list(lv_timer_t *timer)

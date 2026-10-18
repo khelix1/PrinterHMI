@@ -132,3 +132,8 @@ lv_obj_t *ui_create_operator_nav_button(
 void ui_operator_nav_button_set_selected(
     lv_obj_t *button,
     bool selected);
+
+/* Shared Operator page banner: callers own width and any extra controls.
+ * Children 0/1 are the title/subtitle, with fixed theme baselines. */
+lv_obj_t *ui_create_operator_page_header(lv_obj_t *parent,const char *title,
+                                        const char *subtitle,int32_t width);

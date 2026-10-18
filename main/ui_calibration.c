@@ -592,7 +592,7 @@ static bool calibration_action_ready(
         !state.live_data_ok) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION UNAVAILABLE",
+            "Calibration unavailable",
             "The active printer is offline or not ready.");
         return false;
     }
@@ -607,7 +607,7 @@ static bool calibration_action_ready(
             workflow ? workflow : "Calibration");
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             detail);
         return false;
     }
@@ -616,7 +616,7 @@ static bool calibration_action_ready(
         strcmp(state.printer_state, "shutdown") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             "Clear the printer error before calibration.");
         return false;
     }
@@ -672,7 +672,7 @@ static void send_probe_step_cb(
             "Moonraker did not accept the TESTZ command.");
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PROBE MOVE FAILED",
+            "Probe move failed",
             "Moonraker did not accept the TESTZ command.");
     }
 }
@@ -698,7 +698,7 @@ static void abort_probe_calibration_cb(
 
     ui_cal_dialog_notice(
         sent ? UI_STATUS_OK : UI_STATUS_DANGER,
-        sent ? "PROBE ABORT REQUESTED" : "ABORT FAILED",
+        sent ? "Probe abort requested" : "Abort failed",
         sent
             ? "No calibration values were saved."
             : "Moonraker did not accept ABORT.");
@@ -893,7 +893,7 @@ static void send_axis_twist_step_cb(
             "Moonraker did not accept the Axis Twist TESTZ command.");
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "AXIS TWIST MOVE FAILED",
+            "Axis twist move failed",
             "Moonraker did not accept the TESTZ command.");
     }
 }
@@ -920,7 +920,7 @@ static void abort_axis_twist_calibration_cb(
 
     ui_cal_dialog_notice(
         sent ? UI_STATUS_OK : UI_STATUS_DANGER,
-        sent ? "AXIS TWIST ABORT REQUESTED" : "ABORT FAILED",
+        sent ? "Axis twist abort requested" : "Abort failed",
         sent
             ? "No Axis Twist values were saved."
             : "Moonraker did not accept ABORT.");
@@ -1044,7 +1044,7 @@ static void axis_twist_button_cb(
         return;
     }
 
-    ui_cal_dialog_title(s_calibration->axis_twist_popup, ui_text("START AXIS TWIST CALIBRATION?"));
+    ui_cal_dialog_title(s_calibration->axis_twist_popup, ui_text("Start axis twist calibration?"));
 
 
     char body[440];
@@ -1254,31 +1254,9 @@ void ui_calibration_show(
         s_calibration->banner_status=studio_text(s_calibration->root,"Waiting for printer",640,8,336,UI_FONT_CAPTION,UI_ACCENT_BRIGHT);
         lv_obj_set_style_text_align(s_calibration->banner_status,LV_TEXT_ALIGN_RIGHT,0);
     } else {
-    lv_obj_t *banner = ui_create_operator_banner(
-        s_calibration->root,
-        20,
-        16,
-        800,
-        68,
-        UI_STATUS_INFO);
-
-    ui_calibration_layout_label(
-        banner,
-        "Calibration",
-        UI_FONT_TITLE,
-        UI_TEXT_BRIGHT,
-        20,
-        8,
-        520);
-
-    ui_calibration_layout_label(
-        banner,
-        "Available workflows from the active printer's capabilities",
-        UI_FONT_CAPTION,
-        UI_TEXT_DIM,
-        20,
-        39,
-        620);
+    lv_obj_t *banner=ui_create_operator_page_header(s_calibration->root,"Calibration",
+        "Available workflows from the active printer's capabilities",UI_PAGE_RAIL_WIDTH);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,0),520,0);
 
     s_calibration->banner_status = ui_calibration_layout_label(
         banner,
@@ -1304,6 +1282,7 @@ void ui_calibration_show(
         &s_calibration->bed);
 
     if (bed) {
+        s_calibration->bed.purpose="Bed surface and gantry alignment";
         s_calibration->bed_mesh_button =
             ui_button_create(
                 bed,
@@ -1417,6 +1396,7 @@ void ui_calibration_show(
         &s_calibration->motion);
 
     if (motion) {
+        s_calibration->motion.purpose="Movement, limits and vibration";
         lv_obj_set_height(s_calibration->motion.summary, 24);
         lv_obj_add_flag(s_calibration->motion.status, LV_OBJ_FLAG_HIDDEN);
         ui_apply_text_caption(s_calibration->motion.summary);
@@ -1437,6 +1417,7 @@ void ui_calibration_show(
         &s_calibration->thermal);
 
     if (thermal) {
+        s_calibration->thermal.purpose="Heater and extrusion tuning";
         s_calibration->pid_tune_button =
             ui_button_create(
                 thermal,
@@ -1477,6 +1458,7 @@ void ui_calibration_show(
         &s_calibration->probe);
 
     if (probe) {
+        s_calibration->probe.purpose="Probe, Z offset and custom checks";
         lv_obj_add_flag(s_calibration->probe.status, LV_OBJ_FLAG_HIDDEN);
         ui_apply_text_caption(s_calibration->probe.summary);
         lv_label_set_long_mode(s_calibration->probe.summary, LV_LABEL_LONG_DOT);

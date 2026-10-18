@@ -131,7 +131,7 @@ static void run_custom_macro_cb(
     }
     close_custom_popup();
     s_custom->show_results(
-        "CUSTOM CALIBRATION",
+        "Custom calibration",
         "The selected printer macro is running. Monitor Console for its printer-specific instructions.\n\n"
         "Apply & Restart will appear only if Klipper reports SAVE_CONFIG.");
     s_custom->refresh_results();
@@ -163,7 +163,7 @@ static void custom_macro_selected_cb(
     }
 
     custom_register_popup();
-    ui_cal_dialog_title(*s_custom->popup, ui_text("RUN CUSTOM CALIBRATION?"));
+    ui_cal_dialog_title(*s_custom->popup, ui_text("Run custom calibration?"));
 
 
     char body[400];
@@ -232,7 +232,7 @@ static void custom_calibration_button_cb(
     if (*s_custom->count == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_WARNING,
-            "NO CUSTOM CALIBRATIONS",
+            "No custom calibrations",
             "No matching public calibration macros are available.");
         return;
     }
@@ -246,7 +246,7 @@ static void custom_calibration_button_cb(
     }
 
     custom_register_popup();
-    ui_cal_dialog_title(*s_custom->popup, ui_text("CUSTOM CALIBRATION MACROS"));
+    ui_cal_dialog_title(*s_custom->popup, ui_text("Custom calibration macros"));
 
     lv_obj_t *list =
         ui_cal_dialog_body(*s_custom->popup);
@@ -260,7 +260,7 @@ static void custom_calibration_button_cb(
     }
 
 
-    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CLOSE, "CLOSE", close_custom_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CLOSE, "Close", close_custom_popup_cb, NULL, NULL);
 }
 
 

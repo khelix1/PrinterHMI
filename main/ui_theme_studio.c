@@ -55,7 +55,7 @@ void ui_theme_studio_page_frame(lv_obj_t *obj)
     lv_obj_set_size(obj, 976, 424);
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(obj, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_pad_bottom(obj, 0, 0);
 }
 void ui_theme_studio_apply_root_style(lv_obj_t *obj)
@@ -81,7 +81,7 @@ void ui_theme_studio_apply_surface_role(lv_obj_t *o, ui_surface_role_t role)
     case UI_SURFACE_SHELL_NAV: surface(o, UI_NAV, 22, 1, 6); break;
     case UI_SURFACE_PAGE_DEEP:
         surface(o,UI_BG,0,0,0); ui_theme_studio_page_frame(o); break;
-    case UI_SURFACE_TELEMETRY_ROOT: surface(o, UI_BG_DEEP, 0, 0, 0); break;
+    case UI_SURFACE_TELEMETRY_ROOT: surface(o, UI_BG, 0, 0, 0); break;
     case UI_SURFACE_PREVIEW_WELL: ui_theme_studio_apply_preview_style(o); break;
     case UI_SURFACE_STATUS_PILL: surface(o, UI_CONTROL, LV_RADIUS_CIRCLE, 0, 4); break;
     case UI_SURFACE_POPUP_LIST: surface(o, UI_BG_DEEP, 18, 1, 8); break;

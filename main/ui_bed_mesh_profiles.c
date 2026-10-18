@@ -393,7 +393,7 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
         bool active = !strcmp(name, s.active_name);
         if (active) s.selected_profile = (int16_t)i;
         char row_text[96];
-        snprintf(row_text, sizeof(row_text), "%s%s", name, active ? "   ACTIVE" : "");
+        snprintf(row_text, sizeof(row_text), "%s%s", name, active ? "   Active" : "");
         lv_obj_t *row = ui_popup_add_selectable_row(s.profile_list, row_text, 0, 0, 1, 52,
             profile_row_cb, (void *)(uintptr_t)(i + 1));
         if (row) {

@@ -16,6 +16,7 @@
 
 static lv_obj_t *s_root;
 static lv_obj_t *s_tiles;
+static lv_obj_t *s_banner;
 static lv_obj_t *s_center_rule;
 static lv_obj_t *s_body_labels[4];
 static lv_timer_t *s_connection_timer;
@@ -34,7 +35,7 @@ static ui_tools_open_cb_t s_callbacks[4];
 static void tools_deleted(lv_event_t *event){
     if(lv_event_get_target_obj(event)!=s_root)return;
     if(s_connection_timer)lv_timer_delete(s_connection_timer);
-    s_connection_timer=NULL;s_root=NULL;s_tiles=NULL;s_center_rule=NULL;
+    s_connection_timer=NULL;s_root=NULL;s_tiles=NULL;s_center_rule=NULL;s_banner=NULL;
     for(unsigned i=0;i<4;i++)s_body_labels[i]=NULL;
 }
 
@@ -60,7 +61,8 @@ static void add_tile(const char *icon, lv_color_t icon_color,
     lv_obj_set_style_pad_column(button, UI_GAP_CARD, 0);
     lv_obj_set_style_pad_row(button, UI_GAP_ROW, 0);
     /* Flat entry sections retain the familiar two-by-two arrangement. */
-    ui_apply_flat_entry(button);
+    if(ui_theme_is_studio())ui_apply_flat_entry(button);
+    else ui_apply_card_style(button);
     lv_obj_set_grid_dsc_array(button, columns, rows);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
     if (ui_theme_is_studio()) {
@@ -136,6 +138,7 @@ static void tools_rule_deleted(lv_event_t *event)
 }
 static void tools_rule_create(void)
 {
+    if(!ui_theme_is_studio())return;
     s_center_rule=ui_create_divider(s_root,0,0,1,1);
     if(!s_center_rule)return;
     lv_obj_add_flag(s_center_rule,LV_OBJ_FLAG_HIDDEN);
@@ -150,8 +153,14 @@ static void tools_size_changed(lv_event_t *event)
 {
     (void)event;
     if (!s_tiles) return;
-    lv_obj_set_size(s_tiles, lv_obj_get_content_width(s_root) - 40,
-                    lv_obj_get_content_height(s_root) - 108);
+    int32_t width=lv_obj_get_content_width(s_root)-40;
+    if(width>UI_PAGE_RAIL_WIDTH)width=UI_PAGE_RAIL_WIDTH;
+    if(s_banner){
+        lv_obj_set_width(s_banner,width);
+        for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++)
+            lv_obj_set_width(lv_obj_get_child(s_banner,i),width-40);
+    }
+    lv_obj_set_size(s_tiles,width,lv_obj_get_content_height(s_root)-142);
 }
 
 static void tools_style_scroll_surface(void)
@@ -161,8 +170,8 @@ static void tools_style_scroll_surface(void)
 
 static void studio_tools_create(void)
 {
-    studio_text(s_root,"Tools",0,0,976,&ui_studio_font_48,UI_TEXT);
-    s_tiles=studio_plane(s_root,0,72,976,352);
+    studio_text(s_root,"Tools",0,0,976,UI_FONT_TITLE,UI_TEXT);
+    s_tiles=studio_plane(s_root,0,56,976,368);
     tools_style_scroll_surface();
     add_tile(LV_SYMBOL_REFRESH, UI_OK_BRIGHT,
              "Calibration", "Tune and validate your printer.", 0);
@@ -189,18 +198,19 @@ void ui_tools_show(void)
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
     if(ui_theme_is_studio()){studio_tools_create();tools_rule_create();s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);return;}
-    ui_page_title_create(s_root, LV_SYMBOL_SETTINGS " Tools",
-                         "Calibration and operator utilities");
+    s_banner=ui_create_operator_page_header(s_root,"Tools",
+        "Calibration and operator utilities",UI_PAGE_RAIL_WIDTH);
 
     s_tiles = lv_obj_create(s_root);
     ui_apply_surface_role(s_tiles, UI_SURFACE_TRANSPARENT);
     tools_style_scroll_surface();
     lv_obj_set_style_pad_all(s_tiles, 0, 0);
-    lv_obj_set_pos(s_tiles, 20, 88);
+    lv_obj_set_pos(s_tiles, 20, 122);
     lv_obj_set_size(s_tiles, lv_pct(100), lv_pct(100));
     lv_obj_set_style_max_width(s_tiles, UI_PAGE_ROOT_WIDTH - 40, 0);
-    lv_obj_set_style_max_height(s_tiles, UI_PAGE_ROOT_HEIGHT - 108, 0);
+    lv_obj_set_style_max_height(s_tiles, UI_PAGE_ROOT_HEIGHT - 142, 0);
     lv_obj_set_scroll_dir(s_tiles, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_tiles, LV_SCROLLBAR_MODE_OFF);
     ui_responsive_cards(s_tiles, 340);
     lv_obj_add_event_cb(s_root, tools_size_changed, LV_EVENT_SIZE_CHANGED, NULL);
     lv_obj_update_layout(s_root);

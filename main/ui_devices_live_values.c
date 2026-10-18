@@ -160,20 +160,20 @@ static bool format_known_live_value(
                 lv_snprintf(
                     output,
                     output_size,
-                    "DISABLED");
+                    "Disabled");
             } else if (!sensor->status_known) {
                 lv_snprintf(
                     output,
                     output_size,
-                    "CHECKING");
+                    "Checking");
             } else {
                 lv_snprintf(
                     output,
                     output_size,
                     "%s",
                     sensor->filament_detected
-                        ? "FILAMENT PRESENT"
-                        : "RUNOUT");
+                        ? "Filament present"
+                        : "Runout");
             }
 
             return true;
@@ -271,7 +271,7 @@ void ui_devices_live_values_update(void)
         }
 
         if (!live) {
-            ui_value_set_text(label, ui_text("UNAVAILABLE"));
+            ui_value_set_text(label, ui_text("Unavailable"));
             ui_value_set_color(label, UI_TEXT_DIM, 0);
             ui_text_fit_single_line(label, UI_FONT_CAPTION);
             continue;
@@ -309,8 +309,8 @@ void ui_devices_live_values_update(void)
             ui_value_set_text(
                 label,
                 expects_live_value
-                    ? ui_text("WAITING FOR DATA")
-                    : ui_text("DISCOVERED"));
+                    ? ui_text("Waiting for data")
+                    : ui_text("Discovered"));
             ui_value_set_color(label, UI_TEXT_DIM, 0);
         }
         ui_text_fit_single_line(label, UI_FONT_CAPTION);

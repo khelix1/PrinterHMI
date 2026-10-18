@@ -1,3 +1,5 @@
+#include "ui_widgets.h"
+#include "ui_text_fit.h"
 #include "ui_selector_style.h"
 #include "ui_telemetry.h"
 #include "ui_telemetry_components.h"
@@ -132,14 +134,27 @@ void ui_telemetry_show(void)
     lv_obj_set_size(s_panel,width,height);lv_obj_set_pos(s_panel,x,y);
     ui_apply_surface_role(s_panel,UI_SURFACE_TELEMETRY_ROOT);
     lv_obj_clear_flag(s_panel,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(s_panel,ui_theme_is_studio()?0:12,0);lv_obj_set_style_pad_row(s_panel,8,0);
+    lv_obj_set_style_pad_all(s_panel,ui_theme_is_studio()?0:20,0);lv_obj_set_style_pad_row(s_panel,8,0);
     lv_obj_set_flex_flow(s_panel,LV_FLEX_FLOW_COLUMN);lv_obj_add_event_cb(s_panel,panel_deleted,LV_EVENT_DELETE,NULL);
-    lv_obj_t *header=layout_row(s_panel,false);
-    lv_obj_t *title=telemetry_make_label(header,"Telemetry",UI_FONT_TITLE,UI_TEXT_BRIGHT);
-    lv_obj_set_width(title,LV_SIZE_CONTENT);
-    action(header,"Devices",back_cb,NULL);
-    s_status=telemetry_make_label(header,"WAITING",UI_FONT_CAPTION,UI_TEXT_DIM);
-    lv_obj_set_width(s_status,0);lv_obj_set_flex_grow(s_status,1);lv_obj_set_style_text_align(s_status,LV_TEXT_ALIGN_RIGHT,0);
+    lv_obj_t *header;
+    if(ui_theme_is_studio()) {
+        header=layout_row(s_panel,false);
+        lv_obj_t *title=telemetry_make_label(header,"Telemetry",UI_FONT_TITLE,UI_TEXT_BRIGHT);
+        lv_obj_set_width(title,LV_SIZE_CONTENT);
+        action(header,"Devices",back_cb,NULL);
+    }else {
+        header=ui_create_operator_page_header(s_panel,"Telemetry","",LV_PCT(100));
+        for(unsigned i=0;i<2;i++)lv_obj_set_style_max_width(lv_obj_get_child(header,i),LV_PCT(55),0);
+        lv_obj_t *back=action(header,"Devices",back_cb,NULL);
+        lv_obj_set_width(back,128);lv_obj_align(back,LV_ALIGN_RIGHT_MID,-20,0);
+        ui_text_fit_single_line(lv_obj_get_child(back,0),UI_FONT_BODY);
+    }
+    s_status=ui_theme_is_studio()?telemetry_make_label(header,"Waiting",UI_FONT_CAPTION,UI_TEXT_DIM):lv_obj_get_child(header,1);
+    if(!ui_theme_is_studio())lv_label_set_long_mode(s_status,LV_LABEL_LONG_CLIP);
+    if(ui_theme_is_studio()){
+        lv_obj_set_width(s_status,0);lv_obj_set_flex_grow(s_status,1);
+        lv_obj_set_style_text_align(s_status,LV_TEXT_ALIGN_RIGHT,0);
+    }
     lv_obj_t *tabs=layout_row(s_panel,true);
     const char *names[]={"Thermal","Motion","Drybox"};
     for(unsigned i=0;i<3;i++)s_tabs[i]=action(tabs,names[i],view_cb,(void *)(uintptr_t)i);
@@ -156,6 +171,11 @@ void ui_telemetry_show(void)
     ui_telemetry_charts_create(s_graph_host);
     s_history_status=telemetry_make_label(s_panel,"",UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_obj_set_width(s_history_status,LV_PCT(100));
+    if(!ui_theme_is_studio()){
+        lv_label_set_long_mode(s_history_status,LV_LABEL_LONG_CLIP);
+        lv_obj_set_height(s_history_status,UI_FONT_CAPTION->line_height);
+        if(screen_height<500){lv_obj_set_style_pad_bottom(s_panel,8,0);lv_obj_set_style_pad_row(s_panel,4,0);}
+    }
     lv_obj_t *fields[]={s_status,s_history_status,s_graph_host,s_range,s_hotend_selector,s_hold_button,s_scale_button,s_tabs[0],s_tabs[1],s_tabs[2]};
     for(size_t i=0;i<10;i++)if(fields[i])lv_obj_add_event_cb(fields[i],field_deleted,LV_EVENT_DELETE,NULL);
     telemetry_render(true);
@@ -223,9 +243,9 @@ static void telemetry_render(bool force)
     telemetry_sample_t sample;telemetry_history_from_state(&s_latest,s_now_us,&sample);
     bool live=s_latest.live_data_ok;
     char status[160];
-    if(!live)snprintf(status,sizeof(status),"%s%s",s_latest.moonraker_ok?"WAITING FOR KLIPPER":"OFFLINE",s_held?" | GRAPH HELD":"");
-    else if(s_held)snprintf(status,sizeof(status),"GRAPH HELD | VALUES LIVE");
-    else snprintf(status,sizeof(status),"LIVE | %s",s_latest.printer_state[0]?s_latest.printer_state:"connected");
+    if(!live)snprintf(status,sizeof(status),"%s%s",s_latest.moonraker_ok?"Waiting for Klipper":"Offline",s_held?" | Graph held":"");
+    else if(s_held)snprintf(status,sizeof(status),"Graph held | Values live");
+    else snprintf(status,sizeof(status),"Live | %s",s_latest.printer_state[0]?s_latest.printer_state:"connected");
     ui_value_set_text(s_status,status);ui_value_set_color(s_status,live?UI_OK_BRIGHT:UI_WARN,LV_PART_MAIN);
     ui_telemetry_charts_configure(s_view,s_window,s_hotend,s_include_targets);
     ui_telemetry_charts_update_live(&sample,live,s_held);
@@ -239,7 +259,7 @@ static void telemetry_render(bool force)
     else if(count && telemetry_history_get(count-1,&last)) {
         if(epoch!=s_telemetry_epoch || !s_panel)return;
         long long age=s_now_us>=last.time_us?(s_now_us-last.time_us)/1000000:0;
-        snprintf(status,sizeof(status),"2 s sampling | Last sample %lld s ago | %u / 300 samples | Scroll for more%s",age,(unsigned)count,s_held?" | held":"");
+        snprintf(status,sizeof(status),"Every 2 s | Updated %lld s ago | %u/300 samples | Scroll for more%s",age,(unsigned)count,s_held?" | held":"");
     } else if (!live) snprintf(status,sizeof(status),"No live history yet | %s",
         s_latest.moonraker_ok ? "Waiting for Klipper to become ready" : "Reconnect the active printer to begin sampling");
     else snprintf(status,sizeof(status),"2 s sampling | Waiting for this printer's first live sample");

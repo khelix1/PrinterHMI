@@ -94,6 +94,8 @@ ui_page_state_t *ui_page_state_create_owned(
     lv_obj_set_style_text_font(state->icon, &lv_font_montserrat_32, 0);
     state->spinner = lv_spinner_create(body);
     lv_obj_set_size(state->spinner, 34, 34);
+    lv_obj_set_style_arc_color(state->spinner,UI_BORDER,LV_PART_MAIN);
+    lv_obj_set_style_arc_color(state->spinner,UI_ACCENT_CYAN,LV_PART_INDICATOR);
     state->title = lv_label_create(body);
     lv_obj_set_width(state->title, lv_pct(100));
     lv_obj_set_style_text_align(state->title, LV_TEXT_ALIGN_CENTER, 0);

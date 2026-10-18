@@ -34,6 +34,7 @@ static void button_icon_resize(lv_event_t *event)
     lv_obj_t *label = lv_obj_get_child(button, 1);
     if (!label) return;
     bool content = lv_obj_get_style_width(button, 0) == LV_SIZE_CONTENT;
+    bool leading=lv_obj_get_style_flex_main_place(button,0)==LV_FLEX_ALIGN_START;
     lv_obj_set_flex_grow(label, 0);
     int32_t width = LV_SIZE_CONTENT;
     if (!content) {
@@ -41,10 +42,12 @@ static void button_icon_resize(lv_event_t *event)
         int32_t available = lv_obj_get_content_width(button)
             - lv_obj_get_width(icon) - lv_obj_get_style_pad_column(button, 0);
         if (available < 1) available = 1;
+        if(leading)width=available;
         lv_obj_set_style_max_width(label, available, 0);
     } else lv_obj_set_style_max_width(label, LV_COORD_MAX, 0);
     if (lv_obj_get_style_width(label, 0) != width) lv_obj_set_width(label, width);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    if(leading)lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
     /* Flex measures SIZE_CONTENT before applying a minimum height. Reserve
      * the extra space symmetrically so compact native toolbars stay centered. */
     if (lv_obj_get_style_height(button, 0) == LV_SIZE_CONTENT) {
@@ -284,7 +287,7 @@ lv_obj_t *ui_button_create_icon(
 
         lv_obj_set_flex_align(
             button,
-            LV_FLEX_ALIGN_CENTER,
+            layout == UI_BUTTON_ICON_HORIZONTAL_START ? LV_FLEX_ALIGN_START : LV_FLEX_ALIGN_CENTER,
             LV_FLEX_ALIGN_CENTER,
             LV_FLEX_ALIGN_CENTER);
 

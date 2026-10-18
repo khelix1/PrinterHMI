@@ -57,7 +57,7 @@ static void fixture(void){
  s_view_width=UI_PAGE_ROOT_WIDTH;s_view_height=UI_PAGE_ROOT_HEIGHT;s_setup_active=false;s_fullscreen=false;entry.configured=true;busy=true;
 }
 static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);assert(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2);}
-static void dialog_layout(lv_obj_t *popup){lv_obj_update_layout(popup);inside(popup,lv_screen_active());lv_obj_t*footer=lv_obj_get_child(popup,-1),*body=ui_form_body(popup);inside(footer,popup);for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t*b=lv_obj_get_child(footer,i);inside(b,footer);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(popup);inside(lv_obj_get_child(body,-1),body);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
+static void dialog_layout(lv_obj_t *popup){lv_obj_update_layout(popup);inside(popup,lv_screen_active());lv_obj_t*footer=lv_obj_get_child(popup,-1),*body=ui_form_body(popup);assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);inside(footer,popup);for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t*b=lv_obj_get_child(footer,i);inside(b,footer);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(popup);inside(lv_obj_get_child(body,-1),body);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
 static void click(lv_obj_t*b){lv_obj_send_event(b,LV_EVENT_CLICKED,NULL);}
 static lv_obj_t *rotation_option(unsigned i){return lv_obj_get_child(lv_obj_get_child(ui_form_body(s_view_popup),2),i);}
 static void reenter_save(void){click(rotation_option(0));camera_view_open_cb(NULL);camera_picker_open_cb(NULL);}
@@ -73,14 +73,14 @@ static void dialog_checks(lv_display_t*d){
   unsigned before=view_saves;save_ok=false;click(rotation_option(2));assert(view_saves==before+1&&s_view_popup==original&&entry.rotation==90&&strstr(lv_label_get_text(s_view_feedback),"Could not save"));dialog_layout(s_view_popup);save_ok=true;save_hook=reenter_save;click(rotation_option(2));save_hook=NULL;assert(view_saves==before+2&&!s_view_popup&&entry.rotation==180);
   camera_view_open_cb(NULL);click(lv_obj_get_child(lv_obj_get_child(ui_form_body(s_view_popup),4),1));assert(!s_view_popup&&entry.mirror_vertical&&entry.mirror_horizontal);
   camera_view_open_cb(NULL);click(lv_obj_get_child(lv_obj_get_child(s_view_popup,-1),1));assert(!s_view_popup&&!entry.rotation&&!entry.mirror_horizontal&&!entry.mirror_vertical);
-  camera_picker_open_cb(NULL);assert(s_camera_picker_popup);dialog_layout(s_camera_picker_popup);if(!narrow&&density==1&&large)capture(theme,"picker");body=ui_form_body(s_camera_picker_popup);for(unsigned i=0;i<4;i++){lv_obj_t*b=lv_obj_get_child(body,i);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=56);}original=s_camera_picker_popup;camera_picker_open_cb(NULL);assert(s_camera_picker_popup==original);
+  camera_picker_open_cb(NULL);assert(s_camera_picker_popup);dialog_layout(s_camera_picker_popup);if(!narrow&&density==1&&large)capture(theme,"picker");body=ui_form_body(s_camera_picker_popup);for(unsigned i=0;i<4;i++){lv_obj_t*b=lv_obj_get_child(body,i);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=56);if(!narrow)assert(lv_obj_get_style_text_font(lv_obj_get_child(b,0),0)->line_height==UI_FONT_BODY->line_height);}original=s_camera_picker_popup;camera_picker_open_cb(NULL);assert(s_camera_picker_popup==original);
   before=default_saves;save_ok=false;click(lv_obj_get_child(body,2));assert(default_saves==before+1&&s_camera_picker_popup==original&&!s_camera_index&&strstr(lv_label_get_text(s_picker_feedback),"Could not save"));save_ok=true;click(lv_obj_get_child(body,2));assert(default_saves==before+2&&!s_camera_picker_popup&&s_camera_index==2&&default_camera==2);
   for(unsigned i=0;i<10;i++){camera_view_open_cb(NULL);lv_obj_delete(s_view_popup);assert(!s_view_popup&&!s_view_feedback&&!s_view_owner);camera_view_set_cb(NULL);camera_picker_open_cb(NULL);lv_obj_delete(s_camera_picker_popup);assert(!s_camera_picker_popup&&!s_picker_feedback&&!s_picker_owner);camera_picker_select_cb(NULL);}
   camera_view_open_cb(NULL);strcpy(entry.stream_url,"http://replacement-camera.local/stream");before=view_saves;click(rotation_option(1));assert(view_saves==before&&s_view_popup&&strstr(lv_label_get_text(s_view_feedback),"configuration changed"));camera_view_close_cb(NULL);
   camera_picker_open_cb(NULL);config_generation++;before=default_saves;click(lv_obj_get_child(ui_form_body(s_camera_picker_popup),0));assert(default_saves==before&&s_camera_picker_popup&&strstr(lv_label_get_text(s_picker_feedback),"Printer changed"));camera_close_popups();s_camera_generation=config_generation;
   camera_view_open_cb(NULL);before=view_saves;save_hook=retire_save;click(rotation_option(1));save_hook=NULL;assert(view_saves==before+1&&!s_view_popup);
   camera_view_open_cb(NULL);before=view_saves;save_hook=switch_save;click(rotation_option(1));save_hook=NULL;assert(view_saves==before+1&&s_view_popup);click(rotation_option(1));assert(view_saves==before+1);camera_close_popups();s_camera_generation=config_generation;
-  entry.configured=false;camera_picker_open_cb(NULL);assert(s_camera_picker_popup&&lv_obj_check_type(lv_obj_get_child(ui_form_body(s_camera_picker_popup),0),&lv_label_class));dialog_layout(s_camera_picker_popup);camera_close_popups();entry.configured=true;
+  entry.configured=false;camera_picker_open_cb(NULL);assert(s_camera_picker_popup&&lv_obj_check_type(lv_obj_get_child(ui_form_body(s_camera_picker_popup),0),&lv_label_class));dialog_layout(s_camera_picker_popup);if(!narrow&&density==1&&large)capture(theme,"picker-empty");camera_close_popups();entry.configured=true;
   ui_camera_hide();assert(!s_view_popup&&!s_camera_picker_popup);ui_camera_destroy();
  }
  lv_display_set_resolution(d,1024,600);
@@ -135,13 +135,13 @@ static void control_checks(lv_display_t *display)
   assert(!invalidations && lv_label_get_long_mode(selector_label)==LV_LABEL_LONG_DOT);
   const char *caption=lv_label_get_text(lv_obj_get_child(s_configure_button,0));
   assert(strstr(caption,"Configure"));
-  camera_set_status("Camera unavailable | retrying");assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
+  camera_set_status("Camera unavailable. Retrying...");assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN)&&lv_obj_get_height(s_retry_button)>=48);
   lv_obj_update_layout(s_root);inside(selector_label,s_camera_selector);
   assert(lv_obj_get_height(selector_label)<=lv_obj_get_content_height(s_camera_selector));
   if(density==1&&large)capture(theme,"page");
   camera_set_viewport(true);assert(lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
   camera_set_viewport(false);assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
-  camera_set_status("Connecting | waiting for camera stream");assert(lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
+  camera_set_status("Connecting to camera stream...");assert(lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
   camera_view_open_cb(NULL);camera_picker_open_cb(NULL);assert(s_view_popup && s_camera_picker_popup);
   unsigned configure_before=configurations;click(s_configure_button);
   assert(configurations==configure_before+1 && !s_view_popup && !s_camera_picker_popup);

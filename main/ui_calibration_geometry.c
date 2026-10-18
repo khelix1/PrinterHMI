@@ -233,7 +233,7 @@ static void screws_tilt_button_cb(
         !state.live_data_ok) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION UNAVAILABLE",
+            "Calibration unavailable",
             "The active printer is offline or not ready.");
         return;
     }
@@ -242,7 +242,7 @@ static void screws_tilt_button_cb(
         strcmp(state.printer_state, "paused") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             "Screws Tilt cannot run during a print.");
         return;
     }
@@ -251,7 +251,7 @@ static void screws_tilt_button_cb(
         strcmp(state.printer_state, "shutdown") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             "Clear the printer error before calibration.");
         return;
     }
@@ -387,7 +387,7 @@ static void gantry_level_button_cb(
         !state.live_data_ok) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION UNAVAILABLE",
+            "Calibration unavailable",
             "The active printer is offline or not ready.");
         return;
     }
@@ -396,7 +396,7 @@ static void gantry_level_button_cb(
         strcmp(state.printer_state, "paused") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             "Gantry leveling cannot run during a print.");
         return;
     }
@@ -405,7 +405,7 @@ static void gantry_level_button_cb(
         strcmp(state.printer_state, "shutdown") == 0) {
         ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             "Clear the printer error before calibration.");
         return;
     }

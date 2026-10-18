@@ -32,6 +32,7 @@ lv_obj_t *telemetry_create_metric_card(lv_obj_t *parent,const char *title,lv_col
     lv_obj_remove_style_all(header);lv_obj_clear_flag(header,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(header,LV_PCT(100),LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(header,LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(header,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(header,8,0);
     lv_obj_t *name=telemetry_make_label(header,title,UI_FONT_BODY,accent);
     lv_obj_set_width(name,LV_PCT(45));

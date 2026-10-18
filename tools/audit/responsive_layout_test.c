@@ -61,6 +61,7 @@ static void tools_symbol_check(void){
  }
 }
 static void tools_divider_check(void){
+ if(!ui_theme_is_studio()){assert(!s_center_rule);return;}
  lv_area_t left,right,rule,viewport;
  lv_obj_get_coords(lv_obj_get_child(s_tiles,0),&left);lv_obj_get_coords(lv_obj_get_child(s_tiles,1),&right);
  bool columns=left.y1==right.y1 && left.x2<right.x1;
@@ -79,7 +80,7 @@ static void tools_divider_check(void){
   }
  }
 }
-static void run(int width){ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);tools_symbol_check();tools_divider_check();snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
+static void run(int width){ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);tools_symbol_check();tools_divider_check();if(!ui_theme_is_studio()){inside(s_banner,s_root);for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++)inside(lv_obj_get_child(s_banner,i),s_banner);}snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
 #elif defined(TEST_FILES)
 #include "ui_page_state.c"
 #include "ui_files.c"
@@ -90,6 +91,7 @@ int moonraker_config_active_profile_index(void){return 0;}
 const char *moonraker_config_active_profile_name(void){return "Workshop printer";}
 static unsigned lightboxes,selections;
 static bool files_inline_snapshot;
+static const char *files_state_capture;
 void ui_preview_lightbox_show_file_object(lv_obj_t *i,const char *f){assert(i&&f[0]);lightboxes++;}
 static void select_file(const char*p){assert(p&&p[0]);selections++;}
 static unsigned starts,cancels,refreshes,up_calls;
@@ -247,6 +249,11 @@ static void run(int width){
  ui_files_add_folder_button("Long folder title for row checks","folder",590);lv_obj_update_layout(s_printer_file_popup);cards(s_printer_file_list);
  ui_files_set_status("Moonraker offline. Check the active printer.");lv_obj_update_layout(s_printer_file_popup);inside(s_files_state->root,viewport);inside(s_files_state->title,s_files_state->root);inside(s_files_state->detail,s_files_state->root);
  lv_area_t title,description;lv_obj_get_coords(s_files_state->title,&title);lv_obj_get_coords(s_files_state->detail,&description);assert(title.y2<description.y1);
+ const char *messages[]={"Loading files...","No files match the current search","No files found","Moonraker offline","Request failed"};
+ const char *titles[]={"Loading files","No search results","No files found","Files offline","Files unavailable"};
+ const char *states[]={"files-loading","files-search-empty","files-empty","files-offline","files-error"};
+ for(unsigned state=0;state<5;state++){ui_files_set_status(messages[state]);lv_obj_update_layout(s_printer_file_popup);assert(!strcmp(lv_label_get_text(s_files_state->title),titles[state]));inside(s_files_state->title,s_files_state->root);inside(s_files_state->detail,s_files_state->root);files_state_capture=states[state];snapshot(s_printer_file_popup);}
+ files_state_capture=NULL;assert(lv_obj_get_scrollbar_mode(s_printer_file_list)==LV_SCROLLBAR_MODE_OFF);
  ui_thumbnail_t *view=NULL;lv_obj_t *box=NULL;
  ui_files_show_detail_popup("Long_operator_job_name_for_the_inspector_and_ready_to_print_dialog.gcode","Loading metadata",&box,&view,cancel_job,start_job);
  assert(view && box && ui_files_detail_is_open() && lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
@@ -279,7 +286,7 @@ static void run(int width){
  if(bottom>0){lv_area_t held;lv_obj_get_coords(s_detail_start_button,&held);drag_metadata(metadata);lv_obj_get_coords(s_detail_start_button,&action_after);assert(!memcmp(&held,&action_after,sizeof(held)));}
  if(bottom>0)lv_obj_scroll_to_y(metadata,lv_obj_get_scroll_y(metadata)+bottom,LV_ANIM_OFF);
  lv_obj_update_layout(s_file_detail_popup);
- assert(lv_obj_get_scroll_bottom(metadata)<=1);
+ assert(lv_obj_get_scroll_bottom(metadata)<=1);assert(lv_obj_get_scrollbar_mode(metadata)==LV_SCROLLBAR_MODE_OFF);
  lv_area_t text_area,view_area;lv_obj_get_coords(s_detail_info_label,&text_area);lv_obj_get_coords(metadata,&view_area);assert(text_area.y2<=view_area.y2);
  lv_obj_get_coords(s_detail_start_button,&action_after);assert(!memcmp(&action_before,&action_after,sizeof(action_before)));
  assert(!strstr(lv_label_get_text(s_detail_info_label),"Confirm to start this print."));
@@ -330,7 +337,7 @@ static void run(int width){
   lv_obj_delete(resized_image);
   lv_obj_delete(s_studio_metadata_popup);assert(!s_studio_metadata_popup&&!s_studio_metadata_label);ui_files_update_detail_metadata("Updated after deletion",true);assert(lv_obj_has_flag(s_detail_more_button,LV_OBJ_FLAG_HIDDEN));studio_metadata_open(NULL);assert(!s_studio_metadata_popup);studio_metadata_close(NULL);assert(!s_studio_metadata_popup && !s_studio_metadata_label);
  } else {
-  lv_obj_t *footer=lv_obj_get_parent(s_detail_start_button);cards(footer);inside(footer,s_file_detail_popup);
+  lv_obj_t *footer=lv_obj_get_parent(s_detail_start_button);cards(footer);inside(footer,s_file_detail_popup);assert(lv_obj_get_style_border_side(footer,0)==LV_BORDER_SIDE_TOP);
   assert(lv_label_get_long_mode(lv_obj_get_child(s_file_detail_popup,1))==LV_LABEL_LONG_SCROLL_CIRCULAR);
  }
  connected=false;detail_connection_refresh(NULL);assert(lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED)&&lv_obj_has_flag(s_detail_connection_label,LV_OBJ_FLAG_HIDDEN)&&!lv_label_get_text(s_detail_connection_label)[0]);
@@ -377,6 +384,7 @@ static void run(int width){
 void ui_network_create(void){}
 void ui_network_destroy(void){ui_network_destroy_objects(NULL,NULL,NULL);}
 static unsigned scans,profiles;
+static bool network_empty_capture;
 static char picked[40];
 static void scan_cb(lv_event_t *e){(void)e;scans++;}
 static void profiles_cb(lv_event_t *e){(void)e;profiles++;}
@@ -414,7 +422,10 @@ static void run(int width){
  cards(s_network.networks_list);
  lv_obj_send_event(lv_obj_get_child(s_network.networks_list,0),LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,(char *)aps[0].ssid));
  snapshot(s_network.root);
- ui_network_render_scan_results(NULL,0,0,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==0);
+ ui_network_render_scan_results(NULL,0,0,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==1);
+ assert(lv_obj_check_type(lv_obj_get_child(s_network.networks_list,0),&lv_label_class));assert(lv_obj_get_scrollbar_mode(s_network.networks_list)==LV_SCROLLBAR_MODE_OFF);
+ ui_network_refresh_objects(NULL,NULL,NULL,false,NULL,0,"No networks found");assert(!strcmp(lv_label_get_text(s_network.wifi_state),"Offline")&&!strcmp(lv_label_get_text(s_network.moonraker_state),"Disconnected"));
+ network_empty_capture=true;snapshot(s_network.root);network_empty_capture=false;
  ui_network_hide();assert(!s_network.root && !s_network.networks_list);
 }
 
@@ -479,13 +490,19 @@ static void run(int width){
   assert(lv_obj_get_style_border_side(entry,0)==LV_BORDER_SIDE_BOTTOM);
   assert(lv_color_eq(lv_obj_get_style_border_color(entry,0),UI_BORDER));
  }
+ for(unsigned i=0;i<64;i++){
+  lv_obj_t *entry=s_macros->rows[i],*icon=lv_obj_get_child(entry,0),*name=lv_obj_get_child(entry,1);
+  assert(lv_obj_get_style_text_align(name,0)==LV_TEXT_ALIGN_LEFT);
+  assert(lv_label_get_long_mode(name)==LV_LABEL_LONG_WRAP);
+  lv_area_t a,b;lv_obj_get_coords(icon,&a);lv_obj_get_coords(name,&b);assert(a.x2<b.x1);
+  inside(name,entry);
+ }
  assert(lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED));macro_drag_list();
  lv_obj_t *first=s_macros->rows[0];fav[63]=true;gen++;rebuild_macro_list();lv_obj_update_layout(s_root);cards(s_list);assert(first==s_macros->rows[0]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();lv_obj_update_layout(s_root);assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));inside(s_macros->empty,s_list);
  clear_search_cb(NULL);lv_obj_update_layout(s_root);
  assert(!lv_obj_has_state(lv_obj_get_parent(s_macros->search_label),LV_STATE_CHECKED));
- lv_obj_t *header=lv_obj_get_child(s_root,0);
- lv_obj_t *actions=ui_theme_is_studio()?header:lv_obj_get_child(header,3);
+ lv_obj_t *actions=lv_obj_get_parent(s_macros->clear_action);
  cards(actions);
  for(uint32_t i=0;i<lv_obj_get_child_count(actions);i++){
   lv_obj_t *button=lv_obj_get_child(actions,i);if(!lv_obj_check_type(button,&lv_button_class))continue;
@@ -555,9 +572,9 @@ static void snapshot(lv_obj_t *root){
 #if defined(TEST_TOOLS)
  const char *page="tools";
 #elif defined(TEST_FILES)
- const char *page=files_inline_snapshot?"files-inline":root==s_print_confirm_popup?"files-confirm":root==s_file_detail_popup?"files-ready":"files";
+ const char *page=files_state_capture?files_state_capture:files_inline_snapshot?"files-inline":root==s_print_confirm_popup?"files-confirm":root==s_file_detail_popup?"files-ready":"files";
 #elif defined(TEST_NETWORK)
- const char *page="network";
+ const char *page=network_empty_capture?"network-empty":"network";
 #else
  const char *page=root==s_macros->editor?"macros-search":root==s_confirm?"macros-parameters":"macros";
 #endif

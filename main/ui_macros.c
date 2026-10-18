@@ -219,13 +219,13 @@ static void run_macro_cb(lv_event_t *event)
     const char *reason = s_macros->pending_owner != moonraker_config_generation()
         ? "Printer changed. Cancel and reopen the macro." : printer_connection_reason(&state);
     if (reason[0]) {
-        macro_feedback(UI_STATUS_DANGER, "MACRO NOT SENT", reason);
+        macro_feedback(UI_STATUS_DANGER, "Macro not sent", reason);
         return;
     }
     char command[MACRO_COMMAND_MAX];
     snprintf(command, sizeof(command), "%s", s_macros->pending_command);
     if (!command[0]) return;
-    if(macro_already_sent(command)){macro_feedback(UI_STATUS_INFO,"MACRO ALREADY SENT","Check the printer before repeating this reviewed command.");return;}
+    if(macro_already_sent(command)){macro_feedback(UI_STATUS_INFO,"Macro already sent","Check the printer before repeating this reviewed command.");return;}
 
     lv_obj_t *popup = s_confirm;
     uint32_t epoch = s_macro_epoch, owner = s_macros->pending_owner;
@@ -240,12 +240,12 @@ static void run_macro_cb(lv_event_t *event)
         console_controller_add(CONSOLE_ENTRY_ERROR,"Macro %s was not accepted by Moonraker.",command);
     s_macro_dispatching = false;
     if(epoch!=s_macro_epoch || !s_root || s_confirm!=popup || owner!=moonraker_config_generation())return;
-    if(!sent){macro_feedback(UI_STATUS_DANGER,"MACRO NOT SENT",
+    if(!sent){macro_feedback(UI_STATUS_DANGER,"Macro not sent",
         "Request was not accepted. Your reviewed command is retained. Retry when connected.");return;}
     uint32_t expected_epoch=s_macro_epoch+2;
     close_confirm();
     if(s_macro_epoch!=expected_epoch || !s_root || owner!=moonraker_config_generation())return;
-    macro_feedback(UI_STATUS_OK,"MACRO SENT",command);
+    macro_feedback(UI_STATUS_OK,"Macro sent",command);
 }
 
 
@@ -263,7 +263,7 @@ static void macro_favorite_cb(lv_event_t *event)
     bool favorite = macro_controller_toggle_favorite(name);
     macro_feedback(
         UI_STATUS_OK,
-        favorite ? "FAVORITE SAVED" : "FAVORITE REMOVED",
+        favorite ? "Favorite saved" : "Favorite removed",
         favorite ? "Long-press any macro to change Favorites."
                  : "The macro remains available in the full list.");
     rebuild_macro_list();
@@ -275,7 +275,7 @@ static void editor_done_cb(lv_event_t *event)
     if (!s_macros || !s_root || !s_macros->editor || !s_macros->editor_value || s_macro_dispatching) return;
     if (s_macros->editor_owner != moonraker_config_generation()) {
         ui_popup_feedback(lv_obj_get_child(s_macros->editor,1), UI_STATUS_WARNING,
-            "PRINTER CHANGED", "Cancel and reopen this editor.");
+            "Printer changed", "Cancel and reopen this editor.");
         return;
     }
     if (!s_macros->editing_search && (!s_confirm || s_macros->reviewed ||
@@ -321,6 +321,7 @@ static lv_obj_t *macro_dialog(const char *text, lv_obj_t **body)
     lv_obj_set_flex_flow(*body, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(*body, UI_GAP_ROW, 0);
     lv_obj_set_scroll_dir(*body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(*body, LV_SCROLLBAR_MODE_OFF);
     return popup;
 }
 
@@ -333,8 +334,8 @@ static void macro_run_availability(void){
     const char *reason=s_macros->pending_owner!=moonraker_config_generation()?
         "Printer changed. Cancel and reopen the macro.":printer_connection_reason(&state);
     bool was_disabled=lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED);
-    if(reason[0]){lv_obj_add_state(s_macros->run_action,LV_STATE_DISABLED);macro_feedback(UI_STATUS_WARNING,"MACRO NOT READY",reason);}
-    else {lv_obj_remove_state(s_macros->run_action,LV_STATE_DISABLED);if(was_disabled)macro_feedback(UI_STATUS_INFO,"MACRO READY","Review the command, then tap Run.");}
+    if(reason[0]){lv_obj_add_state(s_macros->run_action,LV_STATE_DISABLED);macro_feedback(UI_STATUS_WARNING,"Macro not ready",reason);}
+    else {lv_obj_remove_state(s_macros->run_action,LV_STATE_DISABLED);if(was_disabled)macro_feedback(UI_STATUS_INFO,"Macro ready","Review the command, then tap Run.");}
 }
 
 static lv_obj_t *macro_actions(lv_obj_t *popup, const char *text,
@@ -342,6 +343,8 @@ static lv_obj_t *macro_actions(lv_obj_t *popup, const char *text,
 {
     lv_obj_t *row = lv_obj_create(popup);
     ui_responsive_column(row);
+    ui_apply_divider_border(row, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(row, 8, 0);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(row, UI_GAP_ROW, 0);
     lv_obj_t *cancel = ui_popup_add_action_at(row, UI_POPUP_ACTION_CANCEL,
@@ -420,26 +423,26 @@ static void review_macro_cb(lv_event_t *event)
     (void)event;
     if (!s_macros || !s_root || !s_confirm || s_macros->reviewed || s_macro_dispatching) return;
     if (s_macros->pending_owner != moonraker_config_generation()) {
-        macro_feedback(UI_STATUS_WARNING,"PRINTER CHANGED","Cancel and reopen the macro.");
+        macro_feedback(UI_STATUS_WARNING,"Printer changed","Cancel and reopen the macro.");
         return;
     }
     macro_parameter_value_t values[MACRO_PARAMETER_MAX + MACRO_PARAMETER_EXTRA];
     size_t count = s_macros->parameters.count;
     if (count > MACRO_PARAMETER_MAX) return;
     for (size_t i = 0; i < count; ++i) {
-        if(!s_macros->parameter_fields[i]){macro_feedback(UI_STATUS_WARNING,"PARAMETER UNAVAILABLE","Cancel and reopen the macro parameters.");return;}
+        if(!s_macros->parameter_fields[i]){macro_feedback(UI_STATUS_WARNING,"Parameter unavailable","Cancel and reopen the macro parameters.");return;}
         values[i].name = s_macros->parameters.names[i];
         values[i].value = lv_textarea_get_text(s_macros->parameter_fields[i]);
     }
     for (size_t i = 0; i < MACRO_PARAMETER_EXTRA; ++i) {
-        if(!s_macros->parameter_names[i] || !s_macros->parameter_fields[count+i]){macro_feedback(UI_STATUS_WARNING,"PARAMETER UNAVAILABLE","Cancel and reopen the macro parameters.");return;}
+        if(!s_macros->parameter_names[i] || !s_macros->parameter_fields[count+i]){macro_feedback(UI_STATUS_WARNING,"Parameter unavailable","Cancel and reopen the macro parameters.");return;}
         values[count + i].name = lv_textarea_get_text(s_macros->parameter_names[i]);
         values[count + i].value = lv_textarea_get_text(s_macros->parameter_fields[count + i]);
     }
     const char *error;
     if (!macro_parameter_build_command(s_pending_macro, values, count + MACRO_PARAMETER_EXTRA,
             s_macros->pending_command, sizeof(s_macros->pending_command), &error)) {
-        macro_feedback(UI_STATUS_DANGER, "CHECK PARAMETERS", error);
+        macro_feedback(UI_STATUS_DANGER, "Check parameters", error);
         return;
     }
     uint32_t editor_epoch=s_macro_epoch+1,review_owner=s_macros->pending_owner;
@@ -602,9 +605,10 @@ static void rebuild_macro_list(void)
         lv_obj_t *button = s_macros->rows[displayed];
         if (!button) {
             button = ui_button_create_icon(s_list, UI_BUTTON_OUTLINED,
-                favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY, name, UI_OK_BRIGHT, UI_BUTTON_ICON_HORIZONTAL);
+                favorite ? LV_SYMBOL_OK : LV_SYMBOL_PLAY, name, UI_OK_BRIGHT, UI_BUTTON_ICON_HORIZONTAL_START);
             if (!button) continue;
             if(ui_theme_is_studio())ui_apply_flat_entry(button);
+            else ui_apply_card_style(button);
             s_macros->rows[displayed] = button;
             lv_obj_add_event_cb(button, macro_button_cb, LV_EVENT_CLICKED, NULL);
             lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED, NULL);
@@ -651,7 +655,7 @@ static void refresh_timer_cb(lv_timer_t *timer)
     if(s_confirm)macro_run_availability();
     if(s_macros->root_owner!=moonraker_config_generation()){
         for(size_t i=0;i<MACRO_CONTROLLER_MAX_MACROS;i++)if(s_macros->rows[i])lv_obj_add_state(s_macros->rows[i],LV_STATE_DISABLED);
-        macro_feedback(UI_STATUS_WARNING,"PRINTER CHANGED","Reopen Macros for this printer.");return;
+        macro_feedback(UI_STATUS_WARNING,"Printer changed","Reopen Macros for this printer.");return;
     }
     if (status.generation !=
         s_rendered_generation) {
@@ -695,15 +699,16 @@ void ui_macros_show(
     lv_obj_set_flex_flow(s_root, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_root, ui_theme_is_studio()?0:20, 0);
     lv_obj_set_style_pad_row(s_root, UI_GAP_ROW, 0);
-    lv_obj_t *header = lv_obj_create(s_root);
-    ui_responsive_column(header);
-    lv_obj_t *title = lv_label_create(header);
+    lv_obj_t *header=ui_theme_is_studio()?lv_obj_create(s_root):
+        ui_create_operator_page_header(s_root,"Macros","Public Klipper macros",LV_PCT(100));
+    if(ui_theme_is_studio())ui_responsive_column(header);
+    lv_obj_t *title=ui_theme_is_studio()?lv_label_create(header):lv_obj_get_child(header,0);
     lv_label_set_text(title, ui_text("Macros"));
     ui_apply_text_title(title);
     ui_apply_label_bright(title);
-    lv_obj_t *subtitle = lv_label_create(header);
+    lv_obj_t *subtitle=ui_theme_is_studio()?lv_label_create(header):lv_obj_get_child(header,1);
     lv_label_set_text(subtitle, ui_text("Public Klipper macros"));
-    lv_obj_set_width(subtitle, lv_pct(100));
+    if(ui_theme_is_studio())lv_obj_set_width(subtitle,lv_pct(100));
     ui_apply_text_caption(subtitle);
     ui_apply_label_dim(subtitle);
     s_status = lv_label_create(header);
@@ -759,6 +764,19 @@ void ui_macros_show(
         lv_obj_delete(actions);
         ui_text_fit_single_line(lv_obj_get_child(search,0),UI_FONT_BODY);
         ui_text_fit_single_line(lv_obj_get_child(clear,0),UI_FONT_BODY);
+    }
+    if(!ui_theme_is_studio()) {
+        lv_obj_set_parent(s_status,actions);lv_obj_set_width(s_status,0);
+        lv_obj_set_flex_grow(s_status,1);
+        lv_label_set_long_mode(s_status,LV_LABEL_LONG_DOT);
+        lv_obj_set_height(s_status,UI_FONT_CAPTION->line_height);
+        lv_obj_set_flex_align(actions,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_parent(hint,s_root);lv_obj_move_to_index(hint,2);
+        lv_obj_set_style_max_width(actions,UI_PAGE_RAIL_WIDTH,0);
+        lv_obj_set_style_max_width(hint,UI_PAGE_RAIL_WIDTH,0);
+        lv_obj_set_style_max_width(s_list,UI_PAGE_RAIL_WIDTH,0);
+        ui_apply_surface_role(s_list,UI_SURFACE_TRANSPARENT);
+        lv_obj_set_style_pad_all(s_list,0,0);
     }
     lv_obj_update_layout(s_root);
 

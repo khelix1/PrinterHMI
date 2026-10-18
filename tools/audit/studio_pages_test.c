@@ -78,8 +78,8 @@ static void check_toolhead_offset(void){
   ui_theme_set_active((ui_theme_id_t)theme);lv_obj_t *a=NULL,*b=NULL,*c=NULL;double step=10;state.z_offset=0;
   ui_printer_motion_show(&a,&b,&c,&step,send_motion);
   lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);
-  lv_obj_t *tab=find_text(popup,"Z OFFSET");assert(tab);lv_obj_send_event(lv_obj_get_parent(tab),LV_EVENT_CLICKED,NULL);
-  lv_obj_t *caption=find_text(popup,"RUNTIME Z OFFSET"),*value=find_text(popup,"+0.000 mm"),*adjust=find_text(popup,"-0.05");
+  lv_obj_t *tab=find_text(popup,"Z offset");assert(tab);lv_obj_send_event(lv_obj_get_parent(tab),LV_EVENT_CLICKED,NULL);
+  lv_obj_t *caption=find_text(popup,"Runtime Z offset"),*value=find_text(popup,"+0.000 mm"),*adjust=find_text(popup,"-0.05");
   assert(caption&&value&&adjust);lv_label_set_text(value,"-10.000 mm");lv_obj_update_layout(popup);
   lv_area_t ca,va,ba;lv_obj_get_coords(caption,&ca);lv_obj_get_coords(value,&va);lv_obj_get_coords(adjust,&ba);assert(ca.y2<va.y1);assert(va.y2<ba.y1);
   lv_obj_t *close=lv_obj_get_child(lv_obj_get_child(popup,-1),0);lv_obj_send_event(close,LV_EVENT_CLICKED,NULL);
@@ -192,19 +192,74 @@ static void run(void){s_query[0]=0;s_follow=true;ui_console_show(send_command);l
 static void run(void){lv_obj_t *r=page_root();ui_calibration_card_refs_t refs[4];lv_obj_t *cards[4];for(int i=0;i<4;i++)cards[i]=ui_calibration_layout_card(r,"WORKFLOW",i%2?430:20,i>1?322:126,&refs[i]);children_inside(r);assert(lv_obj_get_x(cards[1])+lv_obj_get_width(cards[1])==976);assert(lv_obj_get_y(cards[3])+lv_obj_get_height(cards[3])==424);snapshot("calibration-layout-native");lv_obj_delete(r);}
 #elif defined(TEST_BED_MESH)
 #include "ui_bed_mesh.c"
-bool bed_mesh_controller_snapshot(bed_mesh_snapshot_t *out,float *v,size_t n,bed_mesh_profile_name_t *p,size_t c){(void)v;(void)n;(void)p;(void)c;memset(out,0,sizeof(*out));return false;}
+static bool valid_mesh;
+bool bed_mesh_controller_snapshot(bed_mesh_snapshot_t *out,float *v,size_t n,bed_mesh_profile_name_t *p,size_t c){
+ (void)p;(void)c;memset(out,0,sizeof(*out));if(!valid_mesh)return false;assert(n>=9);
+ for(unsigned i=0;i<9;i++)v[i]=((int)i-4)*.05f;
+ *out=(bed_mesh_snapshot_t){.valid=true,.rows=3,.cols=3,.mesh_max_x=200,.mesh_max_y=200,.minimum=-.2,.maximum=.2,.range=.4,.values=v};
+ strcpy(out->profile_name,"Reference mesh");return true;
+}
 void ui_bed_mesh_profiles_init(lv_obj_t *owner,ui_bed_mesh_profiles_command_cb_t cb){(void)owner;(void)cb;}
 void ui_bed_mesh_profiles_update(const bed_mesh_snapshot_t *mesh){(void)mesh;}
 void ui_bed_mesh_profiles_show_cb(lv_event_t *e){(void)e;}
 void ui_bed_mesh_profiles_close(void){}
 void ui_bed_mesh_profiles_refresh_availability(void){}
-static void run(void){ui_bed_mesh_show(send_command);lv_obj_update_layout(s.popup);assert(s.canvas && lv_obj_get_width(s.popup)==976 && lv_obj_get_height(s.popup)==424);children_inside(s.popup);assert(lv_obj_get_width(s.canvas)==776 && lv_obj_get_height(s.canvas)==250);snapshot("bed-mesh-layout-native");ui_bed_mesh_close();assert(!s.popup && !s.buf);}
+static void renderer_bounds(void){
+ const int width=333,height=200;size_t stride=lv_draw_buf_width_to_stride(width,LV_COLOR_FORMAT_RGB565),bytes=stride*height;
+ uint8_t *storage=lv_malloc(bytes+256);assert(storage);memset(storage,0xA5,bytes+256);
+ lv_obj_t *canvas=lv_canvas_create(lv_screen_active());lv_canvas_set_buffer(canvas,storage+128,width,height,LV_COLOR_FORMAT_RGB565);
+ ui_bed_mesh_renderer_config_t config={.canvas=canvas,.buf=(uint16_t*)(storage+128),.values=s.values,.mesh=s.mesh,.view=s.view,.zscale=20};
+ /* Both square and rectangular beds fit with padding at opening zoom. */
+ for(unsigned shape=0;shape<2;shape++){
+  config.mesh.mesh_max_x=shape?350:200;config.mesh.mesh_max_y=shape?100:200;
+  ui_bed_mesh_renderer_render(&config);
+  uint16_t *pixels=(uint16_t*)(storage+128),bg=pixels[0];
+  int left=width,right=0,top=height,bottom=0;
+  for(int y=0;y<height;y++)for(int x=0;x<width;x++)if(pixels[y*(stride/2)+x]!=bg){
+   if(x<left)left=x;
+   if(x>right)right=x;
+   if(y<top)top=y;
+   if(y>bottom)bottom=y;
+  }
+  assert(left>8&&right<width-8&&top>8&&bottom<height-8&&right-left>width/3);
+ }
+ for(unsigned i=0;i<4;i++){
+  config.view.pan_x=i%2?140:-140;config.view.pan_y=i<2?80:-80;config.view.zoom=2;
+  ui_bed_mesh_renderer_render(&config);
+  for(unsigned j=0;j<128;j++)assert(storage[j]==0xA5&&storage[128+bytes+j]==0xA5);
+ }
+ lv_obj_delete(canvas);lv_free(storage);
+}
+static void run(void){
+ valid_mesh=false;ui_bed_mesh_show(send_command);lv_obj_update_layout(s.popup);
+ assert(s.canvas && lv_obj_get_width(s.popup)==(ui_theme_is_studio()?976:854) && lv_obj_get_height(s.popup)==(ui_theme_is_studio()?432:528));
+ children_inside(s.popup);assert(lv_obj_get_width(s.canvas)==(ui_theme_is_studio()?976:800) && lv_obj_get_height(s.canvas)==(ui_theme_is_studio()?298:324));
+ assert(!strcmp(lv_label_get_text(s.metrics),""));snapshot(ui_theme_is_studio()?"bed-mesh-layout-native":"bed-mesh-operator-native");
+ valid_mesh=true;ui_bed_mesh_refresh();lv_obj_update_layout(s.popup);children_inside(s.popup);
+ assert(strstr(lv_label_get_text(s.stats),"Reference mesh")&&!strchr(lv_label_get_text(s.stats),'\n'));
+ assert(strstr(lv_label_get_text(s.metrics),"Min -0.200 mm")&&strstr(lv_label_get_text(s.metrics),"Range 0.400 mm"));
+ lv_area_t summary,canvas,height;lv_obj_get_coords(s.stats,&summary);lv_obj_get_coords(s.canvas,&canvas);lv_obj_get_coords(s.metrics,&height);
+ lv_area_t page;lv_obj_get_coords(s.popup,&page);
+ if(ui_theme_is_studio())assert(page.y2<516);
+ assert(summary.y2<canvas.y1&&height.y1>canvas.y2&&height.y2<page.y1+(ui_theme_is_studio()?368:456));
+ assert(!strchr(lv_label_get_text(s.metrics),'\n'));
+ size_t bytes=(size_t)lv_draw_buf_width_to_stride(CW,LV_COLOR_FORMAT_RGB565)*CH;
+ uint8_t *opening=malloc(bytes);assert(opening);memcpy(opening,s.buf,bytes);
+ plus_cb(NULL);s.view.pan_x=60;s.view.yaw+=.5f;render();
+ assert(memcmp(opening,s.buf,bytes));reset_cb(NULL);
+ assert(!memcmp(opening,s.buf,bytes));free(opening);
+ snapshot(ui_theme_is_studio()?"bed-mesh-valid-studio":"bed-mesh-valid-operator");
+ renderer_bounds();
+ valid_mesh=false;ui_bed_mesh_refresh();assert(!strcmp(lv_label_get_text(s.metrics),""));
+ lv_obj_delete(s.metrics);assert(!s.metrics);stats();ui_bed_mesh_close();assert(!s.popup&&!s.buf);
+}
+
 #else
 #include "ui_settings_components.c"
-static void run(void){lv_obj_t *r=page_root();studio_text(r,"Settings",0,0,500,&ui_studio_font_48,UI_TEXT);lv_obj_t *body=studio_plane(r,0,66,976,358);lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_t *section=ui_settings_section_create(body,"Display",0,332);ui_settings_section_add_percent_slider_row(section,"Brightness","Adjust the display backlight",69,10,100,52,clicked);ui_settings_section_add_row(section,"Theme","Choose the interface", "STUDIO Dark",120,clicked);ui_settings_section_add_row(section,"Text size","Choose the reading size","Standard",188,clicked);ui_settings_section_add_action_row(section,"Calibration","Adjust panel touch alignment","Calibrate",256,clicked,false);children_inside(section);snapshot("settings-components-native");lv_obj_delete(r);}
+static void run(void){lv_obj_t *r=page_root();studio_text(r,"Settings",0,0,500,UI_FONT_TITLE,UI_TEXT);lv_obj_t *body=studio_plane(r,0,66,976,358);lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_t *section=ui_settings_section_create(body,"Display",0,332);ui_settings_section_add_percent_slider_row(section,"Brightness","Adjust the display backlight",69,10,100,52,clicked);ui_settings_section_add_row(section,"Theme","Choose the interface", "STUDIO Dark",120,clicked);ui_settings_section_add_row(section,"Text size","Choose the reading size","Standard",188,clicked);ui_settings_section_add_action_row(section,"Calibration","Adjust panel touch alignment","Calibrate",256,clicked,false);children_inside(section);snapshot("settings-components-native");lv_obj_delete(r);}
 #endif
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);ui_theme_set_active(UI_THEME_STUDIO_DARK);ui_theme_set_density(UI_DENSITY_COMFORTABLE);ui_theme_set_accessibility((ui_accessibility_t){0});ui_apply_root_style(lv_screen_active());state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"standby");strcpy(state.homed_axes,"xyz");state.toolhead_position_valid=true;state.toolhead_x=120;state.toolhead_y=120;state.toolhead_z=1.2;for(unsigned theme=0;theme<5;theme++){
-#ifdef TEST_DRYBOX
+#if defined(TEST_DRYBOX) || defined(TEST_BED_MESH)
  if(theme!=UI_THEME_STUDIO_DARK && theme!=UI_THEME_OPERATOR)continue;
 #else
  if(theme!=UI_THEME_STUDIO_DARK)continue;

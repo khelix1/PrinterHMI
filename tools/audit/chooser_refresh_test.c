@@ -61,19 +61,22 @@ static void geometry(void)
   assert(lv_obj_get_y(child)>lv_obj_get_y(s_cards[0].root));
   assert(lv_obj_get_y(child)+lv_obj_get_height(child)<lv_obj_get_y(s_cards[3].root)+lv_obj_get_height(s_cards[3].root));
  }
- assert(separators==1);
+ assert(separators==(ui_theme_is_studio()?1u:0u));
  for(int i=0;i<4;i++){
   chooser_card_t*c=&s_cards[i];contained(c->root,s_root);
-  assert(lv_obj_get_style_radius(c->root,0)==0);
+  if(ui_theme_is_studio())assert(lv_obj_get_style_radius(c->root,0)==0);
+  else if(ui_theme_get_active()==UI_THEME_OPERATOR)assert(lv_obj_get_style_bg_opa(c->root,0)==LV_OPA_COVER);
   for(int j=0;j<i;j++)assert(!overlapping(c->root,s_cards[j].root));
   assert(lv_obj_get_x(c->root)==lv_obj_get_x(s_cards[i%2].root));
   assert(lv_obj_get_y(c->root)==lv_obj_get_y(s_cards[(i/2)*2].root));
   assert(lv_obj_get_width(c->preview_box)==116 && lv_obj_get_height(c->preview_box)==116);
   assert(lv_obj_get_y(c->hint)==lv_obj_get_y(c->active));
   assert(lv_obj_get_y(c->hint)==lv_obj_get_y(s_cards[i%2].hint));
-  lv_obj_t *lower=lv_obj_get_child(c->root,0);
-  assert(lv_obj_get_height(lower)==1 && lv_obj_get_width(lower)==lv_obj_get_width(c->root)-24);
-  assert(lv_obj_get_y(lower)==lv_obj_get_height(c->root)-1);
+  if(ui_theme_is_studio()){
+   lv_obj_t *lower=lv_obj_get_child(c->root,0);
+   assert(lv_obj_get_height(lower)==1 && lv_obj_get_width(lower)==lv_obj_get_width(c->root)-24);
+   assert(lv_obj_get_y(lower)==lv_obj_get_height(c->root)-1);
+  }else assert(lv_obj_get_style_border_side(c->root,0)==LV_BORDER_SIDE_FULL);
   lv_obj_t*labels[]={c->name,c->endpoint,c->status,c->active,c->hint};
   for(unsigned j=0;j<5;j++){
    contained(labels[j],c->root);

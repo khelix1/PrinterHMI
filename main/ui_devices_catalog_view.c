@@ -171,6 +171,8 @@ static void update_filter_buttons(
             /* Eight adjacent 44px rows fill the category rail. Their native
              * targets must remain disjoint instead of inheriting touch slop. */
             lv_obj_set_ext_click_area(button,0);
+        } else if(ui_theme_get_active()==UI_THEME_OPERATOR) {
+            ui_button_set_filter_active(button,index==(size_t)s_devices->filter);
         }
 
         lv_obj_t *label =
@@ -608,7 +610,7 @@ void ui_devices_catalog_view_create(
         LV_DIR_HOR);
     lv_obj_set_scrollbar_mode(
         s_devices->filter_strip,
-        LV_SCROLLBAR_MODE_AUTO);
+        LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_pad_all(
         s_devices->filter_strip,
         0,
@@ -743,6 +745,25 @@ void ui_devices_catalog_view_create(
         lv_obj_set_pos(s_devices->pagination_label,360,390);lv_obj_set_width(s_devices->pagination_label,440);
         ui_create_divider(s_devices->root,174,64,1,352);
         ui_create_divider(s_devices->root,580,56,1,320);
+    }
+    if(ui_theme_get_active()==UI_THEME_OPERATOR) {
+        /* All eight categories stay visible; the device list alone scrolls. */
+        static const int32_t columns[]={LV_GRID_FR(1),LV_GRID_FR(1),LV_GRID_FR(1),LV_GRID_FR(1),LV_GRID_TEMPLATE_LAST};
+        static const int32_t rows[]={44,44,LV_GRID_TEMPLATE_LAST};
+        lv_obj_set_grid_dsc_array(s_devices->filter_strip,columns,rows);
+        lv_obj_set_style_pad_column(s_devices->filter_strip,8,0);
+        lv_obj_set_style_pad_row(s_devices->filter_strip,8,0);
+        lv_obj_set_height(s_devices->filter_strip,96);
+        lv_obj_clear_flag(s_devices->filter_strip,LV_OBJ_FLAG_SCROLLABLE);
+        for(unsigned i=0;i<DEVICE_FILTER_COUNT;i++)if(s_devices->filter_buttons[i]) {
+            lv_obj_t *button=s_devices->filter_buttons[i];
+            lv_obj_set_style_min_width(button,0,0);
+            lv_obj_set_width(button,0);
+            lv_obj_set_grid_cell(button,LV_GRID_ALIGN_STRETCH,i%4,1,LV_GRID_ALIGN_STRETCH,i/4,1);
+        }
+        lv_obj_set_pos(s_devices->list,20,230);lv_obj_set_height(s_devices->list,232);
+        lv_obj_set_y(s_devices->previous_button,474);lv_obj_set_y(s_devices->next_button,474);
+        lv_obj_set_y(s_devices->pagination_label,484);
     }
     s_devices->filter = DEVICE_FILTER_ALL;
     s_devices->rendered_generation = UINT32_MAX;

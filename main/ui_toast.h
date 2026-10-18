@@ -6,6 +6,8 @@ void ui_toast_show(ui_status_kind_t kind,
                        const char *title,
                        const char *detail);
 void ui_toast_close(void);
+/* UI thread, after changing theme/density/accessibility; preserves notices. */
+void ui_toast_refresh_appearance(void);
 
 typedef enum { UI_NOTIFY_QUIET=0, UI_NOTIFY_STANDARD=1, UI_NOTIFY_DETAILED=2 } ui_notification_level_t;
 ui_notification_level_t ui_toast_level(void);

@@ -2086,3 +2086,118 @@ Welcome explains direct step navigation and that saved choices remain in place o
 The completion message is now Setup complete and directs the user to Settings for saved choices and the Printer page for live connection status. It does not infer a currently working printer from a stored profile. Done retains the shared pinned footer/divider and is fitted after final layout. Completion storage, essential checks, save/retry behavior and optional camera handling are unchanged. No extra timer, assets/fonts or storage writes.
 
 Host validation checks actual review SSID/profile values, all saved display fields, native Welcome/Review child bounds, single-line row cells, a one-line native display summary, completion/footer/action bounds and owner replacement during review sampling, alongside the full existing setup/persistence/camera suite across five compatibility themes, densities, text sizes and viewport widths. Native large-text source fixtures are reviewed in Studio Dark and Operator. Firmware build/size, OTA and panel acceptance remain separate.
+
+
+### Files, Camera and Network state/dialog consistency
+
+After checkpoint 1eb5193, Files loading/search-empty/folder-empty/offline/error headings use sentence case through the existing shared page-state component. Its loading spinner now uses the theme accent and divider colors instead of LVGL default blue/white, benefiting every caller of that component. The Operator file inspector uses File preview/Print details and sentence-case actions, avoiding a readiness claim while metadata is unavailable. Browser, metadata and confirmation bodies keep touch scrolling without side scrollbars. Print confirmation, Operator inspector and expanded Studio metadata use the shared top footer divider with 8px spacing; expanded metadata retains its pinned Close action and scroll reach. Studio's inline preview sizing remains unchanged.
+
+Network connection values and fallback banner text now use Connected/Disconnected/Offline/Wi-Fi, with IP address and protocol acronyms preserved. The Studio banner uses the shared flat bottom divider rather than a rounded outline; Operator retains its surfaces. Available-network lists hide sidebars while remaining scrollable, and an empty result gives actionable Scan networks/range guidance. Returned SSIDs, scan selection callbacks, discovery navigation and external controller text are unchanged.
+
+Camera's unavailable/connecting/no-configuration feedback reads as normal sentences while retaining the existing Camera unavailable retry predicate. Retry has a 48px target. View and Select camera dialogs hide body scrollbars and use the same shared footer divider/spacing. Camera choices are flat in Studio, retain Operator surfaces, and share the standard checked-state helper with rotation/mirror choices. Action fitting runs after final dialog geometry so native picker rows keep the preferred body font. Stream/frame/fullscreen ownership, catalog persistence, retries, test/setup suspension and profile fencing are unchanged.
+
+The existing Files/Network responsive suites pass across compatibility themes, density/text sizes, supported widths and custom profiles; they retain print safety, metadata touch scrolling, preview fit, fixed footers, row refresh/damage and page lifetime checks. Additional fixtures cover all five Files page states, Network empty feedback and hidden sidebars. The Camera suite checks preferred native picker text and pinned body/footer bounds alongside frame retirement, retry/save/rotation/mirror/fullscreen, stale callbacks, deleted fields and timer-balanced cleanup; standalone Camera compilation passes. Native large-text project-source renders are reviewed in Studio Dark and Operator, with simulated services. No assets/fonts or transport/storage changes. The current CI firmware limit is 7 MiB, matching the existing OTA slots; build/OTA/panel acceptance remains pending for this follow-up.
+
+
+### Devices, Macros and Calibration visual consistency
+
+- Devices keeps theme-specific category layouts and touch scrolling, with the remaining category-strip scrollbar hidden. Live availability and filament status labels use sentence case.
+- Macro search, parameter and command-review dialogs use the shared footer divider and spacing, with body scrollbars hidden and actions pinned. Operator feedback uses sentence case.
+- Calibration motion/custom workflow titles, actions and failure notices now match the sentence-case dialog convention; PID and axis names remain correctly capitalized. Printer commands and macro matching tokens are unchanged.
+- Studio Dark remains flat, while Operator retains its existing surfaces. Native LVGL fixture renders reviewed in both themes. Host checks cover Devices pointer routes/live guards, Macro review/scroll/keyboard lifetimes, and all calibration dialog variants.
+- ESP-IDF build and physical-panel OTA verification remain the next local checks. No commit or push performed by this patch.
+
+
+### Theme consistency back pass across previously polished pages
+
+The acceptance rule applies to every previously worked page and popup: Studio Dark keeps flat page sections and shared dividers; Operator keeps its own surfaces and controls. Use shared theme fonts, colors, checked-state styling and footer structure. Preserve meaningful danger emphasis and protocol/G-code capitalization.
+
+Corrections in this back patch:
+
+- Shared native forms and profile dialogs hide incidental scrollbars while retaining touch scrolling. Native form footers and profile-dialog footers gain the shared top divider and 8px spacing. Interior profile action rows are not mistaken for dialog footers.
+- Printer control, thermal, sensor, object and stop dialogs use the same scrolling-body/pinned-footer divider convention.
+- Shared selectable lists render as flat, divided rows in Studio, with the shared checked-state treatment; Operator retains its list surfaces. This reaches time zones, appearance preferences, saved bed meshes and other existing list callers. Profile camera-slot selection also uses the shared checked helper.
+- Studio Tools, Job library and printer chooser headings use UI_FONT_TITLE instead of fixed 48/32px faces. Tools gains more content height; Files gains 22px of browser-list height without changing the preview dimensions.
+- Studio graphs and the empty camera viewport use the shared page background.
+- Console Search and Send command actions move below their keyboards with the shared footer divider.
+- Notification preferences gain a larger adaptive dialog, complete native-panel explanation, themed checked states instead of inherited default checked colors, a shared footer, balanced actions and sentence-case labels. Alert priority and persistence policy do not change.
+- Drybox, graph, profile and motion-diagnostics status labels complete the sentence-case pass. Commands, banner classification tokens, units and axis names remain unchanged.
+
+Retrospective coverage:
+
+| Previously worked area | Back-pass coverage |
+| --- | --- |
+| Dashboard, Printer and navigation | Source review; native Studio/Operator page renders; large text, action routes, teardown |
+| Printer chooser and profile editors | Native chooser; manager, editor, security/authentication/certificates, camera slots, keyboard and removal dialogs |
+| Files and previews | Browser/search/empty/offline states, native inline preview, Operator inspector, metadata and print confirmation |
+| Camera | Page/no-camera states, View and Picker; setup/catalog and owner lifetimes |
+| Tools, Devices and Macros | Native pages, category/selection controls, pointer routes, macro review, keyboard and scrolling |
+| Calibration and diagnostics | Page, PID, pressure advance, manual probe, resonance, probe accuracy, endstops, results, geometry, custom macros and motion diagnostics |
+| Bed mesh | Page components, profile list/editor/save/remove dialogs and command guards |
+| Console, Drybox and graphs | Both exposed themes; editors, readings/program controls, all three graph views, range/hold and lifecycle |
+| Settings and Setup | Source layout rules and section components; all Setup steps; theme/time-zone/appearance/network/backup dialogs; display persistence |
+| Notifications and information | Preferences, fault notice, event history, About/software-credit sections and system-information metric layouts |
+| Stop, recovery and active-print controls | Thermal/hotend/sensor/object/stop dialogs, filament recovery, recovery failures and E-stop recreation |
+
+Native LVGL suites also retain compatibility-theme, density, large-text and smaller-viewport checks where their fixtures support them. Source review covers the previously polished modules, including Settings/OTA surfaces whose full hardware workflows cannot be exercised here. Representative renders in both exposed themes were inspected; fixtures replace transport/data. This is host verification, not a claim of physical-panel acceptance for every runtime state. Build, OTA and the final navigation sweep remain local checks. Nothing is committed or pushed by this patch.
+
+
+### Operator Tools, chooser and Macros surfaces
+
+- Operator Tools uses its own banner and four themed cards. Flat row dividers and the center separator remain Studio-only. The category surface hides its scrollbar while retaining small-viewport touch scrolling.
+- Operator's printer chooser uses a banner and four aligned themed cards, with no Studio center/bottom section dividers. Active changes the card-border color without changing border thickness or child geometry. Preview, status, subject binding and click routing are retained.
+- Operator Macros groups its title, status, search controls and guidance in a themed header. A single-line ellipsized status keeps the macro viewport usable; names still wrap inside themed macro cards. Search, favorite, review, dispatch and teardown behavior are retained.
+- Studio retains its existing flat layout for all three pages. Hidden compatibility themes continue through their own surface recipes.
+- Host checks use responsive_layout_test.py variants TOOLS/MACROS and chooser_refresh_test.py, including theme/density/text/viewports, label bounds, macro keyboard/review lifetimes, active transitions and native chooser touches. Native renders reviewed in Operator and Studio. Build and OTA/panel confirmation remain local.
+
+### Operator Tools-family shared headers
+
+Tools, Calibration, Devices, Macros, Bed Mesh and Telemetry now use the shared Operator page header: an 800px content rail, 86px themed banner, consistent title/subtitle fonts and baselines, and theme-owned colors. Studio keeps its flat page presentation. Calibration cards start below the banner; Macros search actions sit below it; Bed Mesh gesture help occupies the side column; Telemetry keeps its Devices action in the header. Dynamic telemetry text uses clipping to preserve quiet identical refreshes.
+
+Delivered by `apply_operator_tools_headers.py`. Host fixture checks passed; firmware build and OTA/panel verification remain local steps. No commit or push is included.
+
+### Full Studio and Operator theme audit closeout
+
+Audited the cumulative 7.0.0-dev source after the Operator Tools-family header patch, including theme dispatch/tokens, page and popup helpers, the two-theme picker, persistent page recreation, shared dividers, and font/symbol fallback. No page implementation directly invokes another theme's A/B/C style recipes. Studio retains its flat page treatment and Operator its panels and cards; popup surfaces and semantic status colors remain theme-owned. Caption and symbol fallback fonts are intentionally shared.
+
+Found one persistent-surface issue: notifications live on LVGL's top layer and could retain the old palette/font after a theme or appearance change. `ui_toast_refresh_appearance()` now rebuilds a visible fault from its captured queue after the application rebuild, preserving priority, printer owner, destination, count and event-history records. Optional brief confirmations retire with the old appearance without restarting their timer.
+
+Delivered by `apply_full_theme_audit_closeout.py`. The audit also updates stale legacy fixture expectations for sentence-case status labels and adaptive popup footer heights, preserving bounds/non-overlap/full-text checks. No new assets or runtime source files were added. Local firmware build and OTA/panel confirmation remain required; nothing is committed or pushed.
+
+### Tools content polish after the full theme audit
+
+Continues Calibration, Devices and Macros from the accepted Tools-family header checkpoint. Camera, Network and Console are unchanged.
+
+Operator Devices now presents all eight category/count controls as a fixed four-column, two-row grid with the shared checked-state fill and outline. Category targets remain at least 44px and disjoint. The device viewport moves below the grid and fits two complete rows, while retaining touch scrolling, 12 entries per page, hidden side scrollbars and Previous/Next behavior. Studio keeps its existing flat category rail and device rows; compatibility theme layouts are retained.
+
+Macro names now use a shared leading icon/text button layout. Wrapped lines align to the left of the name column instead of centering independently, and the icon retains a separate column. Full command names, favorite ordering/long-press, row reuse, search, review and send guards remain unchanged. Existing centered icon buttons keep their previous layout; the new enum value is appended to the shared contract.
+
+Calibration sections show short, complete purpose descriptions when applicable workflows are available rather than repeating long slash-separated button lists. Discovery and unavailable explanations stay dynamic, and capability-driven controls/status/counts remain in place. Studio remains flat and Operator retains its cards. No assets, fonts, transport work or persistence paths are added. Delivered by `apply_tools_content_visual_polish.py`; local firmware build and OTA/panel confirmation remain required.
+
+### Devices uses fixed pages instead of list swiping
+
+Following the Tools content polish, Devices now pages through only the entries visible in its native viewport: four in Operator and six in Studio. Previous/Next and the page/range summary use the same theme-dependent page size. The device list has no swipe scrolling in either exposed theme; all categories remain directly available. Counts, category filtering, live-reading bindings, printer ownership and row reuse retain their existing behavior. Compatibility themes keep their prior 12-entry layout. Delivered by `apply_devices_button_paging.py`.
+
+### Readable twelve-device pages with vertical scrolling
+
+Clarifies the previous button-only pagination adjustment: vertical scrolling within a page is allowed. Devices retains two readable columns and twelve entries per page, with names, object identifiers, category and complete live readings. Its list scrolls vertically without a side scrollbar; Previous/Next moves between sets of twelve. The recent Operator filter grid/selected feedback and shared headers remain intact. Studio keeps its flat list treatment. Macros retains its current vertical scrolling and leading name alignment. No compact three-column or single-line layout is delivered.
+
+`apply_devices_readable_twelve.py` accepts the exact source baselines immediately before or after `apply_devices_button_paging.py`, so that patch need not be applied just to restore the preferred arrangement. Other source states still fail closed. This supersedes the preceding four/six-entry no-scroll behavior.
+
+### Bed Mesh and Telemetry visual polish
+
+Continues the Tools pages after the readable twelve-device follow-up. Bed Mesh uses sentence-case actions/confirmation/help, a left-aligned Studio title and a single-line profile/grid/Z summary. Minimum, maximum and range now have a separate side readout, preventing the former two-line summary from crowding the Studio canvas or being clipped by Operator's header. The readout clears with unavailable/invalid mesh data and its field ownership retires on deletion. Canvas sizes, gestures, action routes and profile/calibration behavior remain in place.
+
+A populated Studio fixture exposed a renderer defect: raster projection/clipping and pixel indexing still used fixed 620x340 dimensions even though Studio's canvas is 776x250. The renderer now reads dimensions and row stride from the RGB565 canvas descriptor; buffer allocation uses LVGL's stride calculation. This fixes the reproduced striped Studio rendering and keeps direct raster writes within the configured canvas. It does not change the PPA configuration.
+
+Telemetry metric names and readings align vertically in their shared header. Scale and history captions are shorter while preserving their values, target-line legend, sample count and scroll guidance. Graph channels/tabs, ranges, hold behavior and vertical scrolling are unchanged. Delivered by `apply_mesh_graphs_visual_polish.py`; no font/image assets or transport/persistence changes are added.
+
+### Bed mesh viewport and fitted view
+
+Full-width mesh canvases (Studio 976 x 278, Operator 800 x 304), compact footer controls, and one-line height metrics reclaim the former side rail. Studio profile status shares the title row. The renderer fits the default orbit and height walls to the actual viewport with padding; opening and Reset view use this fitted baseline, while manual zoom/pan/orbit remain available. Native fixtures cover both themes, density/text settings, reset image equality, and odd-stride raster bounds. Build and OTA panel confirmation remain required. Firmware partition budget: 7 MiB.
+
+### Taller mesh and Motion diagnostics visual pass
+
+Bed Mesh gains twenty pixels of canvas height in each exposed theme: Studio 976 x 298, Operator 800 x 324. Its Studio stage uses eight pixels of the existing gap above the navigation shelf; the compact title row and Operator banner reclaim the remaining height. Profile and height summaries, footer actions and navigation remain separate. Default fitting and Reset view use the actual taller canvas.
+
+Motion limits now align readings to the right with shared theme-owned row dividers and a subdued configuration note. Limits, Drivers and Distance use a matching title divider. The Distance introduction is a caption, leadscrew labels use sentence case, and the numeric editor names the measurement being edited. Printer-switch status uses sentence case. Calculation, transport, selection, scrolling and owner/lifetime behavior are unchanged. Native layout/interaction checks cover themes, densities, large text, narrow views, driver transitions and keyboard/edit retention; the Bed Mesh fixture checks navigation clearance and fitted-reset equality. Local build and OTA verification remain required; firmware partition budget is 7 MiB.

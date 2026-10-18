@@ -70,7 +70,7 @@ static inline void ui_cal_dialog_owner_guard(lv_event_t *event)
 {
     uint32_t owner = (uint32_t)(uintptr_t)lv_event_get_user_data(event);
     if (owner == moonraker_config_generation()) return;
-    ui_cal_dialog_notice(UI_STATUS_WARNING, "PRINTER CHANGED", "Close and reopen calibration for this printer.");
+    ui_cal_dialog_notice(UI_STATUS_WARNING, "Printer changed", "Close and reopen calibration for this printer.");
     lv_event_stop_processing(event);
 }
 static inline void ui_cal_dialog_fit_action(lv_event_t *event)

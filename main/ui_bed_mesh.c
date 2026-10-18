@@ -14,16 +14,17 @@
 #include "esp_heap_caps.h"
 #include "ui_button.h"
 #include "ui_popup.h"
-#include "ui_theme.h"
 #include "ui_widgets.h"
+#include "ui_theme.h"
 #include "ui_page_geometry.h"
-#define CW (ui_theme_is_studio()?776:620)
-#define CH (ui_theme_is_studio()?250:340)
+#define CW (ui_theme_is_studio()?976:800)
+#define CH (ui_theme_is_studio()?298:324)
 #define VALUE_CAP ((size_t)BED_MESH_MAX_ROWS*BED_MESH_MAX_COLS)
 typedef struct {
     lv_obj_t *popup;
     lv_obj_t *canvas;
     lv_obj_t *stats;
+    lv_obj_t *metrics;
     lv_obj_t *surface_grid_button;
     lv_obj_t *surface_grid_label;
     lv_obj_t *calibrate_confirm;
@@ -83,20 +84,33 @@ static const char *mesh_connection_reason(void){
     moonraker_state_t live;moonraker_state_snapshot(&live);
     return s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
 }
-static void stats(void){if(!s.stats)return;
-const char *reason=mesh_connection_reason();if(reason[0]){ui_value_set_text(s.stats,reason);return;}if(!s.mesh.valid){ui_value_set_text(s.stats,ui_text("No active bed mesh. Calibrate or load a profile."));return;}char b[256];snprintf(
-        b,
-        sizeof(b),
-        "PROFILE %s   GRID %u x %u   Z %.0fx%s\n"
-        "MIN %+.3f mm   MAX %+.3f mm   RANGE %.3f mm",
-        s.mesh.profile_name,
-        s.mesh.cols,
-        s.mesh.rows,
-        s.zscale,
-        s.mesh.truncated ? "   TRUNCATED" : "",
-        s.mesh.minimum,
-        s.mesh.maximum,
-        s.mesh.range);ui_value_set_text(s.stats,b);}
+static void mesh_caption_deleted(lv_event_t *event)
+{
+    lv_obj_t *object=lv_event_get_target_obj(event);
+    if(object==s.stats)s.stats=NULL;
+    if(object==s.metrics)s.metrics=NULL;
+}
+static void stats(void)
+{
+    if(!s.stats)return;
+    const char *reason=mesh_connection_reason();
+    if(reason[0]||!s.mesh.valid){
+        ui_value_set_text(s.stats,reason[0]?reason:"No active bed mesh. Calibrate or load a profile.");
+        if(s.metrics)ui_value_set_text(s.metrics,"");
+        return;
+    }
+    char summary[160];
+    snprintf(summary,sizeof(summary),"Profile %s | %u x %u | Z %.0fx%s",
+        s.mesh.profile_name[0]?s.mesh.profile_name:"Current mesh",s.mesh.cols,s.mesh.rows,s.zscale,
+        s.mesh.truncated?" | Truncated":"");
+    ui_value_set_text(s.stats,summary);
+    if(s.metrics){
+        char height[128];
+        snprintf(height,sizeof(height),"Min %+.3f mm  |  Max %+.3f mm  |  Range %.3f mm",
+            s.mesh.minimum,s.mesh.maximum,s.mesh.range);
+        ui_value_set_text(s.metrics,height);
+    }
+}
 static void mesh_connection_refresh(lv_timer_t *timer){
     (void)timer;if(!s.popup)return;
     if(s.calibrate_button){if(mesh_connection_reason()[0])lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
@@ -156,9 +170,7 @@ static void update_surface_grid_button(void)
     if (s.surface_grid_label) {
         lv_label_set_text(
             s.surface_grid_label,
-            s.surface_grid_visible
-                ? ui_text("GRID ON")
-                : ui_text("GRID OFF"));
+            ui_text("Grid"));
     }
 
     if (s.surface_grid_button) {
@@ -253,7 +265,7 @@ static void calibrate_cb(lv_event_t *e)
 
     ui_popup_add_title(
         s.calibrate_confirm,
-        ui_text("START BED MESH?"),
+        ui_text("Calibrate bed mesh?"),
         true,
         4);
     ui_popup_add_header_divider(
@@ -272,7 +284,7 @@ static void calibrate_cb(lv_event_t *e)
     ui_popup_add_footer_action(
         s.calibrate_confirm,
         UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
+        LV_SYMBOL_LEFT " Back",
         160,
         UI_POPUP_FOOTER_LEFT,
         close_calibrate_confirm_cb,
@@ -282,7 +294,7 @@ static void calibrate_cb(lv_event_t *e)
     ui_popup_add_footer_action(
         s.calibrate_confirm,
         UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_PLAY " START",
+        LV_SYMBOL_PLAY " Start",
         190,
         UI_POPUP_FOOTER_RIGHT,
         confirm_calibrate_cb,
@@ -368,27 +380,36 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s.popup);
 
-    ui_popup_add_title(
-        s.popup,
-        ui_text("BED MESH 3D"),
-        false,
-        8);
-    ui_popup_add_header_divider(
-        s.popup,
-        ui_theme_is_studio()?44:52);
+    if(ui_theme_is_studio()) {
+        /* Use eight pixels of the gap above the navigation shelf. */
+        lv_obj_set_height(s.popup,432);
+        lv_obj_t *title=ui_popup_add_caption(s.popup,"Bed mesh",0,0,976);
+        ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT_BRIGHT);
+        ui_popup_add_header_divider(s.popup,36);
+        s.stats=ui_popup_add_caption(s.popup,ui_text(""),184,6,792);
+    }else {
+        lv_obj_t *header=ui_create_operator_page_header(s.popup,"Bed mesh","",UI_PAGE_RAIL_WIDTH);
+        s.stats=lv_obj_get_child(header,1);
+        /* A compact banner gives the interactive graph another twenty pixels. */
+        lv_obj_set_height(header,66);
+        lv_obj_set_y(lv_obj_get_child(header,0),8);
+        lv_obj_set_y(s.stats,42);
+    }
 
-    s.stats =
-        ui_popup_add_caption(
-            s.popup,
-            ui_text(""),
-            ui_theme_is_studio()?0:20,
-            ui_theme_is_studio()?50:58,
-            ui_theme_is_studio()?976:814);
+    ui_apply_custom_label_style(s.stats,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_label_set_long_mode(s.stats,LV_LABEL_LONG_CLIP);
+    lv_obj_set_height(s.stats,UI_FONT_CAPTION->line_height);
+    lv_obj_add_event_cb(s.stats,mesh_caption_deleted,LV_EVENT_DELETE,NULL);
+    s.metrics=ui_popup_add_caption(s.popup,"",ui_theme_is_studio()?0:20,ui_theme_is_studio()?344:430,CW);
+    ui_apply_custom_label_style(s.metrics,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_label_set_long_mode(s.metrics,LV_LABEL_LONG_CLIP);
+    lv_obj_set_height(s.metrics,UI_FONT_CAPTION->line_height);
+    lv_obj_add_event_cb(s.metrics,mesh_caption_deleted,LV_EVENT_DELETE,NULL);
 
     s.buf =
         alloc_psram_first(
-            (size_t)CW * CH,
-            sizeof(uint16_t));
+            (size_t)lv_draw_buf_width_to_stride(CW,LV_COLOR_FORMAT_RGB565) * CH,
+            1);
 
     if (s.buf) {
         s.canvas = lv_canvas_create(s.popup);
@@ -401,7 +422,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         lv_obj_set_pos(
             s.canvas,
             ui_theme_is_studio()?0:20,
-            ui_theme_is_studio()?78:98);
+            ui_theme_is_studio()?40:94);
         lv_obj_add_flag(
             s.canvas,
             LV_OBJ_FLAG_CLICKABLE);
@@ -416,34 +437,28 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         ui_popup_add_action_aligned(
             s.popup,
             UI_POPUP_ACTION_SECONDARY,
-            "GRID OFF",
-            174,
-            60,
-            LV_ALIGN_TOP_RIGHT,
+            "Grid",
+            160,
+            48,
+            LV_ALIGN_BOTTOM_RIGHT,
             -20,
-            ui_theme_is_studio()?78:98,
+            -12,
             surface_grid_cb,
             NULL,
             &s.surface_grid_label);
     update_surface_grid_button();
 
-    if(ui_theme_is_studio())ui_popup_add_footer_divider(s.popup,360);
+    if(ui_theme_is_studio())ui_popup_add_footer_divider(s.popup,368);
     else ui_popup_add_standard_footer_divider(s.popup);
-    ui_popup_add_caption(
-        s.popup,
-        ui_text("DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM"),
-        ui_theme_is_studio()?0:20,
-        ui_theme_is_studio()?336:442,
-        ui_theme_is_studio()?976:814);
 
     ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
-        "RESET VIEW",
+        "Reset view",
         160,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -20,
+        -188,
         -12,
         reset_cb,
         NULL,
@@ -455,7 +470,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -190,
+        -356,
         -12,
         plus_cb,
         NULL,
@@ -467,7 +482,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -252,
+        -416,
         -12,
         minus_cb,
         NULL,
@@ -475,11 +490,11 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
     s.calibrate_button=ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_PRIMARY,
-        "CALIBRATE",
+        "Calibrate",
         150,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -314,
+        -476,
         -12,
         calibrate_cb,
         NULL,
@@ -487,11 +502,11 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
     ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
-        "PROFILES",
+        "Profiles",
         140,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -474,
+        -634,
         -12,
         ui_bed_mesh_profiles_show_cb,
         NULL,

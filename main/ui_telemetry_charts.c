@@ -189,7 +189,7 @@ void ui_telemetry_charts_update_live(const telemetry_sample_t *sample,bool live,
         else if(c->channel==CHANNEL_FLOW && sample && sample->active_hotend[0])snprintf(text,sizeof(text),"Active tool: %s%s",sample->active_hotend,held?" | graph held":"");
         else snprintf(text,sizeof(text),"Live reading%s",held?" | graph held":"");
         ui_value_set_text(c->target,text);
-        ui_value_set_text(c->time,held?"HELD":"NOW");
+        ui_value_set_text(c->time,held?"Held":"Now");
     }
 }
 
@@ -256,11 +256,11 @@ void ui_telemetry_charts_refresh(int64_t end_us,bool held)
         lv_chart_hide_series(c->chart,c->reference,!s_chart_include_targets);
         lv_chart_refresh(c->chart);
         marker_position(c);
-        char text[128];snprintf(text,sizeof(text),"Scale %.1f to %.1f %s%s",low,high,s_units[c->channel],s_chart_include_targets && (c->channel==CHANNEL_HOTEND || c->channel==CHANNEL_BED || c->channel==CHANNEL_CENTER)?" | dim = target":"");ui_value_set_text(c->scale,text);
+        char text[128];snprintf(text,sizeof(text),"%.1f to %.1f %s%s",low,high,s_units[c->channel],s_chart_include_targets && (c->channel==CHANNEL_HOTEND || c->channel==CHANNEL_BED || c->channel==CHANNEL_CENTER)?" | dim: target":"");ui_value_set_text(c->scale,text);
         if(count)snprintf(text,sizeof(text),"Min %.1f | Max %.1f | Span %.1f %s",min,max,max-min,s_units[c->channel]);
         else snprintf(text,sizeof(text),"No samples in this time window");
         ui_value_set_text(c->stats,text);
-        snprintf(text,sizeof(text),"-%u min",s_points/30);ui_value_set_text(c->time_left,text);ui_value_set_text(c->time,held?"HELD":"NOW");
+        snprintf(text,sizeof(text),"-%u min",s_points/30);ui_value_set_text(c->time_left,text);ui_value_set_text(c->time,held?"Held":"Now");
     }
 }
 

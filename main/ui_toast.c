@@ -6,6 +6,7 @@
 #include "operator_event_log.h"
 #include "moonraker_config_controller.h"
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_popup.h"
 #include "ui_text_fit.h"
 #include "printer_profile_health.h"
@@ -91,7 +92,7 @@ void ui_toast_init(void)
 }
 ui_notification_level_t ui_toast_level(void){return s_level;}
 bool ui_toast_confirmations_enabled(void){return s_level==UI_NOTIFY_DETAILED;}
-const char *ui_toast_preference_label(void){return (const char *[]){"QUIET","STANDARD","DETAILED"}[s_level];}
+const char *ui_toast_preference_label(void){return (const char *[]){"Quiet","Standard","Detailed"}[s_level];}
 bool ui_toast_set_level(ui_notification_level_t level)
 {
     if(level<UI_NOTIFY_QUIET || level>UI_NOTIFY_DETAILED)return false;
@@ -210,6 +211,7 @@ static void render_notice(void)
     lv_obj_set_flex_grow(body, 1);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     text(body, notice->printer, UI_FONT_CAPTION, UI_TEXT_DIM);
     text(body, notice->title, UI_FONT_BODY_LARGE, ui_status_color(notice->kind));
     text(body, notice->detail, UI_FONT_BODY, UI_TEXT);
@@ -236,6 +238,17 @@ static void render_notice(void)
     ui_text_fit_single_line(lv_obj_get_child(close, 0), UI_FONT_BODY_LARGE);
     lv_label_set_long_mode(lv_obj_get_child(close, 0), LV_LABEL_LONG_CLIP);
 }
+void ui_toast_refresh_appearance(void)
+{
+    /* Page recreation does not own this top-layer surface. Keep the notice
+     * queue and captured printer/action context, but rebuild visible faults
+     * with the current theme and font metrics. A brief optional confirmation
+     * can retire with the old appearance instead of restarting its timer. */
+    if (!s_toast) return;
+    if (s_notice_count) render_notice();
+    else close_surface();
+}
+
 static void toast_timer_cb(lv_timer_t *timer)
 {
     if(timer!=s_timer || !s_timer || !s_toast)return;
@@ -357,9 +370,8 @@ static void preference_toggle(lv_event_t *event)
     s_pending_level=(ui_notification_level_t)level;
     for(unsigned i=0;i<3;i++){
         if(!s_level_buttons[i])continue;
-        if(i==level)lv_obj_add_state(s_level_buttons[i],LV_STATE_CHECKED);
-        else lv_obj_remove_state(s_level_buttons[i],LV_STATE_CHECKED);
-        char text[32];snprintf(text,sizeof(text),"%s%s",i==level?LV_SYMBOL_OK " ":"",(const char*[]){"QUIET","STANDARD","DETAILED"}[i]);
+        ui_button_set_filter_active(s_level_buttons[i], i == level);
+        char text[32];snprintf(text,sizeof(text),"%s%s",i==level?LV_SYMBOL_OK " ":"",(const char*[]){"Quiet","Standard","Detailed"}[i]);
         ui_value_set_text(lv_obj_get_child(s_level_buttons[i],0),text);
     }
 }
@@ -387,31 +399,32 @@ void ui_toast_preferences_show(void (*changed)(void))
     if (s_preference_popup) { lv_obj_move_foreground(s_preference_popup); return; }
     int width = lv_display_get_horizontal_resolution(NULL) - 32;
     int height = lv_display_get_vertical_resolution(NULL) - 32;
-    if (width > 640) width = 640;
-    if (height > 360) height = 360;
+    if (width > 760) width = 760;
+    if (height > 520) height = 520;
     s_preference_popup = ui_popup_create(lv_layer_top(), width, height, UI_POPUP_STANDARD);
     if (!s_preference_popup) return;
     ++s_preference_epoch;
     s_preference_changed = changed; s_pending_level = s_level;
     lv_obj_add_event_cb(s_preference_popup, preferences_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_flex_flow(s_preference_popup, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_preference_popup, 12, 0);
+    lv_obj_set_style_pad_all(s_preference_popup, 16, 0);
     lv_obj_set_style_pad_row(s_preference_popup, 8, 0);
     lv_obj_remove_flag(s_preference_popup, LV_OBJ_FLAG_SCROLLABLE);
-    text(s_preference_popup, "NOTIFICATIONS", UI_FONT_TITLE, UI_TEXT);
+    text(s_preference_popup, "Notifications", UI_FONT_TITLE, UI_TEXT);
     lv_obj_t *body = column(s_preference_popup);
     lv_obj_set_height(body, 0); lv_obj_set_flex_grow(body, 1);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE); lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
     text(body, "Quiet: connection loss/recovery, paused prints, warnings and errors. Standard: adds routine print events. Detailed: adds routine confirmations. Applies to every printer, page and theme. Local validation and progress remain visible at every level.", UI_FONT_BODY, UI_TEXT);
     for(unsigned i=0;i<3;i++) {
-        s_level_buttons[i]=ui_button_create(body,UI_BUTTON_OUTLINED,(const char *[]){"QUIET","STANDARD","DETAILED"}[i]);
+        s_level_buttons[i]=ui_button_create(body,UI_BUTTON_OUTLINED,(const char *[]){"Quiet","Standard","Detailed"}[i]);
         notification_field_own(s_level_buttons[i]);
         lv_obj_set_size(s_level_buttons[i],LV_PCT(100),48);
         ui_text_fit_single_line(lv_obj_get_child(s_level_buttons[i],0),UI_FONT_BODY_LARGE);
         lv_obj_add_event_cb(s_level_buttons[i],preference_toggle,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
+        ui_button_set_filter_active(s_level_buttons[i], i == (unsigned)s_pending_level);
         if(i==(unsigned)s_pending_level) {
-            lv_obj_add_state(s_level_buttons[i],LV_STATE_CHECKED);
-            lv_label_set_text_fmt(lv_obj_get_child(s_level_buttons[i],0),LV_SYMBOL_OK " %s",(const char *[]){"QUIET","STANDARD","DETAILED"}[i]);
+            lv_label_set_text_fmt(lv_obj_get_child(s_level_buttons[i],0),LV_SYMBOL_OK " %s",(const char *[]){"Quiet","Standard","Detailed"}[i]);
         }
     }
     s_preference_value=lv_obj_get_child(s_level_buttons[s_pending_level],0);
@@ -419,13 +432,15 @@ void ui_toast_preferences_show(void (*changed)(void))
     s_preference_status = text(body, "Dismiss acknowledges a notice; it does not clear a printer fault.", UI_FONT_CAPTION, UI_TEXT_DIM);
     notification_field_own(s_preference_status);
     lv_obj_t *footer = column(s_preference_popup);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(footer, 8, 0);
-    lv_obj_t *cancel = ui_button_create(footer, UI_BUTTON_CANCEL, "CANCEL");
-    lv_obj_set_size(cancel, 128, 48); lv_obj_add_event_cb(cancel, preference_close, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *save = ui_button_create(footer, UI_BUTTON_PRIMARY, "SAVE");
+    lv_obj_t *cancel = ui_button_create(footer, UI_BUTTON_CANCEL, "Cancel");
+    lv_obj_set_size(cancel, 128, 48); lv_obj_set_flex_grow(cancel, 1); lv_obj_add_event_cb(cancel, preference_close, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *save = ui_button_create(footer, UI_BUTTON_PRIMARY, "Save");
     s_preference_save=save;notification_field_own(save);
-    lv_obj_set_size(save, 128, 48); lv_obj_add_event_cb(save, preference_save, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_size(save, 128, 48); lv_obj_set_flex_grow(save, 1); lv_obj_add_event_cb(save, preference_save, LV_EVENT_CLICKED, NULL);
 }
 
 /* Observe only this owner; boot/printer selection establishes a baseline,

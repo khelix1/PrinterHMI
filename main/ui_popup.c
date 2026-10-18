@@ -2,6 +2,7 @@
 #include "ui_text.h"
 
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_theme.h"
 
 #include <stdlib.h>
@@ -513,6 +514,7 @@ lv_obj_t *ui_popup_add_list(lv_obj_t *popup,
     lv_obj_set_pos(list, x, y);
 
     lv_obj_set_scroll_dir(list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
 
     /*
      * Popup list appearance belongs to the shared popup theme.
@@ -543,6 +545,10 @@ lv_obj_t *ui_popup_add_selectable_row(lv_obj_t *parent,
 
     lv_obj_set_size(row, width, height);
     lv_obj_set_pos(row, x, y);
+    if (ui_theme_is_studio()) {
+        ui_apply_surface_role(row, UI_SURFACE_TRANSPARENT);
+        ui_apply_divider_border(row, LV_BORDER_SIDE_BOTTOM);
+    }
 
     if (event_cb) {
         lv_obj_add_event_cb(
@@ -567,6 +573,16 @@ void ui_popup_set_selectable_row_selected(lv_obj_t *row,
 {
     if (!row) return;
 
+    if (ui_theme_is_studio()) {
+        /* Selection may refresh after a caller has laid out wrapped labels.
+         * Keep that padding/geometry while refreshing the shared flat skin. */
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_radius(row, 0, 0);
+        lv_obj_set_style_shadow_width(row, 0, 0);
+        ui_apply_divider_border(row, LV_BORDER_SIDE_BOTTOM);
+        ui_button_set_filter_active(row, selected);
+        return;
+    }
     if (selected) {
         ui_apply_button_status_style(row, UI_STATUS_ACTIVE);
     } else {
@@ -1076,8 +1092,8 @@ void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *
     if (!popup) {
         popup = ui_cal_dialog_create(lv_layer_top(), 650, 360, UI_POPUP_STANDARD);
         if (!popup) return;
-        ui_cal_dialog_title(popup, "CALIBRATION STATUS");
-        ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "CLOSE", cal_notice_close, NULL, NULL);
+        ui_cal_dialog_title(popup, "Calibration status");
+        ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "Close", cal_notice_close, NULL, NULL);
     }
     ui_popup_feedback(ui_cal_dialog_body(popup), kind, title, detail);
 }

@@ -1,6 +1,7 @@
 #include "ui_text_fit.h"
 #include "ui_studio_icons.h"
 #include "ui_widgets.h"
+#include "ui_page_geometry.h"
 #include "ui_text.h"
 #include "ui_button.h"
 
@@ -665,4 +666,36 @@ void ui_operator_nav_button_set_selected(
         button,
         UI_BORDER_BRIGHT,
         LV_PART_MAIN | LV_STATE_FOCUSED);
+}
+
+static void operator_page_header_resized(lv_event_t *event)
+{
+    lv_obj_t *header=lv_event_get_target_obj(event);
+    if(ui_theme_is_studio())return;
+    int32_t width=lv_obj_get_content_width(header)-40;
+    if(width<1)width=1;
+    for(unsigned i=0;i<2;i++)lv_obj_set_width(lv_obj_get_child(header,i),width);
+}
+
+lv_obj_t *ui_create_operator_page_header(lv_obj_t *parent,const char *title,
+                                        const char *subtitle,int32_t width)
+{
+    lv_obj_t *header=ui_create_operator_banner(parent,20,20,width,86,UI_STATUS_INFO);
+    if(!header)return NULL;
+    if(!ui_theme_is_studio())lv_obj_set_style_max_width(header,UI_PAGE_RAIL_WIDTH,0);
+    lv_obj_t *heading=lv_label_create(header);
+    lv_label_set_text(heading,title?title:"");
+    ui_apply_custom_label_style(heading,UI_FONT_TITLE,UI_TEXT_BRIGHT);
+    lv_obj_set_pos(heading,20,15);
+    lv_label_set_long_mode(heading,LV_LABEL_LONG_DOT);
+    lv_obj_set_height(heading,UI_FONT_TITLE->line_height);
+    lv_obj_t *detail=lv_label_create(header);
+    lv_label_set_text(detail,subtitle?subtitle:"");
+    ui_apply_custom_label_style(detail,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_pos(detail,20,50);
+    lv_label_set_long_mode(detail,LV_LABEL_LONG_DOT);
+    lv_obj_set_height(detail,UI_FONT_CAPTION->line_height);
+    lv_obj_add_event_cb(header,operator_page_header_resized,LV_EVENT_SIZE_CHANGED,NULL);
+    lv_obj_update_layout(header);lv_obj_send_event(header,LV_EVENT_SIZE_CHANGED,NULL);
+    return header;
 }

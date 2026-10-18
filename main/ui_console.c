@@ -328,6 +328,13 @@ static lv_obj_t *plain(lv_obj_t *parent, lv_flex_flow_t flow)
     lv_obj_remove_flag(obj,LV_OBJ_FLAG_SCROLLABLE);
     return obj;
 }
+static lv_obj_t *editor_actions(lv_obj_t *popup)
+{
+    lv_obj_t *row = plain(popup, LV_FLEX_FLOW_ROW_WRAP);
+    ui_apply_divider_border(row, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(row, 8, 0);
+    return row;
+}
 static lv_obj_t *console_action(lv_obj_t *parent,const char *text,ui_button_kind_t kind,int width,lv_event_cb_t cb)
 {
     lv_obj_t *button=ui_button_create(parent,kind,text);
@@ -388,12 +395,13 @@ static void search_cb(lv_event_t *event)
     (void)event;if(!s_root || s_command_dispatching)return;
     if(s_search_popup){lv_obj_move_foreground(s_search_popup);
     return;}
-    s_search_popup=editor_popup("Search Console");if(!s_search_popup)return;
+    s_search_popup=editor_popup("Search console");if(!s_search_popup)return;
     lv_obj_add_event_cb(s_search_popup,search_deleted,LV_EVENT_DELETE,NULL);
     s_search_input=editor_input(s_search_popup,sizeof(s_query)-1,"Match message text",s_query);
-    lv_obj_t *actions=plain(s_search_popup,LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_t *actions=editor_actions(s_search_popup);
     console_action(actions,"Cancel",UI_BUTTON_CANCEL,128,search_cancel_cb);console_action(actions,"Apply",UI_BUTTON_PRIMARY,128,search_done_cb);
     s_search_keyboard=editor_keyboard(s_search_popup,s_search_input,search_keyboard_cb);
+    lv_obj_move_to_index(actions, -1);
     lv_obj_add_event_cb(s_search_input,editor_field_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_add_event_cb(s_search_keyboard,editor_field_deleted,LV_EVENT_DELETE,NULL);
 }
@@ -599,7 +607,7 @@ static void open_command_cb(lv_event_t *event)
     s_command_popup=editor_popup("Send command");if(!s_command_popup)return;
     lv_obj_add_event_cb(s_command_popup,command_deleted,LV_EVENT_DELETE,NULL);
     s_command_input=editor_input(s_command_popup,CONSOLE_COMMAND_MAX,"G-code or macro, for example: STATUS","");
-    s_command_actions=plain(s_command_popup,LV_FLEX_FLOW_ROW_WRAP);
+    s_command_actions=editor_actions(s_command_popup);
     console_action(s_command_actions,"Close",UI_BUTTON_CLOSE,96,close_command_cb);
     console_action(s_command_actions,"Previous",UI_BUTTON_SECONDARY,96,history_prev_cb);
     console_action(s_command_actions,"Next",UI_BUTTON_SECONDARY,96,history_next_cb);
@@ -611,6 +619,7 @@ static void open_command_cb(lv_event_t *event)
     ui_apply_custom_label_style(s_command_feedback,UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_label_set_text(s_command_feedback,"Commands run immediately on this printer.");
     s_command_keyboard=editor_keyboard(s_command_popup,s_command_input,keyboard_event_cb);
+    lv_obj_move_to_index(s_command_actions, -1);
     lv_obj_t *fields[]={s_command_input,s_command_feedback,s_command_send,s_command_keyboard};
     for(size_t i=0;i<4;i++)if(fields[i])lv_obj_add_event_cb(fields[i],editor_field_deleted,LV_EVENT_DELETE,NULL);
     update_connection();

@@ -98,11 +98,15 @@ static void show_screws_results_popup(void)
     }
 
     geometry_register(*s_geometry->screws_popup, s_screws_owner);
-    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("Screws tilt results"));
+    ui_cal_dialog_title_divided(*s_geometry->screws_popup, ui_text("Screws tilt results"));
 
 
     *s_geometry->screws_results_label =
         ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), "Waiting for Klipper adjustment results...");
+    ui_apply_custom_label_style(*s_geometry->screws_results_label,UI_FONT_BODY,UI_TEXT);
+    lv_obj_set_style_text_line_space(*s_geometry->screws_results_label,6,0);
+    ui_cal_dialog_caption(ui_cal_dialog_body(*s_geometry->screws_popup),
+        "Follow the reported screw-turn directions, then run the check again after adjusting.");
 
 
 
@@ -264,30 +268,22 @@ static void screws_tilt_button_cb(
     close_screws_popup();
 
     *s_geometry->screws_popup =
-        ui_cal_dialog_create(lv_layer_top(), 600, 360, UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!*s_geometry->screws_popup) {
         return;
     }
 
     geometry_register(*s_geometry->screws_popup, s_screws_owner);
-    ui_cal_dialog_title(*s_geometry->screws_popup, ui_text("Run screws tilt?"));
+    ui_cal_dialog_title_divided(*s_geometry->screws_popup, ui_text("Run screws tilt?"));
 
 
-    char body[420];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "The toolhead will move to every configured screw and probe the bed.%s\n\n"
-        "Clear the bed and motion area before continuing.\n\n"
-        "This reads adjustment guidance only. SAVE_CONFIG will not run.",
-        *s_geometry->screws_home_required
-            ? " XYZ is not homed, so all axes will home first."
-            : "");
-
-    ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), body);
-    s_screws_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->screws_popup), "");
-
+    lv_obj_t *body=ui_cal_dialog_body(*s_geometry->screws_popup);
+    ui_cal_dialog_text(body,"The toolhead will probe every configured bed screw. Clear the bed and motion area before continuing.");
+    ui_cal_dialog_caption(body,*s_geometry->screws_home_required
+        ? "XYZ is not homed. All axes will home first." : "XYZ is already homed.");
+    ui_cal_dialog_caption(body,"Adjustment guidance only. SAVE_CONFIG will not run.");
+    s_screws_feedback = ui_cal_dialog_caption(body, "");
 
 
     ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_screws_popup_cb, NULL, NULL);
@@ -420,32 +416,24 @@ static void gantry_level_button_cb(
     close_gantry_level_popup();
 
     *s_geometry->gantry_popup =
-        ui_cal_dialog_create(lv_layer_top(), 620, 370, UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!*s_geometry->gantry_popup) {
         return;
     }
 
     geometry_register(*s_geometry->gantry_popup, s_gantry_owner);
-    ui_cal_dialog_title(*s_geometry->gantry_popup, *s_geometry->gantry_use_qgl
+    ui_cal_dialog_title_divided(*s_geometry->gantry_popup, *s_geometry->gantry_use_qgl
             ? ui_text("Run quad gantry level?")
             : ui_text("Run Z tilt?"));
 
 
-    char body[430];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "The toolhead will probe multiple bed positions and the gantry will move.%s\n\n"
-        "Clear the bed and motion area before continuing.\n\n"
-        "This runs the detected Klipper leveling command. SAVE_CONFIG will not run.",
-        *s_geometry->gantry_home_required
-            ? " XYZ is not homed, so all axes will home first."
-            : "");
-
-    ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->gantry_popup), body);
-    s_gantry_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_geometry->gantry_popup), "");
-
+    lv_obj_t *body=ui_cal_dialog_body(*s_geometry->gantry_popup);
+    ui_cal_dialog_text(body,"The toolhead will probe multiple bed positions and the gantry will move. Clear the bed and motion area before continuing.");
+    ui_cal_dialog_caption(body,*s_geometry->gantry_home_required
+        ? "XYZ is not homed. All axes will home first." : "XYZ is already homed.");
+    ui_cal_dialog_caption(body,"Runs the detected Klipper leveling command. SAVE_CONFIG will not run.");
+    s_gantry_feedback = ui_cal_dialog_caption(body, "");
 
 
     ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_gantry_level_popup_cb, NULL, NULL);

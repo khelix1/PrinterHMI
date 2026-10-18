@@ -121,7 +121,7 @@ static void run_save_config_cb(lv_event_t *event)
     if (!save_worthy(&snapshot) || snapshot.generation != s_save_generation) {
         s_save_blocked = true;
         ui_value_set_text(s_save_feedback,
-            "Calibration results changed. Go Back and review them before saving.");
+            "Calibration results changed. go back and review them before saving.");
         return;
     }
 
@@ -157,7 +157,7 @@ static void run_save_config_cb(lv_event_t *event)
     if (*context->apply_restart_button)
         lv_obj_add_flag(*context->apply_restart_button, LV_OBJ_FLAG_HIDDEN);
     calibration_session_controller_reset();
-    ui_cal_dialog_title(popup, ui_text("Configuration save requested"));
+    ui_cal_dialog_title_divided(popup, ui_text("Configuration save requested"));
     ui_value_set_text(s_save_feedback,
         "SAVE_CONFIG was accepted. Klipper is expected to save and restart. Wait for Ready before starting a print.");
     ui_value_set_text(s_results_feedback,
@@ -184,7 +184,7 @@ static void apply_restart_button_cb(lv_event_t *event)
     if (!s_results_rendered || snapshot.generation != *s_context->session_generation) {
         ui_calibration_results_refresh();
         ui_value_set_text(s_results_feedback,
-            "Results updated. Review the latest values, then Apply & Restart.");
+            "Results updated. Review the latest values, then Apply & restart.");
         return;
     }
     s_save_generation = snapshot.generation;
@@ -193,7 +193,7 @@ static void apply_restart_button_cb(lv_event_t *event)
         ui_cal_dialog_create(lv_layer_top(), 620, 370, UI_POPUP_DANGER);
     if (!*s_context->save_confirm_popup) return;
     lv_obj_add_event_cb(*s_context->save_confirm_popup, save_confirm_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(*s_context->save_confirm_popup, ui_text("Apply calibration & restart?"));
+    ui_cal_dialog_title_divided(*s_context->save_confirm_popup, ui_text("Apply calibration & restart?"));
     ui_cal_dialog_text(ui_cal_dialog_body(*s_context->save_confirm_popup),
         "PrinterHMI will run SAVE_CONFIG. Klipper will write the reported calibration values and restart.\n\n"
         "The printer will disconnect temporarily. Do not start a print until it reconnects as Ready.");
@@ -213,10 +213,12 @@ void ui_calibration_results_show(const char *title, const char *waiting_text)
         ui_cal_dialog_create(lv_layer_top(), 680, 460, UI_POPUP_STANDARD);
     if (!*s_context->results_popup) return;
     lv_obj_add_event_cb(*s_context->results_popup, results_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(*s_context->results_popup, title ? title : ui_text("Calibration results"));
+    ui_cal_dialog_title_divided(*s_context->results_popup, title ? title : ui_text("Calibration results"));
     *s_context->results_label = ui_cal_dialog_text(ui_cal_dialog_body(*s_context->results_popup),
         waiting_text ? waiting_text : "Waiting for Klipper...");
-    s_results_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_context->results_popup), "");
+    ui_apply_custom_label_style(*s_context->results_label,UI_FONT_BODY,UI_TEXT);
+    lv_obj_set_style_text_line_space(*s_context->results_label,4,0);
+    s_results_feedback = ui_cal_dialog_caption(ui_cal_dialog_body(*s_context->results_popup), "");
     ui_cal_dialog_action(*s_context->results_popup, UI_POPUP_ACTION_CLOSE,
                         "Close", close_calibration_results_popup_cb, NULL, NULL);
     *s_context->apply_restart_button =
@@ -243,7 +245,8 @@ void ui_calibration_results_refresh(void)
     calibration_session_snapshot_t *snapshot = s_context->session_snapshot;
     calibration_session_controller_snapshot(snapshot);
     const char *reason = results_unavailable_reason();
-    ui_value_set_text(s_results_feedback, reason);
+    ui_value_set_text(s_results_feedback, reason ? reason : save_worthy(snapshot) ?
+        "Calibration complete. Review the results, then Apply & restart to save." : "");
     if (*s_context->apply_restart_button) {
         if (save_worthy(snapshot)) {
             lv_obj_clear_flag(*s_context->apply_restart_button, LV_OBJ_FLAG_HIDDEN);
@@ -257,7 +260,7 @@ void ui_calibration_results_refresh(void)
             s_save_blocked = true;
             lv_obj_add_state(s_save_action, LV_STATE_DISABLED);
             ui_value_set_text(s_save_feedback, reason ? reason :
-                "Calibration results changed. Go Back and review them before saving.");
+                "Calibration results changed. go back and review them before saving.");
         } else {
             lv_obj_remove_state(s_save_action, LV_STATE_DISABLED);
             if (s_save_blocked) ui_value_set_text(s_save_feedback, "");
@@ -272,9 +275,7 @@ void ui_calibration_results_refresh(void)
                     snapshot->results[0] ? snapshot->results : "Unknown Klipper error.");
         ui_value_set_text(*s_context->results_label, s_context->display);
     } else if (snapshot->status == CALIBRATION_SESSION_RESULTS && snapshot->results[0]) {
-        lv_snprintf(s_context->display, s_context->display_size, "%s%s", snapshot->results,
-            snapshot->save_available ?
-            "\n\nCalibration complete. Review the result, then Apply & Restart to save it." : "");
+        lv_snprintf(s_context->display, s_context->display_size, "%s", snapshot->results);
         ui_value_set_text(*s_context->results_label, s_context->display);
     }
 }

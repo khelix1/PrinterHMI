@@ -30,6 +30,15 @@ static inline lv_obj_t *ui_form_dialog(const char *title,int width,int height,ui
     lv_obj_set_style_pad_column(footer,8,0);lv_obj_set_style_pad_row(footer,8,0);
     return popup;
 }
+/* Optional shared divider for forms that use the guided-dialog heading style. */
+static inline void ui_form_divide_title(lv_obj_t *popup)
+{
+    if(!popup)return;
+    lv_obj_t *title=lv_obj_get_child(popup,0);
+    lv_obj_set_height(title,UI_FONT_TITLE->line_height+12);
+    ui_apply_divider_border(title,LV_BORDER_SIDE_BOTTOM);
+    lv_obj_set_style_pad_bottom(title,10,0);
+}
 static inline lv_obj_t *ui_form_body(lv_obj_t *popup){return lv_obj_get_child(popup,1);}
 static inline lv_obj_t *ui_form_text(lv_obj_t *parent,const char *text,const lv_font_t *font,lv_color_t color)
 {

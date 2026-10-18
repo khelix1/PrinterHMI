@@ -7,6 +7,7 @@
 #include "ui_filament_recovery.h"
 #include "ui_text.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_theme.h"
 #include "ui_dashboard.h"
 #include "moonraker.h"
@@ -543,6 +544,10 @@ static void select_object_index(int index)
         lv_obj_t *row = s_object_rows[i];
         if (!row) continue;
         bool selected = (int)i == s_selected_object_index;
+        if(ui_theme_is_studio()){
+            ui_popup_set_selectable_row_selected(row,selected);
+            continue;
+        }
         lv_obj_set_style_bg_color(
             row, selected ? UI_ACCENT_CYAN : UI_BG, 0);
         lv_obj_set_style_bg_opa(
@@ -727,7 +732,7 @@ static void show_cancel_object_list(void)
     else snprintf(status, sizeof(status), "Select an object to stop; the rest of the print continues.");
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, status);
-    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_apply_custom_label_style(hint, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(hint, LV_PCT(100));
     lv_obj_t *content = lv_obj_create(body);
     lv_obj_remove_style_all(content);
@@ -736,7 +741,7 @@ static void show_cancel_object_list(void)
     lv_obj_set_style_pad_row(content, UI_GAP_ROW, 0);
     lv_obj_add_event_cb(content, object_content_resize, LV_EVENT_SIZE_CHANGED, NULL);
     s_object_map = lv_obj_create(content);
-    ui_apply_surface_role(s_object_map, UI_SURFACE_POPUP_LIST);
+    ui_apply_surface_role(s_object_map,ui_theme_is_studio()?UI_SURFACE_PREVIEW_WELL:UI_SURFACE_POPUP_LIST);
     lv_obj_set_style_pad_all(s_object_map, UI_PAD_PANEL, 0);
     lv_obj_clear_flag(s_object_map, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_object_map, LV_OBJ_FLAG_CLICKABLE);
@@ -745,7 +750,8 @@ static void show_cancel_object_list(void)
     lv_obj_t *list = lv_obj_create(content);
     lv_obj_set_scroll_dir(list, LV_DIR_VER);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-    ui_apply_surface_role(list, UI_SURFACE_POPUP_LIST);
+    ui_apply_surface_role(list,ui_theme_is_studio()?UI_SURFACE_TRANSPARENT:UI_SURFACE_POPUP_LIST);
+    lv_obj_set_scrollbar_mode(list,LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_pad_row(list, UI_GAP_ROW, 0);
     for (size_t i = 0; i < s_exclude_snapshot->object_count; ++i) {
         moonraker_exclude_object_t *object = &s_exclude_snapshot->objects[i];
@@ -757,11 +763,17 @@ static void show_cancel_object_list(void)
         lv_obj_set_style_pad_ver(row, 10, 0);
         lv_obj_set_style_border_width(row, object->current ? UI_BORDER_STRONG : UI_BORDER_THIN, 0);
         lv_obj_set_style_border_color(row, object->current ? UI_ACCENT_CYAN : UI_BORDER_SOFT, 0);
+        if(ui_theme_is_studio()){
+            ui_apply_surface_role(row,UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(row,LV_BORDER_SIDE_BOTTOM);
+            lv_obj_set_style_pad_hor(row,UI_PAD_CARD,0);
+            lv_obj_set_style_pad_ver(row,10,0);
+        }
         char text[MOONRAKER_EXCLUDE_NAME_MAX + 24];
-        snprintf(text, sizeof(text), object->excluded ? "[EXCLUDED] %s" : object->current ? "[CURRENT] %s" : "%s", object->name);
+        snprintf(text, sizeof(text), object->excluded ? "[Excluded] %s" : object->current ? "[Current] %s" : "%s", object->name);
         lv_obj_t *label = lv_label_create(row);
         lv_label_set_text(label, text);
-        ui_apply_custom_label_style(label, UI_FONT_BODY, object->excluded ? UI_BORDER_SOFT : UI_TEXT);
+        ui_apply_custom_label_style(label, UI_FONT_BODY, object->excluded ? UI_TEXT_DIM : UI_TEXT);
         lv_obj_set_width(label, LV_PCT(100));
         if (object->excluded) { lv_obj_add_state(row, LV_STATE_DISABLED); lv_obj_set_style_opa(row, LV_OPA_50, 0); }
         else { s_object_rows[i] = row; lv_obj_add_event_cb(row, object_row_event_cb, LV_EVENT_ALL, object); }
@@ -961,7 +973,7 @@ static void set_custom_temp_cb(lv_event_t *event)
         if (s_custom_temp_status) {
             lv_label_set_text_fmt(
                 s_custom_temp_status,
-                "ENTER 0-%d C  (0 = OFF)",
+                "Enter 0-%d C (0 = off)",
                 s_custom_temp_max);
             lv_obj_set_style_text_color(
                 s_custom_temp_status, UI_DANGER_BRIGHT, 0);
@@ -1022,6 +1034,8 @@ static lv_obj_t *control_layout(lv_obj_t *popup, const char *title)
     lv_label_set_text(label, title);
     ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
     lv_obj_set_width(label, LV_PCT(100));
+    lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
+    ui_form_divide_title(popup);
     lv_obj_t *body = lv_obj_create(popup);
     lv_obj_remove_style_all(body);
     lv_obj_set_width(body, LV_PCT(100));
@@ -1118,11 +1132,11 @@ static void open_custom_temp_cb(lv_event_t *event)
         LV_EVENT_DELETE, NULL);
     lv_obj_t *body = control_layout(s_custom_temp_popup, s_custom_temp_title);
     char instruction[64];
-    snprintf(instruction, sizeof(instruction), "ENTER 0-%d C  (0 = OFF)", s_custom_temp_max);
+    snprintf(instruction, sizeof(instruction), "Enter 0-%d C (0 = off)", s_custom_temp_max);
     s_custom_temp_status = lv_label_create(body);
     lv_obj_add_event_cb(s_custom_temp_status, custom_temp_field_deleted, LV_EVENT_DELETE, NULL);
     lv_label_set_text(s_custom_temp_status, instruction);
-    ui_apply_custom_label_style(s_custom_temp_status, UI_FONT_BODY, UI_TEXT);
+    ui_apply_custom_label_style(s_custom_temp_status, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(s_custom_temp_status, LV_PCT(100));
     char initial_text[16] = "";
     if (s_custom_temp_initial > 0) snprintf(initial_text, sizeof(initial_text), "%d", s_custom_temp_initial);
@@ -1142,7 +1156,7 @@ static void open_custom_temp_cb(lv_event_t *event)
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL,
         LV_SYMBOL_LEFT " Back", 0, 0, 160, 48, close_custom_temp_cb, NULL, NULL);
     lv_obj_t *set = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_OK " SET", 0, 0, 160, 48, set_custom_temp_cb, NULL, NULL);
+        LV_SYMBOL_OK " Set", 0, 0, 160, 48, set_custom_temp_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1);
     lv_obj_set_flex_grow(set, 1);
     ui_popup_pin_keyboard(s_custom_temp_popup,keyboard);
@@ -1178,7 +1192,7 @@ static lv_obj_t *control_value_card(lv_obj_t *parent, const char *caption,
     }
     lv_obj_t *caption_label = lv_label_create(card);
     lv_label_set_text(caption_label, caption);
-    ui_apply_custom_label_style(caption_label, UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_apply_custom_label_style(caption_label, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(caption_label, LV_PCT(100));
     lv_obj_t *value_label = lv_label_create(card);
     lv_label_set_text(value_label, value);
@@ -1219,7 +1233,7 @@ static void show_control_popup(const char *title, double current_value,
     control_value_card(cards, show_target ? "Current" : "Current speed", current_text, UI_TEXT);
     if (show_target) {
         lv_obj_t *target_card = control_value_card(cards,
-            custom_command_prefix ? "Target - tap to set" : "Target", target_text, UI_ACCENT_CYAN);
+            custom_command_prefix ? "Target - tap to edit" : "Target", target_text, UI_ACCENT_CYAN);
         if (custom_command_prefix) {
             lv_obj_add_flag(target_card, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_style_border_color(target_card, UI_ACCENT_CYAN, LV_STATE_PRESSED);
@@ -1228,7 +1242,7 @@ static void show_control_popup(const char *title, double current_value,
     }
     lv_obj_t *hint = lv_label_create(body);
     lv_label_set_text(hint, ui_text("Choose a preset"));
-    ui_apply_custom_label_style(hint, UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_apply_custom_label_style(hint, UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_set_width(hint, LV_PCT(100));
     lv_obj_t *presets = control_grid(body, 3);
     for (int i = 0; i < count; ++i) {
@@ -1408,19 +1422,19 @@ static void refresh_hotend_list(lv_timer_t *timer)
         const moonraker_hotend_t *hotend = live ? hotend_row(i) : NULL;
         if (!hotend) {
             ui_value_set_text(s_hotend_temp_labels[i], s_hotend_owner == moonraker_config_generation() ?
-                "UNAVAILABLE / REOPEN" : "PRINTER CHANGED / REOPEN");
+                "Unavailable - reopen" : "Printer changed - reopen");
             lv_obj_add_state(s_hotend_temp_buttons[i], LV_STATE_DISABLED);
             lv_obj_add_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
             continue;
         }
         char name[64], temperature[64];
-        snprintf(name, sizeof(name), "T%u %s(%s)", (unsigned)i, hotend->active ? "ACTIVE " : "", hotend->object_name);
+        snprintf(name, sizeof(name), "T%u %s(%s)", (unsigned)i, hotend->active ? "Active " : "", hotend->object_name);
         ui_value_set_text(s_hotend_name_labels[i], name);
-        ui_value_set_color(s_hotend_name_labels[i], hotend->active ? UI_OK_BRIGHT : UI_TEXT, 0);
+        ui_value_set_color(s_hotend_name_labels[i], hotend->active ? UI_OK_BRIGHT : UI_TEXT_DIM, 0);
         if (hotend->temperature > -100.0) snprintf(temperature, sizeof(temperature), "%.1f / %.1f C", hotend->temperature, hotend->target);
         else snprintf(temperature, sizeof(temperature), "-- / -- C");
         ui_value_set_text(s_hotend_temp_labels[i], temperature);
-        ui_value_set_text(s_hotend_activate_labels[i], hotend->active ? ui_text(LV_SYMBOL_OK " ACTIVE") : ui_text("Make active"));
+        ui_value_set_text(s_hotend_activate_labels[i], hotend->active ? ui_text(LV_SYMBOL_OK " Active") : ui_text("Make active"));
         bool disabled = hotend->active || activation_locked || s_hotend_pending ||
             s_hotend_dispatching || !hotend_name_safe(hotend->object_name);
         if (disabled) lv_obj_add_state(s_hotend_activate_buttons[i], LV_STATE_DISABLED);
@@ -1599,7 +1613,7 @@ void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
         lv_obj_set_style_pad_row(info, UI_GAP_ROW, 0);
         s_hotend_name_labels[i] = lv_label_create(info);
         lv_label_set_text(s_hotend_name_labels[i], "");
-        ui_apply_custom_label_style(s_hotend_name_labels[i], UI_FONT_BODY, UI_TEXT);
+        ui_apply_custom_label_style(s_hotend_name_labels[i], UI_FONT_CAPTION, UI_TEXT_DIM);
         lv_obj_set_width(s_hotend_name_labels[i], LV_PCT(100));
         s_hotend_temp_labels[i] = lv_label_create(info);
         lv_label_set_text(s_hotend_temp_labels[i], "");
@@ -1867,7 +1881,7 @@ static void refresh_filament_list(lv_timer_t *timer)
         const moonraker_filament_sensor_t *sensor = owns && s_filament_list_state.discovered ? filament_row_sensor(i) : NULL;
         lv_obj_t *button = s_filament_toggle_buttons[i], *label = s_filament_toggle_labels[i];
         if (!sensor) {
-            ui_value_set_text(s_filament_status_labels[i], owns ? "UNAVAILABLE / REOPEN" : "PRINTER CHANGED / REOPEN");
+            ui_value_set_text(s_filament_status_labels[i], owns ? "Unavailable - reopen" : "Printer changed - reopen");
             ui_value_set_color(s_filament_status_labels[i], UI_TEXT_DIM, 0);
             lv_obj_add_state(button, LV_STATE_DISABLED);
             continue;
@@ -2000,7 +2014,7 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
         snprintf(name, sizeof(name), "%s (%s)", filament_sensor_display_name(sensor->object_name), motion ? "motion" : "switch");
         lv_obj_t *label = lv_label_create(info);
         lv_label_set_text(label, name);
-        ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT);
+        ui_apply_custom_label_style(label, UI_FONT_CAPTION, UI_TEXT_DIM);
         lv_obj_set_width(label, LV_PCT(100));
         s_filament_status_labels[i] = lv_label_create(info);
         lv_label_set_text(s_filament_status_labels[i], ui_text("Checking"));

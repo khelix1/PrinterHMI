@@ -212,6 +212,14 @@ static void owner_deleted(lv_event_t *event)
     ui_bed_mesh_profiles_close();
 }
 
+static void style_profile_selection(lv_obj_t *row,bool selected)
+{
+    ui_popup_set_selectable_row_selected(row,selected);
+    /* Keep the name/badge alignment stable when theme selection skins refresh. */
+    lv_obj_set_style_pad_hor(row,16,0);
+    lv_obj_set_style_pad_ver(row,10,0);
+}
+
 static void profile_row_cb(lv_event_t *event)
 {
     if (!event || !s.profile_popup || !s.profile_list || s_dispatching ||
@@ -226,7 +234,7 @@ static void profile_row_cb(lv_event_t *event)
     s.selected_profile = (int16_t)(encoded - 1);
     for (unsigned i = 0; s.profile_list && i < lv_obj_get_child_count(s.profile_list); ++i) {
         lv_obj_t *row = lv_obj_get_child(s.profile_list, i);
-        ui_popup_set_selectable_row_selected(row, row == selected);
+        style_profile_selection(row, row == selected);
     }
     ui_value_set_text(s.connection_label, reported_profile(selected_profile_name())
         ? "" : "This profile is no longer reported. Close and reopen to refresh the list.");
@@ -270,7 +278,7 @@ static void confirmed_profile_command(lv_event_t *event, bool removing)
     const char *operation = removing ? "REMOVE" : "SAVE";
     if ((!strcmp(operation, "REMOVE") && !reported_profile(s.pending_profile_name)) ||
         (!strcmp(operation, "SAVE") && !s.mesh_valid)) {
-        ui_value_set_text(s.confirm_connection_label, "The reviewed profile or mesh is no longer available. Go Back and review again.");
+        ui_value_set_text(s.confirm_connection_label, "The reviewed profile or mesh is no longer available. Go back and review again.");
         return;
     }
     char command[128];
@@ -286,18 +294,19 @@ static void show_profile_confirmation(bool removing)
 {
     if (!s.profile_popup || s_dispatching || !s.pending_profile_name[0]) return;
     if (s.profile_confirm) { lv_obj_move_foreground(s.profile_confirm); return; }
-    char message[320];
-    snprintf(message, sizeof(message), removing
-        ? "Remove profile \"%s\"?\n\nSAVE_CONFIG will restart Klipper."
-        : "Save the current mesh as \"%s\"?\n\nAn existing profile with this name will be replaced. SAVE_CONFIG will restart Klipper.",
-        s.pending_profile_name);
-    s.profile_confirm = ui_form_dialog(ui_text(removing ? "Remove bed mesh?" : "Save bed mesh?"),
-        620, 370, removing ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
+    s.profile_confirm = ui_form_dialog(ui_text(removing ? "Remove bed mesh profile?" : "Save bed mesh profile?"),
+        650, 410, removing ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
     if (!s.profile_confirm) { s.pending_profile_name[0] = '\0'; return; }
+    ui_form_divide_title(s.profile_confirm);
     lv_obj_add_event_cb(s.profile_confirm, profile_popup_deleted, LV_EVENT_DELETE, NULL);
     s.confirmation_removing = removing;
-    ui_form_text(ui_form_body(s.profile_confirm), message, UI_FONT_BODY, UI_TEXT);
-    s.confirm_connection_label = ui_form_text(ui_form_body(s.profile_confirm), "", UI_FONT_BODY, UI_TEXT_DIM);
+    lv_obj_t *body=ui_form_body(s.profile_confirm);
+    ui_form_text(body,"Profile name",UI_FONT_CAPTION,UI_TEXT_DIM);
+    ui_form_text(body,s.pending_profile_name,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
+    ui_form_text(body,removing ? "Remove this saved mesh profile." :
+        "Save the current mesh under this name. An existing profile with the same name will be replaced.",UI_FONT_BODY,UI_TEXT);
+    ui_form_text(body,"SAVE_CONFIG restarts Klipper. Wait for the printer to reconnect as Ready.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    s.confirm_connection_label = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);
     watch_profile_ref(s.confirm_connection_label);
     ui_form_action(s.profile_confirm, UI_BUTTON_SECONDARY, LV_SYMBOL_LEFT " Back", close_profile_confirm_cb, NULL);
     s.actions[3] = ui_form_action(s.profile_confirm, removing ? UI_BUTTON_DANGER : UI_BUTTON_PRIMARY,
@@ -332,8 +341,9 @@ static void save_as_profile_cb(lv_event_t *event)
     if (s.profile_editor) { lv_obj_move_foreground(s.profile_editor); return; }
     if (!profile_command_ready(s.connection_label)) return;
     if (!s.mesh_valid) { ui_value_set_text(s.connection_label, "No current mesh is available to save."); return; }
-    s.profile_editor = ui_form_dialog(ui_text("Save bed-mesh profile"), 760, 560, UI_POPUP_STANDARD);
+    s.profile_editor = ui_form_dialog(ui_text("Save bed mesh profile"), 760, 560, UI_POPUP_STANDARD);
     if (!s.profile_editor) return;
+    ui_form_divide_title(s.profile_editor);
     lv_obj_add_event_cb(s.profile_editor, profile_popup_deleted, LV_EVENT_DELETE, NULL);
     ui_form_text(ui_form_body(s.profile_editor), "Profile name", UI_FONT_CAPTION, UI_TEXT_DIM);
     s.profile_name_input = ui_form_input(ui_form_body(s.profile_editor), "example: textured_plate", "", false, BED_MESH_PROFILE_NAME_MAX - 1);
@@ -370,14 +380,16 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
         if (s.profile_confirm) lv_obj_move_foreground(s.profile_confirm);
         return;
     }
-    s.profile_popup = ui_form_dialog(ui_text("Bed-mesh profiles"), 760, 520, UI_POPUP_STANDARD);
+    s.profile_popup = ui_form_dialog(ui_text("Bed mesh profiles"), 760, 520, UI_POPUP_STANDARD);
     if (!s.profile_popup) return;
+    ui_form_divide_title(s.profile_popup);
     lv_obj_set_scrollbar_mode(ui_form_body(s.profile_popup), LV_SCROLLBAR_MODE_OFF);
     ++s_epoch;
     lv_obj_add_event_cb(s.profile_popup, profile_popup_deleted, LV_EVENT_DELETE, NULL);
     s.selected_profile = -1;
     s.displayed_count = s.reported_count;
     memcpy(s.displayed_names, s.reported_names, sizeof(s.displayed_names));
+    ui_form_text(ui_form_body(s.profile_popup),"Select a saved profile to load or remove. Save as stores the current mesh.",UI_FONT_CAPTION,UI_TEXT_DIM);
     s.connection_label = ui_form_text(ui_form_body(s.profile_popup), "", UI_FONT_CAPTION, UI_TEXT_DIM);
     watch_profile_ref(s.connection_label);
     s.profile_list = lv_obj_create(ui_form_body(s.profile_popup));
@@ -387,25 +399,32 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
     lv_obj_set_flex_flow(s.profile_list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(s.profile_list, 8, 0);
     lv_obj_clear_flag(s.profile_list, LV_OBJ_FLAG_SCROLLABLE);
-    if (!s.displayed_count) ui_form_text(s.profile_list, "No saved bed-mesh profiles reported.", UI_FONT_BODY, UI_TEXT_DIM);
+    if (!s.displayed_count) ui_form_text(s.profile_list, "No saved bed mesh profiles reported.", UI_FONT_BODY, UI_TEXT_DIM);
     for (size_t i = 0; i < s.displayed_count; ++i) {
         const char *name = s.displayed_names[i];
         bool active = !strcmp(name, s.active_name);
         if (active) s.selected_profile = (int16_t)i;
-        char row_text[96];
-        snprintf(row_text, sizeof(row_text), "%s%s", name, active ? "   Active" : "");
-        lv_obj_t *row = ui_popup_add_selectable_row(s.profile_list, row_text, 0, 0, 1, 52,
+        lv_obj_t *row = ui_popup_add_selectable_row(s.profile_list, name, 0, 0, 1, 52,
             profile_row_cb, (void *)(uintptr_t)(i + 1));
         if (row) {
             s.rows[i] = row;
             watch_profile_ref(row);
             lv_obj_set_width(row, LV_PCT(100));
             lv_obj_set_style_min_height(row, UI_FONT_BODY_LARGE->line_height + 20, 0);
-            lv_obj_set_style_pad_hor(row, 16, 0);
+            lv_obj_set_height(row,LV_SIZE_CONTENT);
+            lv_obj_set_flex_flow(row,LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(row,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+            lv_obj_set_style_pad_column(row,12,0);
             lv_obj_t *label = lv_obj_get_child(row, 0);
-            lv_obj_set_size(label, LV_PCT(100), UI_FONT_BODY_LARGE->line_height);
-            lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
-            ui_popup_set_selectable_row_selected(row, active);
+            lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+            lv_obj_set_size(label,0,LV_SIZE_CONTENT);
+            lv_obj_set_flex_grow(label,1);
+            if(active){
+                lv_obj_t *badge=lv_label_create(row);
+                lv_label_set_text(badge,"Active");
+                ui_apply_custom_label_style(badge,UI_FONT_CAPTION,UI_TEXT_DIM);
+            }
+            style_profile_selection(row, active);
         }
     }
     s.actions[0] = ui_form_action(s.profile_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_SAVE " Save as", save_as_profile_cb, NULL);

@@ -97,12 +97,16 @@ bool ui_calibration_manual_probe_show(
     s_probe.abort_cb = abort_cb;
     s_probe.accept_cb = accept_cb;
     lv_obj_add_event_cb(s_probe.popup, manual_probe_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(s_probe.popup, title ? title : ui_text("Manual probe"));
+    ui_cal_dialog_title_divided(s_probe.popup, title ? title : ui_text("Manual probe"));
 
     s_probe.status_label =
         ui_cal_dialog_text(ui_cal_dialog_body(s_probe.popup), instructions
                 ? instructions
                 : "Adjust the nozzle height, then accept the point.");
+
+    lv_obj_set_style_text_line_space(s_probe.status_label,4,0);
+    ui_cal_dialog_caption(ui_cal_dialog_body(s_probe.popup),
+        "Nozzle movement (mm): negative lowers, positive raises.");
 
     /* Shared by Probe/Z and Axis Twist: coarse travel first, then
      * 0.01 mm or 0.005 mm TESTZ steps for the final paper-contact pass. */

@@ -741,8 +741,7 @@ static void show_probe_adjustment_popup(void)
 {
     ui_calibration_manual_probe_show(
         "Probe / Z offset",
-        "Use TESTZ steps to move the nozzle toward (-) or away from (+) the bed.\n"
-        "Use a paper test, then ACCEPT only when the offset is correct.",
+        "Use a paper gauge to adjust the nozzle height. Choose Accept only when the offset is correct.",
         "Accept",
         send_probe_step_cb,
         abort_probe_calibration_cb,
@@ -818,29 +817,24 @@ static void probe_z_button_cb(
 
     close_probe_popup();
     s_calibration->probe_popup =
-        ui_cal_dialog_create(lv_layer_top(), 630, 390, UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!s_calibration->probe_popup) {
         return;
     }
 
-    ui_cal_dialog_title(s_calibration->probe_popup, ui_text("START PROBE / Z CALIBRATION?"));
+    ui_cal_dialog_title_divided(s_calibration->probe_popup, ui_text("Start probe / Z calibration?"));
 
 
-    char body[440];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "The toolhead will move to the configured probe position.%s\n\n"
-        "Clear the bed and prepare a paper gauge. You will manually adjust TESTZ before accepting.\n\n"
-        "Nothing is saved until Apply & Restart is confirmed.",
-        s_calibration->probe_home_required
-            ? " XYZ is not homed, so the printer's homing workflow will run first."
-            : "");
-    ui_cal_dialog_text(ui_cal_dialog_body(s_calibration->probe_popup), body);
+    lv_obj_t *body=ui_cal_dialog_body(s_calibration->probe_popup);
+    ui_cal_dialog_text(body,"The toolhead will move to the configured probe position. Clear the bed and prepare a paper gauge.");
+    ui_cal_dialog_caption(body,s_calibration->probe_home_required
+        ? "XYZ is not homed. The printer's homing workflow will run first." : "XYZ is already homed.");
+    ui_cal_dialog_caption(body,"You will adjust nozzle height manually before accepting the point.");
+    ui_cal_dialog_caption(body,"Nothing is saved until Apply & restart is confirmed.");
 
-    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_probe_popup_cb, NULL, NULL);
-    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " START", run_probe_calibration_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_probe_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Start", run_probe_calibration_cb, NULL, NULL);
 }
 
 
@@ -960,8 +954,7 @@ static void show_axis_twist_adjustment_popup(void)
 {
     ui_calibration_manual_probe_show(
         "Axis twist calibration",
-        "At each Klipper sample point, use a paper test and TESTZ to set the nozzle height.\n"
-        "Press ACCEPT for every point. The controls remain available until Klipper completes the sequence.",
+        "At each Klipper sample point, set the nozzle height with a paper gauge, then choose Accept point. Repeat until Klipper completes the sequence.",
         "Accept point",
         send_axis_twist_step_cb,
         abort_axis_twist_calibration_cb,
@@ -1038,28 +1031,23 @@ static void axis_twist_button_cb(
 
     close_axis_twist_popup();
     s_calibration->axis_twist_popup =
-        ui_cal_dialog_create(lv_layer_top(), 630, 400, UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!s_calibration->axis_twist_popup) {
         return;
     }
 
-    ui_cal_dialog_title(s_calibration->axis_twist_popup, ui_text("Start axis twist calibration?"));
+    ui_cal_dialog_title_divided(s_calibration->axis_twist_popup, ui_text("Start axis twist calibration?"));
 
 
-    char body[440];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "Klipper will probe and request a manual paper measurement at several points across the X axis.%s\n\n"
-        "Clear the bed and motion area. Nothing is saved until Apply & Restart is confirmed.",
-        s_calibration->axis_twist_home_required
-            ? " XYZ is not homed, so homing will run first."
-            : "");
-    ui_cal_dialog_text(ui_cal_dialog_body(s_calibration->axis_twist_popup), body);
+    lv_obj_t *body=ui_cal_dialog_body(s_calibration->axis_twist_popup);
+    ui_cal_dialog_text(body,"Klipper will probe several points across the X axis and request a manual paper measurement at each point. Clear the bed and motion area.");
+    ui_cal_dialog_caption(body,s_calibration->axis_twist_home_required
+        ? "XYZ is not homed. Homing will run first." : "XYZ is already homed.");
+    ui_cal_dialog_caption(body,"Nothing is saved until Apply & restart is confirmed.");
 
-    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_axis_twist_popup_cb, NULL, NULL);
-    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " START", run_axis_twist_calibration_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_axis_twist_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Start", run_axis_twist_calibration_cb, NULL, NULL);
 }
 
 

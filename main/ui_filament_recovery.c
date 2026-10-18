@@ -74,6 +74,7 @@ static void refresh(lv_timer_t *timer)
             state.nozzle_temp, state.nozzle_target);
     }
     ui_value_set_text(status_label, text);
+    ui_value_set_color(status_label,endpoint_generation!=moonraker_config_generation() || !state.moonraker_ok || !state.live_data_ok ? UI_WARN : UI_TEXT_BRIGHT,0);
     bool sensor_ready = sensors_allow_resume(&sensors);
     if (endpoint_generation != moonraker_config_generation())
         snprintf(text, sizeof(text), "Filament sensor unavailable for this printer.");
@@ -83,6 +84,7 @@ static void refresh(lv_timer_t *timer)
     else if (!sensors.sensor_count) snprintf(text, sizeof(text), "No filament sensor reported. Check filament manually.");
     else snprintf(text, sizeof(text), "Filament sensor: %s", sensor_ready ? "ready (or disabled)" : "empty or checking");
     ui_value_set_text(sensor_label, text);
+    ui_value_set_color(sensor_label,sensors.discovered && !sensor_ready ? UI_WARN : UI_TEXT_DIM,0);
     bool hot = state.nozzle_target >= 170 && state.nozzle_temp >= 170 &&
         state.nozzle_temp >= state.nozzle_target - 5;
     bool homed = strchr(state.homed_axes, 'x') && strchr(state.homed_axes, 'y') &&
@@ -129,6 +131,7 @@ static void action(lv_event_t *event)
     ui_value_set_text(message_label, sent
         ? "Command sent. Check nozzle and Console before continuing."
         : "Command could not be sent. Check connection and retry.");
+    ui_value_set_color(message_label,sent?UI_TEXT_DIM:UI_DANGER_BRIGHT,0);
     refresh(NULL);
 }
 
@@ -190,20 +193,20 @@ void ui_filament_recovery_show(bool (*send)(const char *))
         ? (int)state.nozzle_target : 205;
     popup = ui_form_dialog("Filament recovery", 840, 568, UI_POPUP_STANDARD);
     if (!popup) { send_command = NULL; return; }
+    ui_form_divide_title(popup);
     ++popup_epoch;
     lv_obj_add_event_cb(popup, deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = ui_form_body(popup);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
-    status_label = ui_form_text(body, "", UI_FONT_BODY, UI_TEXT);
-    sensor_label = ui_form_text(body, "", UI_FONT_BODY, UI_TEXT);
+    status_label = ui_form_text(body, "", UI_FONT_BODY, UI_TEXT_BRIGHT);
+    sensor_label = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);
     message_label = ui_form_text(body,
-        "Set temperature and tap Heat. Replace filament, load and purge.\n"
-        "Remove the purge strand before Resume. Missing controls need the HMI macros.",
-        UI_FONT_BODY, UI_TEXT);
+        "Set the target and tap Heat. Replace filament, load and purge; remove the purge strand before Resume. Missing controls require HMI macros.",
+        UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_t *labels[] = {status_label, sensor_label, message_label};
     for (unsigned i = 0; i < 3; ++i)
         lv_obj_add_event_cb(labels[i], field_deleted, LV_EVENT_DELETE, NULL);
-    ui_form_text(body, "Nozzle target", UI_FONT_BODY, UI_TEXT_MUTED);
+    ui_form_text(body, "Nozzle target", UI_FONT_CAPTION, UI_TEXT_DIM);
     static const int32_t temperature_columns[] = {100, LV_GRID_FR(1), 100, LV_GRID_TEMPLATE_LAST};
     static const int32_t one_row[] = {LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST};
     lv_obj_t *temperature_row = lv_obj_create(body);

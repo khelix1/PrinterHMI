@@ -53,6 +53,24 @@ static inline lv_obj_t *ui_cal_dialog_title(lv_obj_t *popup, const char *text)
     lv_label_set_text(title, text);
     return title;
 }
+/* Opt-in title treatment shared with the Motion diagnostics dialogs. */
+static inline lv_obj_t *ui_cal_dialog_title_divided(lv_obj_t *popup,const char *text)
+{
+    lv_obj_t *title=ui_cal_dialog_title(popup,text);
+    lv_obj_set_height(title,UI_FONT_TITLE->line_height+12);
+    ui_apply_divider_border(title,LV_BORDER_SIDE_BOTTOM);
+    lv_obj_set_style_pad_bottom(title,10,0);
+    return title;
+}
+static inline lv_obj_t *ui_cal_dialog_caption(lv_obj_t *parent,const char *text)
+{
+    lv_obj_t *label=lv_label_create(parent);
+    lv_label_set_text(label,text?text:"");
+    ui_apply_custom_label_style(label,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_width(label,LV_PCT(100));
+    lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+    return label;
+}
 static inline lv_obj_t *ui_cal_dialog_body(lv_obj_t *popup)
 {
     return lv_obj_get_child(popup, 1);

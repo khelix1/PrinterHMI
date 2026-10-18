@@ -102,8 +102,7 @@ static void refresh(lv_timer_t *timer)
             if (length < 0 || (size_t)length >= sizeof(text) - used) break;
             used += (size_t)length;
         }
-        snprintf(text + used, sizeof(text) - used, "%s\nLive sample; refreshed every 2 seconds.\n"
-            "Sensorless endstops may only trigger during homing.",
+        snprintf(text + used, sizeof(text) - used, "%s",
             status.truncated ? "Additional endstops omitted." : status.count ? "" : "No endstops reported.");
         ui_value_set_text(s_body, text);
     }
@@ -120,11 +119,14 @@ void ui_endstop_status_show(void)
     s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 460, UI_POPUP_STANDARD);
     if (!s_popup) return;
     lv_obj_add_event_cb(s_popup, endstop_popup_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(s_popup, "Live endstops");
+    ui_cal_dialog_title_divided(s_popup, "Live endstops");
 
     lv_obj_t *list = ui_cal_dialog_body(s_popup);
     s_body = ui_cal_dialog_text(list, "Waiting for the first live sample...");
+    ui_apply_custom_label_style(s_body,UI_FONT_BODY,UI_TEXT);
+    lv_obj_set_style_text_line_space(s_body,6,0);
     lv_obj_add_event_cb(s_body, body_deleted, LV_EVENT_DELETE, NULL);
+    ui_cal_dialog_caption(list,"Live readings every 2 seconds while idle. Sensorless endstops may only trigger during homing.");
 
     ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CLOSE, "Close", close_cb, NULL, NULL);
     s_timer = lv_timer_create(refresh, 250, NULL);

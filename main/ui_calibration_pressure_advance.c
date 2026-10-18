@@ -109,19 +109,19 @@ static void show_armed_popup(
     }
 
     pa_register_popup();
-    ui_cal_dialog_title(s_pa.popup, ui_text("Pressure advance tower armed"));
+    ui_cal_dialog_title_divided(s_pa.popup, ui_text("Pressure advance tower armed"));
 
 
     s_pa.armed = true;
-    char body[500];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "Runtime limits are now ACCEL=500 and SQUARE_CORNER_VELOCITY=1. The tower factor is %s.\n\n"
-        "Start the prepared hollow-square calibration print next. After printing, measure the best corner height with calipers.\n\n"
-        "No value has been saved. RESTART clears the temporary tuning state and restores configured motion limits.",
+    char body[160];
+    lv_snprintf(body,sizeof(body),
+        "Tower factor: %s\nAcceleration: 500 mm/s^2\nSquare-corner velocity: 1 mm/s",
         factor ? factor : "--");
-    ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
+    ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup),body);
+    ui_cal_dialog_caption(ui_cal_dialog_body(s_pa.popup),
+        "Start the prepared hollow-square calibration print next. After printing, measure the best corner height with calipers.");
+    ui_cal_dialog_caption(ui_cal_dialog_body(s_pa.popup),
+        "Nothing is saved. RESTART clears the temporary tuning state and restores configured motion limits.");
 
     ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "Close", close_popup_cb, NULL, NULL);
 }
@@ -207,22 +207,17 @@ static void button_cb(
     }
 
     pa_register_popup();
-    ui_cal_dialog_title(s_pa.popup, ui_text("Set up pressure advance tower"));
+    ui_cal_dialog_title_divided(s_pa.popup, ui_text("Set up pressure advance tower"));
 
 
-    char body[520];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "Prepare the hollow-square PA tower before continuing. Dynamic acceleration and scarf seams must be disabled.\n\n"
-        "Select the drive type for the currently active extruder: %s\n\n"
-        "This changes runtime test limits only. It does not write printer.cfg.",
-        state.active_hotend[0]
-            ? state.active_hotend
-            : "extruder");
-    ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), body);
-
-    s_pa.feedback = ui_cal_dialog_text(ui_cal_dialog_body(s_pa.popup), "");
+    lv_obj_t *body=ui_cal_dialog_body(s_pa.popup);
+    ui_cal_dialog_text(body,
+        "Prepare a hollow-square PA tower. Disable dynamic acceleration and scarf seams before printing.");
+    char active[120];
+    lv_snprintf(active,sizeof(active),"Active extruder: %s",state.active_hotend[0]?state.active_hotend:"extruder");
+    ui_cal_dialog_caption(body,active);
+    ui_cal_dialog_caption(body,"Choose the drive type. Runtime test limits change; printer.cfg is not written.");
+    s_pa.feedback = ui_cal_dialog_caption(body, "");
     ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Direct drive"), 260, arm_tower_cb, (void *)ui_text(".005"), NULL);
     ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Long Bowden"), 260, arm_tower_cb, (void *)ui_text(".020"), NULL);
 

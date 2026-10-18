@@ -140,7 +140,13 @@ int main(void){
   bed_mesh_profile_name_t names[BED_MESH_MAX_PROFILES];for(unsigned i=0;i<BED_MESH_MAX_PROFILES;i++)snprintf(names[i],sizeof(names[i]),"plate_%02u_with_a_long_descriptive_name",i);
   bed_mesh_snapshot_t mesh={.valid=true,.profile_count=BED_MESH_MAX_PROFILES,.profile_names=names};strcpy(mesh.profile_name,names[0]);
   ui_bed_mesh_profiles_update(&mesh);ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup&&s.selected_profile==0);layout(s.profile_popup);
-  for(unsigned i=0;i<lv_obj_get_child_count(s.profile_list);i++){lv_obj_t*row=lv_obj_get_child(s.profile_list,i);inside(lv_obj_get_child(row,0),row);}
+  for(unsigned i=0;i<lv_obj_get_child_count(s.profile_list);i++){
+   lv_obj_t*row=lv_obj_get_child(s.profile_list,i),*name=lv_obj_get_child(row,0);
+   inside(name,row);assert(!strcmp(lv_label_get_text(name),names[i]));
+   assert(lv_label_get_long_mode(name)==LV_LABEL_LONG_WRAP);
+   if(i==0){lv_obj_t *badge=lv_obj_get_child(row,1);inside(badge,row);assert(!strcmp(lv_label_get_text(badge),"Active"));
+    lv_area_t a,b;lv_obj_get_coords(name,&a);lv_obj_get_coords(badge,&b);assert(a.x2<b.x1);}
+  }
   lv_obj_t*initial=s.profile_popup;ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup==initial);
   if(!narrow&&density==1&&large)capture(theme,"list");
   unsigned before=sends;tap(pointer,s.actions[1]);assert(sends==before+1&&s.profile_popup==initial&&strstr(lv_label_get_text(s.connection_label),"not accepted"));
@@ -155,7 +161,7 @@ int main(void){
   accept=false;before=sends;tap(pointer,s.actions[3]);assert(sends==before+1&&s.profile_confirm&&strstr(lv_label_get_text(s.confirm_connection_label),"not accepted"));
   live.moonraker_ok=false;ui_bed_mesh_profiles_refresh_availability();assert(lv_obj_has_state(s.actions[3],LV_STATE_DISABLED));confirm_save_profile_cb(NULL);assert(sends==before+1);live.moonraker_ok=true;ui_bed_mesh_profiles_refresh_availability();assert(!lv_obj_has_state(s.actions[3],LV_STATE_DISABLED)&&!lv_label_get_text(s.confirm_connection_label)[0]);
   accept=true;send_hook=reenter_save;confirm_save_profile_cb(NULL);assert(sends==before+2&&!s.profile_confirm&&!s.profile_popup&&!strcmp(last_command,"BED_MESH_PROFILE SAVE=textured_plate\nSAVE_CONFIG"));send_hook=NULL;
-  ui_bed_mesh_profiles_show_cb(NULL);remove_selected_profile_cb(NULL);assert(s.profile_confirm);char removal[BED_MESH_PROFILE_NAME_MAX];strcpy(removal,s.pending_profile_name);lv_obj_t*confirm=s.profile_confirm;remove_selected_profile_cb(NULL);assert(s.profile_confirm==confirm);
+  ui_bed_mesh_profiles_show_cb(NULL);remove_selected_profile_cb(NULL);assert(s.profile_confirm);layout(s.profile_confirm);if(!narrow&&density==1&&large)capture(theme,"remove");char removal[BED_MESH_PROFILE_NAME_MAX];strcpy(removal,s.pending_profile_name);lv_obj_t*confirm=s.profile_confirm;remove_selected_profile_cb(NULL);assert(s.profile_confirm==confirm);
   accept=false;before=sends;confirm_remove_profile_cb(NULL);assert(sends==before+1&&s.profile_confirm);accept=true;send_hook=reenter_remove;confirm_remove_profile_cb(NULL);snprintf(expected,sizeof(expected),"BED_MESH_PROFILE REMOVE=%s\nSAVE_CONFIG",removal);assert(sends==before+2&&!s.profile_popup&&!strcmp(last_command,expected));send_hook=NULL;
   /* Removed selected profile, inactive mesh and stale printer cannot dispatch. */
   ui_bed_mesh_profiles_show_cb(NULL);mesh.profile_count=0;ui_bed_mesh_profiles_update(&mesh);before=sends;load_selected_profile_cb(NULL);remove_selected_profile_cb(NULL);assert(sends==before&&!s.profile_confirm&&lv_obj_has_state(s.actions[1],LV_STATE_DISABLED));mesh.valid=false;ui_bed_mesh_profiles_update(&mesh);save_as_profile_cb(NULL);assert(!s.profile_editor);
@@ -163,7 +169,7 @@ int main(void){
   /* Empty manager still offers Save As for an available current mesh. */
   mesh.profile_count=0;ui_bed_mesh_profiles_update(&mesh);ui_bed_mesh_profiles_show_cb(NULL);assert(!s.displayed_count&&lv_obj_get_child_count(s.profile_list)==1&&!lv_obj_has_state(s.actions[0],LV_STATE_DISABLED));layout(s.profile_popup);close_profile_popup_cb(NULL);
   mesh.profile_count=BED_MESH_MAX_PROFILES;ui_bed_mesh_profiles_update(&mesh);ui_bed_mesh_profiles_show_cb(NULL);
-  lv_obj_t*row=lv_obj_get_child(s.profile_list,0);lv_obj_scroll_to_view_recursive(row,LV_ANIM_OFF);tap(pointer,row);assert(s.selected_profile==0);
+  lv_obj_t*row=lv_obj_get_child(s.profile_list,0);lv_obj_scroll_to_view_recursive(row,LV_ANIM_OFF);tap(pointer,row);assert(s.selected_profile==0);assert(lv_obj_get_style_pad_left(row,0)==16);
   before=sends;strcpy(live.printer_state,"printing");ui_bed_mesh_profiles_refresh_availability();load_selected_profile_cb(NULL);assert(sends==before&&lv_obj_has_state(s.actions[1],LV_STATE_DISABLED));strcpy(live.printer_state,"paused");load_selected_profile_cb(NULL);assert(sends==before);strcpy(live.printer_state,"ready");ui_bed_mesh_profiles_refresh_availability();assert(!lv_obj_has_state(s.actions[1],LV_STATE_DISABLED));
   save_as_profile_cb(NULL);layout(s.profile_editor);tap(pointer,lv_obj_get_child(lv_obj_get_child(s.profile_editor,-1),0));assert(!s.profile_editor&&s.profile_popup);
   remove_selected_profile_cb(NULL);layout(s.profile_confirm);tap(pointer,lv_obj_get_child(lv_obj_get_child(s.profile_confirm,-1),0));assert(!s.profile_confirm&&!s.pending_profile_name[0]);close_profile_popup_cb(NULL);

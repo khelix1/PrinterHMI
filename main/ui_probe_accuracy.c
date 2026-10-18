@@ -137,8 +137,8 @@ static void refresh_status(lv_timer_t *timer)
         !idle ? "Probe checks require an idle, ready printer." :
         !homed ? "Home XYZ first, then position the probe over a clear bed area." :
         pending ? "Check already sent. Check printer results before running again." :
-        s_send_failed ? "Request was not accepted. Check the connection and tap Run Check to retry." :
-        "XYZ homed. Verify the CURRENT probe position is over a clear bed area.";
+        s_send_failed ? "Request was not accepted. Check the connection and tap Run check to retry." :
+        "XYZ homed. Verify the current position before running.";
     ui_value_set_text(s_status, text);
     if (same && live && idle && homed && !s_dispatching && !pending && s_popup_send && s_samples) lv_obj_remove_state(s_run, LV_STATE_DISABLED);
     else lv_obj_add_state(s_run, LV_STATE_DISABLED);
@@ -163,18 +163,19 @@ static void open_cb(lv_event_t *event)
     s_popup = ui_cal_dialog_create(lv_layer_top(), 660, 430, UI_POPUP_STANDARD);
     if (!s_popup) { s_popup_send = NULL; s_popup_ready = NULL; return; }
     lv_obj_add_event_cb(s_popup, popup_deleted, LV_EVENT_DELETE, NULL);
-    ui_cal_dialog_title(s_popup, "Check probe accuracy?");
+    ui_cal_dialog_title_divided(s_popup, "Check probe accuracy?");
 
-    ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Runs at the CURRENT probe position.\n"
-        "Home XYZ and position the probe over a clear bed area first.\n"
-        "The probe will repeat and retract. Nothing is saved.");
-    ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Samples");
+    ui_cal_dialog_text(ui_cal_dialog_body(s_popup),
+        "Home XYZ, then position the probe over a clear bed area.");
+    ui_cal_dialog_caption(ui_cal_dialog_body(s_popup),
+        "Repeats probing at the current position. Nothing is saved.");
+    ui_cal_dialog_caption(ui_cal_dialog_body(s_popup), "Samples");
     s_samples = lv_dropdown_create(ui_cal_dialog_body(s_popup));
     lv_dropdown_set_options(s_samples, "5\n10\n20");
     lv_dropdown_set_selected(s_samples, 1);
     lv_obj_set_size(s_samples, LV_PCT(100), 54);
     ui_selector_style(s_samples, UI_FONT_BODY);
-    s_status = ui_cal_dialog_text(ui_cal_dialog_body(s_popup), "Waiting for homing status...");
+    s_status = ui_cal_dialog_caption(ui_cal_dialog_body(s_popup), "Waiting for homing status...");
     ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CANCEL, "Back", close_cb, NULL, NULL);
     s_run = ui_cal_dialog_action(s_popup, UI_POPUP_ACTION_CONFIRM, "Run check", run_cb, NULL, NULL);
     lv_obj_add_event_cb(s_samples, field_deleted, LV_EVENT_DELETE, NULL);

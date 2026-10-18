@@ -2201,3 +2201,45 @@ Full-width mesh canvases (Studio 976 x 278, Operator 800 x 304), compact footer 
 Bed Mesh gains twenty pixels of canvas height in each exposed theme: Studio 976 x 298, Operator 800 x 324. Its Studio stage uses eight pixels of the existing gap above the navigation shelf; the compact title row and Operator banner reclaim the remaining height. Profile and height summaries, footer actions and navigation remain separate. Default fitting and Reset view use the actual taller canvas.
 
 Motion limits now align readings to the right with shared theme-owned row dividers and a subdued configuration note. Limits, Drivers and Distance use a matching title divider. The Distance introduction is a caption, leadscrew labels use sentence case, and the numeric editor names the measurement being edited. Printer-switch status uses sentence case. Calculation, transport, selection, scrolling and owner/lifetime behavior are unchanged. Native layout/interaction checks cover themes, densities, large text, narrow views, driver transitions and keyboard/edit retention; the Bed Mesh fixture checks navigation clearance and fitted-reset equality. Local build and OTA verification remain required; firmware partition budget is 7 MiB.
+
+### Probe, Endstops and calibration results visual polish
+
+After checkpoint 92c56a2, Probe Accuracy, Live Endstops and calibration results opt into a shared divided-title helper using theme-owned border styling. Probe instructions separate the required positioning step from a smaller explanation and readiness caption. Endstops use clearer reading contrast and line spacing; refresh/sensorless guidance is a separate caption rather than part of the changing sample text. Calibration results retain the raw Klipper text in the main readout and move completion/save guidance into a caption, with consistent sentence-case actions. Save/restart confirmation retains its command/owner/retry checks.
+
+Native host checks cover both exposed themes plus compatibility themes, density/text settings and narrow viewports, dropdown bounds, pinned footers, scrolling, probe dispatch/retry, endstop polling, result/save transitions and deletion/owner changes. Build and OTA panel verification remain required. No fonts or image assets added; firmware partition budget remains 7 MiB.
+
+### Guided PID, manual probe and pressure advance visual pass
+
+PID heater selection, target adjustment and heat confirmation now use the shared divided-title treatment. Heater identity, the emphasized target, allowed range and attendance guidance are separate readings/captions; target-step buttons include Celsius units, and heat confirmation repeats the selected heater/target. Manual probing uses the same title treatment, clearer status spacing and a movement-units/direction caption while retaining all ten TESTZ steps. Pressure-advance setup separates the active extruder, print preparation and temporary-setting notes; the armed view lists the factor and runtime limits before its next-step/reset guidance. Both exposed themes use their own shared palette/fonts/dividers.
+
+Existing command generation, defaults, clamps, temporary limits, owner guards, callback retirement, retry retention, pinned actions and scrolling remain unchanged. Native PID/Manual/PA fixtures cover all themes, density/text settings and narrow viewports, including target updates, TESTZ dispatch, factor choices, rejection/reentry and printer switching. Local firmware build and OTA verification remain required. No image/font assets added; partition budget remains 7 MiB.
+
+### Alignment, vibration and custom calibration visual pass
+
+Screws tilt/results, Z tilt/quad gantry leveling, input shaper, resonance, accelerometer checks and custom macro selection/review use the shared divided-title treatment in their active theme. Alignment dialogs separate motion clearance, homing state and no-save guidance; screw results have clearer contrast/spacing. Vibration dialogs separate the measurement description from setup guidance. Custom review emphasizes the selected macro and keeps motion/heat and no-auto-save information visible, with sentence-case Back/Run actions. Feedback uses shared captions. Alignment and custom confirmations have more vertical space while retaining pinned actions and body scrolling.
+
+Native Geometry/Motion/Custom audits exercise themes, density/text settings and narrow viewports, homing/capability guards, all command variants, refusal/retry, reentry, ownership changes and deletion. No command, transport, persistence, graph or page-navigation behavior changes. Firmware build and OTA panel verification remain required; partition budget is 7 MiB.
+
+### Probe/Z and Axis Twist visual closeout
+
+The remaining Calibration-owned Probe/Z and Axis Twist start confirmations use shared divided titles, sentence-case actions and the same 650 x 410 preferred modal size as related guided workflows. Motion/clearance instructions, detected homing state and explicit save/restart guidance are separate text sections. Manual-step instructions reference the visible Accept/Accept point controls; movement units/directions continue to come from the shared manual-probe dialog.
+
+The actual Calibration-page fixture checks both Studio and Operator, all density/text settings, flat Studio sections versus Operator cards, capability/discovery states and page bounds. It additionally opens both start confirmations in homed/unhomed states at 1024, 640 and 480-pixel widths, checks pinned actions, scroll reach, title/divider/readiness text and Back without dispatch. Command generation and workflow ownership are unchanged. Firmware build and OTA panel verification remain required; partition budget remains 7 MiB.
+
+### Bed mesh profile visual polish
+
+Bed mesh profile management, naming and save/remove confirmation use an optional shared form-title divider. Profile names wrap without truncation, with a separate Active marker and stable padding across selection changes; Studio retains shared flat rows and Operator its own selectable surfaces. Confirmations emphasize the exact reviewed name and separate replacement/removal behavior from explicit Klipper restart guidance. Manager guidance and sentence-case bed mesh naming match the viewer.
+
+Native profile fixtures cover full names/marker separation, selection alignment, keyboard/footer bounds, scroll reach, exact LOAD/SAVE/REMOVE scripts, retry retention, rejected/stale actions, owner changes and teardown across themes, densities, large text and narrow viewports. Existing command/persistence and mesh-owner behavior remain unchanged. Local firmware build and OTA verification remain required. No font/image assets added; partition budget remains 7 MiB.
+
+### Shared thermal, hotend and sensor dialog visual pass
+
+The Devices catalogue remains read-only. Shared Printer heater/fan controls, custom-temperature entry, hotend selection/activation and filament-sensor dialogs now use the same opt-in form title divider introduced for mesh profiles. Their common header also covers print/object cancellation dialogs; those receive layout regressions. Control captions use the shared caption font, readings remain prominent, and temperature-entry/Active/unavailable labels use sentence case. Sensor and hotend names are captions above their larger live readings. Studio flat sections and Operator surfaces are retained.
+
+Native control, hotend, sensor/status, cancel-print and cancel-object audits cover themes, density/text settings and narrow views, pinned actions/keyboard, scrolling, exact commands, retry retention, quiet refreshes, printer changes and teardown. No preset, command, selection, device-catalogue or transport behavior changes. Local firmware build and OTA verification remain required; partition budget remains 7 MiB.
+
+### Object cancellation and filament recovery visual pass
+
+Studio object cancellation uses its flat preview well/list and shared selectable-row styling, including after selection changes; Operator retains its existing panel/row treatment. Object status prefixes use sentence case, excluded names remain readable, and list scrolling hides its side scrollbar. Object names, geometry, map picking and exclusion confirmations are unchanged.
+
+Filament recovery uses the shared divided form title. Paused/nozzle status stays prominent; sensor readiness, instructions and target captions use the caption font. Printer/sensor warnings and rejected-command feedback use semantic theme colors. The five recovery actions, target-step controls, safety conditions, cooldowns and macro commands are unchanged. Native object/recovery audits cover themes, density/text settings, native and narrow views, Studio flat-row persistence, map/list selection, scrolling/footers, exact dispatch, rejection/retry, readiness and owner/deletion cases. Local firmware build and OTA verification remain required; partition budget remains 7 MiB.

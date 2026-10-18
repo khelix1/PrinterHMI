@@ -156,29 +156,27 @@ static void custom_macro_selected_cb(
     *s_custom->selected = index;
     close_custom_popup();
     *s_custom->popup =
-        ui_cal_dialog_create(lv_layer_top(), 620, 370, UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!*s_custom->popup) {
         return;
     }
 
     custom_register_popup();
-    ui_cal_dialog_title(*s_custom->popup, ui_text("Run custom calibration?"));
+    ui_cal_dialog_title_divided(*s_custom->popup, ui_text("Run custom calibration?"));
 
 
-    char body[400];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "Macro: %s\n\n"
-        "This is printer-defined behavior. It may move hardware or heat components. Keep the machine attended.\n\n"
-        "PrinterHMI will not save automatically.",
-        s_custom->names[index]);
-    ui_cal_dialog_text(ui_cal_dialog_body(*s_custom->popup), body);
-    s_custom_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_custom->popup), "");
+    lv_obj_t *body=ui_cal_dialog_body(*s_custom->popup);
+    ui_cal_dialog_caption(body,"Selected macro");
+    lv_obj_t *name=ui_cal_dialog_text(body,s_custom->names[index]);
+    ui_apply_custom_label_style(name,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
+    ui_cal_dialog_text(body,
+        "Printer-defined behavior may move hardware or heat components. Keep the printer attended.");
+    ui_cal_dialog_caption(body,"PrinterHMI will not save automatically.");
+    s_custom_feedback = ui_cal_dialog_caption(body, "");
 
-    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " BACK", close_custom_popup_cb, NULL, NULL);
-    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " RUN", run_custom_macro_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_custom_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_custom_macro_cb, NULL, NULL);
 }
 
 
@@ -246,7 +244,7 @@ static void custom_calibration_button_cb(
     }
 
     custom_register_popup();
-    ui_cal_dialog_title(*s_custom->popup, ui_text("Custom calibration macros"));
+    ui_cal_dialog_title_divided(*s_custom->popup, ui_text("Custom calibration macros"));
 
     lv_obj_t *list =
         ui_cal_dialog_body(*s_custom->popup);

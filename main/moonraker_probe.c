@@ -215,6 +215,8 @@ static bool probe_get(
     };
 
     esp_http_client_config_t config = {
+        /* API credentials and commands must stay on the selected endpoint. */
+        .disable_auto_redirect = true,
         .url = url,
         .cert_pem = ca_pem,
         .method = HTTP_METHOD_GET,

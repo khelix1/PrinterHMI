@@ -331,15 +331,14 @@ static lv_obj_t *plain(lv_obj_t *parent, lv_flex_flow_t flow)
 }
 static lv_obj_t *editor_actions(lv_obj_t *popup)
 {
-    lv_obj_t *row = plain(popup, LV_FLEX_FLOW_ROW_WRAP);
-    ui_apply_divider_border(row, LV_BORDER_SIDE_TOP);
-    lv_obj_set_style_pad_top(row, 8, 0);
-    return row;
+    return lv_obj_get_child(popup,-1);
 }
 static lv_obj_t *console_action(lv_obj_t *parent,const char *text,ui_button_kind_t kind,int width,lv_event_cb_t cb)
 {
     lv_obj_t *button=ui_button_create(parent,kind,text);
     lv_obj_set_size(button,width,48);
+    lv_obj_t *popup=lv_obj_get_parent(parent);
+    if(popup&&(popup==s_command_popup||popup==s_search_popup))lv_obj_set_flex_grow(button,1);
     lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,NULL);
     lv_obj_t *label=lv_obj_get_child(button,0);
     ui_text_fit_single_line(label,UI_FONT_BODY_LARGE);
@@ -348,47 +347,20 @@ static lv_obj_t *console_action(lv_obj_t *parent,const char *text,ui_button_kind
 }
 static lv_obj_t *editor_popup(const char *title)
 {
-    int w=lv_display_get_horizontal_resolution(NULL)-32,h=lv_display_get_vertical_resolution(NULL)-32;
-    if(w>820)w=820;
-    if(h>520)h=520;
-    lv_obj_t *popup=ui_popup_create(lv_layer_top(),w,h,UI_POPUP_STANDARD);if(!popup)return NULL;
-    lv_obj_set_flex_flow(popup,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(popup,12,0);
-    lv_obj_set_style_pad_row(popup,8,0);
-    lv_obj_remove_flag(popup,LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *heading=lv_label_create(popup);
-    lv_obj_set_width(heading,LV_PCT(100));
-    lv_label_set_text(heading,title);
-    ui_apply_text_title(heading);
-    ui_value_set_color(heading,UI_TEXT,0);
-    ui_text_fit_single_line(heading,UI_FONT_TITLE);
-    lv_label_set_long_mode(heading,LV_LABEL_LONG_CLIP);
+    lv_obj_t *popup=ui_form_dialog(title,820,520,UI_POPUP_STANDARD);
+    if(!popup)return NULL;
+    lv_obj_set_style_pad_all(popup,12,0);lv_obj_set_style_pad_row(popup,8,0);
     ui_form_divide_title(popup);
     return popup;
 }
 static lv_obj_t *editor_input(lv_obj_t *popup,int max,const char *placeholder,const char *text)
 {
-    lv_obj_t *input=lv_textarea_create(popup);
-    lv_obj_set_width(input,LV_PCT(100));
-    lv_textarea_set_one_line(input,true);
-    lv_obj_set_height(input,56);
-    lv_textarea_set_max_length(input,max);
-    lv_textarea_set_placeholder_text(input,placeholder);
-    lv_textarea_set_text(input,text);
-    ui_apply_surface_role(input,UI_SURFACE_TEXT_INPUT);
-    lv_obj_set_style_text_font(input,UI_FONT_BODY,0);
-    return input;
+    return ui_form_input(ui_form_body(popup),placeholder,text,false,max);
 }
 static lv_obj_t *editor_keyboard(lv_obj_t *popup,lv_obj_t *input,lv_event_cb_t cb)
 {
-    lv_obj_t *keyboard=lv_keyboard_create(popup);
-    ui_apply_surface_role(keyboard,UI_SURFACE_KEYBOARD);
-    lv_obj_set_width(keyboard,LV_PCT(100));
-    lv_obj_set_height(keyboard,0);
-    lv_obj_set_flex_grow(keyboard,1);
-    lv_keyboard_set_mode(keyboard,LV_KEYBOARD_MODE_TEXT_LOWER);
-    lv_keyboard_set_textarea(keyboard,input);
-    lv_obj_add_event_cb(keyboard,cb,LV_EVENT_ALL,NULL);
+    lv_obj_t *keyboard=ui_form_keyboard(popup,input,LV_KEYBOARD_MODE_TEXT_LOWER);
+    if(keyboard)lv_obj_add_event_cb(keyboard,cb,LV_EVENT_ALL,NULL);
     return keyboard;
 }
 static void search_deleted(lv_event_t *e){if(lv_event_get_target_obj(e)==s_search_popup)++s_console_epoch;s_search_popup=s_search_input=s_search_keyboard=NULL;}
@@ -404,6 +376,7 @@ static void search_cb(lv_event_t *event)
     console_action(actions,"Cancel",UI_BUTTON_CANCEL,128,search_cancel_cb);console_action(actions,"Apply",UI_BUTTON_PRIMARY,128,search_done_cb);
     s_search_keyboard=editor_keyboard(s_search_popup,s_search_input,search_keyboard_cb);
     lv_obj_move_to_index(actions, -1);
+    ui_form_finish(s_search_popup);
     lv_obj_add_event_cb(s_search_input,editor_field_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_add_event_cb(s_search_keyboard,editor_field_deleted,LV_EVENT_DELETE,NULL);
 }
@@ -533,6 +506,7 @@ static void send_command_cb(lv_event_t *event)
     if (!input || !input[0]) {
         ui_value_set_text(s_command_feedback,"Enter a command before sending.");
         ui_value_set_color(s_command_feedback,UI_WARN,0);
+        if(s_command_feedback)lv_obj_scroll_to_view(s_command_feedback,LV_ANIM_OFF);
         return;
     }
 
@@ -574,6 +548,7 @@ static void send_command_cb(lv_event_t *event)
     else {
         ui_value_set_text(s_command_feedback,"Send failed. Input preserved; check the connection.");
         ui_value_set_color(s_command_feedback,UI_WARN,0);
+        if(s_command_feedback)lv_obj_scroll_to_view(s_command_feedback,LV_ANIM_OFF);
     }
     rebuild_output();
 }
@@ -597,6 +572,15 @@ static void command_deleted(lv_event_t *e)
 {
     if (lv_event_get_target_obj(e) == s_command_popup) retire_command();
 }
+static void command_value_changed(lv_event_t *event)
+{
+    if(!event||s_command_dispatching||!s_command_popup||!s_command_input||
+       lv_event_get_code(event)!=LV_EVENT_VALUE_CHANGED||
+       lv_event_get_target_obj(event)!=s_command_input||
+       lv_event_get_current_target_obj(event)!=s_command_input)return;
+    ui_popup_focus_input(s_command_input);
+}
+
 static void open_command_cb(lv_event_t *event)
 {
     (void)event;if(!s_root || s_command_dispatching)return;
@@ -609,12 +593,13 @@ static void open_command_cb(lv_event_t *event)
     s_command_popup=editor_popup("Send command");if(!s_command_popup)return;
     lv_obj_add_event_cb(s_command_popup,command_deleted,LV_EVENT_DELETE,NULL);
     s_command_input=editor_input(s_command_popup,CONSOLE_COMMAND_MAX,"G-code or macro, for example: STATUS","");
+    lv_obj_add_event_cb(s_command_input,command_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
     s_command_actions=editor_actions(s_command_popup);
     console_action(s_command_actions,"Close",UI_BUTTON_CLOSE,96,close_command_cb);
     console_action(s_command_actions,"Previous",UI_BUTTON_SECONDARY,96,history_prev_cb);
     console_action(s_command_actions,"Next",UI_BUTTON_SECONDARY,96,history_next_cb);
     s_command_send=console_action(s_command_actions,"Send",UI_BUTTON_PRIMARY,96,send_command_cb);
-    s_command_feedback=lv_label_create(s_command_popup);
+    s_command_feedback=lv_label_create(ui_form_body(s_command_popup));
     lv_obj_set_width(s_command_feedback,LV_PCT(100));
     lv_obj_set_height(s_command_feedback,2*UI_FONT_CAPTION->line_height);
     lv_label_set_long_mode(s_command_feedback,LV_LABEL_LONG_WRAP);
@@ -622,6 +607,7 @@ static void open_command_cb(lv_event_t *event)
     lv_label_set_text(s_command_feedback,"Commands run immediately on this printer.");
     s_command_keyboard=editor_keyboard(s_command_popup,s_command_input,keyboard_event_cb);
     lv_obj_move_to_index(s_command_actions, -1);
+    ui_form_finish(s_command_popup);
     lv_obj_t *fields[]={s_command_input,s_command_feedback,s_command_send,s_command_keyboard};
     for(size_t i=0;i<4;i++)if(fields[i])lv_obj_add_event_cb(fields[i],editor_field_deleted,LV_EVENT_DELETE,NULL);
     update_connection();

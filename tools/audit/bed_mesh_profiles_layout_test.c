@@ -27,7 +27,7 @@ static void read_touch(lv_indev_t*i,lv_indev_data_t*d){(void)i;d->point=touch;d-
 static void tap(lv_indev_t*i,lv_obj_t*b){lv_obj_update_layout(lv_layer_top());lv_area_t a;lv_obj_get_coords(b,&a);touch=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*1024+x]=*v++;lv_display_flush_ready(d);}
 static void inside(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"bounds child %d,%d-%d,%d parent %d,%d-%d,%d text=%s\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2,lv_obj_check_type(c,&lv_label_class)?lv_label_get_text(c):"object");abort();}}
-static void layout(lv_obj_t*p){assert(p);lv_obj_update_layout(p);inside(p,lv_screen_active());lv_obj_t*footer=lv_obj_get_child(p,-1);inside(footer,p);if(lv_obj_get_child_count(p)==4)inside(lv_obj_get_child(p,2),p);for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t*b=lv_obj_get_child(footer,i);inside(b,footer);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_t*body=ui_form_body(p);lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(p);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
+static void layout(lv_obj_t*p){assert(p);lv_obj_update_layout(p);inside(p,lv_screen_active());lv_obj_t*footer=lv_obj_get_child(p,-1);inside(footer,p);if(lv_obj_get_child_count(p)==4)inside(lv_obj_get_child(p,2),p);for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t*b=lv_obj_get_child(footer,i);inside(b,footer);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_t*body=ui_form_body(p);lv_obj_scroll_to_y(body,lv_obj_get_scroll_y(body)+lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(p);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
 static void capture(unsigned theme,const char*name){const char*folder=getenv("MESH_PROFILE_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/mesh-profiles-%s-theme%u.ppm",folder,name,theme);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 static void reenter_load(void){load_selected_profile_cb(NULL);ui_bed_mesh_profiles_show_cb(NULL);}
 static void retire_send(void){lv_obj_delete(s.profile_popup);}
@@ -131,6 +131,29 @@ static void field_safety_checks(const bed_mesh_snapshot_t *mesh)
  ui_bed_mesh_profiles_init(original_owner,send_command);ui_bed_mesh_profiles_update(mesh);
  assert(sends==before);
 }
+static void keyboard_action_checks(void)
+{
+ unsigned before=sends;
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_obj_t *keyboard=lv_obj_get_child(s.profile_editor,2);
+ lv_textarea_set_text(s.profile_name_input,"keyboard_review");
+ lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);
+ assert(!s.profile_editor&&s.profile_confirm&&!strcmp(s.pending_profile_name,"keyboard_review")&&sends==before);
+ close_profile_popup_cb(NULL);
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);keyboard=lv_obj_get_child(s.profile_editor,2);
+ lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(s.profile_editor&&!s.profile_confirm&&sends==before);
+ lv_textarea_set_text(s.profile_name_input,"kept_draft");assert(!lv_label_get_text(s.editor_feedback)[0]);
+ lv_obj_add_state(s.editor_continue,LV_STATE_DISABLED);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);
+ assert(s.profile_editor&&!s.profile_confirm);lv_obj_remove_state(s.editor_continue,LV_STATE_DISABLED);
+ lv_obj_t *foreign=lv_keyboard_create(lv_screen_active());lv_obj_add_event_cb(foreign,profile_keyboard_cb,LV_EVENT_ALL,NULL);
+ lv_obj_send_event(foreign,LV_EVENT_READY,NULL);lv_obj_send_event(foreign,LV_EVENT_CANCEL,NULL);
+ assert(s.profile_editor&&!s.profile_confirm&&sends==before);lv_obj_delete(foreign);
+ lv_obj_send_event(keyboard,LV_EVENT_CANCEL,NULL);assert(!s.profile_editor&&!s.profile_confirm&&s.profile_popup&&sends==before);
+ save_as_profile_cb(NULL);keyboard=lv_obj_get_child(s.profile_editor,2);lv_obj_delete(s.profile_name_input);
+ lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(s.profile_editor&&!s.profile_confirm&&sends==before);
+ close_profile_popup_cb(NULL);
+}
+
 int main(void){
  lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(d,flush);lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned narrow=0;narrow<3;narrow++){
@@ -139,7 +162,7 @@ int main(void){
   lv_obj_t*owner=lv_obj_create(lv_screen_active());ui_bed_mesh_profiles_init(owner,send_command);
   bed_mesh_profile_name_t names[BED_MESH_MAX_PROFILES];for(unsigned i=0;i<BED_MESH_MAX_PROFILES;i++)snprintf(names[i],sizeof(names[i]),"plate_%02u_with_a_long_descriptive_name",i);
   bed_mesh_snapshot_t mesh={.valid=true,.profile_count=BED_MESH_MAX_PROFILES,.profile_names=names};strcpy(mesh.profile_name,names[0]);
-  ui_bed_mesh_profiles_update(&mesh);ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup&&s.selected_profile==0);layout(s.profile_popup);
+  ui_bed_mesh_profiles_update(&mesh);keyboard_action_checks();ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup&&s.selected_profile==0);layout(s.profile_popup);
   for(unsigned i=0;i<lv_obj_get_child_count(s.profile_list);i++){
    lv_obj_t*row=lv_obj_get_child(s.profile_list,i),*name=lv_obj_get_child(row,0);
    inside(name,row);assert(!strcmp(lv_label_get_text(name),names[i]));

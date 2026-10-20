@@ -79,7 +79,7 @@ static void check_toolhead_offset(void){
   ui_printer_motion_show(&a,&b,&c,&step,send_motion);
   lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);
   lv_obj_t *tab=find_text(popup,"Z offset");assert(tab);lv_obj_send_event(lv_obj_get_parent(tab),LV_EVENT_CLICKED,NULL);
-  lv_obj_t *caption=find_text(popup,"Runtime Z offset"),*value=find_text(popup,"+0.000 mm"),*adjust=find_text(popup,"-0.05");
+  lv_obj_t *caption=find_text(popup,"Runtime Z offset (mm)"),*value=find_text(popup,"+0.000 mm"),*adjust=find_text(popup,"-0.05");
   assert(caption&&value&&adjust);lv_label_set_text(value,"-10.000 mm");lv_obj_update_layout(popup);
   lv_area_t ca,va,ba;lv_obj_get_coords(caption,&ca);lv_obj_get_coords(value,&va);lv_obj_get_coords(adjust,&ba);assert(ca.y2<va.y1);assert(va.y2<ba.y1);
   lv_obj_t *close=lv_obj_get_child(lv_obj_get_child(popup,-1),0);lv_obj_send_event(close,LV_EVENT_CLICKED,NULL);

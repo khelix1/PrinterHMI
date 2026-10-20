@@ -440,7 +440,7 @@ static void status_banner_set(
     const char *file,
     const char *eta,
     const char *progress,
-    const ui_status_kind_t *shell_kind)
+    const ui_status_kind_t *shell_kind,bool fixed_layout)
 {
     if (!banner) {
         return;
@@ -475,9 +475,8 @@ static void status_banner_set(
     lv_color_t state_color =
         ui_status_color(state_kind);
 
-    if (!ctx->studio_dashboard) ui_operator_banner_set_status(
-        banner,
-        shell_kind ? *shell_kind : state_kind);
+    if (!ctx->studio_dashboard) ui_apply_banner_status_style_with_padding(
+        banner, shell_kind ? *shell_kind : state_kind, fixed_layout?0:UI_PAD_CARD);
 
     if (ctx->accent) {
         ui_value_set_bg_color(
@@ -542,7 +541,7 @@ static void status_banner_set(
 void ui_status_banner_set(lv_obj_t *banner, const char *state,
     const char *file, const char *eta, const char *progress)
 {
-    status_banner_set(banner, state, file, eta, progress, NULL);
+    status_banner_set(banner, state, file, eta, progress, NULL,true);
     /* Full Dashboard banners use coordinates within the outer shell. Status
      * styling must not add theme padding to that fixed composition. Simple
      * message banners retain their separate content-area layout below. */
@@ -592,14 +591,14 @@ static void simple_message_layout(lv_obj_t *banner)
 void ui_status_banner_set_simple(lv_obj_t *banner,
     const char *state, const char *message)
 {
-    status_banner_set(banner, state, message, NULL, NULL, NULL);
+    status_banner_set(banner, state, message, NULL, NULL, NULL,false);
     simple_message_layout(banner);
 }
 
 void ui_status_banner_set_simple_kind(lv_obj_t *banner,
     const char *state, const char *message, ui_status_kind_t shell_kind)
 {
-    status_banner_set(banner, state, message, NULL, NULL, &shell_kind);
+    status_banner_set(banner, state, message, NULL, NULL, &shell_kind,false);
     simple_message_layout(banner);
 }
 

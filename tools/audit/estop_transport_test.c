@@ -17,7 +17,7 @@
 static const char TAG[]="fixture";
 typedef int esp_err_t;
 typedef void *esp_http_client_handle_t;
-typedef struct {const char *url,*cert_pem;int method,timeout_ms;} esp_http_client_config_t;
+typedef struct {const char *url,*cert_pem;int method,timeout_ms;bool disable_auto_redirect;} esp_http_client_config_t;
 static char storage[1024],wire[1024],url[256],body[640];
 static char *s_command_buffer=storage;
 static size_t s_command_capacity=sizeof(storage);
@@ -29,7 +29,7 @@ static bool ensure_command_buffer(void){return true;}
 static bool moonraker_live_websocket_connected(void){return connected;}
 static int esp_websocket_client_send_text(void*c,const char*t,int n,unsigned ticks){assert(c&&ticks==1000);assert(n<(int)sizeof(wire));memcpy(wire,t,n);wire[n]=0;return short_write?n-1:n;}
 static bool moonraker_transport_security_build_http_url_for_endpoint(const char*h,int p,const char*path,char*out,size_t n,const char**ca){snprintf(out,n,"%s://%s:%d%s",secure?"https":"http",h,p,path);*ca=secure?"test-ca":NULL;return true;}
-static void *esp_http_client_init(const esp_http_client_config_t*c){assert(c->method==HTTP_METHOD_POST);strcpy(url,c->url);timeout=c->timeout_ms;assert((c->cert_pem!=NULL)==secure);api_header=false;return init_ok?(void*)2:NULL;}
+static void *esp_http_client_init(const esp_http_client_config_t*c){assert(c->method==HTTP_METHOD_POST&&c->disable_auto_redirect);strcpy(url,c->url);timeout=c->timeout_ms;assert((c->cert_pem!=NULL)==secure);api_header=false;return init_ok?(void*)2:NULL;}
 static int esp_http_client_set_header(void*c,const char*k,const char*v){assert(c);if(!strcmp(k,"X-Api-Key")){assert(!strcmp(v,"test-key"));api_header=true;}return ESP_OK;}
 static int esp_http_client_set_post_field(void*c,const char*b,int n){assert(c&&n<(int)sizeof(body));memcpy(body,b,n);body[n]=0;return ESP_OK;}
 static bool network_activity_controller_try_begin_shared(void){return shared;}

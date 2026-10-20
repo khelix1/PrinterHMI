@@ -1174,7 +1174,7 @@ static void editor_auth_open_cb(lv_event_t *event)
     ++s_profile_epoch;
     lv_obj_add_event_cb(s_editor_auth_popup, profiles_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = profiles_detail_body(s_editor_auth_popup, "API key");
-    lv_obj_t *privacy=profiles_label(body, "Stored only on this panel; it is never shown in backups or logs.", true);
+    lv_obj_t *privacy=profiles_label(body, "Plain backups omit this key. Encrypted backups protect it with your passphrase.", true);
     lv_obj_set_style_text_line_space(privacy,4,0);
     s_editor_auth_key = profiles_field(body, "API key (optional)", s_editor_api_key, MOONRAKER_CONFIG_API_KEY_LENGTH - 1, NULL);
     lv_textarea_set_password_mode(s_editor_auth_key, true);

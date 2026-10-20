@@ -106,6 +106,8 @@ bool moonraker_live_transport_fetch(
     };
 
     esp_http_client_config_t config = {
+        /* API credentials and commands must stay on the selected endpoint. */
+        .disable_auto_redirect = true,
         .url = url,
         .cert_pem = ca_pem,
         .method = HTTP_METHOD_GET,

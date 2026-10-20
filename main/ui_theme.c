@@ -330,7 +330,7 @@ void ui_apply_banner_style(lv_obj_t *obj)
  * No cached kind/theme: custom tokens, accessibility changes and external
  * style writes are checked on every refresh and repaired when necessary.
  */
-static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind)
+static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind,int32_t padding)
 {
     if (!obj) return false;
     lv_style_value_t v;
@@ -342,7 +342,9 @@ static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind)
     if (lv_obj_get_local_style_prop(obj, prop, &v, 0) != LV_STYLE_RES_FOUND || \
         v.num != (expected)) return false; \
 } while (0)
-    if (ui_theme_is_studio()) return ui_theme_studio_banner_matches(obj, kind);
+    if (ui_theme_is_studio()) return ui_theme_studio_banner_matches(obj, kind) &&
+        lv_obj_get_style_pad_top(obj,0)==padding && lv_obj_get_style_pad_bottom(obj,0)==padding &&
+        lv_obj_get_style_pad_left(obj,0)==padding && lv_obj_get_style_pad_right(obj,0)==padding;
     bool classic = s_active_theme == UI_THEME_CLASSIC;
     bool glass = s_active_theme == UI_THEME_GLASS;
     lv_color_t status = ui_theme_b_status_color(kind);
@@ -353,10 +355,10 @@ static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind)
     MATCH_NUM(LV_STYLE_BG_OPA, opacity);
     MATCH_NUM(LV_STYLE_BORDER_WIDTH, UI_BORDER_THIN);
     MATCH_NUM(LV_STYLE_RADIUS, classic || glass ? UI_RADIUS_BANNER : UI_RADIUS_BAR);
-    MATCH_NUM(LV_STYLE_PAD_TOP, UI_PAD_CARD);
-    MATCH_NUM(LV_STYLE_PAD_BOTTOM, UI_PAD_CARD);
-    MATCH_NUM(LV_STYLE_PAD_LEFT, UI_PAD_CARD);
-    MATCH_NUM(LV_STYLE_PAD_RIGHT, UI_PAD_CARD);
+    MATCH_NUM(LV_STYLE_PAD_TOP, padding);
+    MATCH_NUM(LV_STYLE_PAD_BOTTOM, padding);
+    MATCH_NUM(LV_STYLE_PAD_LEFT, padding);
+    MATCH_NUM(LV_STYLE_PAD_RIGHT, padding);
     MATCH_NUM(LV_STYLE_SHADOW_WIDTH, classic ? 14 : 0);
     if (classic) {
         MATCH_COLOR(LV_STYLE_SHADOW_COLOR, UI_BG_DEEP);
@@ -382,28 +384,22 @@ static bool banner_style_matches(lv_obj_t *obj, ui_status_kind_t kind)
     return true;
 }
 
-void ui_apply_banner_status_style(
-    lv_obj_t *obj,
-    ui_status_kind_t kind)
+void ui_apply_banner_status_style_with_padding(lv_obj_t *obj,ui_status_kind_t kind,int32_t padding)
 {
-    if (banner_style_matches(obj, kind)) return;
-    if (ui_theme_is_studio()) { ui_theme_studio_apply_banner_status_style(obj, kind); return; }
-    if (s_active_theme == UI_THEME_CLASSIC) {
-        ui_theme_a_apply_banner_style(obj);
-        apply_custom_surface_opacity(obj);
-        return;
-    }
+    if(!obj||banner_style_matches(obj,kind,padding))return;
+    if(ui_theme_is_studio())ui_theme_studio_apply_banner_status_style(obj,kind);
+    else if(s_active_theme==UI_THEME_CLASSIC){ui_theme_a_apply_banner_style(obj);apply_custom_surface_opacity(obj);}
+    else if(s_active_theme==UI_THEME_GLASS){ui_theme_c_apply_banner_status_style(obj,kind);apply_custom_surface_opacity(obj);}
+    else{ui_theme_b_apply_banner_status_style(obj,kind);apply_custom_surface_opacity(obj);}
+    ui_value_set_style_num(obj,LV_STYLE_PAD_TOP,padding,0);
+    ui_value_set_style_num(obj,LV_STYLE_PAD_BOTTOM,padding,0);
+    ui_value_set_style_num(obj,LV_STYLE_PAD_LEFT,padding,0);
+    ui_value_set_style_num(obj,LV_STYLE_PAD_RIGHT,padding,0);
+}
 
-    if (s_active_theme == UI_THEME_GLASS) {
-        ui_theme_c_apply_banner_status_style(obj, kind);
-        apply_custom_surface_opacity(obj);
-        return;
-    }
-
-    ui_theme_b_apply_banner_status_style(
-        obj,
-        kind);
-    apply_custom_surface_opacity(obj);
+void ui_apply_banner_status_style(lv_obj_t *obj,ui_status_kind_t kind)
+{
+    ui_apply_banner_status_style_with_padding(obj,kind,UI_PAD_CARD);
 }
 
 void ui_apply_preview_style(lv_obj_t *obj)

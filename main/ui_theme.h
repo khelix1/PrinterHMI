@@ -280,6 +280,8 @@ void ui_apply_banner_style(lv_obj_t *obj);
 void ui_apply_banner_status_style(
     lv_obj_t *obj,
     ui_status_kind_t kind);
+/* Full status banners own a fixed composition; compact banners use theme padding. */
+void ui_apply_banner_status_style_with_padding(lv_obj_t *obj,ui_status_kind_t kind,int32_t padding);
 void ui_apply_preview_style(lv_obj_t *obj);
 void ui_apply_info_box_style(lv_obj_t *obj);
 void ui_apply_popup_style(lv_obj_t *obj);

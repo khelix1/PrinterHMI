@@ -1382,6 +1382,8 @@ static bool moonraker_http_get_raw(
     };
 
     esp_http_client_config_t config = {
+        /* API credentials and commands must stay on the selected endpoint. */
+        .disable_auto_redirect = true,
         .url = url,
         .cert_pem = ca_pem,
         .method = HTTP_METHOD_GET,
@@ -1833,6 +1835,8 @@ bool moonraker_send_gcode_script(const char *host,
     int body_len = (int)strlen(body);
 
     esp_http_client_config_t config = {
+        /* API credentials and commands must stay on the selected endpoint. */
+        .disable_auto_redirect = true,
         .url = url,
         .cert_pem = ca_pem,
         .method = HTTP_METHOD_POST,
@@ -1906,9 +1910,16 @@ bool moonraker_start_print_file(const char *host,
     }
 
     char body[260];
-    snprintf(body, sizeof(body), "{\"filename\":\"%s\"}", filename);
+    cJSON *request = cJSON_CreateObject();
+    if (!request) return false;
+    bool encoded = cJSON_AddStringToObject(request, "filename", filename) &&
+        cJSON_PrintPreallocated(request, body, sizeof(body), false);
+    cJSON_Delete(request);
+    if (!encoded) return false;
 
     esp_http_client_config_t config = {
+        /* API credentials and commands must stay on the selected endpoint. */
+        .disable_auto_redirect = true,
         .url = url,
         .cert_pem = ca_pem,
         .method = HTTP_METHOD_POST,

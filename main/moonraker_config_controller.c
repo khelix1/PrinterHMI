@@ -264,8 +264,10 @@ static bool profile_valid(
     return profile &&
            profile->configured &&
            profile->name[0] &&
+           strnlen(profile->name, sizeof(profile->name)) < sizeof(profile->name) &&
            valid_host(profile->host) &&
            valid_port(profile->port) &&
+           valid_api_key(profile->api_key) &&
            valid_camera_stream_url(profile->camera_stream_url);
 }
 

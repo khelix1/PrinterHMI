@@ -63,6 +63,10 @@ static inline lv_obj_t *ui_form_action(lv_obj_t *popup,ui_button_kind_t kind,con
 }
 static inline void ui_form_finish(lv_obj_t *popup)
 {
+    for(unsigned i=0;i<lv_obj_get_child_count(popup);i++) {
+        lv_obj_t *child=lv_obj_get_child(popup,i);
+        if(lv_obj_check_type(child,&lv_keyboard_class)){ui_popup_pin_keyboard(popup,child);break;}
+    }
     lv_obj_update_layout(popup);lv_obj_t *footer=lv_obj_get_child(popup,-1);
     if(lv_obj_get_child_count(footer)==1) {
         lv_obj_set_flex_grow(lv_obj_get_child(footer,0),0);

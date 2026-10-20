@@ -17,7 +17,7 @@ typedef struct {
     uint32_t owner_generation;
     lv_obj_t *actions[4], *connection_label, *confirm_connection_label;
     lv_obj_t *profile_popup, *profile_list, *profile_editor;
-    lv_obj_t *profile_name_input, *profile_confirm, *editor_feedback, *editor_continue;
+    lv_obj_t *profile_name_input, *profile_confirm, *editor_feedback, *editor_continue, *editor_keyboard;
     lv_obj_t *rows[BED_MESH_MAX_PROFILES];
     char pending_profile_name[BED_MESH_PROFILE_NAME_MAX];
     bed_mesh_profile_name_t reported_names[BED_MESH_MAX_PROFILES];
@@ -33,6 +33,7 @@ static ui_bed_mesh_profiles_state_t s;
 /* Kept outside resettable UI state so transport callbacks cannot reopen/dispatch. */
 static uint32_t s_epoch;
 static bool s_dispatching;
+static const char s_name_error[]="Enter a name using letters, numbers, underscore, dot or hyphen.";
 
 static void close_profile_editor_cb(lv_event_t *event);
 static void close_profile_confirm_cb(lv_event_t *event);
@@ -119,7 +120,7 @@ static void profile_ref_deleted(lv_event_t *event)
         retired = true;
     }
     lv_obj_t **fields[] = {&s.profile_list, &s.connection_label, &s.confirm_connection_label,
-        &s.profile_name_input, &s.editor_feedback, &s.editor_continue};
+        &s.profile_name_input, &s.editor_feedback, &s.editor_continue, &s.editor_keyboard};
     for (unsigned i = 0; i < sizeof(fields) / sizeof(fields[0]); ++i)
         if (*fields[i] == object) { *fields[i] = NULL; retired = true; }
     if (retired) ++s_epoch;
@@ -144,6 +145,7 @@ static void retire_editor(void)
     s.profile_name_input = NULL;
     s.editor_feedback = NULL;
     s.editor_continue = NULL;
+    s.editor_keyboard = NULL;
 }
 
 static void retire_confirmation(void)
@@ -324,7 +326,7 @@ static void save_name_continue_cb(lv_event_t *event)
     if (!profile_command_ready(s.editor_feedback)) return;
     const char *name = lv_textarea_get_text(s.profile_name_input);
     if (!valid_profile_name_ui(name)) {
-        ui_value_set_text(s.editor_feedback, "Enter a name using letters, numbers, underscore, dot or hyphen.");
+        ui_value_set_text(s.editor_feedback,s_name_error);
         return;
     }
     memcpy(s.pending_profile_name, name, strlen(name) + 1);
@@ -332,6 +334,26 @@ static void save_name_continue_cb(lv_event_t *event)
     close_profile_editor_cb(NULL);
     if (s_epoch != epoch + 1U || !s.profile_popup || s.profile_editor || s.profile_confirm) return;
     show_profile_confirmation(false);
+}
+
+static void profile_name_changed(lv_event_t *event)
+{
+    if(!event||s_dispatching||!s.profile_editor||!s.profile_name_input||!s.editor_feedback||
+       lv_event_get_code(event)!=LV_EVENT_VALUE_CHANGED||
+       lv_event_get_target_obj(event)!=s.profile_name_input||
+       lv_event_get_current_target_obj(event)!=s.profile_name_input)return;
+    if(!strcmp(lv_label_get_text(s.editor_feedback),s_name_error))ui_value_set_text(s.editor_feedback,"");
+}
+
+static void profile_keyboard_cb(lv_event_t *event)
+{
+    if(!event||s_dispatching||!s.profile_editor||!s.profile_name_input||!s.editor_keyboard||
+       lv_event_get_target_obj(event)!=s.editor_keyboard||
+       lv_event_get_current_target_obj(event)!=s.editor_keyboard||
+       lv_obj_has_state(s.editor_keyboard,LV_STATE_DISABLED)||
+       lv_keyboard_get_textarea(s.editor_keyboard)!=s.profile_name_input)return;
+    if(lv_event_get_code(event)==LV_EVENT_READY)save_name_continue_cb(NULL);
+    else if(lv_event_get_code(event)==LV_EVENT_CANCEL)close_profile_editor_cb(NULL);
 }
 
 static void save_as_profile_cb(lv_event_t *event)
@@ -351,7 +373,10 @@ static void save_as_profile_cb(lv_event_t *event)
     s.editor_feedback = ui_form_text(ui_form_body(s.profile_editor), "", UI_FONT_CAPTION, UI_TEXT_DIM);
     watch_profile_ref(s.profile_name_input);
     watch_profile_ref(s.editor_feedback);
-    ui_form_keyboard(s.profile_editor, s.profile_name_input, LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_add_event_cb(s.profile_name_input,profile_name_changed,LV_EVENT_VALUE_CHANGED,NULL);
+    s.editor_keyboard=ui_form_keyboard(s.profile_editor, s.profile_name_input, LV_KEYBOARD_MODE_TEXT_LOWER);
+    watch_profile_ref(s.editor_keyboard);
+    ui_popup_keyboard_actions(s.editor_keyboard,profile_keyboard_cb,profile_keyboard_cb);
     ui_form_action(s.profile_editor, UI_BUTTON_SECONDARY, LV_SYMBOL_CLOSE " Cancel", close_profile_editor_cb, NULL);
     s.editor_continue = ui_form_action(s.profile_editor, UI_BUTTON_PRIMARY, "Continue", save_name_continue_cb, NULL);
     watch_profile_ref(s.editor_continue);

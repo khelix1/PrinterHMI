@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -158,6 +159,28 @@ static bool json_text(
 }
 
 
+static bool parse_profile_transport_security(const cJSON *item, moonraker_profile_t *profile)
+{
+    const cJSON *secure = cJSON_GetObjectItemCaseSensitive(item, "secure_transport");
+    if (secure) {
+        if (!cJSON_IsBool(secure)) return false;
+        profile->secure_transport = cJSON_IsTrue(secure);
+        return true;
+    }
+    /* Older backups omitted TLS. Preserve a known endpoint's TLS requirement
+     * instead of silently downgrading it when restoring the legacy schema. */
+    profile->secure_transport = false;
+    for (int i = 0; i < MOONRAKER_CONFIG_MAX_PROFILES; ++i) {
+        const moonraker_profile_t *current = moonraker_config_profile(i);
+        if (current && current->configured && current->secure_transport &&
+            current->port == profile->port && !strcasecmp(current->host, profile->host)) {
+            profile->secure_transport = true;
+            break;
+        }
+    }
+    return true;
+}
+
 static void capture_current(
     settings_backup_snapshot_t *snapshot)
 {
@@ -271,6 +294,7 @@ static cJSON *snapshot_to_json(
             profile->configured);
 
         if (profile->configured) {
+            cJSON_AddBoolToObject(item, "secure_transport", profile->secure_transport);
             cJSON_AddStringToObject(
                 item,
                 "name",
@@ -527,6 +551,11 @@ static bool parse_snapshot(
                 status,
                 status_size,
                 "Backup contains invalid printer settings.");
+            return false;
+        }
+
+        if (!parse_profile_transport_security(profile_json, profile)) {
+            set_status(status, status_size, "Backup contains an invalid connection security setting.");
             return false;
         }
 

@@ -35,6 +35,33 @@ bool settings_backup_encrypted_worker_start_export(const char *p,char *s,size_t 
 bool settings_backup_encrypted_worker_start_verify(const char *p,char *s,size_t n){assert(!strcmp(p,passphrase));snprintf(s,n,"Worker busy");worker_starts++;run_backup_hook();if(worker_allowed)worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_VERIFYING;return worker_allowed;}
 settings_backup_encrypted_worker_state_t settings_backup_encrypted_worker_state(void){return worker_state;}
 void settings_backup_encrypted_worker_status(char *s,size_t n){snprintf(s,n,"%s",worker_message);}
+static void mock_stage(settings_backup_progress_cb_t cb,void *context,settings_backup_stage_t stage)
+{
+    assert(s_export_progress_popup&&s_export_progress_bar&&s_progress_close);
+    assert(lv_obj_has_state(s_progress_close,LV_STATE_DISABLED));
+    cb(stage,context);
+    assert(lv_bar_get_value(s_export_progress_bar)>0&&strstr(lv_label_get_text(s_export_progress_value),"Working"));
+}
+bool settings_backup_export_with_progress(settings_backup_progress_cb_t cb,void *ctx,char *s,size_t n)
+{
+    mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_PREPARING);
+    mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_WRITING);
+    return settings_backup_export(s,n);
+}
+bool settings_backup_restore_with_progress(settings_backup_progress_cb_t cb,void *ctx,char *s,size_t n)
+{
+    mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_READING);
+    mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_APPLYING);
+    if(!allowed)mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_ROLLING_BACK);
+    return settings_backup_restore(s,n);
+}
+bool settings_backup_restore_encrypted_with_progress(const char *p,settings_backup_progress_cb_t cb,void *ctx,char *s,size_t n)
+{
+    mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_AUTHENTICATING);
+    mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_APPLYING);
+    if(!allowed)mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_ROLLING_BACK);
+    return settings_backup_restore_encrypted(p,s,n);
+}
 static unsigned password_saves;
 static void password_nested(lv_event_t *event){password_saves++;owned_password_save(event);}
 static void noop(lv_event_t *e){(void)e;}
@@ -90,8 +117,18 @@ static void network(void)
     lv_obj_delete(s_wifi_scan_popup);assert(!s_wifi_scan_popup&&!s_wifi_scan_list&&!s_wifi_selected_btn&&!s_wifi_password_popup&&!s_wifi_password_textarea&&!s_wifi_password_status);
     ui_network_port_popup_show(7125,port_saved);layout(s_moon_port_popup);saved_port=0;
     lv_textarea_set_text(s_moon_port_ta,"0");lv_obj_send_event(lv_obj_get_child(s_moon_port_popup,2),LV_EVENT_READY,NULL);assert(s_moon_port_popup&&!saved_port&&strstr(lv_label_get_text(s_port_status),"65535"));
-    lv_textarea_set_text(s_moon_port_ta,"65536");lv_obj_send_event(lv_obj_get_child(s_moon_port_popup,2),LV_EVENT_READY,NULL);assert(s_moon_port_popup&&!saved_port);
-    lv_textarea_set_text(s_moon_port_ta,"7126");network_save_cb(NULL);assert(!s_moon_port_popup&&saved_port==7126);
+    lv_obj_t *foreign=lv_textarea_create(lv_screen_active());
+    lv_obj_add_event_cb(foreign,port_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_textarea_set_text(foreign,"7126");assert(strstr(lv_label_get_text(s_port_status),"65535"));lv_obj_delete(foreign);
+    lv_textarea_set_text(s_moon_port_ta,"65536");assert(!saved_port&&!strcmp(lv_label_get_text(s_port_status),s_port_guidance));
+    lv_obj_send_event(lv_obj_get_child(s_moon_port_popup,2),LV_EVENT_READY,NULL);assert(s_moon_port_popup&&!saved_port&&strstr(lv_label_get_text(s_port_status),"65535"));
+    lv_textarea_set_text(s_moon_port_ta,"7126");assert(!saved_port&&!strcmp(lv_label_get_text(s_port_status),s_port_guidance));
+    network_save_cb(NULL);assert(!s_moon_port_popup&&saved_port==7126);
+    ui_network_port_popup_show(7125,port_saved);saved_port=0;
+    lv_textarea_set_text(s_moon_port_ta,"0");network_save_cb(NULL);assert(strstr(lv_label_get_text(s_port_status),"65535"));
+    lv_textarea_set_text(s_moon_port_ta,"7127");ui_network_port_popup_close();assert(!saved_port);
+    ui_network_port_popup_show(7125,port_saved);lv_obj_delete(s_port_status);assert(!s_port_status);
+    lv_textarea_set_text(s_moon_port_ta,"7128");assert(!saved_port);ui_network_port_popup_close();
     ui_network_port_popup_show(7125,port_saved);lv_obj_delete(s_moon_port_ta);assert(!s_moon_port_ta&&lv_keyboard_get_textarea(s_port_keyboard)==NULL);network_save_cb(NULL);ui_network_port_popup_close();
     ui_network_port_popup_show(7125,port_saved);lv_obj_delete(s_moon_port_popup);assert(!s_moon_port_ta&&!s_save_cb);
     ui_network_tools_wifi_password_show_owned("fixture",noop,password_nested);unsigned saves=password_saves;owned_password_save(NULL);assert(password_saves==saves+1);lv_obj_t *keyboard=lv_obj_get_child(s_wifi_password_popup,2);
@@ -118,16 +155,74 @@ static void backup(void)
         lv_point_t natural;lv_text_get_size(&natural,lv_label_get_text(label),lv_obj_get_style_text_font(label,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
         assert(natural.x<=lv_obj_get_width(label));
     }
+    exported=0;backup_cb(NULL);assert(exported==1&&s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)==100);
+    layout(s_export_progress_popup);progress_close_cb(NULL);assert(!s_export_progress_popup);
+    allowed=false;backup_cb(NULL);assert(exported==2&&s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)<100);
+    progress_close_cb(NULL);allowed=true;
     unsigned before=restored;allowed=false;restore_request_cb(NULL);assert(!s_restore_confirmation&&restored==before);
     allowed=true;restore_request_cb(NULL);layout(s_restore_confirmation);assert(restored==before);
     allowed=false;restore_confirm_cb(NULL);assert(s_restore_confirmation&&strstr(lv_label_get_text(s_restore_status),"failed"));
+    assert(s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)<100&&!lv_obj_has_state(s_progress_close,LV_STATE_DISABLED));
+    layout(s_export_progress_popup);progress_close_cb(NULL);assert(!s_export_progress_popup&&s_restore_confirmation);
     allowed=true;restore_confirm_cb(NULL);assert(!s_restore_confirmation&&restored==before+2);
+    assert(s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)==100&&strstr(lv_label_get_text(s_export_progress_status),"reboot"));
+    layout(s_export_progress_popup);progress_close_cb(NULL);assert(!s_export_progress_popup);
     show_secret_popup(false);layout(s_secret_popup);keyboard_layout_check(s_secret_popup,s_secret_keyboard,s_secret_input);keyboard_layout_check(s_secret_popup,s_secret_keyboard,s_secret_confirm);lv_obj_send_event(s_secret_keyboard,LV_EVENT_READY,NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"12 characters"));
-    lv_textarea_set_text(s_secret_input,passphrase);lv_textarea_set_text(s_secret_confirm,"different");secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"match"));
-    lv_textarea_set_text(s_secret_confirm,passphrase);worker_allowed=false;secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"busy"));
+    before=worker_starts;
+    lv_obj_send_event(s_secret_input,LV_EVENT_CLICKED,NULL);assert(lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_input);
+    lv_obj_t *foreign=lv_textarea_create(lv_screen_active());
+    lv_obj_add_event_cb(foreign,secret_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
+    lv_obj_add_event_cb(foreign,secret_focus_cb,LV_EVENT_CLICKED,NULL);
+    lv_textarea_set_text(foreign,"unrelated");lv_obj_send_event(foreign,LV_EVENT_CLICKED,NULL);
+    assert(strstr(lv_label_get_text(s_secret_status),"12 characters")&&lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_input);lv_obj_delete(foreign);
+    lv_textarea_set_text(s_secret_input,"short");assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
+    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 characters"));
+    lv_textarea_set_text(s_secret_input,passphrase);assert(!lv_label_get_text(s_secret_status)[0]);
+    lv_textarea_set_text(s_secret_confirm,"different");secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"match")&&worker_starts==before);
+    lv_textarea_set_text(s_secret_input,"another-passphrase");assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
+    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"match"));
+    lv_textarea_set_text(s_secret_input,passphrase);assert(!lv_label_get_text(s_secret_status)[0]);
+    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"match"));
+    lv_obj_send_event(s_secret_confirm,LV_EVENT_CLICKED,NULL);assert(lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_confirm);
+    lv_textarea_set_text(s_secret_confirm,passphrase);assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
+    worker_allowed=false;secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"busy"));
+    lv_textarea_set_text(s_secret_confirm,"different");assert(strstr(lv_label_get_text(s_secret_status),"busy"));
+    lv_textarea_set_text(s_secret_confirm,passphrase);assert(strstr(lv_label_get_text(s_secret_status),"busy"));
     worker_allowed=true;secret_submit_cb(NULL);assert(!s_secret_popup&&s_export_progress_popup);layout(s_export_progress_popup);
-    worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_SUCCEEDED;export_progress_timer_cb(s_export_progress_timer);assert(!s_export_progress_popup&&!s_export_progress_timer);
-    show_secret_popup(true);layout(s_secret_popup);lv_textarea_set_text(s_secret_input,passphrase);secret_submit_cb(NULL);
+    assert(s_progress_close&&lv_obj_has_state(s_progress_close,LV_STATE_DISABLED));
+    progress_close_cb(NULL);assert(s_export_progress_popup&&s_export_progress_timer);
+    snprintf(worker_message,sizeof(worker_message),"Encrypted configuration backed up to the SD card.");
+    lv_timer_t *finished_timer=s_export_progress_timer;
+    worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_SUCCEEDED;export_progress_timer_cb(finished_timer);
+    assert(s_export_progress_popup&&!s_export_progress_timer&&lv_bar_get_value(s_export_progress_bar)==100);
+    assert(!lv_obj_has_state(s_progress_close,LV_STATE_DISABLED)&&strstr(lv_label_get_text(s_export_progress_value),"saved successfully"));
+    assert(strstr(lv_label_get_text(s_export_progress_status),"Encrypted configuration backed up"));
+    assert(!s_secret_input&&!s_restore_passphrase[0]);layout(s_export_progress_popup);
+    lv_tick_inc(1000);lv_timer_handler();assert(s_export_progress_popup);
+    export_progress_timer_cb(finished_timer);assert(s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)==100);
+    progress_close_cb(NULL);assert(!s_export_progress_popup&&!s_progress_close);
+    for(unsigned phase=0;phase<2;phase++){
+        encrypted_backup_request_cb(NULL);assert(s_secret_popup&&!s_secret_is_restore);
+        assert(!lv_textarea_get_text(s_secret_input)[0]&&!lv_textarea_get_text(s_secret_confirm)[0]);
+        lv_textarea_set_text(s_secret_input,passphrase);lv_textarea_set_text(s_secret_confirm,passphrase);
+        secret_submit_cb(NULL);assert(s_export_progress_popup&&s_export_progress_timer);
+        worker_state=phase?SETTINGS_BACKUP_ENCRYPTED_WORKER_WRITING:SETTINGS_BACKUP_ENCRYPTED_WORKER_ENCRYPTING;
+        export_progress_timer_cb(s_export_progress_timer);
+        snprintf(worker_message,sizeof(worker_message),phase?"SD write failed; existing backup was preserved.":"Encryption failed. Try again.");
+        finished_timer=s_export_progress_timer;worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_FAILED;
+        before=worker_starts;export_progress_timer_cb(finished_timer);
+        assert(s_export_progress_popup&&!s_export_progress_timer&&lv_bar_get_value(s_export_progress_bar)<100);
+        assert(!lv_obj_has_state(s_progress_close,LV_STATE_DISABLED)&&!strcmp(lv_label_get_text(s_export_progress_value),"Backup failed"));
+        assert(!strcmp(lv_label_get_text(s_export_progress_status),worker_message)&&!strcmp(lv_label_get_text(s_status),worker_message));
+        assert(!s_secret_popup&&!s_restore_passphrase[0]);layout(s_export_progress_popup);
+        lv_tick_inc(1000);lv_timer_handler();export_progress_timer_cb(finished_timer);
+        assert(s_export_progress_popup&&worker_starts==before&&!strcmp(lv_label_get_text(s_export_progress_status),worker_message));
+        progress_close_cb(NULL);assert(!s_export_progress_popup&&!s_progress_close);
+    }
+    show_secret_popup(true);layout(s_secret_popup);before=worker_starts;
+    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 characters"));
+    lv_textarea_set_text(s_secret_input,passphrase);assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
+    secret_submit_cb(NULL);
     assert(!s_secret_popup&&s_export_progress_popup&&!strcmp(s_restore_passphrase,passphrase));
     worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_SUCCEEDED;export_progress_timer_cb(s_export_progress_timer);
     assert(s_restore_confirmation&&s_pending_encrypted_restore&&!strcmp(s_restore_passphrase,passphrase));layout(s_restore_confirmation);
@@ -136,8 +231,12 @@ static void backup(void)
     worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_SUCCEEDED;export_progress_timer_cb(s_export_progress_timer);
     allowed=false;before=encrypted_restored;restore_confirm_cb(NULL);assert(s_restore_confirmation&&encrypted_restored==before+1&&!strcmp(s_restore_passphrase,passphrase));
     allowed=true;restore_confirm_cb(NULL);assert(!s_restore_confirmation&&encrypted_restored==before+2&&!s_restore_passphrase[0]);
+    assert(s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)==100);layout(s_export_progress_popup);progress_close_cb(NULL);
     show_secret_popup(true);lv_textarea_set_text(s_secret_input,passphrase);secret_submit_cb(NULL);
-    worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_FAILED;export_progress_timer_cb(s_export_progress_timer);assert(!s_export_progress_popup&&!s_restore_passphrase[0]);
+    snprintf(worker_message,sizeof(worker_message),"Passphrase is incorrect or the encrypted backup was changed.");
+    worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_FAILED;export_progress_timer_cb(s_export_progress_timer);
+    assert(!s_export_progress_popup&&!s_restore_passphrase[0]&&s_secret_popup&&s_secret_is_restore&&!s_restore_confirmation);
+    assert(!lv_textarea_get_text(s_secret_input)[0]&&strstr(lv_label_get_text(s_secret_status),"Passphrase is incorrect"));layout(s_secret_popup);
     show_secret_popup(true);lv_textarea_set_text(s_secret_input,passphrase);secret_submit_cb(NULL);lv_obj_delete(s_export_progress_popup);
     assert(!s_export_progress_timer&&!s_restore_passphrase[0]);
     before=exported;backup_cb(NULL);assert(exported==before);
@@ -151,7 +250,10 @@ static void backup(void)
     before=exported;backup_hook=replace_backup;backup_cb(NULL);assert(exported==before+1&&s_popup);
     assert(strstr(lv_label_get_text(s_status),"Plain backups exclude"));
     restore_request_cb(NULL);before=restored;backup_hook=replace_backup;restore_confirm_cb(NULL);assert(restored==before+1&&!s_restore_confirmation&&s_popup);
-    show_secret_popup(false);lv_obj_delete(s_secret_input);assert(!s_secret_input&&lv_keyboard_get_textarea(s_secret_keyboard)==NULL);
+    show_secret_popup(false);secret_submit_cb(NULL);assert(s_secret_validation_error);
+    lv_obj_delete(s_secret_status);assert(!s_secret_status);lv_textarea_set_text(s_secret_input,"short");
+    before=worker_starts;secret_cancel_cb(NULL);assert(worker_starts==before&&!s_secret_validation_error);
+    show_secret_popup(false);assert(!s_secret_validation_error&&!lv_label_get_text(s_secret_status)[0]);lv_obj_delete(s_secret_input);assert(!s_secret_input&&lv_keyboard_get_textarea(s_secret_keyboard)==NULL);
     before=worker_starts;secret_submit_cb(NULL);assert(worker_starts==before);close_secret_popup(false);
     show_secret_popup(false);lv_textarea_set_text(s_secret_input,passphrase);lv_textarea_set_text(s_secret_confirm,passphrase);
     backup_hook=replace_backup;secret_submit_cb(NULL);assert(s_popup&&!s_secret_popup&&!s_export_progress_popup&&!s_restore_passphrase[0]);

@@ -11,6 +11,7 @@
 #include "ui_text_fit.h"
 #include "printer_profile_health.h"
 #include "ui_value_update.h"
+#include "ui_form_dialog.h"
 
 #define NOTICE_CAPACITY 4
 #define NOTICE_OPEN_PRINTERS (-2)
@@ -407,21 +408,39 @@ void ui_toast_preferences_show(void (*changed)(void))
     s_preference_changed = changed; s_pending_level = s_level;
     lv_obj_add_event_cb(s_preference_popup, preferences_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_flex_flow(s_preference_popup, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_preference_popup, 16, 0);
-    lv_obj_set_style_pad_row(s_preference_popup, 8, 0);
+    lv_obj_set_style_pad_all(s_preference_popup, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(s_preference_popup, UI_GAP_ROW, 0);
     lv_obj_remove_flag(s_preference_popup, LV_OBJ_FLAG_SCROLLABLE);
     text(s_preference_popup, "Notifications", UI_FONT_TITLE, UI_TEXT);
+    ui_form_divide_title(s_preference_popup);
     lv_obj_t *body = column(s_preference_popup);
     lv_obj_set_height(body, 0); lv_obj_set_flex_grow(body, 1);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE); lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
-    text(body, "Quiet: connection loss/recovery, paused prints, warnings and errors. Standard: adds routine print events. Detailed: adds routine confirmations. Applies to every printer, page and theme. Local validation and progress remain visible at every level.", UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
+    text(body, "Applies to every printer, page and theme. Local validation and progress remain visible at every level.", UI_FONT_CAPTION, UI_TEXT_DIM);
+    static const char *descriptions[] = {
+        "Connection loss/recovery, paused prints, warnings and errors.",
+        "Everything in Quiet, plus routine print events.",
+        "Everything in Standard, plus routine confirmations.",
+    };
     for(unsigned i=0;i<3;i++) {
-        s_level_buttons[i]=ui_button_create(body,UI_BUTTON_OUTLINED,(const char *[]){"Quiet","Standard","Detailed"}[i]);
+        s_level_buttons[i]=ui_popup_add_selectable_row(body,
+            (const char *[]){"Quiet","Standard","Detailed"}[i], 0, 0, 1, 48,
+            preference_toggle, (void *)(uintptr_t)i);
         notification_field_own(s_level_buttons[i]);
-        lv_obj_set_size(s_level_buttons[i],LV_PCT(100),48);
-        ui_text_fit_single_line(lv_obj_get_child(s_level_buttons[i],0),UI_FONT_BODY_LARGE);
-        lv_obj_add_event_cb(s_level_buttons[i],preference_toggle,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
+        lv_obj_set_size(s_level_buttons[i],LV_PCT(100),LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(s_level_buttons[i],48,0);
+        lv_obj_set_flex_flow(s_level_buttons[i],LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_hor(s_level_buttons[i],UI_PAD_CARD,0);
+        lv_obj_set_style_pad_ver(s_level_buttons[i],10,0);
+        lv_obj_set_style_pad_row(s_level_buttons[i],4,0);
+        lv_obj_t *label=lv_obj_get_child(s_level_buttons[i],0);
+        lv_obj_set_width(label,LV_PCT(100));
+        lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_t *description=text(s_level_buttons[i],descriptions[i],UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_obj_set_style_text_align(description,LV_TEXT_ALIGN_LEFT,0);
         ui_button_set_filter_active(s_level_buttons[i], i == (unsigned)s_pending_level);
         if(i==(unsigned)s_pending_level) {
             lv_label_set_text_fmt(lv_obj_get_child(s_level_buttons[i],0),LV_SYMBOL_OK " %s",(const char *[]){"Quiet","Standard","Detailed"}[i]);

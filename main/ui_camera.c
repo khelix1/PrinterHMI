@@ -390,6 +390,8 @@ static void camera_view_option(lv_obj_t *group, const char *text, unsigned actio
 static void camera_dialog_finish(lv_obj_t *popup)
 {
     if(!popup)return;
+    ui_form_divide_title(popup);
+    lv_obj_set_style_pad_row(popup,UI_GAP_ROW,0);
     lv_obj_set_scrollbar_mode(ui_form_body(popup),LV_SCROLLBAR_MODE_OFF);
     lv_obj_t *footer=lv_obj_get_child(popup,-1);
     ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
@@ -421,7 +423,7 @@ static void camera_view_open_cb(lv_event_t *event)
     if (!s_view_popup) return;
     lv_obj_add_event_cb(s_view_popup, camera_dialog_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = ui_form_body(s_view_popup);
-    ui_form_text(body, entry.name[0] ? entry.name : "Selected camera", UI_FONT_BODY, UI_TEXT);
+    ui_form_text(body, entry.name[0] ? entry.name : "Selected camera", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT);
     ui_form_text(body, ui_text("Rotation"), UI_FONT_CAPTION, UI_TEXT_DIM);
     lv_obj_t *rotations = camera_view_group(body, true);
     const char *labels[] = {"0 deg", "90 deg", "180 deg", "270 deg"};
@@ -432,7 +434,7 @@ static void camera_view_open_cb(lv_event_t *event)
     camera_view_option(mirrors, ui_text("Vertical"), 5, entry.mirror_vertical);
     s_view_feedback = ui_form_text(body, "", UI_FONT_CAPTION, UI_TEXT_DIM);camera_watch(s_view_feedback);
     s_view_close=ui_form_action(s_view_popup, UI_BUTTON_CLOSE, LV_SYMBOL_CLOSE " Close", camera_view_close_cb, NULL);camera_watch(s_view_close);
-    s_view_actions[6]=ui_form_action(s_view_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_REFRESH " Reset", camera_view_set_cb, (void *)6);camera_watch(s_view_actions[6]);
+    s_view_actions[6]=ui_form_action(s_view_popup, UI_BUTTON_SECONDARY, LV_SYMBOL_REFRESH " Reset view", camera_view_set_cb, (void *)6);camera_watch(s_view_actions[6]);
     camera_dialog_finish(s_view_popup);
 }
 
@@ -823,16 +825,22 @@ static void camera_picker_open_cb(lv_event_t *event)
         if(!configured || !entry.configured)continue;
         memcpy(s_picker_urls[index], entry.stream_url, sizeof(s_picker_urls[index]));
         s_picker_urls[index][sizeof(s_picker_urls[index])-1] = 0;
-        char label[64];
-        snprintf(label, sizeof(label), "%s%s", entry.name[0] ? entry.name : "Camera", index == default_index ? " (default)" : "");
-        lv_obj_t *button = ui_button_create(body, UI_BUTTON_SECONDARY, label);
+        lv_obj_t *button = ui_popup_add_selectable_row(body,
+            entry.name[0] ? entry.name : "Camera", 0, 0, 1, 56,
+            camera_picker_select_cb, (void *)(uintptr_t)index);
         s_picker_actions[index]=button;camera_watch(button);
-        lv_obj_set_size(button, LV_PCT(100), 56);
-        lv_obj_add_event_cb(button, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
-        lv_obj_add_event_cb(button, camera_picker_select_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)index);
-        if(ui_theme_is_studio()) {
-            ui_apply_surface_role(button,UI_SURFACE_TRANSPARENT);
-            ui_apply_divider_border(button,LV_BORDER_SIDE_BOTTOM);
+        lv_obj_set_size(button, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_min_height(button,56,0);
+        lv_obj_set_flex_flow(button,LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_hor(button,UI_PAD_CARD,0);
+        lv_obj_set_style_pad_ver(button,10,0);
+        lv_obj_set_style_pad_row(button,4,0);
+        lv_obj_t *name=lv_obj_get_child(button,0);
+        lv_obj_set_width(name,LV_PCT(100));lv_label_set_long_mode(name,LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_align(name,LV_TEXT_ALIGN_LEFT,0);
+        if(index==default_index) {
+            lv_obj_t *caption=ui_form_text(button,ui_text("Default camera"),UI_FONT_CAPTION,UI_TEXT_DIM);
+            lv_obj_set_style_text_align(caption,LV_TEXT_ALIGN_LEFT,0);
         }
         ui_button_set_filter_active(button,index==s_camera_index);
         ++rows;

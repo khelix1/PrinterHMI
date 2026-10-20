@@ -40,6 +40,32 @@ void operator_event_log_add(operator_event_level_t level,const char *format,...)
 static void changed(void){changes++;}
 static void inside(lv_obj_t *c,lv_obj_t *p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);assert(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2);}
 static void bounds(lv_obj_t *root){lv_obj_update_layout(root);inside(root,lv_screen_active());for(unsigned i=0;i<lv_obj_get_child_count(root);i++)inside(lv_obj_get_child(root,i),root);lv_obj_t *body=lv_obj_get_child(root,lv_obj_get_child_count(root)==2?0:1),*footer=lv_obj_get_child(root,lv_obj_get_child_count(root)-1);lv_area_t a,b;lv_obj_get_coords(footer,&a);lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(root);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&b);assert(!memcmp(&a,&b,sizeof(a)));for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t *button=lv_obj_get_child(footer,i);if(lv_obj_check_type(button,&lv_button_class)){inside(button,footer);inside(lv_obj_get_child(button,0),button);assert(lv_obj_get_height(button)==48);lv_obj_add_state(button,LV_STATE_PRESSED);assert(!lv_obj_get_style_transform_width(button,0)&&!lv_obj_get_style_outline_width(button,0));lv_obj_remove_state(button,LV_STATE_PRESSED);}}}
+static void preference_layout(void){
+ lv_obj_update_layout(s_preference_popup);
+ lv_obj_t *title=lv_obj_get_child(s_preference_popup,0),*body=lv_obj_get_child(s_preference_popup,1),*footer=lv_obj_get_child(s_preference_popup,-1);
+ assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM&&lv_obj_get_style_border_width(title,0)>0);
+ assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF&&lv_obj_get_scroll_dir(body)==LV_DIR_VER);
+ lv_area_t title_area,body_area,footer_area;lv_obj_get_coords(title,&title_area);lv_obj_get_coords(body,&body_area);lv_obj_get_coords(footer,&footer_area);
+ assert(title_area.y2<body_area.y1&&body_area.y2<footer_area.y1);
+ const char *descriptions[]={"Connection loss/recovery, paused prints, warnings and errors.","Everything in Quiet, plus routine print events.","Everything in Standard, plus routine confirmations."};
+ unsigned selected=s_pending_level;
+ for(unsigned level=0;level<3;level++){
+  lv_obj_send_event(s_level_buttons[level],LV_EVENT_CLICKED,NULL);assert((unsigned)s_pending_level==level);
+  lv_obj_update_layout(s_preference_popup);
+  for(unsigned i=0;i<3;i++){
+   lv_obj_t *row=s_level_buttons[i],*name=lv_obj_get_child(row,0),*description=lv_obj_get_child(row,1);
+   inside(name,row);inside(description,row);assert(lv_obj_get_height(row)>=48);
+   assert(!strcmp(lv_label_get_text(description),descriptions[i]));
+   assert(strstr(lv_label_get_text(name),(const char*[]){"Quiet","Standard","Detailed"}[i]));
+   assert(lv_obj_has_state(row,LV_STATE_CHECKED)==(i==level));
+   assert(lv_obj_get_style_text_align(name,0)==LV_TEXT_ALIGN_LEFT&&lv_obj_get_style_text_align(description,0)==LV_TEXT_ALIGN_LEFT);
+   lv_area_t name_area,description_area;lv_obj_get_coords(name,&name_area);lv_obj_get_coords(description,&description_area);assert(name_area.x1==description_area.x1&&name_area.y2<description_area.y1);
+   if(ui_theme_is_studio()){assert(lv_obj_get_style_radius(row,0)==0);assert(lv_obj_get_style_border_side(row,0)==LV_BORDER_SIDE_BOTTOM);}
+  }
+ }
+ lv_obj_send_event(s_level_buttons[selected],LV_EVENT_CLICKED,NULL);
+ lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);lv_obj_update_layout(s_preference_popup);
+}
 static uint16_t raster[1024*600];
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t *)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*1024+x]=*v++;lv_display_flush_ready(d);}
 static void capture(const char *name){const char *folder=getenv("NOTIFICATION_SCREENSHOTS");if(!folder||lv_display_get_horizontal_resolution(NULL)!=1024||ui_theme_get_density()!=1||!ui_theme_get_accessibility().large_text)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%u.ppm",folder,name,(unsigned)ui_theme_get_active());FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
@@ -216,7 +242,7 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   assert(ui_toast_set_confirmations(true));ui_toast_show(UI_STATUS_OK,"SAVED","");assert(s_notice_count==1&&s_toast&&!s_timer);ui_toast_init();assert(ui_toast_confirmations_enabled());
   strcpy(printer,"Printer B");ui_toast_show(UI_STATUS_WARNING,"OFFLINE","Check connection");assert(s_notice_count==2&&!strcmp(s_notices[0].printer,"Printer A")&&!strcmp(s_notices[1].printer,"Printer B"));dismiss_notice(NULL);assert(s_notice_count==1&&!strcmp(s_notices[0].printer,"Printer B"));dismiss_notice(NULL);assert(!s_toast&&!s_notice_count);
   ui_toast_show(UI_STATUS_OK,"SAVED","Optional confirmation");assert(s_toast&&s_timer);lv_tick_inc(3000);lv_timer_handler();assert(!s_toast&&!s_timer);
-  ui_toast_preferences_show(changed);bounds(s_preference_popup);capture("notification-preferences");preference_toggle(NULL);assert(s_pending_level==UI_NOTIFY_QUIET);fail_write=true;preference_save(NULL);assert(s_preference_popup&&ui_toast_confirmations_enabled()&&strstr(lv_label_get_text(s_preference_status),"Could not save"));fail_write=false;preference_save(NULL);assert(!s_preference_popup&&!ui_toast_confirmations_enabled()&&changes==1);ui_toast_init();assert(!ui_toast_confirmations_enabled());
+  ui_toast_preferences_show(changed);bounds(s_preference_popup);preference_layout();capture("notification-preferences");preference_toggle(NULL);assert(s_pending_level==UI_NOTIFY_QUIET);fail_write=true;preference_save(NULL);assert(s_preference_popup&&ui_toast_confirmations_enabled()&&strstr(lv_label_get_text(s_preference_status),"Could not save"));fail_write=false;preference_save(NULL);assert(!s_preference_popup&&!ui_toast_confirmations_enabled()&&changes==1);ui_toast_init();assert(!ui_toast_confirmations_enabled());
   for(unsigned i=0;i<6;i++){char title[32];snprintf(title,sizeof(title),"FAULT %u",i);ui_toast_show(UI_STATUS_DANGER,title,"Important instructions remain visible until dismissed.");}assert(s_notice_count==4&&s_overflow==2);bounds(s_toast);unsigned pending=s_notice_count;assert(ui_toast_set_level(UI_NOTIFY_STANDARD));ui_toast_show(UI_STATUS_INFO,"INFO","Additional context");assert(s_notice_count==pending&&s_overflow==3);assert(!strcmp(s_notices[0].title,"FAULT 5"));
   lv_obj_delete(s_toast);assert(!s_toast&&s_notice_count==4);render_notice();assert(s_toast);ui_toast_close();assert(!s_toast&&!s_notice_count);
   ui_toast_show_link(UI_STATUS_DANGER,"COMMAND FAILED","Check the failed command.",UI_SHELL_PAGE_CONSOLE);bounds(s_toast);

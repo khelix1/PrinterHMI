@@ -9,6 +9,7 @@ root=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--lvgl-dir",type=Path)
 parser.add_argument("--lvgl-lib",type=Path,help="Optional host LVGL archive built with these font/stdlib flags")
+parser.add_argument("--variant",choices=["PRINTER","DRYBOX","CONSOLE","SETTINGS","CALIBRATION","BED_MESH"])
 args=parser.parse_args()
 candidates=[args.lvgl_dir] if args.lvgl_dir else list((root/"managed_components").glob("*lvgl*"))
 lvgl=next((p for p in candidates if p and (p/"src/core/lv_obj.c").is_file()),None)
@@ -39,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"freertos/task.h").write_text("#pragma once\nvoid vTaskDelay(uint32_t ticks);\n")
     (tmp/"cJSON.h").write_text("#pragma once\ntypedef struct cJSON cJSON;\n")
     sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","printer_controller.c","ui_theme_preview.c","ui_dashboard_page.c","ui_dashboard_layout_profile.c","ui_shell.c","ui_global_estop.c","ui_thumbnail.c"]
-    for variant in ["PRINTER","DRYBOX","CONSOLE","SETTINGS","CALIBRATION","BED_MESH"]:
+    for variant in ([args.variant] if args.variant else ["PRINTER","DRYBOX","CONSOLE","SETTINGS","CALIBRATION","BED_MESH"]):
         extra={"PRINTER":["ui_printer_layout.c","ui_printer_info_cards.c","ui_printer_actions.c","ui_printer_motion.c","ui_printer_toolhead.c"],"DRYBOX":["ui_status_banner.c"],"CONSOLE":[],"SETTINGS":[],"CALIBRATION":[],"BED_MESH":["ui_bed_mesh_renderer.c","ui_bed_mesh_gestures.c"]}[variant]
         executable=tmp/variant.lower()
         subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wno-unused-function","-ffunction-sections","-fdata-sections",*flags,"-DTEST_"+variant,

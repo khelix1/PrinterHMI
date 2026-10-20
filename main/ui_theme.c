@@ -443,6 +443,22 @@ void ui_apply_dialog_style(lv_obj_t *obj)
 
 void ui_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
 {
+    if (obj && role == UI_SURFACE_TEXT_INPUT) {
+        /* Textareas still scroll to the caret without showing visual bars. */
+        lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
+        /* Own the caret color instead of inheriting the default theme's dark
+         * cursor. Keyboard binding manages which text area is focused. */
+        lv_style_selector_t cursor = LV_PART_CURSOR | LV_STATE_FOCUSED;
+        lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, LV_PART_CURSOR);
+        lv_obj_set_style_border_width(obj, 0, LV_PART_CURSOR);
+        lv_obj_set_style_border_side(obj, LV_BORDER_SIDE_LEFT, cursor);
+        lv_obj_set_style_border_color(obj, UI_TEXT_BRIGHT, cursor);
+        lv_obj_set_style_border_opa(obj, LV_OPA_COVER, cursor);
+        lv_obj_set_style_border_width(obj, 2, cursor);
+        lv_obj_set_style_pad_left(obj, -1, cursor);
+        lv_obj_set_style_anim_duration(obj, ui_theme_motion_enabled() ? 400 : 0, cursor);
+        lv_obj_set_style_border_width(obj, 0, LV_PART_CURSOR | LV_STATE_DISABLED);
+    }
     if (ui_theme_is_studio()) { ui_theme_studio_apply_surface_role(obj, role); return; }
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_surface_role(obj, role);

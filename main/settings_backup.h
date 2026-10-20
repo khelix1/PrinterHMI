@@ -58,3 +58,21 @@ bool settings_backup_restore_encrypted(
 bool settings_backup_remove_all(
     char *status,
     size_t status_size);
+
+/* Synchronous stage callbacks run on the caller's thread, before costly work.
+ * They report stages, not byte percentages; existing APIs remain available. */
+typedef enum {
+    SETTINGS_BACKUP_STAGE_PREPARING,
+    SETTINGS_BACKUP_STAGE_READING,
+    SETTINGS_BACKUP_STAGE_AUTHENTICATING,
+    SETTINGS_BACKUP_STAGE_WRITING,
+    SETTINGS_BACKUP_STAGE_APPLYING,
+    SETTINGS_BACKUP_STAGE_ROLLING_BACK,
+} settings_backup_stage_t;
+typedef void (*settings_backup_progress_cb_t)(settings_backup_stage_t stage, void *user_data);
+bool settings_backup_export_with_progress(settings_backup_progress_cb_t progress, void *user_data,
+    char *status, size_t status_size);
+bool settings_backup_restore_with_progress(settings_backup_progress_cb_t progress, void *user_data,
+    char *status, size_t status_size);
+bool settings_backup_restore_encrypted_with_progress(const char *passphrase,
+    settings_backup_progress_cb_t progress, void *user_data, char *status, size_t status_size);

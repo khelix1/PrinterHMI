@@ -14,6 +14,7 @@
 #include "esp_heap_caps.h"
 #include "ui_button.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_widgets.h"
 #include "ui_theme.h"
 #include "ui_page_geometry.h"
@@ -248,58 +249,51 @@ static void calibrate_cb(lv_event_t *e)
         return;
     }
 
-    /*
-     * Calibration belongs to the bed-mesh viewer, while all modal geometry
-     * and styling comes from the shared popup subsystem.
-     */
-    s.calibrate_confirm =
-        ui_popup_create(
-            s.popup ? s.popup : lv_screen_active(),
-            500,
-            280,
-            UI_POPUP_DANGER);
+    /* Keep the review owned by the viewer, with a scrolling warning and
+     * pinned actions so larger text cannot overlap the controls. */
+    lv_obj_t *parent = s.popup ? s.popup : lv_screen_active();
+    int32_t width = lv_obj_get_width(parent) - 32;
+    int32_t height = lv_obj_get_height(parent) - 32;
+    if (width > 560) width = 560;
+    if (height > 340) height = 340;
+    s.calibrate_confirm = ui_popup_create(parent, width, height, UI_POPUP_DANGER);
+    if (!s.calibrate_confirm) return;
+    lv_obj_set_flex_flow(s.calibrate_confirm, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s.calibrate_confirm, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(s.calibrate_confirm, UI_GAP_ROW, 0);
+    lv_obj_t *title = ui_form_text(s.calibrate_confirm,
+        ui_text("Calibrate bed mesh?"), UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    ui_form_divide_title(s.calibrate_confirm);
 
-    if (!s.calibrate_confirm) {
-        return;
-    }
+    lv_obj_t *body = lv_obj_create(s.calibrate_confirm);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, LV_PCT(100), 0);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_t *warning = ui_form_text(body,
+        "This will move the toolhead across the bed and probe multiple points.",
+        UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_style_text_line_space(warning, 4, 0);
+    lv_obj_t *readiness = ui_form_text(body,
+        "Make sure the bed is clear and the printer is ready.",
+        UI_FONT_CAPTION, UI_TEXT_MUTED);
+    lv_obj_set_style_text_line_space(readiness, 4, 0);
 
-    ui_popup_add_title(
-        s.calibrate_confirm,
-        ui_text("Calibrate bed mesh?"),
-        true,
-        4);
-    ui_popup_add_header_divider(
-        s.calibrate_confirm,
-        44);
-    ui_popup_add_body(
-        s.calibrate_confirm,
-        "This will move the toolhead across the bed and probe multiple "
-        "points.\n\nMake sure the bed is clear and the printer is ready.",
-        24,
-        70,
-        452);
-    ui_popup_add_standard_footer_divider(
-        s.calibrate_confirm);
-
-    ui_popup_add_footer_action(
-        s.calibrate_confirm,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " Back",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        close_calibrate_confirm_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s.calibrate_confirm,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_PLAY " Start",
-        190,
-        UI_POPUP_FOOTER_RIGHT,
-        confirm_calibrate_cb,
-        NULL,
-        NULL);
+    lv_obj_t *footer = lv_obj_create(s.calibrate_confirm);
+    ui_responsive_column(footer);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
+    ui_form_action(s.calibrate_confirm, UI_BUTTON_CANCEL, LV_SYMBOL_LEFT " Back",
+        close_calibrate_confirm_cb, NULL);
+    ui_form_action(s.calibrate_confirm, UI_BUTTON_DANGER, LV_SYMBOL_PLAY " Start probing",
+        confirm_calibrate_cb, NULL);
+    ui_form_finish(s.calibrate_confirm);
 }
 
 bool ui_bed_mesh_is_open(void)

@@ -243,6 +243,8 @@ void ui_popup_set_owner(lv_obj_t *popup, lv_obj_t *owner);
 
 /* Reusable wrapped feedback, owned and deleted by its native body. */
 lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind, const char *title, const char *detail);
+/* Clear existing feedback without creating a label or changing its owner. */
+void ui_popup_clear_feedback(lv_obj_t *body);
 void ui_cal_dialog_register(lv_obj_t *popup);
 void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *detail);
 

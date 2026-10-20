@@ -6,6 +6,7 @@
 #include "ui_toast.h"
 #include "moonraker_config_controller.h"
 #include "ui_value_update.h"
+#include "ui_form_dialog.h"
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -86,7 +87,7 @@ void ui_global_estop_set_printer_name(const char *printer_name)
 {
     if (!s_estop) return;
     char next[sizeof(s_estop->printer_name)];
-    snprintf(next,sizeof(next),"%s",printer_name && printer_name[0]?printer_name:"ACTIVE PRINTER");
+    snprintf(next,sizeof(next),"%s",printer_name && printer_name[0]?printer_name:"Active printer");
     if(strcmp(next,s_estop->printer_name)){++s_estop_epoch;estop_close_popup();}
     snprintf(s_estop->printer_name,sizeof(s_estop->printer_name),"%s",next);
 }
@@ -117,7 +118,7 @@ static void firmware_restart_cb(lv_event_t *event)
     if(epoch==s_estop_epoch && owner==moonraker_config_generation() && s_estop->popup){
         ui_value_set_text(s_estop->message,sent?
             "Restart requested. Wait for the printer to reconnect before continuing.":
-            "RESTART NOT SENT. Check the printer connection and try again.");
+            "Restart not sent. Check the printer connection and try again.");
         if(sent && s_estop->restart)lv_obj_add_state(s_estop->restart,LV_STATE_DISABLED);
     }
     s_restart_dispatching=false;
@@ -141,25 +142,26 @@ static bool estop_show_dialog(bool restart_only)
     lv_obj_t *popup=s_estop->popup;
     lv_obj_add_event_cb(popup,estop_popup_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(popup,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(popup,16,0);
-    lv_obj_set_style_pad_row(popup,12,0);
+    lv_obj_set_style_pad_all(popup,UI_PAD_POPUP,0);
+    lv_obj_set_style_pad_row(popup,UI_GAP_ROW,0);
     lv_obj_t *title=lv_label_create(popup);s_estop->title=title;
-    lv_label_set_text(title,ui_text(restart_only?"RESTART KLIPPER?":"STOP REQUEST SENT"));
+    lv_label_set_text(title,ui_text(restart_only?"Restart Klipper?":"Stop request sent"));
     ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_DANGER_BRIGHT);
     lv_obj_set_width(title,LV_PCT(100));
     lv_label_set_long_mode(title,LV_LABEL_LONG_WRAP);
+    ui_form_divide_title(popup);
 
     lv_obj_t *body=lv_obj_create(popup);
     lv_obj_remove_style_all(body);
     lv_obj_set_size(body,LV_PCT(100),0);
     lv_obj_set_flex_grow(body,1);
     lv_obj_set_flex_flow(body,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(body,12,0);
+    lv_obj_set_style_pad_row(body,UI_GAP_ROW,0);
     lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body,LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_OFF);
     lv_obj_t *name=lv_label_create(body);
-    lv_label_set_text(name,s_estop->printer_name[0]?s_estop->printer_name:"ACTIVE PRINTER");
+    lv_label_set_text(name,s_estop->printer_name[0]?s_estop->printer_name:"Active printer");
     ui_apply_custom_label_style(name,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
     lv_obj_set_width(name,LV_PCT(100));lv_label_set_long_mode(name,LV_LABEL_LONG_WRAP);
     lv_obj_t *message=lv_label_create(body);s_estop->message=message;
@@ -167,19 +169,22 @@ static bool estop_show_dialog(bool restart_only)
         "Restart Klipper on this printer? This interrupts any operation in progress.":
         "Emergency stop requested. Verify this printer has halted before recovery. Restart Klipper only when you are ready to recover."));
     ui_apply_custom_label_style(message,UI_FONT_BODY_LARGE,UI_TEXT);
+    lv_obj_set_style_text_line_space(message,4,0);
     lv_obj_set_width(message,LV_PCT(100));lv_label_set_long_mode(message,LV_LABEL_LONG_WRAP);
 
     lv_obj_t *footer=lv_obj_create(popup);
     lv_obj_remove_style_all(footer);
     lv_obj_clear_flag(footer,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(footer,LV_PCT(100),LV_SIZE_CONTENT);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer,8,0);
     lv_obj_set_flex_flow(footer,LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(footer,LV_FLEX_ALIGN_END,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(footer,12,0);lv_obj_set_style_pad_row(footer,12,0);
+    lv_obj_set_style_pad_column(footer,UI_GAP_ROW,0);lv_obj_set_style_pad_row(footer,UI_GAP_ROW,0);
     ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,
-        restart_only?LV_SYMBOL_CLOSE " CANCEL":LV_SYMBOL_CLOSE " CLOSE",
+        restart_only?LV_SYMBOL_CLOSE " Cancel":LV_SYMBOL_CLOSE " Close",
         0,0,LV_SIZE_CONTENT,52,close_popup_cb,NULL,NULL);
-    s_estop->restart=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,LV_SYMBOL_REFRESH " RESTART KLIPPER",
+    s_estop->restart=ui_popup_add_action_at(footer,UI_POPUP_ACTION_DANGER,LV_SYMBOL_REFRESH " Restart Klipper",
         0,0,LV_SIZE_CONTENT,52,firmware_restart_cb,NULL,NULL);
     lv_obj_t *fields[]={s_estop->title,s_estop->message,s_estop->restart};
     for(size_t i=0;i<3;i++)if(fields[i])lv_obj_add_event_cb(fields[i],estop_field_deleted,LV_EVENT_DELETE,NULL);
@@ -213,7 +218,7 @@ static void estop_event_cb(lv_event_t *event)
     if(epoch==s_estop_epoch && owner==moonraker_config_generation()){
         bool reviewed=estop_show_dialog(false);
         if(reviewed && !sent && s_estop->popup && s_estop->popup_owner==owner){
-            ui_value_set_text(s_estop->title,"STOP NOT CONFIRMED");
+            ui_value_set_text(s_estop->title,"Stop not confirmed");
             ui_value_set_text(s_estop->message,"Stop request could not be sent. Use the printer power switch if needed. Verify the printer has halted before recovery.");
         }
     }

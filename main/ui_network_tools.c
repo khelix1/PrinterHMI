@@ -385,6 +385,17 @@ static ui_network_port_save_cb_t s_save_cb = NULL;
 static lv_obj_t *s_port_status, *s_port_keyboard;
 static bool s_port_dispatching;
 static uint32_t s_port_epoch;
+static const char s_port_guidance[]="Use the Moonraker port configured on this printer.";
+
+static void port_value_changed(lv_event_t *event)
+{
+    if(!event||s_port_dispatching||!s_moon_port_popup||!s_moon_port_ta||!s_port_status||
+       lv_event_get_code(event)!=LV_EVENT_VALUE_CHANGED||
+       lv_event_get_target_obj(event)!=s_moon_port_ta||
+       lv_event_get_current_target_obj(event)!=s_moon_port_ta)return;
+    ui_value_set_text(s_port_status,s_port_guidance);
+}
+
 static void port_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
@@ -438,11 +449,12 @@ void ui_network_port_popup_show(int current_port,ui_network_port_save_cb_t saved
     lv_obj_t *body=ui_form_body(s_moon_port_popup);char value[16];snprintf(value,sizeof(value),"%d",current_port);
     s_moon_port_ta=ui_form_input(body,"Port 1 to 65535",value,false,5);
     lv_textarea_set_accepted_chars(s_moon_port_ta,"0123456789");
-    s_port_status=ui_form_text(body,"Use the Moonraker port configured on this printer.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    s_port_status=ui_form_text(body,s_port_guidance,UI_FONT_CAPTION,UI_TEXT_DIM);
     lv_obj_t *keyboard=ui_form_keyboard(s_moon_port_popup,s_moon_port_ta,LV_KEYBOARD_MODE_NUMBER);
     s_port_keyboard=keyboard;
     lv_obj_t *fields[]={s_moon_port_ta,s_port_status,s_port_keyboard};
     for(size_t i=0;i<3;i++)lv_obj_add_event_cb(fields[i],port_field_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_add_event_cb(s_moon_port_ta,port_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
     ui_popup_keyboard_actions(keyboard,save_cb,close_cb);
     ui_form_action(s_moon_port_popup,UI_BUTTON_CANCEL,"Cancel",close_cb,NULL);
     ui_form_action(s_moon_port_popup,UI_BUTTON_PRIMARY,"Save",save_cb,NULL);ui_form_finish(s_moon_port_popup);

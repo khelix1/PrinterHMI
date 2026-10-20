@@ -177,6 +177,24 @@ static void safety_checks(void)
  assert(!s_center&&!s_poll&&!lv_obj_get_child_count(lv_layer_top()));
 }
 static void inside(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
+static void completion_layout_checks(void)
+{
+ lv_obj_t *popup=s_complete_popup;assert(popup);lv_obj_update_layout(popup);
+ lv_obj_t *title=lv_obj_get_child(popup,0),*body=lv_obj_get_child(popup,1),*footer=lv_obj_get_child(popup,-1);
+ inside(popup,lv_screen_active());inside(title,popup);inside(body,popup);inside(footer,popup);
+ assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM);
+ assert(lv_obj_get_style_border_side(footer,0)==LV_BORDER_SIDE_TOP);
+ assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);
+ assert(lv_obj_get_child_count(body)==2);
+ lv_area_t a,b,c;lv_obj_get_coords(title,&a);lv_obj_get_coords(body,&b);lv_obj_get_coords(footer,&c);assert(a.y2<b.y1&&b.y2<c.y1);
+ for(unsigned i=0;i<2;i++){
+  lv_obj_t *label=lv_obj_get_child(body,i);assert(lv_label_get_long_mode(label)==LV_LABEL_LONG_WRAP);assert(lv_obj_get_style_text_line_space(label,0)==4);
+ }
+ lv_obj_get_coords(footer,&a);lv_obj_scroll_to_y(body,LV_COORD_MAX,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&b);assert(!memcmp(&a,&b,sizeof(a)));
+ inside(lv_obj_get_child(body,-1),body);lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);
+ lv_obj_t *done=lv_obj_get_child(footer,0);inside(done,footer);inside(lv_obj_get_child(done,0),done);assert(lv_obj_get_height(done)>=48&&lv_obj_get_width(done)==160);
+ lv_obj_get_coords(done,&a);lv_obj_get_coords(footer,&b);assert(a.x2==b.x2);
+}
 static void check(void){assert(lv_obj_get_parent(s_center)==lv_screen_active());lv_obj_update_layout(s_center);inside(s_center,lv_screen_active());inside(s_setup_content,s_center);inside(s_stage,s_setup_content);inside(s_actions,s_setup_content);assert(lv_obj_get_height(s_stage)>0);for(unsigned i=0;i<lv_obj_get_child_count(s_actions);i++){lv_obj_t*b=lv_obj_get_child(s_actions,i);inside(b,s_actions);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);}lv_area_t a,b;lv_obj_get_coords(s_actions,&a);lv_obj_scroll_to_y(s_stage,2000,LV_ANIM_OFF);lv_obj_update_layout(s_center);lv_obj_get_coords(s_actions,&b);assert(!memcmp(&a,&b,sizeof(a)));lv_obj_scroll_to_y(s_stage,0,LV_ANIM_OFF);}
 static unsigned width=1024;static uint16_t raster[1024*600];
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*width+x]=*v++;lv_display_flush_ready(d);}
@@ -251,7 +269,8 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  setup_select_complete_cb(NULL);check();assert(strstr(lv_label_get_text(lv_obj_get_child(s_stage,3)),timezone_config_selected_label()));
  assert(contains_text(s_stage,"Display:")&&contains_text(s_stage,"70%")&&contains_text(s_stage,"Sleep 15 min"));
  if(width==1024){for(unsigned row=0;row<3;row++){lv_obj_t *summary=lv_obj_get_child(s_stage,row);for(unsigned cell=0;cell<lv_obj_get_child_count(summary);cell++){lv_obj_t *label=lv_obj_get_child(summary,cell);inside(label,summary);assert(lv_obj_get_height(label)==lv_obj_get_style_text_font(label,0)->line_height);}}assert(contains_text(s_stage,"Workshop_long_")&&contains_text(s_stage,"Workshop printer"));for(unsigned group=0;group<lv_obj_get_child_count(s_stage);group++)inside(lv_obj_get_child(s_stage,group),s_stage);lv_obj_t *display_summary=lv_obj_get_child(s_stage,4);assert(lv_obj_get_height(display_summary)<lv_obj_get_style_text_font(display_summary,0)->line_height*2);}if(density==1&&large)snapshot(t,"review");storage_ok=false;finish_cb(NULL);assert(s_center);storage_ok=true;finish_cb(NULL);assert(!s_center&&!s_setup_content&&!s_status&&!s_poll&&s_complete_popup);lv_obj_update_layout(s_complete_popup);inside(s_complete_popup,lv_screen_active());assert(contains_text(s_complete_popup,"Setup complete")&&contains_text(s_complete_popup,"live connection status"));
- lv_obj_t *completion_footer=lv_obj_get_child(s_complete_popup,-1),*done=lv_obj_get_child(completion_footer,0);inside(completion_footer,s_complete_popup);inside(done,completion_footer);inside(lv_obj_get_child(done,0),done);if(density==1&&large)snapshot(t,"completed");setup_completion_done_cb(NULL);
+ completion_layout_checks();
+ lv_obj_t *completion_footer=lv_obj_get_child(s_complete_popup,-1),*done=lv_obj_get_child(completion_footer,0);inside(completion_footer,s_complete_popup);inside(done,completion_footer);inside(lv_obj_get_child(done,0),done);if(density==1&&large)snapshot(t,"completed");unsigned completed_before_done=completions;click(done);assert(!s_complete_popup&&!s_center&&completions==completed_before_done);
  ui_setup_wizard_show(connect_wifi);lv_obj_delete(s_center);assert(!s_center&&!s_setup_content&&!s_status&&!s_keyboard);ui_setup_wizard_show(connect_wifi);later_cb(NULL);assert(!s_center);safety_checks();
  }
  wifi_ready=configured=true;ui_setup_wizard_show(connect_wifi);wifi_read_hook=reopen_setup;wifi_read_countdown=2;setup_select_complete_cb(NULL);assert(s_center&&s_setup_step==SETUP_STEP_WELCOME&&!s_finish_action&&lv_obj_get_child_count(s_actions)==1);ui_setup_wizard_close();
@@ -269,4 +288,10 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  setup_select_timezone_cb(NULL);preference_hook=reopen_setup;click(lv_obj_get_child(s_options_list,0));preference_hook=NULL;assert(s_setup_step==SETUP_STEP_WELCOME);
  setup_select_display_cb(NULL);preference_hook=reopen_setup;lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);preference_hook=NULL;assert(s_setup_step==SETUP_STEP_WELCOME);
  setup_select_display_cb(NULL);theme_row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);unsigned writes_before=preference_writes;click(lv_obj_get_child(theme_row,0));ui_setup_wizard_close();lv_tick_inc(50);lv_timer_handler();assert(!s_center&&appearance_rebuilds==2&&preference_writes==writes_before);
+ width=480;lv_display_set_resolution(d,480,280);
+ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++){
+  ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
+  show_setup_completion();completion_layout_checks();assert(lv_obj_get_height(s_complete_popup)<=248);
+  lv_obj_t *done=lv_obj_get_child(lv_obj_get_child(s_complete_popup,-1),0);click(done);assert(!s_complete_popup);
+ }
  lv_display_delete(d);lv_deinit();puts("PASS: configured network/printer review values, compact display summary, completion bounds and review-read owner replacement; saved/custom camera summaries and URL redaction, optional/no-printer/empty/failure/retry states, busy scan deduplication and no additional camera save on Continue; active-profile printer editing, SSID/IP/waiting-address summaries, saved-vs-live status and API-key redaction; seven-step Setup layout, sparse timezone catalog/persistence failure, brightness/sleep save failure/retry, deferred theme/text rebuild and closed-owner cancellation across five themes/densities/text/viewports; Wi-Fi nested dispatch/retry/captured credentials, camera verification ownership/save failures, retired fields/actions/timers, completion and replacement teardown");return 0;}

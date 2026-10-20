@@ -797,6 +797,11 @@ static void search_button_cb(lv_event_t *event)
     if (s_search_popup) { lv_obj_move_foreground(s_search_popup); return; }
     s_search_popup=ui_form_dialog("Search files",760,540,UI_POPUP_STANDARD);
     if(!s_search_popup)return;
+    ui_form_divide_title(s_search_popup);
+    /* Reserve room for the input and full keyboard on short displays. */
+    bool short_display=lv_display_get_vertical_resolution(NULL)<480;
+    lv_obj_set_style_pad_all(s_search_popup,short_display?12:UI_PAD_POPUP,0);
+    lv_obj_set_style_pad_row(s_search_popup,short_display?8:UI_GAP_ROW,0);
     ++s_files_epoch;
     lv_obj_add_event_cb(s_search_popup,search_popup_deleted_cb,LV_EVENT_DELETE,NULL);
     lv_obj_t *body=ui_form_body(s_search_popup);
@@ -1325,11 +1330,12 @@ static void detail_start_event_cb(lv_event_t *event)
     s_print_confirm_profile=moonraker_config_active_profile_index();
     s_print_confirm_generation=moonraker_config_generation();
     lv_obj_set_flex_flow(s_print_confirm_popup,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_print_confirm_popup,16,0);
+    lv_obj_set_style_pad_all(s_print_confirm_popup,UI_PAD_POPUP,0);
     lv_obj_set_style_pad_row(s_print_confirm_popup,UI_GAP_ROW,0);
     lv_obj_t *title=lv_label_create(s_print_confirm_popup);
-    lv_label_set_text(title,"Start this print?");ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
+    lv_label_set_text(title,"Start this print?");ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT_BRIGHT);
     lv_obj_set_width(title,LV_PCT(100));
+    ui_form_divide_title(s_print_confirm_popup);
     lv_obj_t *body=lv_obj_create(s_print_confirm_popup);
     lv_obj_remove_style_all(body);lv_obj_set_size(body,LV_PCT(100),0);lv_obj_set_flex_grow(body,1);
     lv_obj_set_flex_flow(body,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(body,UI_GAP_ROW,0);
@@ -1337,14 +1343,17 @@ static void detail_start_event_cb(lv_event_t *event)
     lv_obj_t *printer=lv_label_create(body);
     const char *name=moonraker_config_active_profile_name();
     lv_label_set_text_fmt(printer,"Printer: %s",name && name[0]?name:"Active printer");
-    ui_apply_custom_label_style(printer,UI_FONT_BODY,UI_TEXT_DIM);lv_obj_set_width(printer,LV_PCT(100));
+    ui_apply_custom_label_style(printer,UI_FONT_CAPTION,UI_TEXT_DIM);lv_obj_set_width(printer,LV_PCT(100));
+    lv_label_set_long_mode(printer,LV_LABEL_LONG_WRAP);lv_obj_set_style_text_line_space(printer,4,0);
     lv_obj_t *file=lv_label_create(body);
     lv_label_set_text(file,s_detail_filename);ui_apply_custom_label_style(file,UI_FONT_BODY_LARGE,UI_TEXT);
     lv_obj_set_width(file,LV_PCT(100));lv_label_set_long_mode(file,LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_line_space(file,4,0);
     lv_obj_t *hint=lv_label_create(body);
     s_print_connection_label=hint;
     lv_label_set_text(hint,"The selected printer will run this G-code file.");
     ui_apply_custom_label_style(hint,UI_FONT_CAPTION,UI_TEXT_DIM);lv_obj_set_width(hint,LV_PCT(100));
+    lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);lv_obj_set_style_text_line_space(hint,4,0);
     lv_obj_t *footer=lv_obj_create(s_print_confirm_popup);
     lv_obj_remove_style_all(footer);lv_obj_set_size(footer,LV_PCT(100),LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(footer,LV_FLEX_FLOW_ROW_WRAP);lv_obj_set_style_pad_column(footer,UI_GAP_ROW,0);lv_obj_set_style_pad_row(footer,UI_GAP_ROW,0);
@@ -1498,10 +1507,11 @@ static void studio_metadata_open(lv_event_t *e)
     if(!s_studio_metadata_popup)return;
     lv_obj_add_event_cb(s_studio_metadata_popup,studio_metadata_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_studio_metadata_popup, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_studio_metadata_popup, 16, 0);
+    lv_obj_set_style_pad_all(s_studio_metadata_popup, UI_PAD_POPUP, 0);
     lv_obj_set_style_pad_row(s_studio_metadata_popup, UI_GAP_ROW, 0);
-    lv_obj_t *title=studio_text(s_studio_metadata_popup,"File details",0,0,1,UI_FONT_TITLE,UI_TEXT);
+    lv_obj_t *title=studio_text(s_studio_metadata_popup,"File details",0,0,1,UI_FONT_TITLE,UI_TEXT_BRIGHT);
     lv_obj_set_width(title, LV_PCT(100));
+    ui_form_divide_title(s_studio_metadata_popup);
     lv_obj_t *body=studio_plane(s_studio_metadata_popup,0,0,1,0);
     lv_obj_set_width(body, LV_PCT(100));lv_obj_set_flex_grow(body,1);
     file_metadata_scroll_style(body);
@@ -1509,6 +1519,7 @@ static void studio_metadata_open(lv_event_t *e)
     lv_obj_set_width(label,LV_PCT(100));
     lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
     lv_obj_set_height(label,LV_SIZE_CONTENT);
+    lv_obj_set_style_text_line_space(label,4,0);
     s_studio_metadata_label=label;
     lv_obj_t *footer=studio_plane(s_studio_metadata_popup,0,0,1,48);
     lv_obj_set_width(footer,LV_PCT(100));lv_obj_set_height(footer,LV_SIZE_CONTENT);

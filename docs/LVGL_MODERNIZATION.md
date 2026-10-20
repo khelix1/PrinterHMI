@@ -2317,3 +2317,381 @@ not physical panel screenshots. No preference values, save/callback behavior,
 transport, commands, fonts or theme exposure change. Build and OTA locally, then
 verify all three dialogs in both exposed themes, including changed density,
 large text, scrolling and Close. Firmware partition budget remains 7 MiB.
+
+### Notification preferences and About dialog visual closeout
+
+Notification preferences and About now use the shared form title divider and
+theme-owned spacing. Quiet, Standard and Detailed retain their exact level/save
+behavior, with a wrapping explanation directly below each selectable name rather
+than a single introductory policy paragraph. The shared rows remain flat with
+dividers in Studio and use Operator surfaces in Operator. Selection checks stay
+with their names, captions remain left-aligned after selection changes, and the
+system-wide scope and fault-dismissal guidance remain visible in the body.
+About uses density-aware section spacing and more readable paragraph line
+spacing; complete firmware identity, authorship, AI assistance, third-party
+credits and license/source notices remain unchanged.
+
+Native Notification and About suites pass across five themes, three densities,
+normal/large text and native/narrow viewports. Notification coverage checks all
+three selection/caption layouts, pinned Cancel/Save, failed-save retention,
+persistence and legacy migration, owner/deletion/reentry, fault priority,
+deduplication, queue bounds and destination behavior. About covers all three
+firmware channels, modified/unknown identity, complete credit presence,
+scroll-to-last-notice reach, pinned Close, native pointer closure and read/delete
+reentry. Separate owner compilation treats warnings as errors. Simulated LVGL
+large-text renders were reviewed in Studio and Operator, including About credits
+and the notification level descriptions. SDK/persistence are mocked; no firmware
+build, flash or physical panel verification was performed here. After building
+and OTA, check both dialogs in both exposed themes, normal/large text, selection,
+Cancel/Save and scrolling to the final About notices. Partition budget: 7 MiB.
+
+### Global stop and Klipper restart dialog visual closeout
+
+The global E-stop recovery and Restart Klipper review use the shared form-title
+and footer dividers, theme-owned popup/body/action spacing, sentence-case
+headings/actions and readable message line spacing. Scroll bodies hide side
+scrollbars while retaining vertical reach and pinned, wrapping actions. The
+printer name and warning palette remain prominent. The E-STOP button itself,
+immediate M112 dispatch, restart command, sender/printer ownership, five-second
+accepted-restart guard, failed-command retry and popup cleanup are unchanged.
+
+Native recovery-owner, Studio/shell and Calibration FEEDBACK suites pass across
+their five-theme/density/text/native-and-narrow viewport matrices. Recovery now
+explicitly asserts that its first M112 send happens before the feedback popup
+exists, in addition to nested stop/restart, stop-during-restart, rejected sends,
+reopen suppression, stale owner/sender/field and replacement/deletion cases.
+Layout checks cover divided title/footer bounds, hidden scrollbars, labels,
+pinned actions and scroll reach; the shell fixture retains actual pointer
+activation of E-stop. Separate recovery and feedback-owner compilation treats
+warnings as errors. Simulated Studio/Operator renders were reviewed for stop
+failure/requested and restart review states, including large text. Transport is
+mocked; these are not physical panel screenshots or printer-stop verification.
+Build and OTA locally, then inspect Restart Klipper with Cancel in both exposed
+themes and text sizes. Actual stop/recovery behavior remains a device acceptance
+check when appropriate. No transport, command, version or font changes;
+application partition budget remains 7 MiB.
+
+### Camera view and selection dialog visual closeout
+
+Camera view and Select camera use the shared divided form title and theme-owned
+popup row spacing. Camera view emphasizes the complete camera name and labels
+its existing reset action Reset view. Selection uses shared selectable rows with
+wrapping names at the regular choice font instead of shrinking single-line
+labels. The default camera has a separate, left-aligned caption. Studio keeps
+flat rows/dividers and Operator keeps its own row surfaces. Selected-camera
+highlight, 56-pixel minimum targets, pinned actions and vertical scrolling remain.
+
+The full native Camera pipeline suite passes. Dialog checks span five themes,
+three densities, normal/large text and native/narrow viewports, including maximum
+stored-length wide-character names without font shrinking, default captions,
+selection identity, title/body/footer bounds, empty catalog, scroll reach,
+failed-save retention/retry, stale owner/catalog/URL guards and deleted fields.
+The same suite retains all rotations/mirrors/reset, fullscreen behavior, frame
+retirement/validation, quiet refresh, polling/reentry, show/hide/setup ownership,
+Configure handoffs and timer/root cleanup, plus Dashboard source retirement.
+Standalone Camera compilation treats warnings as errors. Simulated large-text
+LVGL renders were reviewed for view, populated picker and empty picker in Studio
+and Operator. SDK/catalog/stream boundaries are mocked; no firmware build, real
+stream performance or physical panel verification is implied. Rotation/mirror
+values, persistence, request scheduling and stream ownership are unchanged.
+Build and OTA locally, then verify Camera view/Reset view and selection/Close in
+both exposed themes and text sizes. No preview sizing, font assets, transport
+or version changes; application partition budget remains 7 MiB.
+
+### Shared keyboard-input caret visibility
+
+The shared text-input surface explicitly styles a bright two-pixel left-edge
+caret for the focused field, rather than inheriting LVGL's default-theme cursor
+color. Keyboard binding continues to own focus. Inactive and disabled inputs
+hide the caret; reduced motion uses a steady caret, otherwise it blinks at
+400 ms. The fix applies through the existing shared role to every textarea
+constructor: form inputs, popup textareas and Console editors. Text, password
+masking, validation, keyboard layouts and command behavior are unchanged.
+
+The native shared-popup suite checks all three input constructors, password
+modes, empty and filled fields, keyboard insertion/backspace, arrow-key cursor
+movement, focused/disabled states and reduced motion across five themes, both
+text sizes and 1024/640/480 widths. It compares actual RGB565 pixels near the
+insertion position to verify that the bright caret appears and disappears on
+blur. Existing helper allocation-failure, keyboard rebinding/deletion and popup
+ownership checks pass. Console and Network/Backup native regression suites also
+pass, including their density/text/viewport and persistence/owner matrices and
+separate owner compilation with warnings as errors. These are simulated host
+checks; build and OTA panel verification remain local. Check an empty field,
+mid-text editing, a password and numeric entry in Studio and Operator. No font,
+transport, version or partition changes; application partitions remain 7 MiB.
+
+### Motion diagnostics dialog spacing closeout
+
+Motion limits, TMC driver diagnostics and Axis distance calculator use the
+shared divided title and density-aware row/action spacing. Wrapped diagnostic
+text and calculator guidance use four-pixel line spacing for readability.
+The compact measurement editor retains its existing geometry so its field and
+numeric keyboard remain usable on short displays. Runtime readings, driver
+selection, calculations, validation and printer ownership are unchanged.
+
+Native Motion layout checks cover five themes, three densities, both text sizes
+and 1024/640/480 widths, including short displays, title/body/footer separation,
+hidden scrollbars, pinned actions, field/keyboard bounds, calculations, retained
+edits, driver selection, offline/profile transitions and timer-balanced cleanup.
+The Probe/Endstop/Motion safety suite also passes its owner, dispatch/retry,
+reentry, replacement and retired-widget checks. Standalone Motion compilation
+uses warnings as errors. Simulated large-text Studio and Operator renders were
+reviewed; transport/SDK boundaries are mocked. Firmware build, OTA and physical
+panel verification remain local. Inspect these three dialogs and numeric editing
+in both exposed themes and text sizes. No version, font, command or partition
+changes; application partitions remain 7 MiB.
+
+### Bed mesh calibration review layout closeout
+
+The mesh viewer's Calibrate bed mesh review replaces fixed warning/action
+positions with a shared divided title, scrolling warning body and pinned action
+row. It uses density-owned spacing and a separate readiness caption. The Start
+action is labeled Start probing; Back keeps its previous meaning. The popup
+fits within the viewer's dimensions. The BED_MESH_CALIBRATE command, connection
+checks and close-before-dispatch behavior are unchanged; the mesh view stays open.
+
+The native Bed Mesh fixture passes in Studio and Operator, all three densities
+and both text sizes. It checks complete native warning/caption bounds, title and
+footer separation, 48-pixel action targets, compact-body scroll reach with fixed
+actions, repeated opening, Back without dispatch, offline blocking, lost-live-data
+blocking at confirmation, the exact Start command and viewer-close cleanup.
+Existing mesh viewport, reset, rendering-buffer guards and teardown checks pass.
+The full bed-mesh profile layout/safety suite also passes. These are simulated
+host checks with mocked transport. Large-text Studio/Operator renders were
+reviewed; firmware build, OTA and physical panel acceptance remain local. Inspect
+the review and use Back to verify layout without initiating probing. No font,
+version or partition changes; application partitions remain 7 MiB.
+
+### Profile connection and certificate dialog visual closeout
+
+Connection security, API key and Select CA certificate use the shared divided
+heading and density-owned row spacing. Security guidance has readable wrapped
+line spacing; API-key privacy guidance and certificate scope use caption styling.
+Certificate filenames now wrap at the normal choice font in content-sized rows
+with at least 56-pixel targets, flat Studio dividers and Operator row surfaces.
+Names no longer depend on sideways marquee scrolling. The editor and its pinned
+keyboard geometry, stored text, API-key masking, certificate filename/path
+validation, scan cap, import routing and secure-port rules are unchanged.
+
+The native profile suite passes across five themes, three densities, both text
+sizes and 1024/640/480 viewports, including short displays. Detail-dialog checks
+cover title/body/footer separation and pinned actions; certificate checks cover
+119-character accepted filenames without font shrinking or clipped row text,
+scrolling to the final row even when a row exceeds the viewport, complete path
+identity and minimum targets. Existing authentication cancellation/persistence,
+failed import/retry, empty/missing-card, rejected unsafe/oversize filenames,
+reentrant scan/import, stale printer/draft, deleted fields/rows and replacement
+cleanup checks pass. Main discovery bridge checks and standalone profile owner
+compilation also pass. Simulated Studio/Operator large-text renders were reviewed;
+SDK, SD and transport boundaries are mocked. Build and OTA locally, then inspect
+these three dialogs in both exposed themes/text sizes and Cancel/Close the draft.
+No font, version or partition changes; application partitions remain 7 MiB.
+
+### Printer and camera removal review visual closeout
+
+Remove printer and Remove camera now use the shared divided review heading and
+density-owned row spacing. Printer removal separates the captured printer-name
+prompt from its saved endpoint/health/preview consequences, and uses sentence-case
+Cancel/Remove actions. Camera removal keeps its full slot/name/stream warning and
+presents the irreversible-action note as a separate caption. Warning and retry
+text have readable line spacing. Existing danger actions, captured targets,
+last-profile restriction, failed-write retry, connection/generation guards and
+post-removal cleanup behavior are unchanged.
+
+The full native profile suite passes across five themes, three densities, both
+text sizes and 1024/640/480 viewports, including short displays. Removal layout
+checks cover divided title/footer separation, complete target/consequence text,
+wrapping, caption styling, minimum action targets, pinned actions and scroll reach.
+Existing cancel-without-write, retained failed-write retry, changed-profile and
+last-profile guards, exact removal targets, nested callbacks, retired fields,
+replacement dialogs and camera default/cache cleanup remain covered. Previously
+polished security/API-key/certificate tests and standalone owner compilation also
+pass. Simulated large-text Studio/Operator removal renders were reviewed; SDK,
+storage and transport are mocked. Firmware build, OTA and panel acceptance remain
+local. Inspect both removal reviews and use Cancel/Keep camera to check the layout.
+No font, version or partition changes; application partitions remain 7 MiB.
+
+### Setup Review and completion visual closeout
+
+Setup Review's time-zone and display summaries have readable wrapped line
+spacing. Setup complete uses the shared divided heading, density-owned padding,
+wrapped completion/next-step guidance and a pinned right-aligned Done action.
+Its preferred 300-pixel height is clamped to the viewport with a 32-pixel margin;
+the body can scroll while Done remains fixed. Completion persistence, prerequisites,
+optional Camera behavior, saved choices and finish/reopen ownership are unchanged.
+
+The full native Setup suite passes across five themes, three densities, both text
+sizes and 1024/640/480 viewports. Completion checks cover divided title/footer
+bounds, full paragraph wrapping, scroll reach, hidden scrollbars, 160-by-48 Done
+placement and actual Done activation without another completion write. Additional
+480-by-280 checks verify height clamping and guidance reach in every theme/density
+and text size. Existing prerequisite/save failure/retry, callback replacement,
+closed-owner cancellation, staged field/timer retirement, camera verification,
+credential redaction and saved/live review checks pass, along with standalone
+owner compilation. Simulated large-text Studio and Operator Review/completion
+renders were reviewed; SDK, preferences and transport are mocked. Build and OTA
+locally, then inspect Setup > Review, Finish setup and Done in both exposed themes
+and text sizes. No font, version or partition changes; application partitions
+remain 7 MiB.
+
+### Files print review and expanded metadata visual closeout
+
+Start this print and the Studio expanded File details dialog use shared divided
+headings and density-owned popup padding. Print review keeps the full filename
+at the regular choice font, with wrapped printer/context captions and readable
+line spacing. Expanded metadata uses the same readable line spacing. Actions
+remain pinned below scrolling content. Inline preview dimensions, metadata
+ownership/update behavior, print command routing, connection/printer guards and
+failed-start retry are unchanged.
+
+The native responsive Files suite passes across five themes, three densities,
+both text sizes, three host widths and custom metric/profile overrides. New
+checks cover divided title/footer bounds, full filename identity/font/wrapping,
+printer context, scroll reach and pinned actions, including a 186-character wide
+filename. Actual Cancel activation retains the preview and sends no print request.
+Existing pointer dragging reaches the final metadata line without moving Close;
+metadata updates, preview aspect/size bounds, failed/reentrant/stale print requests,
+printer/offline gating, deleted widgets/root cleanup and timer/object balances all
+pass. Simulated large-text Studio/Operator print-review and Studio metadata renders
+were reviewed. Transport and image data are mocked; firmware build, OTA and panel
+verification remain local. Inspect a file's print review and Cancel, then expanded
+File details/scroll/Close in Studio. No font, version or partition changes;
+application partitions remain 7 MiB.
+
+### Files search dialog heading and keyboard layout closeout
+
+Search files uses the shared divided heading and density-owned spacing on normal
+height displays. Displays below 480 pixels high use compact popup padding/gaps
+to retain room for the input, complete keyboard and pinned Cancel/Search actions.
+Keyboard dimensions, search text limits, filtering, retained drafts, cancellation,
+printer/page ownership and sort routing are unchanged.
+
+The full native responsive Files suite passes across five themes, three densities,
+both text sizes, three host widths and custom metric/profile overrides. Search
+checks cover title/body/keyboard/footer separation, a complete 56-pixel input,
+keyboard field/key bounds and 48-pixel action targets. Additional actual 640-by-400
+and 480-by-400 display checks pass in every theme, density and text size. Existing
+search reopening/retained draft, keyboard Ready/Cancel, stale/retired callbacks,
+browser/print ownership, preview/metadata layout and timer/object cleanup checks
+remain passing. Simulated large-text Studio and Operator Search renders were
+reviewed; SDK/transport are mocked. Build and OTA locally, then check Files > Search,
+mid-text editing, Cancel and Search in both exposed themes and text sizes.
+No font, version or partition changes; application partitions remain 7 MiB.
+
+### Shared input scrollbar visual cleanup
+
+The shared text-input surface hides visual scrollbars in every theme. Textareas
+continue to scroll to the insertion cursor; the focused caret remains visible.
+This covers form fields, popup textareas and Console editors through their
+existing surface role, including password entry. No scrolling flags, accepted
+characters, text limits, keyboard layouts or submission behavior are changed.
+
+The native shared-popup suite passes across five themes, both text sizes and
+three widths, with all three input constructors, password modes and reduced-motion
+states. Long-text checks fill a field beyond its visible width, type at the end,
+wait for scrolling to settle, verify the caret within the field, edit/backspace
+at the beginning and return to the left edge without exposing scrollbars. Existing
+rendered caret pixels, keyboard rebinding/deletion and allocation/owner teardown
+checks pass. Console and Network/Backup regression matrices and separate owner
+compilation also pass. These are simulated host checks with mocked SDK/transport;
+firmware build, OTA and physical panel acceptance remain local. Check long text
+and cursor movement in Files Search, a password field and Console in both exposed
+themes. No font, version or partition changes; application partitions remain 7 MiB.
+
+### Main printer and Camera setup form heading closeout
+
+Add printer, Edit printer and Camera setup now use the same divided heading and
+row spacing as their nested detail dialogs. Smaller gaps between field groups
+leave more room for the form while its actions remain pinned. Printer status
+messages have readable wrapped line spacing. Field grouping, aligned host/port
+inputs, four camera slots, nested keyboards, direct Camera setup entry and saved
+profile/camera behavior are unchanged.
+
+The full native profile suite passes across five themes, three densities, both
+text sizes and 1024/640/480 viewports. The main editors now join the divided-title,
+body/footer separation and hidden-scrollbar checks. Existing native form-fit,
+five-digit port, slot/default/selection layout, scrolling redraw, nested keyboard,
+discovery/test/save validation and retry, captured target, cancellation, field
+retirement and direct-setup replacement/cleanup checks pass. Previously polished
+security and removal reviews remain covered, along with standalone profile owner
+compilation. Simulated large-text Studio/Operator editor and Camera setup renders
+were reviewed; SDK/storage/transport are mocked. Build and OTA locally, then inspect
+Add/Edit printer and Camera setup in both exposed themes/text sizes, open and
+cancel a field keyboard, and cancel the form. No font, version or partition
+changes; application partitions remain 7 MiB.
+
+### Profile field keyboard heading closeout
+
+The shared profile field editor uses the divided heading and compact row spacing
+for printer names, host/IP, port, API key, camera names and camera URLs. Name
+headings distinguish Edit printer name from Edit camera name, and the action is
+labeled Done. The existing pinned-keyboard helper continues to reserve a complete
+input and footer on short displays. Accepted characters, field lengths, API-key
+masking, numeric port validation and Done/Cancel draft behavior are unchanged.
+
+The full native profile suite passes across five themes, three densities, both
+text sizes and 1024/640/480 viewports, including short displays. Keyboard dialogs
+join the divided-heading/body/footer checks and actual field-focus/keyboard/action
+bounds checks. Printer/camera name headings are checked explicitly. Existing
+numeric and password modes/limits, retained invalid ports, repeated opening,
+Ready/Cancel, deleted targets/values/keys, reentrant writes and replacement or
+profile teardown remain passing, together with the main forms, security/removal
+reviews, discovery/camera flows and standalone owner compilation. Simulated
+large-text Studio/Operator numeric keyboard renders were reviewed. SDK/storage/
+transport are mocked; firmware build, OTA and panel acceptance remain local.
+Inspect a name, port, API key and camera URL editor in both exposed themes/text
+sizes, then Cancel. No font, version or partition changes; application partitions
+remain 7 MiB.
+
+### Clear stale profile-port validation feedback on edit
+
+After an invalid profile port is rejected, editing that draft now clears the old
+warning instead of leaving Invalid port beside the corrected value. Validation
+still happens on Done: another invalid value shows the warning again and keeps
+the input; a valid value applies only to the profile draft. Cancel and profile
+persistence behavior are unchanged. Only value-change events from the current
+owned port editor can clear its feedback.
+
+The shared popup module exposes a feedback-clear helper that finds its own tagged
+feedback label, clears its text and preserves the label/body lifetime. It creates
+no label when there is no feedback and leaves ordinary guidance untouched. Shared
+popup tests cover no-op/repeated clearing, feedback reuse, deletion and null-body
+cases alongside the existing caret/keyboard/owner matrix. The full profile suite
+passes across five themes, three densities, both text sizes and three viewports.
+It verifies rejected 0, stale-warning clearing on edit, rejected 65536, clearing
+again for 7129, unrelated textarea events, retained input and the existing
+Done/Cancel, retired fields, reentrant writes and replacement cleanup. Standalone
+profile compilation also passes. Simulated Studio/Operator corrected-port renders
+were reviewed; SDK/storage/transport are mocked. Build and OTA locally, then enter
+0 in an Edit port draft, press Done, correct it and verify the warning disappears;
+Cancel the draft. No font, version or partition changes; application partitions
+remain 7 MiB.
+
+### Clear stale Network port validation feedback on edit
+
+The Network page's Moonraker port editor restores its normal configuration guidance when the current input changes. Save and keyboard Done still reject empty values, zero and ports above 65535. Editing does not save a port, and Cancel leaves the configured port unchanged.
+
+Host verification: the Network/backup dialog fixture checks invalid-to-invalid and invalid-to-valid edits, explicit Save, Cancel, unrelated textarea events and deletion of the status label or input. The existing theme, density and text-size matrix remains covered. ESP-IDF builds and panel checks are performed separately.
+
+### Visible backup and restore stages and encrypted-password retry
+
+Plain backup and the final plain/encrypted restore now show a stage bar before costly storage or authentication work. Stage callbacks repaint the progress dialog on the caller's UI thread before preparing, writing, reading/authenticating, applying and rollback. The bar reports operation stages, not byte percentages; only success reaches 100. Completion/failure messages stay open with Close enabled afterward, including the required reboot guidance on successful restore. Restore failures retain the review for retry. Existing encrypted backup creation and initial encrypted verification keep their worker-driven progress dialogs.
+
+Failed encrypted verification returns to Open encrypted backup with a blank masked input and the backend's specific error beside it. Authentication failure is reported as an incorrect passphrase or changed backup, without claiming which caused it. Failures do not reach restore review or apply settings. Passphrase clearing, review confirmation, worker overlap prevention, previous-backup rotation and restore rollback semantics are preserved. No settings writes were moved to a worker task.
+
+Validation: native Network/backup fixtures cover stage bars, completed/failed results, Close, restore retries, incorrect-password feedback, no saved passphrase after verification failure, duplicate dispatch and popup replacement/deletion across five themes, densities, text sizes and three viewports. UI translation units compile with warnings treated as errors. The backup parser host audit also executes actual export/restore control flow with settings/crypto-loader mocks, tests authentication/validation rejection before settings changes, rollback, legacy API wrappers and real temporary-file promotion. These host checks do not replace an ESP-IDF build or SD-card/panel verification.
+
+### Persistent encrypted backup success confirmation
+
+After encrypted backup creation succeeds, its progress dialog remains open at 100 with “Backup saved successfully”, the backend's saved-to-SD result and an enabled Close button. Its polling timer stops. Close is disabled while saving, and the close callback also rejects attempts while a worker timer is active. Encrypted restore verification still proceeds to restore review without showing a backup-created confirmation.
+
+Host Network/backup checks cover the in-progress close guard, completed bar, explicit success text, stopped timer, retained confirmation after time advances, stale timer callback, Close cleanup and secret clearing, alongside the existing theme/density/text-size/viewport and restore lifecycle matrix. Firmware build and panel verification remain separate.
+
+### Persistent encrypted backup failure details and retry
+
+An encrypted backup worker failure now stops the polling timer and leaves its result dialog open with “Backup failed”, the backend's error detail, an incomplete stage bar and an enabled Close button. The failure heading uses the danger text color. Closing returns to configuration backup; retry opens blank masked passphrase and confirmation inputs. Encrypted verification failures continue to return to the password form with their specific error and do not reach restore review.
+
+The host Network/backup suite checks failures during encryption and SD writing, exact retained details, no false completion, stopped/stale timer handling, persistence after time advances, Close cleanup and a fresh retry form across the existing theme/density/text-size/viewport matrix. Production storage and worker behavior are unchanged. ESP-IDF build and panel checks remain separate.
+
+Pending intermittent hardware issue: the user reported Settings -> OTA update crashes after encrypted backup, including repeats after reboot, followed by rollback. Updating from the local build folder worked; the sequence subsequently stopped reproducing. A host integration check repeated encrypted-backup completion/close -> open OTA with mocked workers without reproducing the crash. The cause remains unconfirmed and requires a matching-firmware panic/backtrace if it recurs. The encrypted-backup success confirmation patch was not installed when the crashes were reported.

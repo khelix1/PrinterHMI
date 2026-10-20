@@ -44,8 +44,8 @@ static lv_obj_t *about_section(lv_obj_t *parent, const char *heading)
     }
     lv_obj_set_size(section, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(section, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(section, 16, 0);
-    lv_obj_set_style_pad_row(section, 10, 0);
+    lv_obj_set_style_pad_all(section, UI_PAD_CARD, 0);
+    lv_obj_set_style_pad_row(section, UI_GAP_ROW, 0);
     lv_obj_clear_flag(section, LV_OBJ_FLAG_SCROLLABLE);
     ui_form_text(section, heading, UI_FONT_CAPTION, UI_TEXT_MUTED);
     return section;
@@ -75,9 +75,12 @@ static void about_build(void)
     const esp_app_desc_t *app=description?&snapshot:NULL;
     s_popup = ui_form_dialog(ui_text("About PrinterHMI"), 760, 520, UI_POPUP_STANDARD);
     if (!s_popup) return;
+    ui_form_divide_title(s_popup);
+    lv_obj_set_style_pad_row(s_popup, UI_GAP_ROW, 0);
     lv_obj_add_event_cb(s_popup, about_deleted, LV_EVENT_DELETE, NULL);
 
     lv_obj_t *body = ui_form_body(s_popup);
+    lv_obj_set_style_text_line_space(body, 4, 0);
     ui_form_text(body, "PrinterHMI", UI_FONT_HEADING, UI_TEXT);
     ui_form_text(body, "Open-source print-cell operator interface", UI_FONT_CAPTION, UI_TEXT_MUTED);
     ui_form_text(body,

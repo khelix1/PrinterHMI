@@ -214,20 +214,19 @@ static lv_obj_t *layout_body(lv_obj_t *popup, const char *title)
 {
     lv_obj_set_flex_flow(popup, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(popup, UI_PAD_POPUP, 0);
-    lv_obj_set_style_pad_row(popup, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(popup, UI_GAP_ROW, 0);
     lv_obj_t *label = lv_label_create(popup);
     lv_label_set_text(label, title);
     ui_apply_custom_label_style(label, UI_FONT_TITLE, UI_TEXT_BRIGHT);
-    lv_obj_set_size(label, LV_PCT(100), UI_FONT_TITLE->line_height+12);
-    ui_apply_divider_border(label,LV_BORDER_SIDE_BOTTOM);
-    lv_obj_set_style_pad_bottom(label,10,0);
+    lv_obj_set_width(label, LV_PCT(100));
+    ui_form_divide_title(popup);
     lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
     lv_obj_t *body = lv_obj_create(popup);
     lv_obj_remove_style_all(body);
     lv_obj_set_size(body, LV_PCT(100), 0);
     lv_obj_set_flex_grow(body, 1);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(body, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
     lv_obj_add_flag(body, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
@@ -240,6 +239,8 @@ static lv_obj_t *layout_label(lv_obj_t *parent, const char *text, bool caption)
     ui_apply_custom_label_style(label, caption ? UI_FONT_CAPTION : UI_FONT_BODY,
         caption ? UI_TEXT_MUTED : UI_TEXT);
     lv_obj_set_width(label, LV_PCT(100));
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_line_space(label, 4, 0);
     return label;
 }
 static lv_obj_t *layout_footer(lv_obj_t *popup)
@@ -251,7 +252,7 @@ static lv_obj_t *layout_footer(lv_obj_t *popup)
     lv_obj_set_style_pad_top(footer, 8, 0);
     lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(footer, UI_GAP_CARD, 0);
+    lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
     return footer;
 }
 static const int32_t layout_columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};

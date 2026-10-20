@@ -84,13 +84,48 @@ static void run(int width){ui_tools_show();connected=false;tools_connection_refr
 #elif defined(TEST_FILES)
 #include "ui_page_state.c"
 #include "ui_files.c"
+static void files_review_layout(lv_obj_t *popup)
+{
+ lv_obj_update_layout(popup);
+ lv_obj_t *title=lv_obj_get_child(popup,0),*body=lv_obj_get_child(popup,1),*footer=lv_obj_get_child(popup,-1);
+ inside(title,popup);inside(body,popup);inside(footer,popup);
+ assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM);
+ assert(lv_obj_get_style_border_side(footer,0)==LV_BORDER_SIDE_TOP);
+ assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);
+ lv_area_t a,b,c;lv_obj_get_coords(title,&a);lv_obj_get_coords(body,&b);lv_obj_get_coords(footer,&c);assert(a.y2<b.y1&&b.y2<c.y1);
+ if(popup==s_print_confirm_popup){
+  lv_obj_t *printer=lv_obj_get_child(body,0),*file=lv_obj_get_child(body,1),*hint=lv_obj_get_child(body,2);
+  assert(strstr(lv_label_get_text(printer),moonraker_config_active_profile_name()));
+  assert(!strcmp(lv_label_get_text(file),s_detail_filename));
+  assert(lv_obj_get_style_text_font(file,0)->line_height==UI_FONT_BODY_LARGE->line_height);
+  for(unsigned i=0;i<3;i++){lv_obj_t *label=lv_obj_get_child(body,i);assert(lv_label_get_long_mode(label)==LV_LABEL_LONG_WRAP&&lv_obj_get_style_text_line_space(label,0)==4);}
+  lv_obj_get_coords(footer,&a);lv_obj_scroll_to_y(body,LV_COORD_MAX,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&b);assert(!memcmp(&a,&b,sizeof(a)));inside(hint,body);
+  lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);
+ }else assert(lv_obj_get_style_text_line_space(s_studio_metadata_label,0)==4);
+}
+static void files_search_layout_check(void)
+{
+ lv_obj_t *popup=s_search_popup;assert(popup);lv_obj_update_layout(popup);
+ inside(popup,lv_screen_active());
+ lv_obj_t *title=lv_obj_get_child(popup,0),*body=lv_obj_get_child(popup,1),*keyboard=s_search_keyboard,*footer=lv_obj_get_child(popup,-1);
+ inside(title,popup);inside(body,popup);inside(keyboard,popup);inside(footer,popup);
+ assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM);
+ assert(lv_obj_get_style_border_side(footer,0)==LV_BORDER_SIDE_TOP);
+ inside(s_search_textarea,body);assert(lv_obj_get_height(s_search_textarea)>=56);
+ keyboard_layout_check(popup,keyboard,s_search_textarea);
+ lv_area_t a,b,c;lv_obj_get_coords(title,&a);lv_obj_get_coords(body,&b);lv_obj_get_coords(keyboard,&c);assert(a.y2<b.y1&&b.y2<c.y1);
+ lv_obj_get_coords(footer,&a);assert(c.y2<a.y1);
+ for(unsigned i=0;i<lv_obj_get_child_count(footer);i++){
+  lv_obj_t *button=lv_obj_get_child(footer,i);inside(button,footer);inside(lv_obj_get_child(button,0),button);assert(lv_obj_get_height(button)>=48);
+ }
+}
 static unsigned live_objects(lv_obj_t *p){unsigned n=1;for(uint32_t i=0;i<lv_obj_get_child_count(p);i++)n+=live_objects(lv_obj_get_child(p,i));return n;}
 static unsigned live_timers(void){unsigned n=0;lv_timer_t*t=NULL;while((t=lv_timer_get_next(t)))n++;return n;}
 char *thumbnail_session_selected_file(void){return "fixture.gcode";}
 int moonraker_config_active_profile_index(void){return 0;}
 const char *moonraker_config_active_profile_name(void){return "Workshop printer";}
 static unsigned lightboxes,selections;
-static bool files_inline_snapshot;
+static bool files_inline_snapshot,files_long_review_capture;
 static const char *files_state_capture;
 void ui_preview_lightbox_show_file_object(lv_obj_t *i,const char *f){assert(i&&f[0]);lightboxes++;}
 static void select_file(const char*p){assert(p&&p[0]);selections++;}
@@ -265,7 +300,7 @@ static void run(int width){
  lv_obj_set_width(confirm,width<640?width:640);
  lv_obj_update_layout(confirm);inside(confirm,lv_screen_active());
  for(uint32_t i=0;i<lv_obj_get_child_count(confirm);i++)inside(lv_obj_get_child(confirm,i),confirm);
- cards(lv_obj_get_child(confirm,-1));snapshot(confirm);
+ files_review_layout(confirm);cards(lv_obj_get_child(confirm,-1));snapshot(confirm);
  print_confirm_cancel(NULL);assert(!s_print_confirm_popup && ui_files_detail_is_open() && starts==prior);
  detail_start_event_cb(NULL);print_accept=false;print_confirm_accept(NULL);assert(s_print_confirm_popup&&starts==prior);
  print_accept=true;unsigned attempts=start_attempts;start_hook=reenter_start;print_confirm_accept(NULL);start_hook=NULL;assert(start_attempts==attempts+1&&!s_print_confirm_popup && starts==prior+1);
@@ -317,7 +352,7 @@ static void run(int width){
   assert(!lv_obj_has_flag(s_detail_more_button,LV_OBJ_FLAG_HIDDEN) && lv_obj_get_width(s_detail_start_button)==128);
   assert(lv_obj_get_height(box)==128 && lv_image_get_transformed_height(resized_image)<=128);
   studio_metadata_open(NULL);assert(!ui_files_can_refresh_rows());assert(s_studio_metadata_popup && s_studio_metadata_label);
-  lv_obj_update_layout(s_studio_metadata_popup);
+  files_review_layout(s_studio_metadata_popup);snapshot(s_studio_metadata_popup);
   for(uint32_t i=0;i<lv_obj_get_child_count(s_studio_metadata_popup);i++)inside(lv_obj_get_child(s_studio_metadata_popup,i),s_studio_metadata_popup);
   lv_obj_t*expanded_body=lv_obj_get_child(s_studio_metadata_popup,1);assert(lv_obj_has_flag(expanded_body,LV_OBJ_FLAG_CLICKABLE));
   assert(lv_obj_get_scroll_bottom(expanded_body)>0);lv_obj_t*fixed_footer=lv_obj_get_child(s_studio_metadata_popup,-1);lv_area_t fixed_before,fixed_after;lv_obj_get_coords(fixed_footer,&fixed_before);drag_metadata(expanded_body);lv_obj_get_coords(fixed_footer,&fixed_after);assert(!memcmp(&fixed_before,&fixed_after,sizeof(fixed_before)));
@@ -365,9 +400,16 @@ static void run(int width){
  }
  lv_obj_t *event_source=s_search_button;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);assert(!s_search_popup); /* Old printer page cannot launch an editor. */
  ui_files_hide();ui_files_show();event_source=s_search_button;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);
- assert(s_search_popup);keyboard_layout_check(s_search_popup,lv_obj_get_child(s_search_popup,2),s_search_textarea);
+ assert(s_search_popup);files_search_layout_check();snapshot(s_search_popup);
  lv_textarea_set_text(s_search_textarea,"test query");lv_obj_t*search_owner=s_search_popup;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);assert(s_search_popup==search_owner&&!strcmp(lv_textarea_get_text(s_search_textarea),"test query"));lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_CANCEL,NULL);lv_timer_handler();assert(!s_search_popup);
  lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_READY,NULL);lv_timer_handler();assert(!s_search_popup);
+ char very_long_name[187];memset(very_long_name,'W',180);memcpy(very_long_name+180,".gcode",7);
+ ui_files_show_detail_popup(very_long_name,"Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
+ attempts=start_attempts;detail_start_event_cb(NULL);assert(s_print_confirm_popup);
+ lv_obj_set_width(s_print_confirm_popup,width<640?width:640);files_review_layout(s_print_confirm_popup);
+ files_long_review_capture=true;snapshot(s_print_confirm_popup);files_long_review_capture=false;
+ lv_obj_t *review_footer=lv_obj_get_child(s_print_confirm_popup,-1);lv_obj_send_event(lv_obj_get_child(review_footer,0),LV_EVENT_CLICKED,NULL);
+ assert(!s_print_confirm_popup&&s_file_detail_popup&&start_attempts==attempts);ui_files_close_detail_popup();
  snapshot(s_printer_file_popup);ui_files_hide();assert(!s_file_detail_popup && !s_studio_metadata_popup);assert(!s_printer_file_popup);
  unsigned objects_before=live_objects(lv_screen_active())+live_objects(lv_layer_top()),timers_before=live_timers();
  for(unsigned repeat=0;repeat<4;repeat++){ui_files_show();ui_files_add_file_entry("cycle.gcode",100,0,0);ui_files_hide();assert(!s_file_rows && !s_files_refresh_timer && !s_files_refresh_pending);assert(live_objects(lv_screen_active())+live_objects(lv_layer_top())==objects_before && live_timers()==timers_before);}
@@ -572,7 +614,7 @@ static void snapshot(lv_obj_t *root){
 #if defined(TEST_TOOLS)
  const char *page="tools";
 #elif defined(TEST_FILES)
- const char *page=files_state_capture?files_state_capture:files_inline_snapshot?"files-inline":root==s_print_confirm_popup?"files-confirm":root==s_file_detail_popup?"files-ready":"files";
+ const char *page=files_long_review_capture?"files-confirm-long":files_state_capture?files_state_capture:files_inline_snapshot?"files-inline":root==s_search_popup?"files-search":root==s_print_confirm_popup?"files-confirm":root==s_studio_metadata_popup?"files-metadata":root==s_file_detail_popup?"files-ready":"files";
 #elif defined(TEST_NETWORK)
  const char *page=network_empty_capture?"network-empty":"network";
 #else
@@ -593,4 +635,11 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   if(theme==UI_THEME_STUDIO_DARK&&(w||custom))continue;
   custom_tokens=custom;theme_case=theme;density_case=density;large_case=large;width_case=w;ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});run((int[]){theme==UI_THEME_STUDIO_DARK?976:854,640,480}[w]);
  }
+#if defined(TEST_FILES)
+ for(unsigned viewport=0;viewport<2;viewport++)for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++){
+  lv_display_set_resolution(d,viewport?480:640,400);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
+  ui_files_show();lv_obj_send_event(s_search_button,LV_EVENT_CLICKED,NULL);files_search_layout_check();
+  lv_textarea_set_text(s_search_textarea,"Retained only in draft");lv_obj_send_event(s_search_cancel,LV_EVENT_CLICKED,NULL);assert(!s_search_popup);ui_files_hide();
+ }
+#endif
  lv_display_delete(d);lv_deinit();puts("PASS: responsive page bounds, wrapping, non-overlap and lifecycle across all five themes, three densities, both text sizes, three viewport widths and custom metric/profile overrides");}

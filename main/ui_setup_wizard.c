@@ -22,6 +22,7 @@
 #include "onboarding_controller.h"
 #include "ui_printer_profiles.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_theme.h"
 #include "ui_studio_layout.h"
 #include "ui_text_fit.h"
@@ -616,13 +617,15 @@ static bool setup_review_content(bool final)
     setup_review_row("Camera",s_camera_done?"Camera configured":"Add later",s_camera_done,true,LV_SYMBOL_OK " Saved");
     if(final) {
         char zone[144];snprintf(zone,sizeof(zone),"Time zone: %s",timezone_config_selected_label());
-        setup_text(s_stage,zone,UI_FONT_BODY,UI_TEXT);
+        lv_obj_t *zone_label=setup_text(s_stage,zone,UI_FONT_BODY,UI_TEXT);
+        lv_obj_set_style_text_line_space(zone_label,4,0);
         unsigned sleep=ui_settings_sleep_timeout_minutes();
         const char *timeout=sleep==0?"Sleep off":sleep==5?"Sleep 5 min":sleep==15?"Sleep 15 min":"Sleep 30 min";
         const char *theme=theme_manager_active()==UI_THEME_STUDIO_DARK?"Studio Dark":theme_manager_active()==UI_THEME_OPERATOR?"Operator":theme_manager_active_label();
         char display[160];snprintf(display,sizeof(display),"Display: %s / %s text / %d%% / %s",theme,
             theme_manager_accessibility().large_text?"Larger":"Standard",ui_settings_brightness_percent(),timeout);
-        setup_text(s_stage,display,UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_obj_t *display_label=setup_text(s_stage,display,UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_obj_set_style_text_line_space(display_label,4,0);
     } else {
         setup_text(s_stage,"Use Continue to walk through setup, or select a step. Saved choices stay in place when you leave.",UI_FONT_BODY,UI_TEXT_DIM);
     }
@@ -1220,21 +1223,27 @@ static void show_setup_completion(void)
 {
     int width=lv_display_get_horizontal_resolution(NULL)-32;
     if(width>660)width=660;
-    s_complete_popup=ui_popup_create(lv_screen_active(),width,300,UI_POPUP_STANDARD);
+    int height=lv_display_get_vertical_resolution(NULL)-32;
+    if(height>300)height=300;
+    s_complete_popup=ui_popup_create(lv_screen_active(),width,height,UI_POPUP_STANDARD);
     if(!s_complete_popup)return;
     lv_obj_add_event_cb(s_complete_popup,completion_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_complete_popup,LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_all(s_complete_popup,20,0);
+    lv_obj_set_style_pad_all(s_complete_popup,UI_PAD_POPUP,0);
     lv_obj_set_style_pad_row(s_complete_popup,UI_GAP_ROW,0);
-    setup_text(s_complete_popup,"Setup complete",UI_FONT_TITLE,UI_TEXT);
+    setup_text(s_complete_popup,"Setup complete",UI_FONT_TITLE,UI_TEXT_BRIGHT);
+    ui_form_divide_title(s_complete_popup);
     lv_obj_t *body=setup_plane(s_complete_popup,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_height(body,0);lv_obj_set_flex_grow(body,1);lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);
-    setup_text(body,"Your saved choices are available in Settings. Reopen Setup center whenever you need it.",UI_FONT_BODY,UI_TEXT);
-    setup_text(body,"Check the Printer page for live connection status. Camera setup remains optional.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_t *saved=setup_text(body,"Your saved choices are available in Settings. Reopen Setup center whenever you need it.",UI_FONT_BODY,UI_TEXT);
+    lv_obj_set_style_text_line_space(saved,4,0);
+    lv_obj_t *next=setup_text(body,"Check the Printer page for live connection status. Camera setup remains optional.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_style_text_line_space(next,4,0);
     lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_OFF);
     lv_obj_t *footer=setup_plane(s_complete_popup,LV_FLEX_FLOW_ROW);
     ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
-    setup_action(footer,"Done",UI_POPUP_ACTION_CONFIRM,setup_completion_done_cb);
+    lv_obj_set_flex_align(footer,LV_FLEX_ALIGN_END,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_width(setup_action(footer,"Done",UI_POPUP_ACTION_CONFIRM,setup_completion_done_cb),160);
     lv_obj_update_layout(s_complete_popup);setup_fit_actions(footer);
     lv_obj_move_foreground(s_complete_popup);
 }

@@ -230,6 +230,54 @@ static void renderer_bounds(void){
  }
  lv_obj_delete(canvas);lv_free(storage);
 }
+static void mesh_confirm_capture(void)
+{
+ const char *dir=getenv("MESH_CONFIRM_SCREENSHOTS");
+ if(!dir||ui_theme_get_density()!=UI_DENSITY_COMFORTABLE)return;
+ lv_obj_invalidate(lv_screen_active());lv_refr_now(NULL);
+ char path[512];snprintf(path,sizeof(path),"%s/confirm-theme%d-large%d.ppm",dir,
+     ui_theme_get_active(),ui_theme_get_accessibility().large_text);
+ FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");
+ for(size_t i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);
+}
+static void mesh_confirm_checks(void)
+{
+ unsigned before=sends;
+ calibrate_cb(NULL);assert(s.calibrate_confirm&&sends==before);
+ lv_obj_t *popup=s.calibrate_confirm;calibrate_cb(NULL);assert(s.calibrate_confirm==popup);
+ lv_obj_update_layout(popup);
+ lv_obj_t *title=lv_obj_get_child(popup,0),*body=lv_obj_get_child(popup,1),*footer=lv_obj_get_child(popup,-1);
+ inside(popup,s.popup);inside(title,popup);inside(body,popup);inside(footer,popup);
+ assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM);
+ assert(lv_obj_get_style_border_side(footer,0)==LV_BORDER_SIDE_TOP);
+ assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);
+ lv_area_t a,b,c;lv_obj_get_coords(title,&a);lv_obj_get_coords(body,&b);lv_obj_get_coords(footer,&c);
+ assert(a.y2<b.y1&&b.y2<c.y1);
+ assert(lv_obj_get_child_count(body)==2&&lv_obj_get_child_count(footer)==2);
+ assert(strstr(lv_label_get_text(lv_obj_get_child(body,0)),"move the toolhead"));
+ assert(strstr(lv_label_get_text(lv_obj_get_child(body,1)),"bed is clear"));
+ children_inside(body);
+ for(unsigned i=0;i<2;i++){lv_obj_t *button=lv_obj_get_child(footer,i);inside(button,footer);inside(lv_obj_get_child(button,0),button);assert(lv_obj_get_height(button)>=48);}
+ assert(strstr(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(footer,1),0)),"Start probing"));
+ mesh_confirm_capture();
+ /* A compact host exercises scrolling without moving the pinned actions. */
+ lv_obj_set_size(popup,440,260);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&a);
+ lv_obj_scroll_to_y(body,LV_COORD_MAX,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&b);
+ assert(!memcmp(&a,&b,sizeof(a)));inside(lv_obj_get_child(body,-1),body);
+ lv_obj_send_event(lv_obj_get_child(footer,0),LV_EVENT_CLICKED,NULL);
+ assert(!s.calibrate_confirm&&s.popup&&sends==before);
+ state.live_data_ok=false;calibrate_cb(NULL);assert(!s.calibrate_confirm&&sends==before);
+ state.live_data_ok=true;calibrate_cb(NULL);assert(s.calibrate_confirm);
+ unsigned overlay_count=lv_obj_get_child_count(lv_layer_top());
+ state.live_data_ok=false;confirm_calibrate_cb(NULL);assert(s.calibrate_confirm&&sends==before);
+ assert(lv_obj_get_child_count(lv_layer_top())==overlay_count+2);
+ lv_obj_delete(lv_obj_get_child(lv_layer_top(),-1));
+ assert(lv_obj_get_child_count(lv_layer_top())==overlay_count);
+ state.live_data_ok=true;
+ footer=lv_obj_get_child(s.calibrate_confirm,-1);
+ lv_obj_send_event(lv_obj_get_child(footer,1),LV_EVENT_CLICKED,NULL);
+ assert(!s.calibrate_confirm&&s.popup&&sends==before+1&&!strcmp(command,"BED_MESH_CALIBRATE"));
+}
 static void run(void){
  valid_mesh=false;ui_bed_mesh_show(send_command);lv_obj_update_layout(s.popup);
  assert(s.canvas && lv_obj_get_width(s.popup)==(ui_theme_is_studio()?976:854) && lv_obj_get_height(s.popup)==(ui_theme_is_studio()?432:528));
@@ -250,8 +298,10 @@ static void run(void){
  assert(!memcmp(opening,s.buf,bytes));free(opening);
  snapshot(ui_theme_is_studio()?"bed-mesh-valid-studio":"bed-mesh-valid-operator");
  renderer_bounds();
+ mesh_confirm_checks();
  valid_mesh=false;ui_bed_mesh_refresh();assert(!strcmp(lv_label_get_text(s.metrics),""));
- lv_obj_delete(s.metrics);assert(!s.metrics);stats();ui_bed_mesh_close();assert(!s.popup&&!s.buf);
+ lv_obj_delete(s.metrics);assert(!s.metrics);stats();calibrate_cb(NULL);assert(s.calibrate_confirm);
+ ui_bed_mesh_close();assert(!s.popup&&!s.buf&&!s.calibrate_confirm);
 }
 
 #else

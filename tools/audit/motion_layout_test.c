@@ -22,7 +22,20 @@ static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(ui
 static void snapshot(int theme,const char *name){const char *folder=getenv("MOTION_LAYOUT_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%d.ppm",folder,name,theme);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
-static void layout(lv_obj_t *popup){lv_obj_update_layout(popup);lv_obj_t *footer=lv_obj_get_child(popup,-1),*body=lv_obj_get_child(popup,1);inside(footer,popup);inside(body,popup);for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t *b=lv_obj_get_child(footer,i);assert(lv_obj_get_height(b)>=48);inside(b,footer);inside(lv_obj_get_child(b,0),b);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,300,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
+static void layout(lv_obj_t *popup){lv_obj_update_layout(popup);
+ lv_obj_t *title=lv_obj_get_child(popup,0);
+ inside(title,popup);
+ if(popup==s->popup) {
+  assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM);
+  assert(lv_obj_get_height(title)>=UI_FONT_TITLE->line_height+12);
+ }
+ lv_obj_t *scroll_body=lv_obj_get_child(popup,1);
+ lv_area_t title_area,body_area,footer_area;
+ lv_obj_get_coords(title,&title_area);lv_obj_get_coords(scroll_body,&body_area);
+ lv_obj_get_coords(lv_obj_get_child(popup,-1),&footer_area);
+ assert(title_area.y2<body_area.y1 && body_area.y2<footer_area.y1);
+ assert(lv_obj_get_scrollbar_mode(scroll_body)==LV_SCROLLBAR_MODE_OFF);
+lv_obj_t *footer=lv_obj_get_child(popup,-1),*body=lv_obj_get_child(popup,1);inside(footer,popup);inside(body,popup);for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t *b=lv_obj_get_child(footer,i);assert(lv_obj_get_height(b)>=48);inside(b,footer);inside(lv_obj_get_child(b,0),b);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,300,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
 static unsigned timer_count(void){unsigned count=0;for(lv_timer_t*t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))count++;return count;}
 static void reset(void){memset(&motion,0,sizeof(motion));memset(&state,0,sizeof(state));state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"ready");motion.owner_generation=generation;motion.discovered=true;for(int i=0;i<4;i++){motion.limit_valid[i]=true;motion.limits[i]=(double[]){200,2500,6,0.5}[i];}motion.driver_count=2;strcpy(motion.drivers[0].name,"tmc2209 stepper_x");strcpy(motion.drivers[1].name,"tmc2209 stepper_y");motion.drivers[0].run_valid=motion.drivers[0].hold_valid=motion.drivers[0].status_valid=true;motion.drivers[0].run_current=0.8;motion.drivers[0].hold_current=0.3;strcpy(motion.drivers[0].flags,"Example driver warning text spanning multiple words");}
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);motion_ui_state_t storage={0};s=&storage;

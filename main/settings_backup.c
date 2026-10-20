@@ -728,10 +728,12 @@ static bool apply_snapshot(
 }
 
 
-bool settings_backup_export(
+bool settings_backup_export_with_progress(
+    settings_backup_progress_cb_t progress, void *user_data,
     char *status,
     size_t status_size)
 {
+    if(progress)progress(SETTINGS_BACKUP_STAGE_PREPARING,user_data);
     settings_backup_snapshot_t snapshot;
     capture_current(&snapshot);
 
@@ -773,6 +775,7 @@ bool settings_backup_export(
         return false;
     }
 
+    if(progress)progress(SETTINGS_BACKUP_STAGE_WRITING,user_data);
     FILE *file = fopen(
         SETTINGS_BACKUP_TEMP_PATH,
         "wb");
@@ -1186,11 +1189,13 @@ bool settings_backup_encrypted_preflight(
     return true;
 }
 
-bool settings_backup_restore_encrypted(
+bool settings_backup_restore_encrypted_with_progress(
     const char *passphrase,
+    settings_backup_progress_cb_t progress, void *user_data,
     char *status,
     size_t status_size)
 {
+    if(progress)progress(SETTINGS_BACKUP_STAGE_AUTHENTICATING,user_data);
     settings_backup_snapshot_t restored;
     if (!load_encrypted_backup_snapshot(passphrase, &restored, status, status_size)) {
         operator_event_log_add(OPERATOR_EVENT_ERROR,
@@ -1199,7 +1204,9 @@ bool settings_backup_restore_encrypted(
     }
     settings_backup_snapshot_t previous;
     capture_current(&previous);
+    if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
+        if(progress)progress(SETTINGS_BACKUP_STAGE_ROLLING_BACK,user_data);
         (void)apply_snapshot(&previous);
         set_status(status, status_size,
             "Encrypted restore failed; previous settings were reapplied.");
@@ -1278,10 +1285,12 @@ bool settings_backup_preflight(
 }
 
 
-bool settings_backup_restore(
+bool settings_backup_restore_with_progress(
+    settings_backup_progress_cb_t progress, void *user_data,
     char *status,
     size_t status_size)
 {
+    if(progress)progress(SETTINGS_BACKUP_STAGE_READING,user_data);
     settings_backup_snapshot_t restored;
 
     if (!load_backup_snapshot(&restored, status, status_size)) {
@@ -1294,7 +1303,9 @@ bool settings_backup_restore(
     settings_backup_snapshot_t previous;
     capture_current(&previous);
 
+    if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
+        if(progress)progress(SETTINGS_BACKUP_STAGE_ROLLING_BACK,user_data);
         (void)apply_snapshot(&previous);
 
         set_status(
@@ -1319,3 +1330,11 @@ bool settings_backup_restore(
 
     return true;
 }
+
+/* Compatibility entry points keep existing callers and storage semantics. */
+bool settings_backup_export(char *status,size_t status_size)
+{return settings_backup_export_with_progress(NULL,NULL,status,status_size);}
+bool settings_backup_restore(char *status,size_t status_size)
+{return settings_backup_restore_with_progress(NULL,NULL,status,status_size);}
+bool settings_backup_restore_encrypted(const char *passphrase,char *status,size_t status_size)
+{return settings_backup_restore_encrypted_with_progress(passphrase,NULL,NULL,status,status_size);}

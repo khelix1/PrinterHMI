@@ -1063,6 +1063,17 @@ lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind,
     if (changed) lv_obj_scroll_to_view(label, LV_ANIM_OFF);
     return label;
 }
+void ui_popup_clear_feedback(lv_obj_t *body)
+{
+    if (!body) return;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(body); ++i) {
+        lv_obj_t *child = lv_obj_get_child(body, i);
+        if (lv_obj_get_user_data(child) == &s_feedback_tag) {
+            ui_value_set_text(child, "");
+            return;
+        }
+    }
+}
 static void cal_owner_deleted(lv_event_t *event)
 {
     lv_obj_t *owner = lv_event_get_target_obj(event);

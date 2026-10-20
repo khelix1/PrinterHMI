@@ -181,9 +181,9 @@ static void run(void){
  assert(ui_global_estop_init(send_command));ui_global_estop_set_printer_name("Printer A");
  lv_obj_t *host=lv_obj_create(lv_screen_active());ui_global_estop_create(host);
  send_accept=false;click(s_estop->button);assert(strstr(command,"M112")&&s_estop->popup);
- assert(strstr(lv_label_get_text(s_estop->title),"NOT CONFIRMED"));layout(s_estop->popup);
+ assert(strstr(lv_label_get_text(s_estop->title),"not confirmed"));layout(s_estop->popup);
  lv_obj_t *footer=lv_obj_get_child(s_estop->popup,2);click(lv_obj_get_child(footer,1));
- assert(strstr(lv_label_get_text(s_estop->message),"RESTART NOT SENT"));
+ assert(strstr(lv_label_get_text(s_estop->message),"Restart not sent"));
  send_accept=true;click(lv_obj_get_child(footer,1));
  assert(strstr(lv_label_get_text(s_estop->message),"Restart requested"));
  assert(lv_obj_has_state(lv_obj_get_child(footer,1),LV_STATE_DISABLED));layout(s_estop->popup);

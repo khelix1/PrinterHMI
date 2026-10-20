@@ -21,14 +21,18 @@ string(STRIP
 set(PRINTERHMI_STABLE_VERSION_PATTERN
     "^[0-9]+\\.[0-9]+\\.[0-9]+$"
 )
+set(PRINTERHMI_DEVELOPMENT_VERSION_PATTERN
+    "^[0-9]+\\.[0-9]+\\.[0-9]+-dev$"
+)
 set(PRINTERHMI_NIGHTLY_VERSION_PATTERN
     "^nightly-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9a-f]+$"
 )
 
 if(NOT PRINTERHMI_VERSION MATCHES "${PRINTERHMI_STABLE_VERSION_PATTERN}" AND
-   NOT PRINTERHMI_VERSION MATCHES "${PRINTERHMI_NIGHTLY_VERSION_PATTERN}")
+   NOT PRINTERHMI_VERSION MATCHES "${PRINTERHMI_NIGHTLY_VERSION_PATTERN}" AND
+   NOT PRINTERHMI_VERSION MATCHES "${PRINTERHMI_DEVELOPMENT_VERSION_PATTERN}")
     message(FATAL_ERROR
-        "version.txt must contain X.Y.Z or a generated nightly identity"
+        "version.txt must contain X.Y.Z, X.Y.Z-dev or a generated nightly identity"
     )
 endif()
 

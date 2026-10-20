@@ -2,6 +2,7 @@
 #include "ui_text.h"
 
 #include "ui_button.h"
+#include "ui_widgets.h"
 #include "ui_theme.h"
 
 #include <stdlib.h>
@@ -9,12 +10,24 @@
 typedef struct {
     lv_obj_t *blocker;
     lv_obj_t *popup;
+    lv_obj_t *owner;
     lv_obj_t *footer;
     lv_obj_t *footer_buttons[3];
     int32_t footer_widths[3];
     int32_t footer_columns[4];
     int32_t footer_rows[2];
 } ui_popup_modal_ctx_t;
+
+static void footer_field_deleted_cb(lv_event_t *event);
+static void popup_size_cb(lv_event_t *event);
+
+static void modal_owner_deleted_cb(lv_event_t *event)
+{
+    ui_popup_modal_ctx_t *ctx = lv_event_get_user_data(event);
+    if (!ctx) return;
+    ctx->owner = NULL;
+    if (ctx->popup) lv_obj_delete(ctx->popup);
+}
 
 static void modal_blocker_deleted_cb(lv_event_t *event)
 {
@@ -23,7 +36,9 @@ static void modal_blocker_deleted_cb(lv_event_t *event)
     if (!ctx) return;
 
     ctx->blocker = NULL;
-    if (!ctx->popup) free(ctx);
+    /* A modal without its blocker would expose the underlying page. */
+    if (ctx->popup) lv_obj_delete(ctx->popup);
+    else free(ctx);
 }
 
 static void modal_popup_deleted_cb(lv_event_t *event)
@@ -32,6 +47,18 @@ static void modal_popup_deleted_cb(lv_event_t *event)
         event ? lv_event_get_user_data(event) : NULL;
     if (!ctx) return;
 
+    /* The modal context is released before LVGL deletes popup children. */
+    lv_obj_remove_event_cb_with_user_data(ctx->popup, popup_size_cb, ctx);
+    if (ctx->footer)
+        lv_obj_remove_event_cb_with_user_data(ctx->footer, footer_field_deleted_cb, ctx);
+    for (unsigned i = 0; i < 3; ++i)
+        if (ctx->footer_buttons[i])
+            lv_obj_remove_event_cb_with_user_data(ctx->footer_buttons[i], footer_field_deleted_cb, ctx);
+
+    if (ctx->owner) {
+        lv_obj_remove_event_cb_with_user_data(ctx->owner, modal_owner_deleted_cb, ctx);
+        ctx->owner = NULL;
+    }
     ctx->popup = NULL;
 
     if (ctx->blocker) {
@@ -487,6 +514,7 @@ lv_obj_t *ui_popup_add_list(lv_obj_t *popup,
     lv_obj_set_pos(list, x, y);
 
     lv_obj_set_scroll_dir(list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
 
     /*
      * Popup list appearance belongs to the shared popup theme.
@@ -517,6 +545,10 @@ lv_obj_t *ui_popup_add_selectable_row(lv_obj_t *parent,
 
     lv_obj_set_size(row, width, height);
     lv_obj_set_pos(row, x, y);
+    if (ui_theme_is_studio()) {
+        ui_apply_surface_role(row, UI_SURFACE_TRANSPARENT);
+        ui_apply_divider_border(row, LV_BORDER_SIDE_BOTTOM);
+    }
 
     if (event_cb) {
         lv_obj_add_event_cb(
@@ -541,6 +573,16 @@ void ui_popup_set_selectable_row_selected(lv_obj_t *row,
 {
     if (!row) return;
 
+    if (ui_theme_is_studio()) {
+        /* Selection may refresh after a caller has laid out wrapped labels.
+         * Keep that padding/geometry while refreshing the shared flat skin. */
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_radius(row, 0, 0);
+        lv_obj_set_style_shadow_width(row, 0, 0);
+        ui_apply_divider_border(row, LV_BORDER_SIDE_BOTTOM);
+        ui_button_set_filter_active(row, selected);
+        return;
+    }
     if (selected) {
         ui_apply_button_status_style(row, UI_STATUS_ACTIVE);
     } else {
@@ -593,11 +635,35 @@ lv_obj_t *ui_popup_add_textarea(lv_obj_t *popup,
     /*
      * Popup input appearance belongs to the shared theme.
      */
-    ui_apply_text_title(textarea);
+    ui_apply_text_body(textarea);
 
     ui_apply_surface_role(textarea, UI_SURFACE_TEXT_INPUT);
 
+    if(height>0 && !LV_COORD_IS_PCT(height) && height!=LV_SIZE_CONTENT) {
+        lv_obj_set_style_min_height(textarea,height,0);lv_obj_set_height(textarea,height);
+    }
+    lv_obj_add_event_cb(textarea,ui_popup_input_focus_cb,LV_EVENT_FOCUSED,NULL);
     return textarea;
+}
+
+typedef struct {
+    lv_obj_t *keyboard;
+    lv_obj_t *input;
+} ui_keyboard_binding_t;
+
+static void keyboard_binding_deleted_cb(lv_event_t *event)
+{
+    ui_keyboard_binding_t *binding = lv_event_get_user_data(event);
+    lv_obj_t *deleted = lv_event_get_target_obj(event);
+    lv_obj_t *keyboard = binding->keyboard;
+    lv_obj_t *input = binding->input;
+    if (deleted != keyboard && deleted != input) return;
+    lv_obj_t *peer = deleted == keyboard ? input : keyboard;
+    lv_obj_remove_event_cb_with_user_data(peer, keyboard_binding_deleted_cb, binding);
+    free(binding);
+    /* Do not detach a replacement textarea installed by a caller. */
+    if (deleted == input && lv_keyboard_get_textarea(keyboard) == input)
+        lv_keyboard_set_textarea(keyboard, NULL);
 }
 
 lv_obj_t *ui_popup_add_keyboard(lv_obj_t *popup,
@@ -612,6 +678,16 @@ lv_obj_t *ui_popup_add_keyboard(lv_obj_t *popup,
     if (!popup || !textarea) return NULL;
 
     lv_obj_t *keyboard = lv_keyboard_create(popup);
+    if (!keyboard) return NULL;
+    ui_keyboard_binding_t *binding = calloc(1, sizeof(*binding));
+    if (!binding) {
+        lv_obj_delete(keyboard);
+        return NULL;
+    }
+    binding->keyboard = keyboard;
+    binding->input = textarea;
+    lv_obj_add_event_cb(keyboard, keyboard_binding_deleted_cb, LV_EVENT_DELETE, binding);
+    lv_obj_add_event_cb(textarea, keyboard_binding_deleted_cb, LV_EVENT_DELETE, binding);
     lv_obj_set_size(keyboard, width, height);
     lv_obj_align(keyboard,
                  align,
@@ -659,6 +735,15 @@ static ui_popup_modal_ctx_t *modal_context(lv_obj_t *popup)
     return NULL;
 }
 
+void ui_popup_set_owner(lv_obj_t *popup, lv_obj_t *owner)
+{
+    ui_popup_modal_ctx_t *ctx = modal_context(popup);
+    if (!ctx || owner == popup || ctx->owner == owner) return;
+    if (ctx->owner) lv_obj_remove_event_cb_with_user_data(ctx->owner, modal_owner_deleted_cb, ctx);
+    ctx->owner = owner;
+    if (owner) lv_obj_add_event_cb(owner, modal_owner_deleted_cb, LV_EVENT_DELETE, ctx);
+}
+
 lv_obj_t *ui_popup_find_owner(lv_obj_t *object)
 {
     for (lv_obj_t *p = object; p; p = lv_obj_get_parent(p))
@@ -686,6 +771,7 @@ static void footer_layout(ui_popup_modal_ctx_t *ctx)
         if (!button) continue;
         /* Percent widths resolve against the whole footer, not its Grid cell. */
         lv_obj_t *label = lv_obj_get_child(button, 0);
+        if (!label || !lv_obj_check_type(label, &lv_label_class)) continue;
         const lv_font_t *font = lv_obj_get_style_text_font(label, 0);
         lv_point_t natural, wrapped;
         int32_t pad = lv_obj_get_style_pad_left(button, 0) + lv_obj_get_style_pad_right(button, 0)
@@ -716,6 +802,15 @@ static void footer_layout(ui_popup_modal_ctx_t *ctx)
         if (ctx->footer_buttons[slot]) lv_obj_set_height(ctx->footer_buttons[slot], height);
     lv_obj_set_grid_dsc_array(ctx->footer, ctx->footer_columns, ctx->footer_rows);
 }
+static void footer_field_deleted_cb(lv_event_t *event)
+{
+    ui_popup_modal_ctx_t *ctx = lv_event_get_user_data(event);
+    lv_obj_t *deleted = lv_event_get_target_obj(event);
+    if (deleted == ctx->footer) ctx->footer = NULL;
+    for (unsigned i = 0; i < 3; ++i)
+        if (deleted == ctx->footer_buttons[i]) ctx->footer_buttons[i] = NULL;
+    /* Relayout on the next popup resize/action insertion, after deletion. */
+}
 static void popup_size_cb(lv_event_t *event)
 {
     footer_layout(lv_event_get_user_data(event));
@@ -740,14 +835,17 @@ lv_obj_t *ui_popup_add_footer_action(lv_obj_t *popup,
     }
     if (!ctx->footer) {
         ctx->footer = lv_obj_create(popup);
+        lv_obj_add_event_cb(ctx->footer, footer_field_deleted_cb, LV_EVENT_DELETE, ctx);
         lv_obj_remove_style_all(ctx->footer);
         lv_obj_remove_flag(ctx->footer, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_pad_column(ctx->footer, 12, 0);
+        lv_obj_remove_event_cb_with_user_data(popup, popup_size_cb, ctx);
         lv_obj_add_event_cb(popup, popup_size_cb, LV_EVENT_SIZE_CHANGED, ctx);
     }
     lv_obj_t *button = ui_button_create(ctx->footer, ui_popup_action_button_kind(action), text);
     if (!button) return NULL;
     ctx->footer_buttons[slot] = button;
+    lv_obj_add_event_cb(button, footer_field_deleted_cb, LV_EVENT_DELETE, ctx);
     ctx->footer_widths[slot] = width > 0 ? width : 1;
     lv_obj_set_height(button, 48);
     lv_obj_t *label = lv_obj_get_child(button, 0);
@@ -931,4 +1029,135 @@ lv_obj_t *ui_popup_add_button_aligned(lv_obj_t *popup,
     }
 
     return button;
+}
+
+/* A bounded stack keeps nested calibration dialogs associated with their
+ * workflow. Delete callbacks remove owners before any later feedback. */
+#include "ui_calibration_dialog.h"
+#include "ui_value_update.h"
+static char s_feedback_tag;
+static lv_obj_t *s_cal_owners[8];
+static unsigned s_cal_owner_count;
+
+lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind,
+                          const char *title, const char *detail)
+{
+    if (!body) return NULL;
+    lv_obj_t *label = NULL;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(body); ++i) {
+        lv_obj_t *child = lv_obj_get_child(body, i);
+        if (lv_obj_get_user_data(child) == &s_feedback_tag) { label = child; break; }
+    }
+    if (!label) {
+        label = lv_label_create(body);
+        lv_obj_set_user_data(label, &s_feedback_tag);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+        ui_apply_custom_label_style(label, UI_FONT_BODY, ui_status_color(kind));
+    }
+    char message[512];
+    lv_snprintf(message, sizeof(message), "%s%s%s", title ? title : "",
+                detail && detail[0] ? "\n" : "", detail ? detail : "");
+    bool changed = ui_value_set_text(label, message);
+    ui_value_set_color(label, ui_status_color(kind), 0);
+    if (changed) lv_obj_scroll_to_view(label, LV_ANIM_OFF);
+    return label;
+}
+void ui_popup_clear_feedback(lv_obj_t *body)
+{
+    if (!body) return;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(body); ++i) {
+        lv_obj_t *child = lv_obj_get_child(body, i);
+        if (lv_obj_get_user_data(child) == &s_feedback_tag) {
+            ui_value_set_text(child, "");
+            return;
+        }
+    }
+}
+static void cal_owner_deleted(lv_event_t *event)
+{
+    lv_obj_t *owner = lv_event_get_target_obj(event);
+    for (unsigned i = 0; i < s_cal_owner_count; ++i) {
+        if (s_cal_owners[i] != owner) continue;
+        for (unsigned j = i + 1; j < s_cal_owner_count; ++j) s_cal_owners[j - 1] = s_cal_owners[j];
+        --s_cal_owner_count; break;
+    }
+}
+void ui_cal_dialog_register(lv_obj_t *popup)
+{
+    if (s_cal_owner_count == 8) {
+        for (unsigned i = 1; i < 8; ++i) s_cal_owners[i - 1] = s_cal_owners[i];
+        --s_cal_owner_count;
+    }
+    s_cal_owners[s_cal_owner_count++] = popup;
+    lv_obj_add_event_cb(popup, cal_owner_deleted, LV_EVENT_DELETE, NULL);
+}
+static void cal_notice_close(lv_event_t *event)
+{
+    lv_obj_t *popup = ui_popup_find_owner(lv_event_get_target_obj(event));
+    if (popup) lv_obj_delete(popup);
+}
+void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *detail)
+{
+    lv_obj_t *popup = s_cal_owner_count ? s_cal_owners[s_cal_owner_count - 1] : NULL;
+    if (!popup) {
+        popup = ui_cal_dialog_create(lv_layer_top(), 650, 360, UI_POPUP_STANDARD);
+        if (!popup) return;
+        ui_cal_dialog_title(popup, "Calibration status");
+        ui_cal_dialog_action(popup, UI_POPUP_ACTION_CLOSE, "Close", cal_notice_close, NULL, NULL);
+    }
+    ui_popup_feedback(ui_cal_dialog_body(popup), kind, title, detail);
+}
+
+void ui_popup_focus_input(lv_obj_t *input)
+{
+    if(!input)return;
+    lv_obj_update_layout(input);
+    lv_obj_add_state(input,LV_STATE_FOCUSED);
+    lv_obj_scroll_to_view_recursive(input,LV_ANIM_OFF);
+}
+void ui_popup_input_focus_cb(lv_event_t *event)
+{
+    ui_popup_focus_input(lv_event_get_target_obj(event));
+}
+void ui_popup_keyboard_actions(lv_obj_t *keyboard,lv_event_cb_t ready,lv_event_cb_t cancel)
+{
+    if(!keyboard)return;
+    if(ready)lv_obj_add_event_cb(keyboard,ready,LV_EVENT_READY,NULL);
+    if(cancel)lv_obj_add_event_cb(keyboard,cancel,LV_EVENT_CANCEL,NULL);
+}
+void ui_popup_pin_keyboard(lv_obj_t *form,lv_obj_t *keyboard)
+{
+    if(!form||!keyboard)return;
+    lv_obj_t *input=lv_keyboard_get_textarea(keyboard),*body=input;
+    while(body && lv_obj_get_parent(body)!=form)body=lv_obj_get_parent(body);
+    lv_obj_set_parent(keyboard,form);
+    lv_obj_move_to_index(keyboard,(int32_t)lv_obj_get_child_count(form)-2);
+    int height=lv_display_get_vertical_resolution(NULL)/3;
+    if(height<140)height=140;
+    if(height>200)height=200;
+    lv_obj_set_flex_grow(keyboard,0);lv_obj_set_style_min_height(keyboard,0,0);
+    lv_obj_set_size(keyboard,LV_PCT(100),height);lv_obj_set_align(keyboard,LV_ALIGN_TOP_LEFT);
+    for(unsigned pass=0;pass<2;pass++) {
+        lv_obj_update_layout(form);
+        int reserved=0;unsigned visible=0;
+        for(unsigned i=0;i<lv_obj_get_child_count(form);i++) {
+            lv_obj_t *child=lv_obj_get_child(form,i);
+            if(lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))continue;
+            visible++;
+            if(child!=body && child!=keyboard)reserved+=lv_obj_get_height(child);
+        }
+        int minimum=input?lv_obj_get_height(input):56;
+        if(minimum<56)minimum=56;
+        if(body)minimum+=lv_obj_get_style_pad_top(body,0)+lv_obj_get_style_pad_bottom(body,0);
+        int available=lv_obj_get_content_height(form)-reserved-minimum-
+            (int)(visible?visible-1:0)*lv_obj_get_style_pad_row(form,0);
+        if(available<140 && !pass) {
+            lv_obj_set_style_pad_all(form,12,0);lv_obj_set_style_pad_row(form,8,0);continue;
+        }
+        if(height>available)height=available;
+        if(height<96)height=96;
+        lv_obj_set_height(keyboard,height);break;
+    }
+    lv_obj_update_layout(form);ui_popup_focus_input(input);
 }

@@ -1,4 +1,5 @@
 #include "ota_release_catalog.h"
+#include "firmware_identity.h"
 #include "network_activity_controller.h"
 
 #include "cJSON.h"
@@ -43,7 +44,7 @@ static bool s_task_running = false;
 static char *s_error = NULL;
 
 
-static void ensure_lock(void)
+static bool ensure_lock(void)
 {
     if (!s_lock) {
         /*
@@ -53,13 +54,13 @@ static void ensure_lock(void)
         s_lock = xSemaphoreCreateMutexWithCaps(
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
+    return s_lock != NULL;
 }
 
 
-static void lock_catalog(void)
+static bool lock_catalog(void)
 {
-    ensure_lock();
-    xSemaphoreTake(s_lock, portMAX_DELAY);
+    return ensure_lock() && xSemaphoreTake(s_lock, portMAX_DELAY) == pdTRUE;
 }
 
 
@@ -90,7 +91,7 @@ static void *psram_calloc(size_t count, size_t size)
 
 static void catalog_fail(const char *message)
 {
-    lock_catalog();
+    if (!lock_catalog()) return;
 
     if (!s_error) {
         s_error = psram_calloc(1, 128);
@@ -146,34 +147,6 @@ static bool parse_semver(
 }
 
 
-static ota_release_relation_t compare_version(
-    const char *candidate,
-    const char *running)
-{
-    int ca = 0;
-    int cb = 0;
-    int cc = 0;
-    int ra = 0;
-    int rb = 0;
-    int rc = 0;
-
-    if (!parse_semver(candidate, &ca, &cb, &cc) ||
-        !parse_semver(running, &ra, &rb, &rc)) {
-        return OTA_RELEASE_STABLE;
-    }
-
-    if (ca != ra) {
-        return ca > ra ? OTA_RELEASE_NEWER : OTA_RELEASE_OLDER;
-    }
-    if (cb != rb) {
-        return cb > rb ? OTA_RELEASE_NEWER : OTA_RELEASE_OLDER;
-    }
-    if (cc != rc) {
-        return cc > rc ? OTA_RELEASE_NEWER : OTA_RELEASE_OLDER;
-    }
-
-    return OTA_RELEASE_INSTALLED;
-}
 
 
 static void copy_json_string(
@@ -287,9 +260,8 @@ static bool parse_releases(
         return false;
     }
 
-    const esp_app_desc_t *app = esp_app_get_description();
-    const char *running =
-        app && app->version[0] ? app->version : "unknown";
+    firmware_identity_t installed;
+    firmware_identity_get(&installed);
     size_t stable_count = 0;
     size_t nightly_count = 0;
 
@@ -396,7 +368,9 @@ static bool parse_releases(
             matched_asset, "browser_download_url");
         if (!cJSON_IsString(url) ||
             !url->valuestring ||
-            !url->valuestring[0]) {
+            !url->valuestring[0] ||
+            strnlen(url->valuestring, sizeof(catalog->entries[0].asset_url)) >=
+                sizeof(catalog->entries[0].asset_url)) {
             continue;
         }
 
@@ -444,16 +418,13 @@ static bool parse_releases(
 
         if (stable) {
             entry->channel = OTA_RELEASE_CHANNEL_STABLE;
-            entry->relation = compare_version(
-                entry->version,
-                running);
+            entry->relation = (ota_release_relation_t)firmware_identity_compare(
+                &installed, FIRMWARE_CHANNEL_STABLE, entry->version);
             ++stable_count;
         } else {
             entry->channel = OTA_RELEASE_CHANNEL_NIGHTLY;
-            entry->relation =
-                strcmp(entry->version, running) == 0
-                    ? OTA_RELEASE_INSTALLED
-                    : OTA_RELEASE_DEVELOPMENT;
+            entry->relation = (ota_release_relation_t)firmware_identity_compare(
+                &installed, FIRMWARE_CHANNEL_NIGHTLY, entry->version);
             ++nightly_count;
         }
 
@@ -573,7 +544,11 @@ static void release_catalog_task(void *argument)
     free(response);
 
     release_catalog_t *old_catalog = NULL;
-    lock_catalog();
+    if (!lock_catalog()) {
+        free(catalog);
+        vTaskDeleteWithCaps(NULL);
+        return;
+    }
     old_catalog = s_catalog;
     s_catalog = catalog;
     if (s_error) {
@@ -595,7 +570,7 @@ static void release_catalog_task(void *argument)
 
 bool ota_release_catalog_start(void)
 {
-    lock_catalog();
+    if (!lock_catalog()) return false;
     if (s_task_running) {
         unlock_catalog();
         return true;
@@ -639,7 +614,11 @@ void ota_release_catalog_snapshot(
 
     memset(snapshot, 0, sizeof(*snapshot));
 
-    lock_catalog();
+    if (!lock_catalog()) {
+        snapshot->state = OTA_RELEASE_CATALOG_ERROR;
+        snprintf(snapshot->error, sizeof(snapshot->error), "Not enough memory to open release catalog");
+        return;
+    }
     snapshot->state = s_state;
     snapshot->count = s_catalog ? s_catalog->count : 0;
     snprintf(
@@ -660,7 +639,7 @@ bool ota_release_catalog_entry(
     }
 
     bool found = false;
-    lock_catalog();
+    if (!lock_catalog()) return false;
 
     if (s_catalog && index < s_catalog->count) {
         *entry = s_catalog->entries[index];

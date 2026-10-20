@@ -13,6 +13,7 @@
 #include "ui_status_banner.h"
 #include "ui_page_geometry.h"
 #include "ui_studio_layout.h"
+#include "moonraker_config_controller.h"
 
 /*
  * Theme A Drybox control surface.
@@ -31,6 +32,15 @@
  */
 
 static ui_drybox_page_action_cb_t s_action_cb = NULL;
+static ui_drybox_page_t *s_page_owner;
+static uint32_t s_page_generation;
+static void retire_page(ui_drybox_page_t *page);
+static void watch_page_fields(void);
+static void page_deleted(lv_event_t *event)
+{
+    ui_drybox_page_t *page=lv_event_get_user_data(event);
+    if(page && lv_event_get_target_obj(event)==page->panel)retire_page(page);
+}
 
 static lv_obj_t *s_heater_dot = NULL;
 static lv_obj_t *s_fan_dot = NULL;
@@ -103,13 +113,13 @@ static bool drybox_banner_is_offline(const char *banner)
 
 static const char *drybox_status_text(const char *banner)
 {
-    if (text_contains(banner, "UNAVAILABLE")) return "UNAVAILABLE";
-    if (drybox_banner_is_offline(banner)) return "OFFLINE";
+    if (text_contains(banner, "UNAVAILABLE")) return "Unavailable";
+    if (drybox_banner_is_offline(banner)) return "Offline";
     if (text_contains(banner, "ACTIVE") ||
-        text_contains(banner, "DRYING")) return "DRYING";
-    if (text_contains(banner, "HEATING")) return "HEATING";
-    if (text_contains(banner, "READY")) return "READY";
-    return "MONITORING";
+        text_contains(banner, "DRYING")) return "Drying";
+    if (text_contains(banner, "HEATING")) return "Heating";
+    if (text_contains(banner, "READY")) return "Ready";
+    return "Monitoring";
 }
 
 
@@ -190,35 +200,35 @@ static void set_program_button_state(
     }
 
     if (s_program_status_label) {
-        const char *status = "READY";
+        const char *status = "Ready";
 
         if (!online) {
-            status = "OFFLINE";
+            status = "Offline";
         } else {
             switch (active_program) {
                 case DRYBOX_PROGRAM_PLA:
-                    status = "PLA ACTIVE";
+                    status = "PLA active";
                     break;
 
                 case DRYBOX_PROGRAM_PETG:
-                    status = "PETG ACTIVE";
+                    status = "PETG active";
                     break;
 
                 case DRYBOX_PROGRAM_HOLD:
-                    status = "HOLDING";
+                    status = "Holding";
                     break;
 
                 case DRYBOX_PROGRAM_RESUME:
-                    status = "RESUMING";
+                    status = "Resuming";
                     break;
 
                 case DRYBOX_PROGRAM_STOP:
-                    status = "READY";
+                    status = "Ready";
                     break;
 
                 case DRYBOX_PROGRAM_NONE:
                 default:
-                    status = "READY";
+                    status = "Ready";
                     break;
             }
         }
@@ -233,20 +243,20 @@ static void set_program_button_state(
 
 static void set_humidity_presentation(float humidity)
 {
-    const char *condition = "IDEAL";
+    const char *condition = "Ideal";
     lv_color_t color = UI_ACCENT_CYAN;
 
     if (humidity < 10.0f) {
-        condition = "VERY DRY";
+        condition = "Very dry";
         color = UI_ACCENT_INFO;
     } else if (humidity < 25.0f) {
-        condition = "IDEAL";
+        condition = "Ideal";
         color = UI_OK_BRIGHT;
     } else if (humidity < 40.0f) {
-        condition = "MODERATE";
+        condition = "Moderate";
         color = UI_WARN;
     } else {
-        condition = "HIGH";
+        condition = "High";
         color = UI_DANGER_BRIGHT;
     }
 
@@ -352,14 +362,15 @@ static void make_divider(
 
 static void drybox_button_event_cb(lv_event_t *event)
 {
-    const char *command =
-        (const char *)lv_event_get_user_data(event);
-
-    if (!command || !s_action_cb) {
-        return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || !s_page_owner ||
+        !s_page_owner->panel || s_page_generation != moonraker_config_generation() || !s_action_cb) return;
+    static const char *const commands[] = {"DRY_PLA","DRY_PETG","DRY_HOLD","DRY_RESUME","DRY_STOP"};
+    for (size_t i=0;i<5;++i) {
+        lv_obj_t *button=s_program_buttons[i+1];
+        if (button && lv_event_get_target_obj(event)==button && !lv_obj_has_state(button,LV_STATE_DISABLED)) {
+            s_action_cb(commands[i],event);return;
+        }
     }
-
-    s_action_cb(command, event);
 }
 
 static lv_obj_t *make_program_button(
@@ -425,7 +436,7 @@ static void build_environment_panel(
 
     ui_create_operator_card_heading(
         panel,
-        "ENVIRONMENT",
+        "Environment",
         22,
         18);
 
@@ -444,20 +455,16 @@ static void build_environment_panel(
 
     lv_obj_t *unit = make_text(
         panel,
-        "%RH",
-        UI_FONT_TITLE,
+        "% RH",
+        UI_FONT_CAPTION,
         UI_ACCENT_CYAN);
 
-    lv_obj_align_to(
-        unit,
-        page->humidity_label,
-        LV_ALIGN_OUT_BOTTOM_MID,
-        0,
-        -4);
+    /* Unit and condition share a caption row below the numeric value. */
+    lv_obj_set_pos(unit,100,105);
 
     s_humidity_condition_label = make_text(
         panel,
-        "IDEAL",
+        "Ideal",
         UI_FONT_CAPTION,
         UI_OK_BRIGHT);
 
@@ -472,8 +479,8 @@ static void build_environment_panel(
 
     lv_obj_set_pos(
         s_humidity_condition_label,
-        132,
-        111);
+        160,
+        105);
 
     s_humidity_bar = lv_bar_create(panel);
     lv_obj_set_size(s_humidity_bar, 300, 7);
@@ -486,7 +493,7 @@ static void build_environment_panel(
 
     lv_obj_t *air_title = make_text(
         panel,
-        "AIR TEMP",
+        "Air temp",
         UI_FONT_BODY,
         UI_TEXT);
 
@@ -509,7 +516,7 @@ static void build_environment_panel(
 
     lv_obj_t *center_title = make_text(
         panel,
-        "CENTER TEMP",
+        "Center temp",
         UI_FONT_BODY,
         UI_TEXT);
 
@@ -544,7 +551,7 @@ static void build_system_panel(
 
     ui_create_operator_card_heading(
         panel,
-        "DRYING SYSTEM",
+        "Drying system",
         22,
         18);
 
@@ -563,7 +570,7 @@ static void build_system_panel(
 
     lv_obj_t *target_caption = make_text(
         panel,
-        "TARGET TEMPERATURE",
+        "Target temperature",
         UI_FONT_CAPTION,
         UI_TEXT_DIM);
 
@@ -584,7 +591,7 @@ static void build_system_panel(
 
     lv_obj_t *heater_title = make_text(
         panel,
-        "HEATER",
+        "Heater",
         UI_FONT_BODY_LARGE,
         UI_TEXT);
 
@@ -628,7 +635,7 @@ static void build_system_panel(
 
     lv_obj_t *fan_title = make_text(
         panel,
-        "FAN",
+        "Fan",
         UI_FONT_BODY_LARGE,
         UI_TEXT);
 
@@ -663,7 +670,7 @@ static void build_program_panel(
 
     lv_obj_t *heading = make_text(
         panel,
-        "MATERIAL PROGRAM",
+        "Material program",
         UI_FONT_BODY_LARGE,
         UI_TEXT_DIM);
 
@@ -725,7 +732,7 @@ static void build_program_panel(
         make_program_button(
         panel,
         LV_SYMBOL_PAUSE,
-        "HOLD",
+        "Hold",
         "DRY_HOLD",
         330,
         140,
@@ -736,7 +743,7 @@ static void build_program_panel(
         make_program_button(
         panel,
         LV_SYMBOL_PLAY,
-        "RESUME",
+        "Resume",
         "DRY_RESUME",
         486,
         140,
@@ -747,7 +754,7 @@ static void build_program_panel(
         make_program_button(
         panel,
         LV_SYMBOL_STOP,
-        "STOP",
+        "Stop",
         "DRY_STOP",
         642,
         140,
@@ -759,11 +766,12 @@ static void studio_drybox_create(ui_drybox_page_t *page)
 {
     lv_obj_t *p=page->panel;
     lv_obj_t *banner=studio_plane(p,0,0,976,64);
-    studio_text(banner,"Drybox",0,0,640,&ui_studio_font_48,UI_TEXT);
-    page->banner_label=studio_text(banner,"READY",716,14,260,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+    studio_text(banner,"Drybox",0,0,640,UI_FONT_TITLE,UI_TEXT);
+    page->banner_label=studio_text(banner,"Ready",716,0,260,UI_FONT_TITLE,UI_TEXT_DIM);
+    lv_obj_set_style_text_align(page->banner_label,LV_TEXT_ALIGN_RIGHT,0);
     studio_text(p,"Air",0,82,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->air_label=studio_text(p,"-- C",0,114,260,&ui_studio_font_48,UI_TEXT);
-    studio_rule(p,0,194,260,1);
+    studio_rule(p,0,196,260,1);
     studio_text(p,"Center",0,222,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->center_label=studio_text(p,"-- C",0,254,260,&ui_studio_font_48,UI_TEXT);
     s_studio_humidity_arc=lv_arc_create(p);
@@ -779,7 +787,7 @@ static void studio_drybox_create(ui_drybox_page_t *page)
     page->humidity_label=studio_text(p,"--",354,118,244,&ui_studio_font_96,UI_TEXT);
     lv_obj_set_style_text_align(page->humidity_label,LV_TEXT_ALIGN_CENTER,0);
     studio_text(p,"% RH",438,232,112,UI_FONT_TITLE,UI_TEXT_DIM);
-    s_humidity_condition_label=studio_text(p,"NO DATA",396,282,180,UI_FONT_CAPTION,UI_OK_BRIGHT);
+    s_humidity_condition_label=studio_text(p,"No data",396,282,180,UI_FONT_CAPTION,UI_OK_BRIGHT);
     lv_obj_set_style_text_align(s_humidity_condition_label,LV_TEXT_ALIGN_CENTER,0);
     studio_text(p,"Target temperature",716,76,260,UI_FONT_BODY,UI_TEXT_DIM);
     page->target_label=studio_text(p,"-- C",716,110,260,&ui_studio_font_48,UI_TEXT);
@@ -788,7 +796,7 @@ static void studio_drybox_create(ui_drybox_page_t *page)
     studio_text(p,"Fan",856,222,120,UI_FONT_BODY,UI_TEXT_DIM);
     page->heater_label=studio_text(p,"--",716,260,126,UI_FONT_VALUE_SMALL,UI_TEXT);
     page->fan_label=studio_text(p,"--%",856,260,120,UI_FONT_VALUE_SMALL,UI_TEXT);
-    s_program_status_label=studio_text(p,"NO PROGRAM",0,330,280,UI_FONT_BODY,UI_TEXT_DIM);
+    s_program_status_label=studio_text(p,"No program",0,330,280,UI_FONT_BODY,UI_TEXT_DIM);
     studio_rule(p,0,358,976,1);
     const char *names[]={"PLA","PETG","Hold","Resume","Stop"};
     const char *cmds[]={"DRY_PLA","DRY_PETG","DRY_HOLD","DRY_RESUME","DRY_STOP"};
@@ -810,6 +818,8 @@ bool ui_drybox_page_create(
     }
 
     s_action_cb = action_cb;
+    s_page_owner = page;
+    s_page_generation = moonraker_config_generation();
 
     page->panel = lv_obj_create(lv_screen_active());
 
@@ -817,6 +827,7 @@ bool ui_drybox_page_create(
         return false;
     }
 
+    lv_obj_add_event_cb(page->panel,page_deleted,LV_EVENT_DELETE,page);
     lv_obj_set_size(page->panel,
                     UI_PAGE_ROOT_WIDTH,
                     UI_PAGE_ROOT_HEIGHT);
@@ -828,14 +839,14 @@ bool ui_drybox_page_create(
         LV_OBJ_FLAG_SCROLLABLE);
 
     ui_apply_root_style(page->panel);
-    if (ui_theme_is_studio()) { studio_drybox_create(page); return true; }
+    if (ui_theme_is_studio()) { studio_drybox_create(page); watch_page_fields(); return true; }
 
     const ui_drybox_layout_profile_t *layout =
         &ui_page_layout_profile_current()->drybox;
 
     ui_page_title_create(
         page->panel,
-        "DRYBOX",
+        "Drybox",
         layout->subtitle);
 
     /*
@@ -857,7 +868,7 @@ bool ui_drybox_page_create(
     ui_status_banner_set_simple(
         banner,
         drybox_status_text(banner_text_cb()),
-        "FILAMENT CONDITIONING");
+        "Filament conditioning");
 
     page->banner_label =
         ui_status_banner_state_label(banner);
@@ -866,6 +877,7 @@ bool ui_drybox_page_create(
     build_system_panel(page);
     build_program_panel(page);
 
+    watch_page_fields();
     return true;
 }
 
@@ -873,7 +885,7 @@ void ui_drybox_page_refresh(
     const ui_drybox_page_t *page,
     const ui_drybox_page_state_t *state)
 {
-    if (!page || !page->panel || !state) {
+    if (!page || page != s_page_owner || !page->panel || !state) {
         return;
     }
 
@@ -936,7 +948,7 @@ void ui_drybox_page_refresh(
             ui_status_banner_set_simple_kind(
                 banner_box,
                 drybox_status_text(display_text),
-                "FILAMENT CONDITIONING",
+                "Filament conditioning",
                 banner_kind);
             if(ui_theme_is_studio()) {
                 lv_obj_set_style_bg_opa(banner_box,LV_OPA_TRANSP,0);
@@ -963,7 +975,7 @@ void ui_drybox_page_refresh(
         if (s_humidity_condition_label) {
             ui_value_set_text(
                 s_humidity_condition_label,
-                ui_text("NO DATA"));
+                ui_text("No data"));
 
             set_label_color(
                 s_humidity_condition_label,
@@ -990,7 +1002,7 @@ void ui_drybox_page_refresh(
         }
 
         if (page->heater_label) {
-            ui_value_set_text(page->heater_label, ui_text("OFFLINE"));
+            ui_value_set_text(page->heater_label, ui_text("Offline"));
             set_label_color(page->heater_label, UI_TEXT_DIM);
         }
 
@@ -1093,7 +1105,7 @@ void ui_drybox_page_refresh(
     if (page->heater_label) {
         ui_value_set_text(
             page->heater_label,
-            state->heater_on ? ui_text("HEATING") : ui_text("OFF"));
+            state->heater_on ? ui_text("Heating") : ui_text("Off"));
 
         set_label_color(
             page->heater_label,
@@ -1145,17 +1157,10 @@ void ui_drybox_page_refresh(
     }
 }
 
-void ui_drybox_page_cleanup(
-    ui_drybox_page_t *page)
+static void retire_page(ui_drybox_page_t *page)
 {
-    if (!page) {
-        return;
-    }
-
-    if (page->panel) {
-        lv_obj_delete(page->panel);
-    }
-
+    if (!page) return;
+    bool owns = page == s_page_owner;
     page->panel = NULL;
     page->banner_label = NULL;
     page->air_label = NULL;
@@ -1165,6 +1170,8 @@ void ui_drybox_page_cleanup(
     page->heater_label = NULL;
     page->fan_label = NULL;
 
+    if (!owns) return;
+    s_page_owner = NULL;
     s_heater_dot = NULL;
     s_fan_dot = NULL;
     s_active_dot = NULL;
@@ -1179,4 +1186,31 @@ void ui_drybox_page_cleanup(
     }
 
     s_action_cb = NULL;
+}
+void ui_drybox_page_cleanup(ui_drybox_page_t *page)
+{
+    if (!page) return;
+    lv_obj_t *panel=page->panel;
+    retire_page(page);
+    if (panel) lv_obj_delete(panel);
+}
+static void page_field_deleted(lv_event_t *event)
+{
+    if (!s_page_owner) return;
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **refs[]={&s_page_owner->banner_label,&s_page_owner->air_label,&s_page_owner->center_label,
+        &s_page_owner->humidity_label,&s_page_owner->target_label,&s_page_owner->heater_label,&s_page_owner->fan_label,
+        &s_heater_dot,&s_fan_dot,&s_active_dot,&s_program_status_label,&s_humidity_condition_label,
+        &s_humidity_bar,&s_studio_humidity_arc,&s_heater_activity_bar};
+    for(size_t i=0;i<sizeof(refs)/sizeof(refs[0]);i++)if(*refs[i]==target)*refs[i]=NULL;
+    for(size_t i=0;i<DRYBOX_PROGRAM_COUNT;i++)if(s_program_buttons[i]==target)s_program_buttons[i]=NULL;
+}
+static void watch_page_fields(void)
+{
+    lv_obj_t *refs[]={s_page_owner->banner_label,s_page_owner->air_label,s_page_owner->center_label,
+        s_page_owner->humidity_label,s_page_owner->target_label,s_page_owner->heater_label,s_page_owner->fan_label,
+        s_heater_dot,s_fan_dot,s_active_dot,s_program_status_label,s_humidity_condition_label,
+        s_humidity_bar,s_studio_humidity_arc,s_heater_activity_bar};
+    for(size_t i=0;i<sizeof(refs)/sizeof(refs[0]);i++)if(refs[i])lv_obj_add_event_cb(refs[i],page_field_deleted,LV_EVENT_DELETE,NULL);
+    for(size_t i=0;i<DRYBOX_PROGRAM_COUNT;i++)if(s_program_buttons[i])lv_obj_add_event_cb(s_program_buttons[i],page_field_deleted,LV_EVENT_DELETE,NULL);
 }

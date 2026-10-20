@@ -1,3 +1,4 @@
+#include "moonraker_command_route.h"
 #include "moonraker_live_websocket.h"
 #include "moonraker_config_controller.h"
 #include "moonraker_transport_security_controller.h"
@@ -47,6 +48,9 @@ static volatile bool s_macro_config_pending;
 static volatile bool s_subscription_ready = false;
 static volatile bool s_subscribed = false;
 static volatile int64_t s_last_status_update_us = 0;
+/* Only the runtime task owns quiet-link request cadence. */
+static int64_t s_idle_status_request_us;
+static uint32_t s_idle_status_generation;
 static bool s_file_change_pending = false;
 
 static char *s_message_buffer = NULL;
@@ -318,6 +322,7 @@ static bool build_subscription(
             "{\"jsonrpc\":\"2.0\","
             "\"method\":\"printer.objects.subscribe\","
             "\"params\":{\"objects\":{"
+            "\"webhooks\":[\"state\",\"state_message\"],"
             "\"print_stats\":null,"
             "\"motion_report\":null,"
             "\"display_status\":null,"
@@ -593,7 +598,12 @@ bool moonraker_live_websocket_send_gcode(
     size_t used = 0;
     s_command_buffer[0] = '\0';
 
-    if (!append_command_text(
+    const char *admin_method=moonraker_command_admin_method(script);
+    if(admin_method) {
+        if(!append_command_text(&used,"{\"jsonrpc\":\"2.0\",\"method\":\"") ||
+           !append_command_text(&used,admin_method) ||
+           !append_command_text(&used,"\""))return false;
+    } else if (!append_command_text(
             &used,
             "{\"jsonrpc\":\"2.0\","
             "\"method\":\"printer.gcode.script\","
@@ -609,7 +619,7 @@ bool moonraker_live_websocket_send_gcode(
     int suffix_length = snprintf(
         suffix,
         sizeof(suffix),
-        "\"},\"id\":%u}",
+        admin_method?",\"id\":%u}":"\"},\"id\":%u}",
         (unsigned)request_id);
 
     if (suffix_length <= 0 ||
@@ -1342,6 +1352,29 @@ static bool create_client(
 }
 
 
+static void request_idle_status(int64_t now)
+{
+    /* Status notifications contain changes only. A quiet standby printer still
+     * needs a verified sample before the shell's three-second freshness limit. */
+    if (!moonraker_live_websocket_subscribed() || !s_subscription_ready) return;
+    int64_t updated = s_last_status_update_us;
+    if (updated <= 0 || now < updated || now - updated < 1500000LL) return;
+    if (s_idle_status_generation != s_generation) {
+        s_idle_status_generation = s_generation;
+        s_idle_status_request_us = 0;
+    }
+    if (s_idle_status_request_us && now >= s_idle_status_request_us &&
+        now - s_idle_status_request_us < 1500000LL) return;
+    s_idle_status_request_us = now;
+    static const char request[] =
+        "{\"jsonrpc\":\"2.0\",\"method\":\"printer.objects.query\","
+        "\"params\":{\"objects\":{\"webhooks\":[\"state\",\"state_message\"],"
+        "\"print_stats\":[\"state\"]}},\"id\":1004}";
+    /* Sending is not proof of readiness. Only the generation-fenced response
+     * merge updates the live state and freshness timestamp. No HTTP fallback. */
+    (void)esp_websocket_client_send_text(s_client, request, (int)sizeof(request)-1, 0);
+}
+
 void moonraker_live_websocket_tasklet(
     bool wifi_ready,
     const char *host,
@@ -1428,6 +1461,7 @@ void moonraker_live_websocket_tasklet(
             ESP_LOGW(TAG, "WS subscribe transaction failed");
         }
     }
+    request_idle_status(now);
 }
 
 bool moonraker_live_websocket_connected(void)

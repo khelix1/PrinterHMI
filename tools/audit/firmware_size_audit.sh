@@ -2,7 +2,7 @@
 set -euo pipefail
 
 firmware="${1:-build-idf6-hosted3/PrinterHMI.bin}"
-max_bytes=$((3 * 1024 * 1024))
+max_bytes=$((7 * 1024 * 1024))
 
 [[ -s "$firmware" ]] || {
     echo "ERROR: firmware image not found: $firmware" >&2

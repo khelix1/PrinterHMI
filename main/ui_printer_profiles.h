@@ -22,12 +22,23 @@ void ui_printer_profiles_show_for_slot(
     ui_printer_profiles_active_changed_cb_t active_changed_cb,
     ui_printer_profiles_discover_cb_t discover_cb);
 
+/* Nonzero identity for the current editor's Discover request. Zero means the
+ * originating editor/draft is no longer current. UI-thread calls only. */
+uint32_t ui_printer_profiles_discovery_request(void);
+void ui_printer_profiles_cancel_discovery_request(uint32_t request);
+bool ui_printer_profiles_apply_discovered_endpoint(uint32_t request,
+    const char *host,int port,const char *identity);
+
+/* Synchronous edit helper for a caller already owning the current editor.
+ * Discovery callbacks must use the request-bound API above. */
 void ui_printer_profiles_set_discovered_endpoint(
     const char *host,
     int port,
     const char *identity);
 
-/* Opens the selected profile editor directly at its Camera Setup panel. */
+/* Opens Camera setup directly for the saved profile; closes prior profile
+ * dialogs. Cancel/Use camera returns to the caller without an editor stack.
+ * Callback parameters are retained for source compatibility. */
 void ui_printer_profiles_open_camera_setup(
     int profile_index,
     ui_printer_profiles_active_changed_cb_t active_changed_cb,

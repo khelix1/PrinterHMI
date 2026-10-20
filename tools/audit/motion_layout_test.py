@@ -44,3 +44,5 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         str(lvgl/"src/font/lv_font_montserrat_12.c"),str(tmp/"motion_calculation.c"),*[str(root/"main"/s) for s in sources],
         str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
+    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict",*flags,"-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),"-c",str(root/"main/ui_motion_diagnostics.c"),"-o",str(tmp/"motion_owner.o")],check=True)
+    print("PASS: Motion diagnostics standalone owner with warnings treated as errors")

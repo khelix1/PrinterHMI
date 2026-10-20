@@ -38,14 +38,16 @@ def size(x):return bool(re.fullmatch(r'[0-9\s,+*/()-]+|ui_theme_density_metric\(
 cases=[]; inventory=[]
 for p in sorted((root/'main').glob('*.c')):
  s=re.sub(r'/\*[\s\S]*?\*/|//[^\n]*',lambda m: ''.join('\n' if c=='\n' else ' ' for c in m.group()),p.read_text())
- for name in ('ui_button_create','ui_button_create_icon','ui_popup_add_action_at','ui_create_button','ui_create_button_primary','ui_create_button_secondary','ui_create_button_success','ui_create_button_warning','ui_create_button_danger','lv_button_create','ui_button_create_empty','ui_popup_add_footer_action','ui_popup_add_action_aligned','ui_popup_add_selectable_row','ui_create_operator_nav_button'):
+ for name in ('studio_action','ui_button_create','ui_button_create_icon','ui_popup_add_action_at','ui_create_button','ui_create_button_primary','ui_create_button_secondary','ui_create_button_success','ui_create_button_warning','ui_create_button_danger','lv_button_create','ui_button_create_empty','ui_popup_add_footer_action','ui_popup_add_action_aligned','ui_popup_add_selectable_row','ui_create_operator_nav_button'):
   for start,end,a in calls(s,name):
    if s[end:].lstrip().startswith('{'):continue
    line=s.count('\n',0,start)+1; entry={'file':p.name,'line':line,'api':name,'args':a};inventory.append(entry)
    if name in ('lv_button_create','ui_button_create_empty'):continue
    icon=None;geom=None;kind='UI_BUTTON_OUTLINED'
    if name in ('ui_popup_add_selectable_row','ui_create_operator_nav_button'):continue
-   if name=='ui_popup_add_footer_action' and len(a)>=4:
+   if name=='studio_action' and len(a)>=6:
+    text=a[1];geom=a[4:6]
+   elif name=='ui_popup_add_footer_action' and len(a)>=4:
     text=a[2];geom=[a[3],'48']
    elif name=='ui_popup_add_action_aligned' and len(a)>=5:
     text=a[2];geom=a[3:5]
@@ -60,6 +62,12 @@ for p in sorted((root/'main').glob('*.c')):
      variable=match[1]
      for _,_,z in calls(s[end:end+1800],'lv_obj_set_size'):
       if len(z)==3 and z[0]==variable:geom=z[1:];break
+   # Settings theme footers measure native label width after creation.
+   # theme_dialog_layout_test exercises these real owners in all five themes.
+   if p.name=='ui_settings_popups.c' and name=='ui_popup_add_action_at' and 'theme_footer_fit(footer)' in s[end:s.find('\n}',end)]:continue
+   # Macro actions depend on native sizing and Studio's final font fitting.
+   # Exercise the real owner in responsive_layout_test instead of isolated geometry.
+   if p.name=='ui_macros.c' and name=='ui_button_create' and text in ('"SEARCH"','"CLEAR SEARCH"'):continue
    if geom and all(size(z) for z in geom) and not (geom[0]=='1'):
     for t in texts(text):
      if icon and not re.fullmatch(r'LV_SYMBOL_\w+|"(?:\\.|[^"\\])*"',icon):continue
@@ -107,12 +115,16 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         if c['api']=='ui_popup_add_footer_action':
             code+=f'footer({c["text"]},{c["w"]});\n';continue
         make=f'ui_button_create(lv_screen_active(),UI_BUTTON_OUTLINED,{c["text"]})'
+        if c['api']=='studio_action':make=f'studio_action(lv_screen_active(),{c["text"]},0,0,{c["w"]},{c["h"]},NULL,NULL)'
         if c['icon']:make=f'ui_button_create_icon(lv_screen_active(),UI_BUTTON_OUTLINED,{c["icon"]},{c["text"]},UI_TEXT,UI_BUTTON_ICON_HORIZONTAL)'
         where=json.dumps(c['file']+':'+str(c['line']))
-        code+=f'b={make};lv_obj_set_size(b,{c["w"]},{c["h"]});fit(b,{where});lv_obj_delete(b);\n'
+        code+=f'b={make};lv_obj_set_size(b,{c["w"]},{c["h"]});fit(b,{where});assert(lv_obj_get_height(b)>=44 && lv_obj_get_width(b)>=44);lv_obj_delete(b);\n'
     (tmp/"button_cases.inc").write_text(code)
     source=(root/"main/ui_settings.c").read_text()
     (tmp/"settings_cases.inc").write_text(''.join(f'row({",".join(a[1:4])});\n' for _,_,a in calls(source,'ui_settings_section_add_action_row')))
+    begin=source.index("    const int firmware_row_1 =")
+    finish=source.index("    section_y += firmware_height + section_gap;",begin)
+    (tmp/"firmware_settings.inc").write_text(source[begin:finish])
     source=(root/"main/ui_calibration.c").read_text()
     start=source.index('static void layout_bed_geometry_actions(')
     (tmp/"bed_actions.inc").write_text(source[start:source.index('static void refresh_capabilities',start)])

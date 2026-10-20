@@ -1,3 +1,4 @@
+#include "ui_button_press.h"
 /*
  * Theme B: Operator
  *
@@ -119,6 +120,7 @@ static void apply_button(
         LV_STATE_FOCUSED);
 
     theme_b_apply_shared_button_frame(obj);
+    ui_button_stable_press(obj);
 }
 
 static void apply_label(

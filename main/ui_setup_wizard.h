@@ -4,7 +4,11 @@
 
 typedef bool (*ui_setup_wizard_wifi_connect_cb_t)(const char *ssid, const char *password);
 
-/* Dedicated first-run flow. It shares the saved configuration/controllers with
- * Settings but never opens the normal Network, Printer Profile, or Camera UI. */
+/* First-run flow shares saved configuration/controllers with Settings.
+ * Printer setup opens the shared profile editor; Wi-Fi/camera flows stay here. */
 void ui_setup_wizard_show(ui_setup_wizard_wifi_connect_cb_t wifi_connect_cb);
 void ui_setup_wizard_close(void);
+
+/* Rebuild persistent app surfaces after a saved theme/text-size change. */
+void ui_setup_wizard_show_with_appearance_callback(
+    ui_setup_wizard_wifi_connect_cb_t wifi_connect_cb,void (*appearance_changed)(void));

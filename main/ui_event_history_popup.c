@@ -7,13 +7,22 @@
 #include "lvgl.h"
 #include "operator_event_log.h"
 #include "ui_popup.h"
+#include "ui_form_dialog.h"
 #include "ui_theme.h"
+#include "ui_button.h"
+#include "ui_widgets.h"
+#include "ui_responsive_layout.h"
+#include "ui_text_fit.h"
 
 static lv_obj_t *s_popup = NULL;
 static lv_obj_t *s_list = NULL;
+static uint32_t s_history_epoch;
+static bool s_rebuilding;
 static lv_timer_t *s_refresh_timer = NULL;
 static size_t s_rendered_count = 0;
 static uint32_t s_rendered_sequence = 0;
+static lv_obj_t *s_follow_button;
+static bool s_follow_live = true;
 
 
 static const char *event_level_text(
@@ -21,14 +30,14 @@ static const char *event_level_text(
 {
     switch (level) {
     case OPERATOR_EVENT_ERROR:
-        return "ERROR";
+        return "Error";
 
     case OPERATOR_EVENT_WARNING:
-        return "WARN";
+        return "Warning";
 
     case OPERATOR_EVENT_INFO:
     default:
-        return "INFO";
+        return "Info";
     }
 }
 
@@ -45,7 +54,7 @@ static lv_color_t event_level_color(
 
     case OPERATOR_EVENT_INFO:
     default:
-        return UI_TEXT_BRIGHT;
+        return UI_TEXT_DIM;
     }
 }
 
@@ -89,15 +98,19 @@ static void format_event_time(
 }
 
 
-static void rebuild_event_list(void)
+static void rebuild_event_list_impl(void)
 {
     if (!s_list) {
         return;
     }
 
+    uint32_t epoch=s_history_epoch;lv_obj_t *list=s_list;
     lv_obj_clean(s_list);
+    if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
 
     size_t count = operator_event_log_count();
+    if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
+    if(count>OPERATOR_EVENT_LOG_CAPACITY)count=OPERATOR_EVENT_LOG_CAPACITY;
     s_rendered_count = count;
     s_rendered_sequence = 0;
 
@@ -105,9 +118,11 @@ static void rebuild_event_list(void)
 
     if (count > 0 &&
         operator_event_log_get(0, &newest)) {
+        if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
         s_rendered_sequence = newest.sequence;
     }
 
+    if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
     if (count == 0) {
         lv_obj_t *empty = lv_label_create(s_list);
 
@@ -115,8 +130,8 @@ static void rebuild_event_list(void)
             empty,
             ui_text("No operator events have been recorded."));
 
-        lv_obj_set_width(empty, 680);
-        lv_obj_set_pos(empty, 16, 20);
+        lv_obj_set_width(empty, LV_PCT(100));
+        lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
 
         ui_apply_custom_label_style(
             empty,
@@ -138,47 +153,48 @@ static void rebuild_event_list(void)
 
         operator_event_t event;
 
-        if (!operator_event_log_get(
-                newest_index,
-                &event)) {
-            continue;
-        }
+        bool got=operator_event_log_get(newest_index,&event);
+        if(epoch!=s_history_epoch || s_list!=list || !s_popup)return;
+        if(!got)continue;
 
         char time_text[24] = "";
-        char line[176];
+        char metadata[48];
 
         format_event_time(
             &event,
             time_text,
             sizeof(time_text));
 
-        snprintf(
-            line,
-            sizeof(line),
-            "%s  %-5s  %s",
-            time_text,
-            event_level_text(event.level),
-            event.message);
-
-        lv_obj_t *label = lv_label_create(s_list);
-
-        lv_label_set_text(label, line);
-        lv_label_set_long_mode(
-            label,
-            LV_LABEL_LONG_WRAP);
-
-        lv_obj_set_size(label, 680, 48);
-        lv_obj_set_pos(
-            label,
-            16,
-            (int32_t)row * 52 + 10);
-
-        ui_apply_custom_label_style(
-            label,
-            UI_FONT_CAPTION,
-            event_level_color(event.level));
-
-        last_label = label;
+        snprintf(metadata,sizeof(metadata),"%s  %s",time_text,event_level_text(event.level));
+        lv_obj_t *row=lv_obj_create(s_list);
+        lv_obj_remove_style_all(row);
+        lv_obj_clear_flag(row,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(row,LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_all(row,12,0);
+        lv_obj_set_style_pad_row(row,6,0);
+        lv_obj_set_style_border_width(row,1,0);
+        lv_obj_set_style_border_color(row,UI_BORDER_SOFT,0);
+        lv_obj_set_style_radius(row,UI_RADIUS_ACTION,0);
+        if(!ui_theme_is_studio()) {
+            ui_apply_surface_role(row,UI_SURFACE_SECTION);
+            lv_obj_set_style_pad_all(row,12,0);
+            lv_obj_set_style_pad_row(row,6,0);
+        }
+        if(ui_theme_is_studio()) {
+            ui_apply_surface_role(row,UI_SURFACE_TRANSPARENT);
+            ui_apply_divider_border(row,LV_BORDER_SIDE_BOTTOM);
+            lv_obj_set_style_pad_all(row,12,0);
+        }
+        lv_obj_t *meta=lv_label_create(row);
+        lv_label_set_text(meta,metadata);lv_obj_set_width(meta,LV_PCT(100));
+        lv_label_set_long_mode(meta,LV_LABEL_LONG_WRAP);
+        ui_apply_custom_label_style(meta,UI_FONT_CAPTION,event_level_color(event.level));
+        lv_obj_t *label=lv_label_create(row);
+        lv_label_set_text(label,event.message);lv_obj_set_width(label,LV_PCT(100));
+        lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
+        ui_apply_custom_label_style(label,UI_FONT_BODY,UI_TEXT);
+        last_label = row;
     }
 
     /*
@@ -186,7 +202,7 @@ static void rebuild_event_list(void)
      */
     lv_obj_update_layout(s_list);
 
-    if (last_label) {
+    if (last_label && s_follow_live) {
         lv_obj_scroll_to_view(
             last_label,
             LV_ANIM_OFF);
@@ -194,20 +210,36 @@ static void rebuild_event_list(void)
 }
 
 
+static void rebuild_event_list(void)
+{
+    if(s_rebuilding)return;
+    s_rebuilding=true;rebuild_event_list_impl();s_rebuilding=false;
+}
+static void history_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_list){s_list=NULL;if(s_refresh_timer)lv_timer_delete(s_refresh_timer);s_refresh_timer=NULL;}
+    else if(target==s_follow_button)s_follow_button=NULL;
+    else return;
+    ++s_history_epoch;
+    s_rendered_count=SIZE_MAX;s_rendered_sequence=0;
+}
 static void refresh_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (!s_popup || !s_list) {
+    if(timer && timer!=s_refresh_timer)return;
+    uint32_t epoch=s_history_epoch;
+    if (!s_popup || !s_list || !s_follow_live) {
         return;
     }
 
     size_t count = operator_event_log_count();
+    if(epoch!=s_history_epoch || !s_popup || !s_list)return;
     uint32_t newest_sequence = 0;
     operator_event_t newest;
 
     if (count > 0 &&
         operator_event_log_get(0, &newest)) {
+        if(epoch!=s_history_epoch || !s_popup || !s_list)return;
         newest_sequence = newest.sequence;
     }
 
@@ -215,6 +247,7 @@ static void refresh_timer_cb(lv_timer_t *timer)
      * Sequence comparison also detects replacement of the oldest entry
      * after the bounded ring reaches capacity and its count stays at 40.
      */
+    if(epoch!=s_history_epoch || !s_popup || !s_list)return;
     if (count != s_rendered_count ||
         newest_sequence != s_rendered_sequence) {
         rebuild_event_list();
@@ -222,21 +255,18 @@ static void refresh_timer_cb(lv_timer_t *timer)
 }
 
 
+static void history_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)!=s_popup)return;
+    if(s_refresh_timer)lv_timer_delete(s_refresh_timer);
+    ++s_history_epoch;
+    s_refresh_timer=NULL;s_popup=NULL;s_list=NULL;s_follow_button=NULL;
+    s_rendered_count=0;s_rendered_sequence=0;s_follow_live=true;
+}
+
 void ui_event_history_popup_close(void)
 {
-    if (s_refresh_timer) {
-        lv_timer_delete(s_refresh_timer);
-        s_refresh_timer = NULL;
-    }
-
-    if (s_popup) {
-        lv_obj_delete(s_popup);
-    }
-
-    s_popup = NULL;
-    s_list = NULL;
-    s_rendered_count = 0;
-    s_rendered_sequence = 0;
+    if(s_popup)lv_obj_delete(s_popup);
 }
 
 
@@ -249,79 +279,74 @@ static void close_cb(lv_event_t *event)
 
 static void clear_cb(lv_event_t *event)
 {
-    (void)event;
+    (void)event;if(!s_popup || !s_list)return;
+    uint32_t epoch=s_history_epoch;
     operator_event_log_clear();
-    rebuild_event_list();
+    if(epoch==s_history_epoch && s_popup && s_list)rebuild_event_list();
 }
 
 
+static void follow_cb(lv_event_t *event)
+{
+    if(event && lv_event_get_code(event)!=LV_EVENT_CLICKED)return;
+    if(!s_popup || !s_list || !s_follow_button)return;
+    s_follow_live=!s_follow_live;
+    lv_label_set_text(lv_obj_get_child(s_follow_button,0),s_follow_live ? "Hold" : "Follow live");
+    ui_text_fit_single_line(lv_obj_get_child(s_follow_button,0),UI_FONT_BODY);
+    ui_button_set_filter_active(s_follow_button,!s_follow_live);
+    if(s_follow_live)rebuild_event_list();
+}
+static void action_fit(lv_event_t *event)
+{
+    ui_text_fit_single_line(lv_obj_get_child(lv_event_get_target_obj(event),0),UI_FONT_BODY);
+}
+static lv_obj_t *history_action(lv_obj_t *footer,ui_button_kind_t kind,const char *text,lv_event_cb_t cb)
+{
+    lv_obj_t *button=ui_button_create(footer,kind,text);
+    lv_obj_set_size(button,148,48);lv_obj_set_style_min_width(button,148,0);lv_obj_set_flex_grow(button,1);
+    lv_obj_add_event_cb(button,action_fit,LV_EVENT_SIZE_CHANGED,NULL);
+    lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,NULL);
+    return button;
+}
 void ui_event_history_popup_show(void)
 {
-    if (s_popup) {
-        rebuild_event_list();
-        lv_obj_move_foreground(s_popup);
-        return;
-    }
-
-    s_popup = ui_popup_create(
-        lv_layer_top(),
-        800,
-        500,
-        UI_POPUP_STANDARD);
-
-    if (!s_popup) {
-        return;
-    }
-
-    ui_popup_add_title(
-        s_popup,
-        ui_text("OPERATOR EVENT HISTORY"),
-        false,
-        0);
-
-    ui_popup_add_header_divider(
-        s_popup,
-        44);
-
-    s_list = ui_popup_add_list(
-        s_popup,
-        24,
-        58,
-        752,
-        344);
-
-    ui_popup_add_standard_footer_divider(
-        s_popup);
-
-    ui_popup_add_footer_action(
-        s_popup,
-        UI_POPUP_ACTION_CLOSE,
-        LV_SYMBOL_CLOSE " CLOSE",
-        220,
-        UI_POPUP_FOOTER_LEFT,
-        close_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s_popup,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_TRASH " CLEAR",
-        220,
-        UI_POPUP_FOOTER_RIGHT,
-        clear_cb,
-        NULL,
-        NULL);
-
+    if(s_popup){lv_obj_move_foreground(s_popup);return;}
+    int width=lv_display_get_horizontal_resolution(NULL)-32;
+    int height=lv_display_get_vertical_resolution(NULL)-32;
+    if(width>880)width=880;
+    if(height>540)height=540;
+    s_popup=ui_popup_create(lv_layer_top(),width,height,UI_POPUP_STANDARD);
+    if(!s_popup)return;
+    ++s_history_epoch;
+    s_follow_live=true;
+    lv_obj_add_event_cb(s_popup,history_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_set_flex_flow(s_popup,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_popup,16,0);lv_obj_set_style_pad_row(s_popup,12,0);
+    lv_obj_t *title=lv_label_create(s_popup);
+    lv_label_set_text(title,"Event history");lv_obj_set_width(title,LV_PCT(100));
+    ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
+    lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    ui_form_divide_title(s_popup);
+    s_list=lv_obj_create(s_popup);lv_obj_add_event_cb(s_list,history_field_deleted,LV_EVENT_DELETE,NULL);lv_obj_remove_style_all(s_list);
+    lv_obj_set_size(s_list,LV_PCT(100),0);lv_obj_set_flex_grow(s_list,1);
+    lv_obj_set_flex_flow(s_list,LV_FLEX_FLOW_COLUMN);lv_obj_set_style_pad_row(s_list,8,0);
+    lv_obj_set_scroll_dir(s_list,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_list,LV_SCROLLBAR_MODE_OFF);
+    lv_obj_t *footer=lv_obj_create(s_popup);ui_responsive_column(footer);
+    ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
+    lv_obj_set_flex_flow(footer,LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(footer,8,0);lv_obj_set_style_pad_row(footer,8,0);
+    s_follow_button=history_action(footer,UI_BUTTON_OUTLINED,"Hold",follow_cb);
+    ui_button_set_filter_active(s_follow_button,false);
+    lv_obj_add_event_cb(s_follow_button,history_field_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_t *clear=history_action(footer,UI_BUTTON_DANGER,"Clear history",clear_cb);
+    if(clear)lv_obj_set_style_min_width(clear,220,0);
+    history_action(footer,UI_BUTTON_CLOSE,"Close",close_cb);
+    uint32_t epoch=s_history_epoch;
     rebuild_event_list();
-
-    if (!s_refresh_timer) {
-        s_refresh_timer =
-            lv_timer_create(
-                refresh_timer_cb,
-                500,
-                NULL);
-    }
-
+    if(epoch!=s_history_epoch || !s_popup || !s_list)return;
+    lv_obj_update_layout(s_popup);
+    for(unsigned i=0;i<lv_obj_get_child_count(footer);i++)
+        ui_text_fit_single_line(lv_obj_get_child(lv_obj_get_child(footer,i),0),UI_FONT_BODY);
+    s_refresh_timer=lv_timer_create(refresh_timer_cb,500,NULL);
     lv_obj_move_foreground(s_popup);
 }

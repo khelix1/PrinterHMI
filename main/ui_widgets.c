@@ -1,8 +1,48 @@
 #include "ui_text_fit.h"
 #include "ui_studio_icons.h"
 #include "ui_widgets.h"
+#include "ui_page_geometry.h"
 #include "ui_text.h"
 #include "ui_button.h"
+
+void ui_apply_scroll_surface(lv_obj_t *obj)
+{
+    if(!obj)return;
+    lv_obj_set_style_bg_color(obj,UI_BG,0);
+    lv_obj_set_style_bg_opa(obj,LV_OPA_COVER,0);
+    lv_obj_set_style_bg_grad_dir(obj,LV_GRAD_DIR_NONE,0);
+    lv_obj_set_style_radius(obj,0,0);
+    lv_obj_set_style_border_width(obj,0,0);
+    lv_obj_set_style_shadow_width(obj,0,0);
+}
+
+void ui_apply_flat_entry(lv_obj_t *obj)
+{
+    ui_apply_scroll_surface(obj);
+    ui_apply_divider_border(obj,LV_BORDER_SIDE_BOTTOM);
+}
+
+lv_obj_t *ui_create_divider(lv_obj_t *parent,int x,int y,int width,int height)
+{
+    if(!parent)return NULL;
+    lv_obj_t *divider=lv_obj_create(parent);
+    if(!divider)return NULL;
+    lv_obj_remove_style_all(divider);
+    ui_apply_surface_role(divider,UI_SURFACE_DIVIDER);
+    lv_obj_set_size(divider,width,height);
+    lv_obj_set_pos(divider,x,y);
+    lv_obj_clear_flag(divider,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_CLICKABLE);
+    return divider;
+}
+
+void ui_apply_divider_border(lv_obj_t *obj,lv_border_side_t side)
+{
+    if(!obj)return;
+    lv_obj_set_style_border_color(obj,UI_BORDER,0);
+    lv_obj_set_style_border_opa(obj,LV_OPA_COVER,0);
+    lv_obj_set_style_border_width(obj,1,0);
+    lv_obj_set_style_border_side(obj,side,0);
+}
 
 /*
  * TEST2_OPERATOR_WIDGETS
@@ -336,39 +376,9 @@ lv_obj_t *ui_create_operator_card_heading(
  * Shared one-pixel divider used inside Operator center cards.
  */
 lv_obj_t *ui_create_operator_card_divider(
-    lv_obj_t *parent,
-    int x,
-    int y,
-    int width)
+    lv_obj_t *parent, int x, int y, int width)
 {
-    if (!parent) {
-        return NULL;
-    }
-
-    lv_obj_t *divider =
-        lv_obj_create(parent);
-
-    if (!divider) {
-        return NULL;
-    }
-
-    lv_obj_clear_flag(
-        divider,
-        LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_set_size(
-        divider,
-        width,
-        1);
-
-    lv_obj_set_pos(
-        divider,
-        x,
-        y);
-
-    ui_apply_surface_role(divider, UI_SURFACE_DIVIDER);
-
-    return divider;
+    return ui_create_divider(parent,x,y,width,1);
 }
 
 
@@ -561,6 +571,7 @@ lv_obj_t *ui_create_operator_nav_button(
     ui_apply_text_button(text_label);
     lv_obj_set_width(text_label, width - 28);
     lv_label_set_long_mode(text_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(text_label, LV_TEXT_ALIGN_CENTER, 0);
 
     lv_obj_set_style_text_color(
         text_label,
@@ -572,6 +583,18 @@ lv_obj_t *ui_create_operator_nav_button(
         LV_ALIGN_LEFT_MID,
         22,
         0);
+
+    /* Center the visible icon/text group, rather than the unused label box.
+     * Studio replaces this with its existing stacked dock arrangement. */
+    lv_point_t natural;
+    lv_text_get_size(&natural, text ? text : "",
+        lv_obj_get_style_text_font(text_label, 0), 0, 0,
+        LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    int32_t text_width = natural.x < width - 28 ? natural.x : width - 28;
+    lv_obj_set_width(text_label, text_width);
+    int32_t group_left = (width - (18 + 4 + text_width)) / 2;
+    lv_obj_align(icon_label, LV_ALIGN_LEFT_MID, group_left, 0);
+    lv_obj_align(text_label, LV_ALIGN_LEFT_MID, group_left + 22, 0);
 
     ui_operator_nav_button_set_selected(
         button,
@@ -643,4 +666,36 @@ void ui_operator_nav_button_set_selected(
         button,
         UI_BORDER_BRIGHT,
         LV_PART_MAIN | LV_STATE_FOCUSED);
+}
+
+static void operator_page_header_resized(lv_event_t *event)
+{
+    lv_obj_t *header=lv_event_get_target_obj(event);
+    if(ui_theme_is_studio())return;
+    int32_t width=lv_obj_get_content_width(header)-40;
+    if(width<1)width=1;
+    for(unsigned i=0;i<2;i++)lv_obj_set_width(lv_obj_get_child(header,i),width);
+}
+
+lv_obj_t *ui_create_operator_page_header(lv_obj_t *parent,const char *title,
+                                        const char *subtitle,int32_t width)
+{
+    lv_obj_t *header=ui_create_operator_banner(parent,20,20,width,86,UI_STATUS_INFO);
+    if(!header)return NULL;
+    if(!ui_theme_is_studio())lv_obj_set_style_max_width(header,UI_PAGE_RAIL_WIDTH,0);
+    lv_obj_t *heading=lv_label_create(header);
+    lv_label_set_text(heading,title?title:"");
+    ui_apply_custom_label_style(heading,UI_FONT_TITLE,UI_TEXT_BRIGHT);
+    lv_obj_set_pos(heading,20,15);
+    lv_label_set_long_mode(heading,LV_LABEL_LONG_DOT);
+    lv_obj_set_height(heading,UI_FONT_TITLE->line_height);
+    lv_obj_t *detail=lv_label_create(header);
+    lv_label_set_text(detail,subtitle?subtitle:"");
+    ui_apply_custom_label_style(detail,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_pos(detail,20,50);
+    lv_label_set_long_mode(detail,LV_LABEL_LONG_DOT);
+    lv_obj_set_height(detail,UI_FONT_CAPTION->line_height);
+    lv_obj_add_event_cb(header,operator_page_header_resized,LV_EVENT_SIZE_CHANGED,NULL);
+    lv_obj_update_layout(header);lv_obj_send_event(header,LV_EVENT_SIZE_CHANGED,NULL);
+    return header;
 }

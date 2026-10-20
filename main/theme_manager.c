@@ -90,7 +90,7 @@ static const char *theme_label(ui_theme_id_t theme)
 
 void theme_manager_init(void)
 {
-    uint8_t saved_theme = (uint8_t)UI_THEME_OPERATOR;
+    uint8_t saved_theme = (uint8_t)UI_THEME_DEFAULT;
     nvs_handle_t handle;
 
     esp_err_t error = nvs_open(
@@ -126,7 +126,7 @@ void theme_manager_init(void)
     ui_theme_id_t theme = (ui_theme_id_t)saved_theme;
 
     if (error != ESP_OK || !theme_valid(theme)) {
-        theme = UI_THEME_OPERATOR;
+        theme = UI_THEME_DEFAULT;
 
         if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) {
             ESP_LOGW(TAG,
@@ -314,7 +314,7 @@ bool theme_manager_remove_custom(size_t index)
                summary->id) == 0;
 
     if (removing_active &&
-        !theme_manager_select(UI_THEME_OPERATOR)) {
+        !theme_manager_select(UI_THEME_DEFAULT)) {
         return false;
     }
 

@@ -49,6 +49,35 @@ saved Custom OTA URL. The current manager accepts HTTP or HTTPS URLs, but
 server-certificate policy and image signing are not yet a complete production
 trust chain. Use a controlled network and server.
 
+## Local OTA web server
+
+After building with `./tools/build_idf6_hosted3.sh`, serve the firmware from
+your development computer:
+
+```bash
+python3 -m http.server 8000 --bind 0.0.0.0 --directory ~/P4/PrinterHMI_v3_2/build-idf6-hosted3
+```
+
+Leave that terminal running. On PrinterHMI, open **Settings → Firmware update →
+Custom URL** and enter:
+
+```text
+http://<computer-LAN-IP>:8000/PrinterHMI.bin
+```
+
+Replace `<computer-LAN-IP>` with the development computer's LAN IPv4 address,
+not the printer's or HMI's address. Run `hostname -I` on the development
+computer to list its addresses; choose the LAN address reachable by the HMI.
+The computer and HMI must be able to reach each other over the network.
+
+The server uses the current `build-idf6-hosted3/PrinterHMI.bin`, so rebuilding
+updates the file at the same URL without restarting the server. Use the
+application image `PrinterHMI.bin`, not a merged/full-flash image. Keep HMI
+power connected during installation and leave the server running until the
+transfer finishes. Stop the server with **Ctrl+C** afterward. If port 8000 is
+already in use, stop the existing server or choose another port in both the
+command and firmware URL.
+
 ## Rollback behavior
 
 The project enables bootloader application rollback. A newly installed image

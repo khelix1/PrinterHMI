@@ -30,7 +30,8 @@ bool printer_controller_is_ready(const char *state)
 
 bool printer_controller_is_error(const char *state)
 {
-    return printer_controller_state_is(state, "error");
+    return printer_controller_state_is(state, "error") ||
+           printer_controller_state_is(state, "shutdown");
 }
 
 bool printer_controller_is_live_state(const char *state)
@@ -57,16 +58,20 @@ void printer_controller_format_status_symbol_text(char *out,
 {
     if (!out || out_len == 0) return;
 
-    if (printer_controller_is_printing(state)) {
+    if (!moonraker_ok) {
+        snprintf(out, out_len, LV_SYMBOL_WARNING " OFFLINE");
+    } else if (printer_controller_state_is(state, "shutdown")) {
+        snprintf(out, out_len, LV_SYMBOL_WARNING " SHUTDOWN");
+    } else if (printer_controller_is_error(state)) {
+        snprintf(out, out_len, LV_SYMBOL_WARNING " ERROR");
+    } else if (!live_data_ok) {
+        snprintf(out, out_len, LV_SYMBOL_WARNING " WAITING FOR KLIPPER");
+    } else if (printer_controller_is_printing(state)) {
         snprintf(out, out_len, LV_SYMBOL_PLAY " PRINTING");
     } else if (printer_controller_is_paused(state)) {
         snprintf(out, out_len, LV_SYMBOL_PAUSE " PAUSED");
-    } else if (printer_controller_is_error(state)) {
-        snprintf(out, out_len, LV_SYMBOL_WARNING " ERROR");
-    } else if (moonraker_ok || live_data_ok) {
-        snprintf(out, out_len, LV_SYMBOL_OK " READY");
     } else {
-        snprintf(out, out_len, LV_SYMBOL_WARNING " OFFLINE");
+        snprintf(out, out_len, LV_SYMBOL_OK " READY");
     }
 }
 

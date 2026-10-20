@@ -6,6 +6,9 @@
 #include "ui_studio_layout.h"
 #include "ui_printer_motion.h"
 #include "ui_popup.h"
+#include "moonraker_config_controller.h"
+#include "printer_connection_policy.h"
+#include "ui_toast.h"
 #include <string.h>
 
 #include <stdint.h>
@@ -26,12 +29,37 @@ static lv_obj_t *s_flow_factor_value = NULL;
 
 /* Tuning widget references belong to one Printer page, across all themes. */
 static lv_obj_t *s_tuning_owner;
+static lv_obj_t *s_studio_position, *s_studio_motion_owner, *s_studio_tuning_popup, *s_studio_tune_button;
+static uint32_t s_tuning_generation, s_tuning_epoch;
+static bool s_tuning_dispatching;
+static uint32_t s_factor_owner[2], s_factor_sent_at[2];
+static bool s_factor_accepted[2];
+static void studio_tuning_close(lv_event_t *event);
+static void tuning_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target = lv_event_get_target(event);
+    if (target == s_speed_factor_slider) s_speed_factor_slider = NULL;
+    else if (target == s_flow_factor_slider) s_flow_factor_slider = NULL;
+    else if (target == s_speed_factor_value) s_speed_factor_value = NULL;
+    else if (target == s_flow_factor_value) s_flow_factor_value = NULL;
+    else return;
+    ++s_tuning_epoch;
+}
+static void watch_tuning_fields(void)
+{
+    lv_obj_t *fields[] = {s_speed_factor_slider, s_flow_factor_slider, s_speed_factor_value, s_flow_factor_value};
+    for (size_t i = 0; i < 4; ++i)
+        if (fields[i]) lv_obj_add_event_cb(fields[i], tuning_field_deleted, LV_EVENT_DELETE, NULL);
+}
 static void tuning_owner_deleted(lv_event_t *event)
 {
     if (lv_event_get_target(event) != s_tuning_owner) return;
     s_speed_factor_slider = s_flow_factor_slider = NULL;
     s_speed_factor_value = s_flow_factor_value = NULL;
     s_tuning_owner = NULL;
+    s_send_gcode_cb = NULL;
+    ++s_tuning_epoch;
+    studio_tuning_close(NULL);
 }
 
 static int s_pending_speed_factor = -1;
@@ -68,64 +96,44 @@ static void set_factor_value_text(
         "%d%%",
         value);
 
-    lv_label_set_text(label, text);
+    if (strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
 }
 
 
 static void tuning_slider_event_cb(lv_event_t *event)
 {
-    if (!event) {
-        return;
-    }
-
-    lv_obj_t *slider =
-        lv_event_get_target(event);
-
-    if (!slider) {
-        return;
-    }
-
-    printer_tuning_kind_t kind =
-        (printer_tuning_kind_t)(intptr_t)
-            lv_event_get_user_data(event);
-
-    int value =
-        lv_slider_get_value(slider);
-
-    lv_obj_t *value_label =
-        kind == PRINTER_TUNING_SPEED
-            ? s_speed_factor_value
-            : s_flow_factor_value;
-
-    set_factor_value_text(
-        value_label,
-        value);
-
-    if (lv_event_get_code(event) !=
-        LV_EVENT_RELEASED) {
-        return;
-    }
-
+    if (!event || s_tuning_dispatching || !s_tuning_owner ||
+        s_tuning_generation != moonraker_config_generation()) return;
+    lv_event_code_t code = lv_event_get_code(event);
+    if (code != LV_EVENT_VALUE_CHANGED && code != LV_EVENT_RELEASED) return;
+    printer_tuning_kind_t kind = (printer_tuning_kind_t)(intptr_t)lv_event_get_user_data(event);
+    if (kind != PRINTER_TUNING_SPEED && kind != PRINTER_TUNING_FLOW) return;
+    lv_obj_t *slider = kind == PRINTER_TUNING_SPEED ? s_speed_factor_slider : s_flow_factor_slider;
+    if (!slider || lv_event_get_target(event) != slider || lv_obj_has_state(slider, LV_STATE_DISABLED)) return;
+    moonraker_state_t live;
+    moonraker_state_snapshot(&live);
+    if (printer_connection_reason(&live)[0]) return;
+    int value = clamp_factor(lv_slider_get_value(slider));
+    set_factor_value_text(kind == PRINTER_TUNING_SPEED ? s_speed_factor_value : s_flow_factor_value, value);
+    if (code != LV_EVENT_RELEASED) return;
+    int *pending = kind == PRINTER_TUNING_SPEED ? &s_pending_speed_factor : &s_pending_flow_factor;
+    if (*pending == value && s_factor_owner[kind] == s_tuning_generation &&
+        s_factor_accepted[kind] && lv_tick_elaps(s_factor_sent_at[kind]) < 5000) return;
+    uint32_t owner = s_tuning_generation, epoch = s_tuning_epoch;
+    ui_printer_live_status_send_gcode_cb_t send = s_send_gcode_cb;
     char command[24];
-
-    lv_snprintf(
-        command,
-        sizeof(command),
-        kind == PRINTER_TUNING_SPEED
-            ? "M220 S%d"
-            : "M221 S%d",
-        value);
-
-    if (!s_send_gcode_cb ||
-        !s_send_gcode_cb(command)) {
-        return;
-    }
-
-    if (kind == PRINTER_TUNING_SPEED) {
-        s_pending_speed_factor = value;
-    } else {
-        s_pending_flow_factor = value;
-    }
+    lv_snprintf(command, sizeof(command), kind == PRINTER_TUNING_SPEED ? "M220 S%d" : "M221 S%d", value);
+    s_tuning_dispatching = true;
+    bool accepted = send && send(command);
+    s_tuning_dispatching = false;
+    if (owner != moonraker_config_generation()) return;
+    /* Keep the selected input on rejection; accepted state awaits telemetry. */
+    *pending = value;
+    s_factor_owner[kind] = owner;
+    s_factor_accepted[kind] = accepted;
+    s_factor_sent_at[kind] = lv_tick_get();
+    if (!s_tuning_owner || epoch != s_tuning_epoch) return;
+    if (!accepted) ui_toast_show(UI_STATUS_DANGER, "PRINT TUNING", "Send failed. Selected value kept; check connection and retry.");
 }
 
 
@@ -355,60 +363,45 @@ static void refresh_filament_label(
 
 
 static void refresh_factor_slider(
-    lv_obj_t *slider,
-    lv_obj_t *value_label,
-    double reported_factor,
-    int *pending_factor)
+    lv_obj_t *slider, lv_obj_t *value_label, double reported_factor, int *pending_factor)
 {
-    if (!slider ||
-        !value_label ||
-        !pending_factor) {
-        return;
-    }
-
-    int reported =
-        clamp_factor(
-            (int)(reported_factor + 0.5));
-
+    if (!slider || !value_label || !pending_factor || !s_tuning_owner) return;
+    size_t kind = pending_factor == &s_pending_speed_factor ? PRINTER_TUNING_SPEED : PRINTER_TUNING_FLOW;
+    uint32_t owner = moonraker_config_generation();
+    moonraker_state_t live;
+    moonraker_state_snapshot(&live);
+    bool ready = s_tuning_generation == owner && !printer_connection_reason(&live)[0] && s_send_gcode_cb;
+    if (ready && !s_tuning_dispatching) lv_obj_remove_state(slider, LV_STATE_DISABLED);
+    else lv_obj_add_state(slider, LV_STATE_DISABLED);
+    int reported = clamp_factor((int)(reported_factor + 0.5));
     int displayed = reported;
-
+    bool timed_out = false;
     if (*pending_factor >= 0) {
-        int difference =
-            reported - *pending_factor;
-
-        if (difference < 0) {
-            difference = -difference;
-        }
-
-        if (difference <= 1) {
+        int difference = reported - *pending_factor;
+        if (difference < 0) difference = -difference;
+        if (s_factor_owner[kind] != owner || (ready && difference <= 1)) {
             *pending_factor = -1;
-        } else {
-            displayed = *pending_factor;
-        }
+            s_factor_accepted[kind] = false;
+        } else if (s_factor_accepted[kind] && lv_tick_elaps(s_factor_sent_at[kind]) >= 5000) {
+            *pending_factor = -1;
+            s_factor_accepted[kind] = false;
+            timed_out = ready;
+        } else if (s_factor_owner[kind] == s_tuning_generation) displayed = *pending_factor;
     }
-
-    if (lv_obj_has_state(
-            slider,
-            LV_STATE_PRESSED)) {
-        return;
+    if (!lv_obj_has_state(slider, LV_STATE_PRESSED)) {
+        if (lv_slider_get_value(slider) != displayed) lv_slider_set_value(slider, displayed, LV_ANIM_OFF);
+        set_factor_value_text(value_label, displayed);
     }
-
-    lv_slider_set_value(
-        slider,
-        displayed,
-        LV_ANIM_OFF);
-
-    set_factor_value_text(
-        value_label,
-        displayed);
+    /* Notifications run last: their callbacks may retire the page. */
+    if (timed_out) ui_toast_show(UI_STATUS_WARNING, "PRINT TUNING", "Update unconfirmed. Live value restored; check printer before retrying.");
 }
 
 
-static lv_obj_t *s_studio_position;
-static lv_obj_t *s_studio_tuning_popup;
 static void studio_tuning_deleted(lv_event_t *e)
 {
-    (void)e;s_studio_tuning_popup=NULL;
+    if (lv_event_get_target(e) != s_studio_tuning_popup) return;
+    ++s_tuning_epoch;
+    s_studio_tuning_popup=NULL;
     s_speed_factor_slider=s_flow_factor_slider=s_speed_factor_value=s_flow_factor_value=NULL;
 }
 static void studio_tuning_close(lv_event_t *e)
@@ -417,7 +410,12 @@ static void studio_tuning_close(lv_event_t *e)
 }
 static void studio_tuning_open(lv_event_t *e)
 {
-    (void)e;if(s_studio_tuning_popup)return;
+    if (e && (lv_event_get_code(e) != LV_EVENT_CLICKED || lv_event_get_target(e) != s_studio_tune_button)) return;
+    if (!s_tuning_owner || s_tuning_dispatching || s_tuning_generation != moonraker_config_generation()) return;
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    if (printer_connection_reason(&live)[0]) return;
+    if(s_studio_tuning_popup){lv_obj_move_foreground(s_studio_tuning_popup);return;}
+    ++s_tuning_epoch;
     s_studio_tuning_popup=ui_popup_create(lv_layer_top(),680,280,UI_POPUP_STANDARD);
     if(!s_studio_tuning_popup)return;
     lv_obj_add_event_cb(s_studio_tuning_popup,studio_tuning_deleted,LV_EVENT_DELETE,NULL);
@@ -428,14 +426,20 @@ static void studio_tuning_open(lv_event_t *e)
     s_flow_factor_value=studio_text(s_studio_tuning_popup,"--%",356,110,280,UI_FONT_VALUE_SMALL,UI_TEXT);
     s_speed_factor_slider=create_tuning_slider(s_studio_tuning_popup,24,164,UI_ACCENT,PRINTER_TUNING_SPEED);
     s_flow_factor_slider=create_tuning_slider(s_studio_tuning_popup,356,164,UI_OK_BRIGHT,PRINTER_TUNING_FLOW);
+    watch_tuning_fields();
     moonraker_state_t state;moonraker_state_snapshot(&state);
-    refresh_factor_slider(s_speed_factor_slider,s_speed_factor_value,state.speed_factor,&s_pending_speed_factor);
-    refresh_factor_slider(s_flow_factor_slider,s_flow_factor_value,state.flow_factor,&s_pending_flow_factor);
     studio_action(s_studio_tuning_popup,"Close",496,214,160,48,studio_tuning_close,NULL);
+    uint32_t epoch = s_tuning_epoch;
+    refresh_factor_slider(s_speed_factor_slider,s_speed_factor_value,state.speed_factor,&s_pending_speed_factor);
+    if (epoch != s_tuning_epoch) return;
+    refresh_factor_slider(s_flow_factor_slider,s_flow_factor_value,state.flow_factor,&s_pending_flow_factor);
 }
 static void studio_motion_deleted(lv_event_t *e)
 {
-    (void)e;studio_tuning_close(NULL);s_studio_position=NULL;
+    if (lv_event_get_target(e) != s_studio_motion_owner) return;
+    s_studio_motion_owner=s_studio_tune_button=NULL;
+    ++s_tuning_epoch;
+    studio_tuning_close(NULL);s_studio_position=NULL;
     s_speed_factor_slider=s_flow_factor_slider=s_speed_factor_value=s_flow_factor_value=NULL;
 }
 static void studio_motion_refresh(void)
@@ -450,9 +454,10 @@ static void studio_motion_refresh(void)
 }
 static void studio_motion_create(lv_obj_t *card,lv_obj_t **speed,lv_obj_t **flow,lv_obj_t **layer,lv_obj_t **filament,lv_event_cb_t filament_cb)
 {
+    s_studio_motion_owner=card;
     /* The image well occupies y=0..239; telemetry stays below it. */
     s_studio_position=studio_text(card,"X --    Y --    Z --",0,252,508,UI_FONT_BODY,UI_TEXT);
-    studio_action(card,"Tune",524,246,96,44,studio_tuning_open,NULL);
+    s_studio_tune_button=studio_action(card,"Tune",524,246,96,44,studio_tuning_open,NULL);
     studio_rule(card,0,302,620,1);
     studio_text(card,"Speed",0,310,130,UI_FONT_CAPTION,UI_TEXT_DIM);
     studio_text(card,"Flow",144,310,130,UI_FONT_CAPTION,UI_TEXT_DIM);
@@ -484,10 +489,15 @@ void ui_printer_live_status_create(
     }
 
     /*
-     * Pending values deliberately survive page destruction/recreation.
-     * Moonraker remains authoritative and clears them when its reported
-     * factor matches the requested value.
+     * Requests survive recreation only for their captured printer. Rejected
+     * drafts remain retryable; accepted values have a bounded telemetry wait.
      */
+    studio_tuning_close(NULL);
+    s_studio_motion_owner = s_studio_position = s_studio_tune_button = NULL;
+    ++s_tuning_epoch;
+    s_tuning_generation = moonraker_config_generation();
+    if (s_factor_owner[PRINTER_TUNING_SPEED] != s_tuning_generation) s_pending_speed_factor = -1;
+    if (s_factor_owner[PRINTER_TUNING_FLOW] != s_tuning_generation) s_pending_flow_factor = -1;
     s_send_gcode_cb = send_gcode_cb;
     s_speed_factor_slider = s_flow_factor_slider = NULL;
     s_speed_factor_value = s_flow_factor_value = NULL;
@@ -517,7 +527,7 @@ void ui_printer_live_status_create(
 
     lv_label_set_text(
         title,
-        ui_text("ACTIVE PRINT"));
+        ui_text("Active print"));
 
     ui_apply_text_body_large(title);
     ui_apply_label_dim(title);
@@ -533,35 +543,7 @@ void ui_printer_live_status_create(
         *active_file_label = NULL;
     }
 
-    lv_obj_t *divider =
-        lv_obj_create(card);
-
-    lv_obj_clear_flag(
-        divider,
-        LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_set_size(divider, 1, 156);
-    lv_obj_set_pos(divider, compact_operator_shell ? 196 : 310, 48);
-
-    lv_obj_set_style_bg_color(
-        divider,
-        UI_BORDER_SOFT,
-        0);
-
-    lv_obj_set_style_bg_opa(
-        divider,
-        LV_OPA_COVER,
-        0);
-
-    lv_obj_set_style_border_width(
-        divider,
-        0,
-        0);
-
-    lv_obj_set_style_pad_all(
-        divider,
-        0,
-        0);
+    ui_create_divider(card,compact_operator_shell?196:310,48,1,156);
 
     if (layer_label) {
         *layer_label =
@@ -775,16 +757,20 @@ void ui_printer_live_status_create(
             UI_OK,
             PRINTER_TUNING_FLOW);
 
+    watch_tuning_fields();
+
     /*
      * Do not flash/reset to 100% when returning to the Printer page.
      * Initialize immediately from the latest Moonraker state or from a
      * command that is still awaiting confirmation.
      */
+    uint32_t epoch = s_tuning_epoch;
     refresh_factor_slider(
         s_speed_factor_slider,
         s_speed_factor_value,
         initial_speed_factor,
         &s_pending_speed_factor);
+    if (epoch != s_tuning_epoch) return;
 
     refresh_factor_slider(
         s_flow_factor_slider,
@@ -821,6 +807,11 @@ void ui_printer_live_status_refresh(
      * The Active Print card remains visible and contains thumbnail,
      * layer, live speed, live flow, filament, and tuning controls.
      */
+    /* Compare against the live owner tree without dereferencing a retired page. */
+    bool owns_page = false;
+    for (lv_obj_t *owner = s_tuning_owner; owner; owner = lv_obj_get_parent(owner))
+        if (owner == printer_panel) { owns_page = true; break; }
+    if (!owns_page) return;
     studio_motion_refresh();
     (void)active_file_box;
     (void)active_file_label;
@@ -893,11 +884,13 @@ void ui_printer_live_status_refresh(
             moonraker_online,
             filament_state);
 
+        uint32_t epoch = s_tuning_epoch;
         refresh_factor_slider(
             s_speed_factor_slider,
             s_speed_factor_value,
             printer_speed_factor,
             &s_pending_speed_factor);
+        if (epoch != s_tuning_epoch) return;
 
         refresh_factor_slider(
             s_flow_factor_slider,

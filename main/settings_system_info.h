@@ -11,3 +11,6 @@ void settings_system_info_bind_uptime_label(lv_obj_t *label);
 
 void settings_system_info_refresh(void);
 void settings_system_info_unbind(void);
+
+void settings_system_info_bind_heap_metrics(lv_obj_t *current,lv_obj_t *minimum,lv_obj_t *largest);
+void settings_system_info_bind_psram_metrics(lv_obj_t *current,lv_obj_t *minimum);

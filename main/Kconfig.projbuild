@@ -1,0 +1,11 @@
+menu "PrinterHMI diagnostics"
+
+config PRINTERHMI_GRAPHICS_DIAGNOSTICS
+    bool "Periodic graphics timing and heap reports"
+    default n
+    help
+        Log active render-cycle timing and heap summaries every ten seconds.
+        Startup renderer/buffer information remains available with this off.
+        This option does not change PPA selection or display configuration.
+
+endmenu

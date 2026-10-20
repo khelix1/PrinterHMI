@@ -18,8 +18,8 @@ done
 
 version="$(tr -d '[:space:]' < version.txt)"
 
-if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "ERROR: version.txt is not a semantic X.Y.Z version: $version" >&2
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-dev)?$ ]]; then
+    echo "ERROR: version.txt is not an X.Y.Z or X.Y.Z-dev version: $version" >&2
     exit 1
 fi
 
@@ -90,7 +90,8 @@ release_notes="docs/releases/v${version}.md"
 }
 
 if [[ -f tools/release_stable.sh ]]; then
-    require_text tools/release_stable.sh "version=\"${version}\""
+    require_text tools/release_stable.sh 'version="$(tr -d '\''[:space:]'\'' < version.txt)"'
+    require_text tools/release_stable.sh 'development firmware cannot be published as stable'
 fi
 
 echo "PASS: version.txt ${version} owns the build and runtime identity"

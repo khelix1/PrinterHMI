@@ -9,10 +9,35 @@
 #include "console_controller.h"
 #include "moonraker.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
-
 static ui_calibration_pid_context_t *s_context;
+static uint32_t s_pid_owner;
+static uint32_t s_pid_epoch;
+static bool s_pid_dispatching;
+static lv_obj_t *s_pid_feedback;
+
+static void pid_retire_popup(void)
+{
+    ++s_pid_epoch;
+    s_pid_feedback = NULL;
+    if (s_context) {
+        *s_context->popup = NULL;
+        *s_context->target_label = NULL;
+    }
+}
+
+static void pid_popup_deleted(lv_event_t *event)
+{
+    if (s_context && lv_event_get_target_obj(event) == *s_context->popup)
+        pid_retire_popup();
+}
+
+static void pid_register_popup(void)
+{
+    lv_obj_add_event_cb(*s_context->popup, pid_popup_deleted, LV_EVENT_DELETE, NULL);
+}
 
 void ui_calibration_pid_init(ui_calibration_pid_context_t *context)
 {
@@ -41,8 +66,7 @@ void ui_calibration_pid_close(void)
     if (*s_context->popup) {
         lv_obj_t *popup =
             *s_context->popup;
-        *s_context->popup = NULL;
-        *s_context->target_label = NULL;
+        pid_retire_popup();
         lv_obj_delete(popup);
     }
 }
@@ -63,27 +87,27 @@ bool ui_calibration_pid_printer_ready(void)
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID UNAVAILABLE",
+            "PID unavailable",
             "The active printer is offline or not ready.");
         return false;
     }
 
     if (strcmp(state.printer_state, "printing") == 0 ||
         strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID BLOCKED",
+            "PID blocked",
             "PID calibration cannot run during a print.");
         return false;
     }
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID BLOCKED",
+            "PID blocked",
             "Clear the printer error before calibration.");
         return false;
     }
@@ -124,18 +148,8 @@ static void refresh_pid_target_label(void)
         return;
     }
 
-    char text[240];
-    lv_snprintf(
-        text,
-        sizeof(text),
-        "%s\n\nTARGET: %d C\n"
-        "Allowed range: %d-%d C\n\n"
-        "The heater will cycle repeatedly. Keep the machine attended.",
-        s_context->display_names[
-            *s_context->selected_index],
-        *s_context->target,
-        *s_context->target_min,
-        *s_context->target_max);
+    char text[64];
+    lv_snprintf(text,sizeof(text),"Target: %d C",*s_context->target);
     lv_label_set_text(
         *s_context->target_label,
         text);
@@ -145,7 +159,7 @@ static void refresh_pid_target_label(void)
 static void pid_adjust_target_cb(
     lv_event_t *event)
 {
-    if (!s_context || !event) {
+    if (!s_context || !*s_context->popup || !event || s_pid_dispatching) {
         return;
     }
 
@@ -192,9 +206,9 @@ static void run_pid_tune_cb(
 {
     (void)event;
 
-    if (!s_context ||
-        *s_context->selected_index >=
-            *s_context->heater_count ||
+    if (!s_context || !*s_context->popup || s_pid_dispatching ||
+        s_pid_owner != moonraker_config_generation() ||
+        *s_context->selected_index >= *s_context->heater_count ||
         !ui_calibration_pid_printer_ready()) {
         return;
     }
@@ -215,9 +229,9 @@ static void run_pid_tune_cb(
 
     if (written <= 0 ||
         (size_t)written >= sizeof(command)) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PID FAILED",
+            "PID failed",
             "The selected heater command is too long.");
         return;
     }
@@ -229,21 +243,31 @@ static void run_pid_tune_cb(
         start_sequence);
     console_controller_add_command(command);
 
-    bool sent =
-        s_context->send_gcode &&
-        s_context->send_gcode(command);
+    ui_calibration_pid_context_t *context = s_context;
+    lv_obj_t *popup = *context->popup;
+    uint32_t epoch = s_pid_epoch;
+    uint32_t owner = s_pid_owner;
+    s_pid_dispatching = true;
+    bool sent = context->send_gcode && context->send_gcode(command);
+    s_pid_dispatching = false;
 
-    ui_calibration_pid_close();
-
+    /* A transport callback may navigate, retire the owner or switch printers. */
+    if (s_context != context || s_pid_epoch != epoch ||
+        *context->popup != popup || owner != moonraker_config_generation()) return;
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the PID command.");
+        if (s_pid_feedback)
+            lv_label_set_text(s_pid_feedback,
+                "Command was not accepted. Your heater and target are retained. Retry when connected.");
+        return;
     }
 
+    ui_calibration_pid_close();
     s_context->show_results(
-        "PID CALIBRATION",
+        "PID calibration",
         "The heater is cycling. Keep the machine attended.\n\n"
-        "Apply & Restart will appear only after Klipper reports a successful result requiring SAVE_CONFIG.");
+        "Apply & restart will appear only after Klipper reports a successful result requiring SAVE_CONFIG.");
     s_context->refresh_results();
 }
 
@@ -270,12 +294,13 @@ static void back_to_pid_heaters_cb(
         return;
     }
 
+    ui_calibration_pid_close();
     ui_calibration_pid_event(NULL);
 }
 
 
 static void pid_start_warning_cb(lv_event_t *event);
-static void show_pid_target_popup(void)
+static void show_pid_target_popup(bool defaults)
 {
     if (!s_context ||
         *s_context->selected_index >=
@@ -288,116 +313,83 @@ static void show_pid_target_popup(void)
     const char *object_name =
         s_context->object_names[
             *s_context->selected_index];
-    pid_set_defaults(object_name);
+    if (defaults) pid_set_defaults(object_name);
 
     *s_context->popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            440,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 440, UI_POPUP_STANDARD);
 
     if (!*s_context->popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_context->popup,
-        ui_text("CONFIRM PID CALIBRATION"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_context->popup,
-        48);
+    pid_register_popup();
+    lv_obj_set_user_data(*s_context->popup, (void *)(uintptr_t)s_pid_owner);
+    ui_cal_dialog_title_divided(*s_context->popup, ui_text("Confirm PID calibration"));
 
-    *s_context->target_label =
-        ui_popup_add_body(
-            *s_context->popup,
-            "",
-            28,
-            72,
-            594);
+
+    lv_obj_t *body=ui_cal_dialog_body(*s_context->popup);
+    ui_cal_dialog_caption(body,s_context->display_names[*s_context->selected_index]);
+    *s_context->target_label = ui_cal_dialog_text(body, "");
+    ui_apply_custom_label_style(*s_context->target_label,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
     refresh_pid_target_label();
+    char range[80];
+    lv_snprintf(range,sizeof(range),"Allowed range: %d-%d C",*s_context->target_min,*s_context->target_max);
+    ui_cal_dialog_caption(body,range);
 
     static const int deltas[] =
         {-10, -5, 5, 10};
     static const char *labels[] =
-        {"-10", "-5", "+5", "+10"};
+        {"-10 C", "-5 C", "+5 C", "+10 C"};
 
     for (size_t index = 0;
          index < sizeof(deltas) / sizeof(deltas[0]);
          ++index) {
-        ui_popup_add_action_at(
-            *s_context->popup,
-            UI_POPUP_ACTION_CHOICE,
-            labels[index],
-            45 + (int)index * 145,
-            260,
-            120,
-            46,
-            pid_adjust_target_cb,
-            (void *)(intptr_t)deltas[index],
-            NULL);
+        ui_cal_dialog_choice(*s_context->popup, UI_POPUP_ACTION_CHOICE, labels[index], 120, pid_adjust_target_cb, (void *)(intptr_t)deltas[index], NULL);
     }
 
-    ui_popup_add_standard_footer_divider(
-        *s_context->popup);
+    ui_cal_dialog_caption(body,"The heater will cycle repeatedly. Keep the printer attended.");
 
-    ui_popup_add_footer_action(
-        *s_context->popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        back_to_pid_heaters_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", back_to_pid_heaters_cb, NULL, NULL);
 
-    ui_popup_add_footer_action(
-        *s_context->popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " RUN",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        pid_start_warning_cb,
-        NULL,
-        NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", pid_start_warning_cb, NULL, NULL);
 }
 
 
 static void back_to_pid_target_cb(lv_event_t *event)
 {
     (void)event;
-    show_pid_target_popup();
+    show_pid_target_popup(false);
 }
 
 
 static void pid_start_warning_cb(lv_event_t *event)
 {
     (void)event;
-    if (!s_context) return;
+    if (!s_context || !*s_context->popup || s_pid_dispatching) return;
     ui_calibration_pid_close();
-    *s_context->popup = ui_popup_create(lv_layer_top(), 650, 420, UI_POPUP_DANGER);
+    *s_context->popup = ui_cal_dialog_create(lv_layer_top(), 650, 420, UI_POPUP_DANGER);
     if (!*s_context->popup) return;
-    ui_popup_add_title(*s_context->popup, ui_text("START PID HEAT CYCLE?"), false, 4);
-    ui_popup_add_header_divider(*s_context->popup, 48);
-    ui_popup_add_body(*s_context->popup,
-        "The selected heater will cycle repeatedly at the chosen target. Keep the printer attended, clear the area, and do not start a print until calibration completes.",
-        28, 76, 594);
-    ui_popup_add_standard_footer_divider(*s_context->popup);
-    ui_popup_add_footer_action(*s_context->popup, UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK", 170, UI_POPUP_FOOTER_LEFT,
-        back_to_pid_target_cb, NULL, NULL);
-    ui_popup_add_footer_action(*s_context->popup, UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_PLAY " START HEAT", 210, UI_POPUP_FOOTER_RIGHT,
-        run_pid_tune_cb, NULL, NULL);
+    pid_register_popup();
+    lv_obj_set_user_data(*s_context->popup, (void *)(uintptr_t)s_pid_owner);
+    ui_cal_dialog_title_divided(*s_context->popup, ui_text("Start PID heat cycle?"));
+
+    char selection[160];
+    lv_snprintf(selection,sizeof(selection),"%s | Target %d C",
+        *s_context->selected_index<*s_context->heater_count && *s_context->selected_index<s_context->heater_capacity
+            ? s_context->display_names[*s_context->selected_index] : "Selected heater",*s_context->target);
+    ui_cal_dialog_caption(ui_cal_dialog_body(*s_context->popup),selection);
+    ui_cal_dialog_text(ui_cal_dialog_body(*s_context->popup), "The selected heater will cycle repeatedly at the chosen target. Keep the printer attended, clear the area, and do not start a print until calibration completes.");
+
+    s_pid_feedback = ui_cal_dialog_caption(ui_cal_dialog_body(*s_context->popup), "");
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", back_to_pid_target_cb, NULL, NULL);
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_DANGER, LV_SYMBOL_PLAY " Start heat", run_pid_tune_cb, NULL, NULL);
 }
 
 
 static void pid_heater_selected_cb(
     lv_event_t *event)
 {
-    if (!s_context || !event) {
+    if (!s_context || !*s_context->popup || !event || s_pid_dispatching) {
         return;
     }
 
@@ -410,7 +402,7 @@ static void pid_heater_selected_cb(
     }
 
     *s_context->selected_index = index;
-    show_pid_target_popup();
+    show_pid_target_popup(true);
 }
 
 
@@ -423,6 +415,12 @@ void ui_calibration_pid_event(
         return;
     }
 
+    if (s_pid_dispatching) return;
+    if (*s_context->popup) {
+        lv_obj_move_foreground(*s_context->popup);
+        return;
+    }
+    s_pid_owner = moonraker_config_generation();
     *s_context->heater_count = 0;
     memset(
         s_context->object_names,
@@ -440,8 +438,8 @@ void ui_calibration_pid_event(
 
     for (size_t index = 0;
          index < status.stored_count &&
-         *s_context->heater_count <
-             UI_CALIBRATION_PID_HEATER_MAX;
+         *s_context->heater_count < s_context->heater_capacity &&
+         *s_context->heater_count < UI_CALIBRATION_PID_HEATER_MAX;
          ++index) {
         device_descriptor_t device;
 
@@ -470,75 +468,45 @@ void ui_calibration_pid_event(
     }
 
     if (*s_context->heater_count == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_WARNING,
-            "NO PID HEATERS",
+            "No PID heaters",
             "No PID-capable heater objects are available.");
         return;
     }
 
     if (*s_context->heater_count == 1) {
         *s_context->selected_index = 0;
-        show_pid_target_popup();
+        show_pid_target_popup(true);
         return;
     }
 
     ui_calibration_pid_close();
 
     *s_context->popup =
-        ui_popup_create(
-            lv_layer_top(),
-            650,
-            440,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 440, UI_POPUP_STANDARD);
 
     if (!*s_context->popup) {
         return;
     }
 
-    ui_popup_add_title(
-        *s_context->popup,
-        ui_text("SELECT HEATER FOR PID"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        *s_context->popup,
-        48);
+    pid_register_popup();
+    lv_obj_set_user_data(*s_context->popup, (void *)(uintptr_t)s_pid_owner);
+    ui_cal_dialog_title_divided(*s_context->popup, ui_text("Select heater for PID"));
+
 
     lv_obj_t *list =
-        ui_popup_add_list(
-            *s_context->popup,
-            28,
-            68,
-            594,
-            292);
+        ui_cal_dialog_body(*s_context->popup);
 
     if (list) {
         for (size_t index = 0;
              index < *s_context->heater_count;
              ++index) {
-            ui_popup_add_selectable_row(
-                list,
-                s_context->display_names[index],
-                8,
-                8 + (int)index * 54,
-                558,
-                46,
-                pid_heater_selected_cb,
-                (void *)(uintptr_t)index);
+            ui_cal_dialog_select(list, s_context->display_names[index], pid_heater_selected_cb, (void *)(uintptr_t)index);
         }
     }
 
-    ui_popup_add_standard_footer_divider(
-        *s_context->popup);
 
-    ui_popup_add_footer_action(
-        *s_context->popup,
-        UI_POPUP_ACTION_CLOSE,
-        "CLOSE",
-        170,
-        UI_POPUP_FOOTER_RIGHT,
-        close_pid_popup_cb,
-        NULL,
-        NULL);
+
+    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CLOSE, "Close", close_pid_popup_cb, NULL, NULL);
 }

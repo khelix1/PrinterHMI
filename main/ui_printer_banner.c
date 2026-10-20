@@ -158,7 +158,7 @@ void ui_printer_banner_refresh(
                                  s_notice,
                                  NULL,
                                  NULL);
-        ui_operator_banner_set_status(banner, s_notice_kind);
+        ui_apply_banner_status_style_with_padding(banner, s_notice_kind,0);
         return;
     }
     s_notice[0] = '\0';
@@ -193,7 +193,6 @@ void ui_printer_banner_refresh(
      * Moonraker reports lowercase lifecycle states. The shared status bar
      * and Printer's explicit palette both consume the normalized state.
      */
-    ui_operator_banner_set_status(
-        banner,
-        printer_banner_status_kind(normalized_state));
+    ui_apply_banner_status_style_with_padding(
+        banner, printer_banner_status_kind(normalized_state),0);
 }

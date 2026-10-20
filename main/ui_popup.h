@@ -1,4 +1,5 @@
 #pragma once
+#include "ui_theme.h"
 
 #include "lvgl.h"
 
@@ -237,3 +238,18 @@ lv_obj_t *ui_popup_add_form_cell(lv_obj_t *form, unsigned index);
 
 /* Find the modal owner through layout containers. */
 lv_obj_t *ui_popup_find_owner(lv_obj_t *object);
+/* Keep modal rendering above its blocker while tying cleanup to a page owner. */
+void ui_popup_set_owner(lv_obj_t *popup, lv_obj_t *owner);
+
+/* Reusable wrapped feedback, owned and deleted by its native body. */
+lv_obj_t *ui_popup_feedback(lv_obj_t *body, ui_status_kind_t kind, const char *title, const char *detail);
+/* Clear existing feedback without creating a label or changing its owner. */
+void ui_popup_clear_feedback(lv_obj_t *body);
+void ui_cal_dialog_register(lv_obj_t *popup);
+void ui_cal_dialog_notice(ui_status_kind_t kind, const char *title, const char *detail);
+
+/* Native column forms: pin the keyboard immediately above the final footer. */
+void ui_popup_pin_keyboard(lv_obj_t *form,lv_obj_t *keyboard);
+void ui_popup_focus_input(lv_obj_t *input);
+void ui_popup_input_focus_cb(lv_event_t *event);
+void ui_popup_keyboard_actions(lv_obj_t *keyboard,lv_event_cb_t ready,lv_event_cb_t cancel);

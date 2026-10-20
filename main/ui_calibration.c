@@ -1,4 +1,6 @@
 #include "ui_calibration.h"
+#include "printer_connection_policy.h"
+#include "ui_value_update.h"
 #include "ui_studio_layout.h"
 #include "ui_text.h"
 
@@ -29,6 +31,7 @@
 #include "ui_button.h"
 #include "ui_page_geometry.h"
 #include "ui_popup.h"
+#include "ui_calibration_dialog.h"
 #include "ui_theme.h"
 #include "ui_toast.h"
 #include "ui_widgets.h"
@@ -64,6 +67,7 @@ typedef struct {
     lv_timer_t *refresh_timer;
     ui_calibration_open_bed_mesh_cb_t open_bed_mesh;
     ui_calibration_send_gcode_cb_t send_gcode;
+    bool connection_blocked;
     bool screws_home_required;
     bool gantry_home_required;
     bool gantry_use_qgl;
@@ -170,7 +174,7 @@ static void layout_bed_geometry_actions(
 
     ui_calibration_layout_set_action_label(
         s_calibration->bed_mesh_button,
-        "BED MESH");
+        "Bed mesh");
 
     for (size_t index = 0; index < count; ++index) {
         lv_obj_set_size(visible_buttons[index], 170, 44);
@@ -201,7 +205,7 @@ static void refresh_capabilities(void)
     if (!capabilities.discovered) {
         lv_label_set_text(
             s_calibration->banner_status,
-            ui_text("WAITING FOR PRINTER"));
+            ui_text("Waiting for printer"));
 
         ui_calibration_card_refs_t *cards[] = {
             &s_calibration->bed,
@@ -223,7 +227,7 @@ static void refresh_capabilities(void)
                 ui_text("Waiting for active-printer discovery."));
             lv_label_set_text(
                 cards[index]->status,
-                ui_text("AWAITING DISCOVERY"));
+                ui_text("Awaiting discovery"));
             ui_apply_label_dim(cards[index]->status);
         }
 
@@ -299,9 +303,9 @@ static void refresh_capabilities(void)
     lv_snprintf(
         banner,
         sizeof(banner),
-        "%u TOOL%s DETECTED",
+        "%u tool%s detected",
         (unsigned)capabilities.tool_count,
-        capabilities.tool_count == 1 ? "" : "S");
+        capabilities.tool_count == 1 ? "" : "s");
     lv_label_set_text(
         s_calibration->banner_status,
         banner);
@@ -310,11 +314,11 @@ static void refresh_capabilities(void)
     size_t bed_count = 0;
 
     if (capabilities.bed_mesh) {
-        ui_calibration_layout_append_tool(bed, sizeof(bed), "BED MESH");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "Bed mesh");
         ++bed_count;
     }
     if (capabilities.screws_tilt) {
-        ui_calibration_layout_append_tool(bed, sizeof(bed), "SCREWS TILT");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "Screws tilt");
         ++bed_count;
     }
     if (capabilities.quad_gantry_level) {
@@ -322,11 +326,11 @@ static void refresh_capabilities(void)
         ++bed_count;
     }
     if (capabilities.z_tilt) {
-        ui_calibration_layout_append_tool(bed, sizeof(bed), "Z TILT");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "Z tilt");
         ++bed_count;
     }
     if (capabilities.axis_twist) {
-        ui_calibration_layout_append_tool(bed, sizeof(bed), "AXIS TWIST");
+        ui_calibration_layout_append_tool(bed, sizeof(bed), "Axis twist");
         ++bed_count;
     }
 
@@ -376,7 +380,7 @@ static void refresh_capabilities(void)
                     label,
                     capabilities.quad_gantry_level
                         ? ui_text("QGL")
-                        : ui_text("Z TILT"));
+                        : ui_text("Z tilt"));
             }
         } else {
             lv_obj_add_flag(
@@ -431,28 +435,28 @@ static void refresh_capabilities(void)
         ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
-            "HOTEND PID");
+            "Hotend PID");
         ++thermal_count;
     }
     if (capabilities.bed_pid) {
         ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
-            "BED PID");
+            "Bed PID");
         ++thermal_count;
     }
     if (capabilities.generic_heater_pid) {
         ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
-            "GENERIC HEATER PID");
+            "Generic heater PID");
         ++thermal_count;
     }
     if (capabilities.pressure_advance) {
         ui_calibration_layout_append_tool(
             thermal,
             sizeof(thermal),
-            "PRESSURE ADVANCE");
+            "Pressure advance");
         ++thermal_count;
     }
 
@@ -503,15 +507,15 @@ static void refresh_capabilities(void)
             probe,
             sizeof(probe),
             capabilities.load_cell_probe
-                ? "LOAD CELL PROBE / Z"
+                ? "Load cell probe / Z"
                 : capabilities.bltouch
-                    ? "BLTOUCH / Z OFFSET"
-                    : "PROBE / Z OFFSET");
+                    ? "BLTouch / Z offset"
+                    : "Probe / Z offset");
         ++probe_count;
     }
 
     if (capabilities.probe_accuracy) {
-        ui_calibration_layout_append_tool(probe, sizeof(probe), "ACCURACY CHECK");
+        ui_calibration_layout_append_tool(probe, sizeof(probe), "Accuracy check");
         ++probe_count;
     }
     if (capabilities.calibration_macro_count > 0) {
@@ -519,7 +523,7 @@ static void refresh_capabilities(void)
         lv_snprintf(
             macros,
             sizeof(macros),
-            "CUSTOM CALIBRATION MACROS (%u)",
+            "Custom calibration macros (%u)",
             (unsigned)capabilities.calibration_macro_count);
         ui_calibration_layout_append_tool(probe, sizeof(probe), macros);
     }
@@ -586,9 +590,9 @@ static bool calibration_action_ready(
 
     if (!state.moonraker_ok ||
         !state.live_data_ok) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION UNAVAILABLE",
+            "Calibration unavailable",
             "The active printer is offline or not ready.");
         return false;
     }
@@ -601,18 +605,18 @@ static bool calibration_action_ready(
             sizeof(detail),
             "%s cannot run during a print.",
             workflow ? workflow : "Calibration");
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             detail);
         return false;
     }
 
     if (strcmp(state.printer_state, "error") == 0 ||
         strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "CALIBRATION BLOCKED",
+            "Calibration blocked",
             "Clear the printer error before calibration.");
         return false;
     }
@@ -666,9 +670,9 @@ static void send_probe_step_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the TESTZ command.");
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "PROBE MOVE FAILED",
+            "Probe move failed",
             "Moonraker did not accept the TESTZ command.");
     }
 }
@@ -692,9 +696,9 @@ static void abort_probe_calibration_cb(
     ui_calibration_results_close();
     calibration_session_controller_reset();
 
-    ui_toast_show(
-        sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
-        sent ? "PROBE CALIBRATION ABORTED" : "ABORT FAILED",
+    ui_cal_dialog_notice(
+        sent ? UI_STATUS_OK : UI_STATUS_DANGER,
+        sent ? "Probe abort requested" : "Abort failed",
         sent
             ? "No calibration values were saved."
             : "Moonraker did not accept ABORT.");
@@ -726,8 +730,8 @@ static void accept_probe_calibration_cb(
     }
 
     ui_calibration_results_show(
-        "PROBE / Z RESULTS",
-        "Waiting for Klipper to accept the measured Z offset.\\n\\n"
+        "Probe / Z results",
+        "Waiting for Klipper to accept the measured Z offset.\n\n"
         "Apply & Restart will appear only if Klipper reports SAVE_CONFIG.");
     ui_calibration_results_refresh();
 }
@@ -736,10 +740,9 @@ static void accept_probe_calibration_cb(
 static void show_probe_adjustment_popup(void)
 {
     ui_calibration_manual_probe_show(
-        "PROBE / Z OFFSET",
-        "Use TESTZ steps to move the nozzle toward (-) or away from (+) the bed.\n"
-        "Use a paper test, then ACCEPT only when the offset is correct.",
-        "ACCEPT",
+        "Probe / Z offset",
+        "Use a paper gauge to adjust the nozzle height. Choose Accept only when the offset is correct.",
+        "Accept",
         send_probe_step_cb,
         abort_probe_calibration_cb,
         accept_probe_calibration_cb);
@@ -777,7 +780,7 @@ static void run_probe_calibration_cb(
         calibration_session_controller_mark_error(
             "Moonraker did not accept PROBE_CALIBRATE.");
         ui_calibration_results_show(
-            "PROBE / Z RESULTS",
+            "Probe / Z results",
             "Probe/Z calibration could not be started.");
         ui_calibration_results_refresh();
         return;
@@ -814,61 +817,24 @@ static void probe_z_button_cb(
 
     close_probe_popup();
     s_calibration->probe_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            630,
-            390,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!s_calibration->probe_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_calibration->probe_popup,
-        ui_text("START PROBE / Z CALIBRATION?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->probe_popup,
-        48);
+    ui_cal_dialog_title_divided(s_calibration->probe_popup, ui_text("Start probe / Z calibration?"));
 
-    char body[440];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "The toolhead will move to the configured probe position.%s\\n\\n"
-        "Clear the bed and prepare a paper gauge. You will manually adjust TESTZ before accepting.\\n\\n"
-        "Nothing is saved until Apply & Restart is confirmed.",
-        s_calibration->probe_home_required
-            ? " XYZ is not homed, so the printer's homing workflow will run first."
-            : "");
-    ui_popup_add_body(
-        s_calibration->probe_popup,
-        body,
-        28,
-        76,
-        574);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->probe_popup);
-    ui_popup_add_footer_action(
-        s_calibration->probe_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_probe_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->probe_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " START",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        run_probe_calibration_cb,
-        NULL,
-        NULL);
+
+    lv_obj_t *body=ui_cal_dialog_body(s_calibration->probe_popup);
+    ui_cal_dialog_text(body,"The toolhead will move to the configured probe position. Clear the bed and prepare a paper gauge.");
+    ui_cal_dialog_caption(body,s_calibration->probe_home_required
+        ? "XYZ is not homed. The printer's homing workflow will run first." : "XYZ is already homed.");
+    ui_cal_dialog_caption(body,"You will adjust nozzle height manually before accepting the point.");
+    ui_cal_dialog_caption(body,"Nothing is saved until Apply & restart is confirmed.");
+
+    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_probe_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->probe_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Start", run_probe_calibration_cb, NULL, NULL);
 }
 
 
@@ -919,9 +885,9 @@ static void send_axis_twist_step_cb(
     if (!sent) {
         calibration_session_controller_mark_error(
             "Moonraker did not accept the Axis Twist TESTZ command.");
-        ui_toast_show(
+        ui_cal_dialog_notice(
             UI_STATUS_DANGER,
-            "AXIS TWIST MOVE FAILED",
+            "Axis twist move failed",
             "Moonraker did not accept the TESTZ command.");
     }
 }
@@ -946,9 +912,9 @@ static void abort_axis_twist_calibration_cb(
     ui_calibration_results_close();
     calibration_session_controller_reset();
 
-    ui_toast_show(
-        sent ? UI_STATUS_INFO : UI_STATUS_DANGER,
-        sent ? "AXIS TWIST ABORTED" : "ABORT FAILED",
+    ui_cal_dialog_notice(
+        sent ? UI_STATUS_OK : UI_STATUS_DANGER,
+        sent ? "Axis twist abort requested" : "Abort failed",
         sent
             ? "No Axis Twist values were saved."
             : "Moonraker did not accept ABORT.");
@@ -987,10 +953,9 @@ static void accept_axis_twist_point_cb(
 static void show_axis_twist_adjustment_popup(void)
 {
     ui_calibration_manual_probe_show(
-        "AXIS TWIST CALIBRATION",
-        "At each Klipper sample point, use a paper test and TESTZ to set the nozzle height.\n"
-        "Press ACCEPT for every point. The controls remain available until Klipper completes the sequence.",
-        "ACCEPT POINT",
+        "Axis twist calibration",
+        "At each Klipper sample point, set the nozzle height with a paper gauge, then choose Accept point. Repeat until Klipper completes the sequence.",
+        "Accept point",
         send_axis_twist_step_cb,
         abort_axis_twist_calibration_cb,
         accept_axis_twist_point_cb);
@@ -1029,7 +994,7 @@ static void run_axis_twist_calibration_cb(
         calibration_session_controller_mark_error(
             "Moonraker did not accept AXIS_TWIST_COMPENSATION_CALIBRATE.");
         ui_calibration_results_show(
-            "AXIS TWIST RESULTS",
+            "Axis twist results",
             "Axis Twist calibration could not be started.");
         ui_calibration_results_refresh();
         return;
@@ -1066,60 +1031,23 @@ static void axis_twist_button_cb(
 
     close_axis_twist_popup();
     s_calibration->axis_twist_popup =
-        ui_popup_create(
-            lv_layer_top(),
-            630,
-            400,
-            UI_POPUP_STANDARD);
+        ui_cal_dialog_create(lv_layer_top(), 650, 410, UI_POPUP_STANDARD);
 
     if (!s_calibration->axis_twist_popup) {
         return;
     }
 
-    ui_popup_add_title(
-        s_calibration->axis_twist_popup,
-        ui_text("START AXIS TWIST CALIBRATION?"),
-        false,
-        4);
-    ui_popup_add_header_divider(
-        s_calibration->axis_twist_popup,
-        48);
+    ui_cal_dialog_title_divided(s_calibration->axis_twist_popup, ui_text("Start axis twist calibration?"));
 
-    char body[440];
-    lv_snprintf(
-        body,
-        sizeof(body),
-        "Klipper will probe and request a manual paper measurement at several points across the X axis.%s\n\n"
-        "Clear the bed and motion area. Nothing is saved until Apply & Restart is confirmed.",
-        s_calibration->axis_twist_home_required
-            ? " XYZ is not homed, so homing will run first."
-            : "");
-    ui_popup_add_body(
-        s_calibration->axis_twist_popup,
-        body,
-        28,
-        76,
-        574);
-    ui_popup_add_standard_footer_divider(
-        s_calibration->axis_twist_popup);
-    ui_popup_add_footer_action(
-        s_calibration->axis_twist_popup,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        170,
-        UI_POPUP_FOOTER_LEFT,
-        close_axis_twist_popup_cb,
-        NULL,
-        NULL);
-    ui_popup_add_footer_action(
-        s_calibration->axis_twist_popup,
-        UI_POPUP_ACTION_CONFIRM,
-        LV_SYMBOL_PLAY " START",
-        180,
-        UI_POPUP_FOOTER_RIGHT,
-        run_axis_twist_calibration_cb,
-        NULL,
-        NULL);
+
+    lv_obj_t *body=ui_cal_dialog_body(s_calibration->axis_twist_popup);
+    ui_cal_dialog_text(body,"Klipper will probe several points across the X axis and request a manual paper measurement at each point. Clear the bed and motion area.");
+    ui_cal_dialog_caption(body,s_calibration->axis_twist_home_required
+        ? "XYZ is not homed. Homing will run first." : "XYZ is already homed.");
+    ui_cal_dialog_caption(body,"Nothing is saved until Apply & restart is confirmed.");
+
+    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_axis_twist_popup_cb, NULL, NULL);
+    ui_cal_dialog_action(s_calibration->axis_twist_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Start", run_axis_twist_calibration_cb, NULL, NULL);
 }
 
 
@@ -1142,7 +1070,7 @@ static void refresh_axis_twist_session(void)
     if (snapshot.status == CALIBRATION_SESSION_ERROR) {
         ui_calibration_manual_probe_hide();
         ui_calibration_results_show(
-            "AXIS TWIST RESULTS",
+            "Axis twist results",
             "Klipper reported an Axis Twist calibration error.");
         ui_calibration_results_refresh();
         return;
@@ -1154,7 +1082,7 @@ static void refresh_axis_twist_session(void)
         snapshot.save_available) {
         ui_calibration_manual_probe_hide();
         ui_calibration_results_show(
-            "AXIS TWIST RESULTS",
+            "Axis twist results",
             "Klipper completed the Axis Twist calibration.");
         ui_calibration_results_refresh();
     }
@@ -1183,6 +1111,23 @@ static void calibration_refresh_timer_cb(
         refresh_capabilities();
     }
 
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    const char *reason=printer_idle_reason(&live);
+    if(!reason[0] && s_calibration->connection_blocked)refresh_capabilities();
+    s_calibration->connection_blocked=reason[0]!=0;
+    lv_obj_t *commands[]={s_calibration->screws_tilt_button,s_calibration->gantry_level_button,
+        s_calibration->axis_twist_button,s_calibration->pid_tune_button,s_calibration->probe_z_button,
+        s_calibration->custom_calibration_button};
+    for(unsigned i=0;i<sizeof(commands)/sizeof(commands[0]);i++)if(commands[i]) {
+        if(reason[0])lv_obj_add_state(commands[i],LV_STATE_DISABLED);
+        else lv_obj_remove_state(commands[i],LV_STATE_DISABLED);
+    }
+    if(reason[0]) {
+        const char *caption=!live.moonraker_ok?"Offline - reconnect":!live.live_data_ok?"Klipper not ready":
+            !strcmp(live.printer_state,"printing")?"Printing - wait":!strcmp(live.printer_state,"paused")?"Paused - resume/cancel":"Klipper not ready";
+        ui_value_set_text(s_calibration->banner_status,caption);
+        ui_value_set_color(s_calibration->banner_status,UI_WARN,0);
+    } else ui_value_set_color(s_calibration->banner_status,UI_ACCENT_BRIGHT,0);
     ui_calibration_geometry_refresh();
     refresh_axis_twist_session();
     ui_calibration_results_refresh();
@@ -1294,42 +1239,20 @@ void ui_calibration_show(
 
     if(ui_theme_is_studio()) {
         studio_text(s_calibration->root,"Calibration",0,0,620,UI_FONT_TITLE,UI_TEXT);
-        s_calibration->banner_status=studio_text(s_calibration->root,"WAITING FOR PRINTER",640,8,336,UI_FONT_CAPTION,UI_ACCENT_BRIGHT);
+        s_calibration->banner_status=studio_text(s_calibration->root,"Waiting for printer",640,8,336,UI_FONT_CAPTION,UI_ACCENT_BRIGHT);
         lv_obj_set_style_text_align(s_calibration->banner_status,LV_TEXT_ALIGN_RIGHT,0);
     } else {
-    lv_obj_t *banner = ui_create_operator_banner(
-        s_calibration->root,
-        20,
-        20,
-        800,
-        86,
-        UI_STATUS_INFO);
-
-    ui_calibration_layout_label(
-        banner,
-        "CALIBRATION",
-        UI_FONT_TITLE,
-        UI_TEXT_BRIGHT,
-        20,
-        15,
-        520);
-
-    ui_calibration_layout_label(
-        banner,
-        "Available workflows from the active printer's capabilities",
-        UI_FONT_CAPTION,
-        UI_TEXT_DIM,
-        20,
-        50,
-        620);
+    lv_obj_t *banner=ui_create_operator_page_header(s_calibration->root,"Calibration",
+        "Available workflows from the active printer's capabilities",UI_PAGE_RAIL_WIDTH);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,0),520,0);
 
     s_calibration->banner_status = ui_calibration_layout_label(
         banner,
-        "WAITING FOR PRINTER",
+        "Waiting for printer",
         UI_FONT_CAPTION,
         UI_ACCENT_BRIGHT,
         550,
-        18,
+        14,
         230);
 
     lv_obj_set_style_text_align(
@@ -1341,18 +1264,18 @@ void ui_calibration_show(
 
     lv_obj_t *bed = ui_calibration_layout_card(
         s_calibration->root,
-        "BED GEOMETRY",
+        "Bed geometry",
         20,
         126,
         &s_calibration->bed);
 
     if (bed) {
-        lv_obj_set_height(bed, 190);
+        s_calibration->bed.purpose="Bed surface and gantry alignment";
         s_calibration->bed_mesh_button =
             ui_button_create(
                 bed,
                 UI_BUTTON_OUTLINED,
-                "BED MESH");
+                "Bed mesh");
 
         if (s_calibration->bed_mesh_button) {
             lv_obj_set_size(
@@ -1378,7 +1301,7 @@ void ui_calibration_show(
             ui_button_create(
                 bed,
                 UI_BUTTON_OUTLINED,
-                "SCREWS");
+                "Screws");
 
         if (s_calibration->screws_tilt_button) {
             lv_obj_set_size(
@@ -1404,7 +1327,7 @@ void ui_calibration_show(
             ui_button_create(
                 bed,
                 UI_BUTTON_OUTLINED,
-                "LEVEL");
+                "Level");
 
         if (s_calibration->gantry_level_button) {
             lv_obj_set_size(
@@ -1430,7 +1353,7 @@ void ui_calibration_show(
             ui_button_create(
                 bed,
                 UI_BUTTON_OUTLINED,
-                "TWIST");
+                "Twist");
 
         if (s_calibration->axis_twist_button) {
             lv_obj_set_size(
@@ -1455,13 +1378,13 @@ void ui_calibration_show(
 
     lv_obj_t *motion = ui_calibration_layout_card(
         s_calibration->root,
-        "MOTION",
+        "Motion",
         430,
         126,
         &s_calibration->motion);
 
     if (motion) {
-        lv_obj_set_height(motion, 190);
+        s_calibration->motion.purpose="Movement, limits and vibration";
         lv_obj_set_height(s_calibration->motion.summary, 24);
         lv_obj_add_flag(s_calibration->motion.status, LV_OBJ_FLAG_HIDDEN);
         ui_apply_text_caption(s_calibration->motion.summary);
@@ -1476,23 +1399,24 @@ void ui_calibration_show(
 
     lv_obj_t *thermal = ui_calibration_layout_card(
         s_calibration->root,
-        "TEMPERATURE & EXTRUSION",
+        "Temperature & extrusion",
         20,
         322,
         &s_calibration->thermal);
 
     if (thermal) {
+        s_calibration->thermal.purpose="Heater and extrusion tuning";
         s_calibration->pid_tune_button =
             ui_button_create(
                 thermal,
                 UI_BUTTON_OUTLINED,
-                "PID TUNE");
+                "PID tune");
 
         if (s_calibration->pid_tune_button) {
             lv_obj_set_size(
                 s_calibration->pid_tune_button,
                 150,
-                38);
+                44);
             lv_obj_align(
                 s_calibration->pid_tune_button,
                 LV_ALIGN_BOTTOM_RIGHT,
@@ -1516,13 +1440,13 @@ void ui_calibration_show(
 
     lv_obj_t *probe = ui_calibration_layout_card(
         s_calibration->root,
-        "PROBE, Z & CUSTOM",
+        "Probe, Z & custom",
         430,
         322,
         &s_calibration->probe);
 
     if (probe) {
-        lv_obj_set_height(probe, 190);
+        s_calibration->probe.purpose="Probe, Z offset and custom checks";
         lv_obj_add_flag(s_calibration->probe.status, LV_OBJ_FLAG_HIDDEN);
         ui_apply_text_caption(s_calibration->probe.summary);
         lv_label_set_long_mode(s_calibration->probe.summary, LV_LABEL_LONG_DOT);
@@ -1532,7 +1456,7 @@ void ui_calibration_show(
             ui_button_create(
                 probe,
                 UI_BUTTON_OUTLINED,
-                "PROBE / Z");
+                "Probe / Z");
 
         if (s_calibration->probe_z_button) {
             lv_obj_set_size(
@@ -1558,7 +1482,7 @@ void ui_calibration_show(
             ui_button_create(
                 probe,
                 UI_BUTTON_OUTLINED,
-                "CUSTOM");
+                "Custom");
 
         if (s_calibration->custom_calibration_button) {
             lv_obj_set_size(
@@ -1581,6 +1505,11 @@ void ui_calibration_show(
         }
     }
 
+    if(ui_theme_is_studio()) {
+        ui_create_divider(s_calibration->root,488,52,1,364);
+        ui_create_divider(s_calibration->root,16,233,944,1);
+    }
+
     s_calibration->device_generation = UINT32_MAX;
     s_calibration->macro_generation = UINT32_MAX;
     refresh_capabilities();
@@ -1589,6 +1518,7 @@ void ui_calibration_show(
         calibration_refresh_timer_cb,
         500,
         NULL);
+    calibration_refresh_timer_cb(NULL);
 }
 
 

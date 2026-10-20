@@ -45,3 +45,9 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/s) for s in sources],
         str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
+
+    (tmp/"audit_compat.h").write_text("#include <stddef.h>\nsize_t strlcpy(char *,const char *,size_t);\n")
+    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror",*flags,
+        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-include",str(tmp/"audit_compat.h"),"-c",str(root/"main/ui_printer_profiles.c"),"-o",str(tmp/"profile_owner.o")],check=True)
+    print("PASS: standalone profile editor compilation with warnings treated as errors")

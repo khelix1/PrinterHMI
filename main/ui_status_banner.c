@@ -5,6 +5,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "ui_font_fallback.h"
+#include "ui_text_fit.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -439,7 +440,7 @@ static void status_banner_set(
     const char *file,
     const char *eta,
     const char *progress,
-    const ui_status_kind_t *shell_kind)
+    const ui_status_kind_t *shell_kind,bool fixed_layout)
 {
     if (!banner) {
         return;
@@ -474,9 +475,8 @@ static void status_banner_set(
     lv_color_t state_color =
         ui_status_color(state_kind);
 
-    if (!ctx->studio_dashboard) ui_operator_banner_set_status(
-        banner,
-        shell_kind ? *shell_kind : state_kind);
+    if (!ctx->studio_dashboard) ui_apply_banner_status_style_with_padding(
+        banner, shell_kind ? *shell_kind : state_kind, fixed_layout?0:UI_PAD_CARD);
 
     if (ctx->accent) {
         ui_value_set_bg_color(
@@ -541,7 +541,16 @@ static void status_banner_set(
 void ui_status_banner_set(lv_obj_t *banner, const char *state,
     const char *file, const char *eta, const char *progress)
 {
-    status_banner_set(banner, state, file, eta, progress, NULL);
+    status_banner_set(banner, state, file, eta, progress, NULL,true);
+    /* Full Dashboard banners use coordinates within the outer shell. Status
+     * styling must not add theme padding to that fixed composition. Simple
+     * message banners retain their separate content-area layout below. */
+    if (banner) {
+        ui_value_set_style_num(banner,LV_STYLE_PAD_LEFT,0,0);
+        ui_value_set_style_num(banner,LV_STYLE_PAD_RIGHT,0,0);
+        ui_value_set_style_num(banner,LV_STYLE_PAD_TOP,0,0);
+        ui_value_set_style_num(banner,LV_STYLE_PAD_BOTTOM,0,0);
+    }
 }
 
 static void simple_message_layout(lv_obj_t *banner)
@@ -549,23 +558,47 @@ static void simple_message_layout(lv_obj_t *banner)
     if (!banner) return;
     status_banner_ctx_t *ctx = lv_obj_get_user_data(banner);
     if (!ctx || !ctx->file) return;
+    /* Resolve the shell before sizing the message on the first refresh. */
+    lv_obj_update_layout(banner);
+    if(ctx->state)ui_text_fit_single_line(ctx->state,UI_FONT_TITLE);
     int32_t width = lv_obj_get_width(banner) - 218;
     if (width < 1) width = 1;
     ui_value_set_style_num(ctx->file, LV_STYLE_WIDTH, width, 0);
     ui_value_set_style_num(ctx->file, LV_STYLE_TEXT_ALIGN, LV_TEXT_ALIGN_LEFT, 0);
+    /* Theme status updates may change compact-shell padding. Keep the simple
+     * banner's decoration and labels within its live content area. */
+    if(ctx->accent){
+        ui_value_set_style_num(ctx->accent,LV_STYLE_HEIGHT,LV_PCT(100),0);
+        ui_value_set_style_num(ctx->accent,LV_STYLE_ALIGN,LV_ALIGN_LEFT_MID,0);
+        ui_value_set_style_num(ctx->accent,LV_STYLE_X,2,0);
+        ui_value_set_style_num(ctx->accent,LV_STYLE_Y,0,0);
+    }
+    if(ctx->bar){
+        ui_value_set_style_num(ctx->bar,LV_STYLE_ALIGN,LV_ALIGN_BOTTOM_MID,0);
+        ui_value_set_style_num(ctx->bar,LV_STYLE_X,0,0);
+        ui_value_set_style_num(ctx->bar,LV_STYLE_Y,-2,0);
+    }
+    if(ctx->state){
+        ui_value_set_style_num(ctx->state,LV_STYLE_ALIGN,LV_ALIGN_LEFT_MID,0);
+        ui_value_set_style_num(ctx->state,LV_STYLE_X,22,0);
+        ui_value_set_style_num(ctx->state,LV_STYLE_Y,0,0);
+    }
+    ui_value_set_style_num(ctx->file,LV_STYLE_ALIGN,LV_ALIGN_LEFT_MID,0);
+    ui_value_set_style_num(ctx->file,LV_STYLE_X,196,0);
+    ui_value_set_style_num(ctx->file,LV_STYLE_Y,0,0);
 }
 
 void ui_status_banner_set_simple(lv_obj_t *banner,
     const char *state, const char *message)
 {
-    status_banner_set(banner, state, message, NULL, NULL, NULL);
+    status_banner_set(banner, state, message, NULL, NULL, NULL,false);
     simple_message_layout(banner);
 }
 
 void ui_status_banner_set_simple_kind(lv_obj_t *banner,
     const char *state, const char *message, ui_status_kind_t shell_kind)
 {
-    status_banner_set(banner, state, message, NULL, NULL, &shell_kind);
+    status_banner_set(banner, state, message, NULL, NULL, &shell_kind,false);
     simple_message_layout(banner);
 }
 

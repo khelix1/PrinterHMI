@@ -26,16 +26,21 @@ lv_obj_t *ui_calibration_layout_card(lv_obj_t *parent, const char *title,
                                      ui_calibration_card_refs_t *refs)
 {
     int width=ui_theme_is_studio()?480:390;
-    if(ui_theme_is_studio()){x=x>20?496:0;y=y>126?234:44;}
-    lv_obj_t *card = ui_create_operator_card(parent, x, y, width, ui_theme_is_studio()?190:176);
+    bool studio=ui_theme_is_studio();
+    if(studio){x=x>20?496:0;y=y>126?234:44;}
+    else y=y>126?321:122;
+    lv_obj_t *card = ui_create_operator_card(parent, x, y, width, studio?190:191);
     if (!card) return NULL;
-    ui_create_operator_card_heading(card, title, 16, 14);
-    ui_create_operator_card_divider(card, 16, 45, width-32);
+    if(studio)ui_apply_scroll_surface(card);
+    ui_create_operator_card_heading(card, title, 16, studio?6:10);
+    if(!studio)ui_create_operator_card_divider(card, 16, 44, width-32);
     if (refs) {
         refs->summary = ui_calibration_layout_label(card,
-            "Waiting for active-printer discovery.", UI_FONT_BODY,
-            UI_TEXT_DIM, 16, 58, width-32);
-        refs->status = ui_calibration_layout_label(card, "AWAITING DISCOVERY",
+            "Waiting for active-printer discovery.", UI_FONT_CAPTION,
+            UI_TEXT_DIM, 16, studio?44:48, width-32);
+        lv_label_set_long_mode(refs->summary,LV_LABEL_LONG_DOT);
+        lv_obj_set_height(refs->summary,24);
+        refs->status = ui_calibration_layout_label(card, "Awaiting discovery",
             UI_FONT_CAPTION, UI_ACCENT_BRIGHT, 16, 142, 190);
     }
     if (refs && refs->status) ui_text_fit_single_line(refs->status, UI_FONT_CAPTION);
@@ -57,18 +62,19 @@ void ui_calibration_layout_set_card(ui_calibration_card_refs_t *refs,
                                     size_t macro_count)
 {
     if (!refs || !refs->summary || !refs->status) return;
-    lv_label_set_text(refs->summary, summary && summary[0] ? summary :
+    const char *detail=(count || macro_count) && refs->purpose ? refs->purpose : summary;
+    lv_label_set_text(refs->summary, detail && detail[0] ? detail :
                       ui_text("No applicable tools reported by this printer."));
     char status[48];
     if (macro_count > 0) {
-        lv_snprintf(status, sizeof(status), "%u TOOL%s + %u MACRO%s",
-                    (unsigned)count, count == 1 ? "" : "S",
-                    (unsigned)macro_count, macro_count == 1 ? "" : "S");
+        lv_snprintf(status, sizeof(status), "%u tool%s + %u macro%s",
+                    (unsigned)count, count == 1 ? "" : "s",
+                    (unsigned)macro_count, macro_count == 1 ? "" : "s");
     } else if (count > 0) {
-        lv_snprintf(status, sizeof(status), "%u TOOL%s DETECTED",
-                    (unsigned)count, count == 1 ? "" : "S");
+        lv_snprintf(status, sizeof(status), "%u tool%s detected",
+                    (unsigned)count, count == 1 ? "" : "s");
     } else {
-        lv_snprintf(status, sizeof(status), "NOT CONFIGURED");
+        lv_snprintf(status, sizeof(status), "Not configured");
     }
     lv_label_set_text(refs->status, status);
     ui_text_fit_single_line(refs->status, UI_FONT_CAPTION);

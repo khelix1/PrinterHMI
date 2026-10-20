@@ -37,6 +37,13 @@ static lv_color_t temp_value_color(double temp, double target)
 static const char *dashboard_print_state_text(
     const moonraker_state_t *state)
 {
+    if (!state->moonraker_ok) return "OFFLINE";
+    if (!state->live_data_ok) {
+        if (!strcmp(state->printer_state, "shutdown") ||
+            !strcmp(state->printer_state, "error")) return "SHUTDOWN";
+        return "WAITING FOR KLIPPER";
+    }
+
     const char *text =
         printer_controller_status_text(state->printer_state);
 
@@ -250,6 +257,16 @@ static void update_environment_cards(
 {
     char buffer[64];
 
+    if (!state->moonraker_ok || !state->live_data_ok) {
+        if (context->chamber_label) ui_value_set_text(context->chamber_label, "-- C");
+        if (context->humidity_label) ui_value_set_text(context->humidity_label, "-- %RH");
+        if (context->target_rh_label) ui_value_set_text(context->target_rh_label, "Heat -- C");
+        if (context->heater_label) ui_value_set_text(context->heater_label, "--");
+        if (context->fan_label) ui_value_set_text(context->fan_label, "-- %");
+        if (context->moonraker_label) ui_value_set_text(context->moonraker_label, ui_text("not linked"));
+        return;
+    }
+
     if (context->chamber_label) {
         snprintf(
             buffer,
@@ -310,6 +327,12 @@ void dashboard_runtime_controller_tick(
 
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
+    if (!state.moonraker_ok || !state.live_data_ok) {
+        state.nozzle_temp = state.nozzle_target = -999.0;
+        state.bed_temp = state.bed_target = -999.0;
+        state.progress = state.current_gcode_z = state.print_duration = -1.0;
+        state.current_layer = state.total_layer = -1;
+    }
 
     update_status_cards(&state, context);
     update_live_preview(&state, context);

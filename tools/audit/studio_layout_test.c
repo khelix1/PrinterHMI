@@ -22,7 +22,11 @@ static char last_action[32];static int lightboxes,selected_page;
 void ui_command_bar_action(const char *s){snprintf(last_action,sizeof(last_action),"%s",s);}
 void ui_shell_page_action(ui_shell_page_t page){selected_page=page;}
 void ui_preview_lightbox_show_file_object(lv_obj_t *o,const char *f){(void)o;(void)f;lightboxes++;}
-static bool sent(const char *gcode){snprintf(last_action,sizeof(last_action),"%s",gcode);return true;}
+static bool send_ok=true;static unsigned stop_calls,toasts;
+static uint32_t recovery_owner=1;
+uint32_t moonraker_config_generation(void){return recovery_owner;}
+void ui_toast_show(ui_status_kind_t k,const char*t,const char*d){(void)k;(void)t;(void)d;toasts++;}
+static bool sent(const char *gcode){snprintf(last_action,sizeof(last_action),"%s",gcode);stop_calls++;return send_ok;}
 moonraker_filament_status_t moonraker_filament_state_status(const moonraker_filament_state_t*s,size_t*p,size_t*e){(void)s;*p=1;*e=1;return MOONRAKER_FILAMENT_READY;}
 static lv_point_t touch_point;
 static bool pressed;
@@ -65,11 +69,16 @@ int main(void){
   static uint16_t tiny[4];s_active_print_thumb_canvas_buf=tiny;
   ui_active_print_thumb_show_canvas_from_buffer(page.active_print_host,2,2,"fixture.gcode");
   int before=lightboxes;tap(pointer,160,300);assert(lightboxes==before+1);
-  ui_active_print_thumb_delete_canvas();ui_active_print_thumb_set_placeholder(page.active_print_host,"PRINT\nTHUMBNAIL");
+  ui_active_print_thumb_delete_canvas();ui_active_print_thumb_set_placeholder(page.active_print_host,"Model preview\n\nNo preview loaded");
   if(density==1)screenshot(large?"studio-dark-large":"studio-dark");
 
-  click(lv_obj_get_parent(estop));assert(!strcmp(last_action,"M112"));
-  lv_obj_t *close=find(lv_layer_top(),LV_SYMBOL_CLOSE " CLOSE");assert(close);click(lv_obj_get_parent(close));
+  lv_area_t stop_area;lv_obj_get_coords(lv_obj_get_parent(estop),&stop_area);
+  unsigned stop_before=stop_calls,toast_before=toasts;send_ok=false;
+  tap(pointer,(stop_area.x1+stop_area.x2)/2,(stop_area.y1+stop_area.y2)/2);
+  assert(stop_calls==stop_before+1&&!strcmp(last_action,"M112")&&toasts==toast_before&&find(lv_layer_top(),"Stop not confirmed"));
+  send_ok=true;tap(pointer,(stop_area.x1+stop_area.x2)/2,(stop_area.y1+stop_area.y2)/2);
+  assert(stop_calls==stop_before+2&&!strcmp(last_action,"M112"));
+  lv_obj_t *close=find(lv_layer_top(),LV_SYMBOL_CLOSE " Close");assert(close);click(lv_obj_get_parent(close));
   /* Unknown/capability-less values remain explicit, never fake zero. */
   ui_machine_status_set(page.machine_status_host,"-- / -- C","N/A","N/A","N/A","-- mm/s","-- mm3/s","N/A");machine_status_ctx_t*m=lv_obj_get_user_data(page.machine_status_host);assert(!strcmp(lv_label_get_text(m->nozzle),"--°"));assert(!strcmp(lv_label_get_text(m->bed),"N/A"));
   ui_command_bar_update("standby",false);assert(lv_obj_has_state(s_pause_button,LV_STATE_DISABLED)&&lv_obj_has_state(s_cancel_button,LV_STATE_DISABLED));
@@ -78,9 +87,57 @@ int main(void){
 
   ui_dashboard_page_destroy(&page);ui_shell_destroy();assert(!find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP"));
  }
+ /* Native Operator Dashboard, with its own cards and typography retained. */
+ for(unsigned large=0;large<2;large++)for(unsigned density=0;density<3;density++){
+  ui_theme_set_active(UI_THEME_OPERATOR);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});ui_apply_root_style(lv_screen_active());
+  ui_shell_create();ui_shell_create_nav();ui_shell_set_active_printer_name("Sermoon D1");
+  ui_dashboard_page_t page=ui_dashboard_page_create(lv_screen_active());
+  ui_status_banner_set(page.banner_host,"PRINTING","Spool holder.gcode","ETA 3:42 PM","64%");
+  ui_active_print_set(page.active_print_host,"171 / 267","01:06","REM 00:38");
+  ui_machine_status_set(page.machine_status_host,"210 / 210 C","60 / 60 C","45 C","18 %RH","125 mm/s","8.3 mm3/s","65%");
+  ui_machine_status_set_connection(page.machine_status_host,true);ui_machine_status_set_filament(page.machine_status_host,true,NULL);
+  ui_command_bar_update("printing",true);lv_obj_update_layout(lv_screen_active());labels(page.root);
+  active_print_ctx_t *active=lv_obj_get_user_data(page.active_print_host);
+  lv_area_t preview,timing;lv_obj_get_coords(active->preview_box,&preview);lv_obj_get_coords(active->footer,&timing);assert(preview.y2<timing.y1);
+  const lv_font_t *font=lv_obj_get_style_text_font(active->footer,0);lv_point_t measured;
+  lv_text_get_size(&measured,lv_label_get_text(active->footer),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);assert(measured.x<=lv_obj_get_width(active->footer));
+  assert(find(page.root,"Active print")&&find(page.root,"Machine status")&&find(page.root,"Air temp"));
+  click(s_pause_button);assert(!strcmp(last_action,"PAUSE"));click(s_object_button);assert(!strcmp(last_action,"CANCEL_OBJECT"));click(s_cancel_button);assert(!strcmp(last_action,"CANCEL_PRINT"));
+  ui_command_bar_update("paused",true);assert(lv_obj_has_flag(s_pause_button,LV_OBJ_FLAG_HIDDEN));click(s_resume_button);assert(!strcmp(last_action,"RESUME"));
+  if(density==1)screenshot(large?"dashboard-operator-large":"dashboard-operator");
+  ui_dashboard_page_destroy(&page);ui_shell_destroy();
+ }
  /* Page roots are fixed; only explicit Files/Settings content may scroll. */
  ui_theme_set_active(UI_THEME_STUDIO_DARK);lv_obj_t*aux=lv_obj_create(lv_screen_active());lv_obj_set_size(aux,854,528);ui_apply_surface_role(aux,UI_SURFACE_PAGE_DEEP);lv_obj_update_layout(aux);assert(lv_obj_get_height(aux)==424);assert(!lv_obj_has_flag(aux,LV_OBJ_FLAG_SCROLLABLE));lv_obj_delete(aux);
 
- ui_theme_set_active(UI_THEME_OPERATOR);ui_shell_create();ui_shell_create_nav();assert(find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP"));ui_shell_destroy();
- puts("PASS: native STUDIO Dashboard bounds/text across densities and large text, thermal unknowns, print action routes/states, eight navigation routes, fixed page roots, E-stop recreation and repeated teardown");return 0;
+ for(unsigned theme=UI_THEME_CLASSIC;theme<=UI_THEME_STUDIO_DARK;theme++){
+  recovery_owner++;ui_theme_set_active(theme);ui_shell_create();ui_shell_create_nav();ui_shell_set_active_printer_name("Sermoon D1");lv_obj_update_layout(lv_screen_active());
+  lv_obj_t *button_label=find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP");assert(button_label);lv_area_t a;lv_obj_get_coords(lv_obj_get_parent(button_label),&a);
+  unsigned before=stop_calls;tap(pointer,(a.x1+a.x2)/2,(a.y1+a.y2)/2);assert(stop_calls==before+1&&!strcmp(last_action,"M112"));
+  assert(find(lv_layer_top(),"Stop request sent"));lv_obj_t *restart=find(lv_layer_top(),LV_SYMBOL_REFRESH " Restart Klipper");assert(restart);
+  send_ok=false;unsigned old_toasts=toasts;click(lv_obj_get_parent(restart));assert(toasts==old_toasts&&find(lv_layer_top(),"Restart not sent. Check the printer connection and try again."));
+  send_ok=true;click(lv_obj_get_parent(restart));assert(!strcmp(last_action,"FIRMWARE_RESTART")&&find(lv_layer_top(),"Restart requested. Wait for the printer to reconnect before continuing."));lv_obj_t *close=find(lv_layer_top(),LV_SYMBOL_CLOSE " Close");assert(close);click(lv_obj_get_parent(close));ui_shell_destroy();
+ }
+ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned size=0;size<3;size++) {
+  ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
+  lv_display_set_resolution(d,(int[]){1024,640,480}[size],size?400:600);
+  ui_global_estop_set_printer_name("Very long configured printer name for readable recovery target");
+  ui_global_estop_show_restart_confirmation();lv_obj_update_layout(lv_layer_top());
+  lv_obj_t *title=find(lv_layer_top(),"Restart Klipper?");assert(title);lv_obj_t *popup=lv_obj_get_parent(title);inside(popup,lv_layer_top());
+  for(uint32_t i=0;i<lv_obj_get_child_count(popup);i++)inside(lv_obj_get_child(popup,i),popup);
+  lv_obj_t *footer=lv_obj_get_child(popup,-1);labels(footer);
+  assert(lv_obj_get_width(popup)<=lv_display_get_horizontal_resolution(d)-32);
+  assert(lv_obj_get_height(popup)<=lv_display_get_vertical_resolution(d)-32);
+  lv_obj_t *body=lv_obj_get_child(popup,1);assert(lv_obj_get_height(body)>50 && lv_obj_has_flag(body,LV_OBJ_FLAG_SCROLLABLE));
+  assert(lv_obj_get_style_border_side(title,0)==LV_BORDER_SIDE_BOTTOM&&lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF);
+  lv_obj_scroll_to_y(body,lv_obj_get_scroll_y(body)+lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);
+  lv_obj_update_layout(popup);assert(lv_obj_get_scroll_bottom(body)<=1);
+  lv_obj_t *message=lv_obj_get_child(body,-1);lv_area_t ma,ba;lv_obj_get_coords(message,&ma);lv_obj_get_coords(body,&ba);assert(ma.y2<=ba.y2);
+  if(theme==UI_THEME_STUDIO_DARK && density==1 && !size)screenshot(large?"recovery-studio-large":"recovery-studio");
+  unsigned before=stop_calls;ui_global_estop_set_printer_name("Other printer");assert(!find(lv_layer_top(),"Restart Klipper?"));assert(stop_calls==before);
+  ui_global_estop_show_restart_confirmation();title=find(lv_layer_top(),"Restart Klipper?");assert(title);lv_obj_delete(lv_obj_get_parent(title));
+  ui_global_estop_show_restart_confirmation();lv_obj_t *cancel=find(lv_layer_top(),LV_SYMBOL_CLOSE " Cancel");assert(cancel);click(lv_obj_get_parent(cancel));assert(!find(lv_layer_top(),"Restart Klipper?"));
+ }
+ lv_display_set_resolution(d,1024,600);
+ puts("PASS: native Studio and Operator Dashboard bounds/text across densities and large text, thermal unknowns, print action routes/states, eight navigation routes, fixed page roots, E-stop recreation and repeated teardown");return 0;
 }

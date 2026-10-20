@@ -12,6 +12,12 @@ void dashboard_live_controller_push_banner(bool moonraker_ok)
     moonraker_state_t state_snapshot;
     moonraker_state_snapshot(&state_snapshot);
 
+    if (!state_snapshot.moonraker_ok || !state_snapshot.live_data_ok) {
+        state_snapshot.printer_file[0] = '\0';
+        state_snapshot.progress = -1.0;
+        state_snapshot.print_duration = -1.0;
+    }
+
     char state[48];
     char file[160];
     char progress[24];
@@ -22,7 +28,7 @@ void dashboard_live_controller_push_banner(bool moonraker_ok)
         state,
         sizeof(state),
         state_snapshot.printer_state,
-        moonraker_ok,
+        moonraker_ok && state_snapshot.moonraker_ok,
         state_snapshot.live_data_ok);
 
     if (state_snapshot.printer_file[0] &&
@@ -85,6 +91,16 @@ void dashboard_live_controller_push_machine(void)
 {
     moonraker_state_t state_snapshot;
     moonraker_state_snapshot(&state_snapshot);
+
+    /* This writer runs after the runtime cards and must use the same
+     * availability gate, otherwise stale values overwrite placeholders. */
+    if (!state_snapshot.moonraker_ok || !state_snapshot.live_data_ok) {
+        state_snapshot.nozzle_temp = state_snapshot.nozzle_target = -999.0;
+        state_snapshot.bed_temp = state_snapshot.bed_target = -999.0;
+        state_snapshot.air_temp = state_snapshot.humidity = -999.0;
+        state_snapshot.live_velocity = state_snapshot.live_flow = -1.0;
+        state_snapshot.part_fan_speed = -1.0;
+    }
 
     char nozzle[32];
     char hotend_name[32];

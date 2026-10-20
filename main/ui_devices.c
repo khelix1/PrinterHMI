@@ -13,9 +13,11 @@
 #include "ui_widgets.h"
 #include "ui_devices_catalog_view.h"
 #include "ui_endstop_status.h"
+#include "moonraker_config_controller.h"
 
 typedef struct {
     lv_obj_t *root;
+    uint32_t owner_generation;
     lv_obj_t *banner_status;
     ui_devices_open_telemetry_cb_t open_telemetry;
 } ui_devices_state_t;
@@ -84,7 +86,9 @@ static void devices_open_telemetry_event_cb(
 {
     (void)event;
 
-    if (s_devices && s_devices->open_telemetry) {
+    if (s_devices && s_devices->root &&
+        s_devices->owner_generation == moonraker_config_generation() &&
+        s_devices->open_telemetry) {
         s_devices->open_telemetry();
     }
 }
@@ -93,7 +97,19 @@ static void devices_open_telemetry_event_cb(
 static void endstops_cb(lv_event_t *event)
 {
     (void)event;
-    ui_endstop_status_show();
+    if (s_devices && s_devices->root &&
+        s_devices->owner_generation == moonraker_config_generation())
+        ui_endstop_status_show();
+}
+
+static void devices_root_deleted(lv_event_t *event)
+{
+    if (!s_devices || lv_event_get_target(event) != s_devices->root) return;
+    s_devices->root = NULL;
+    s_devices->banner_status = NULL;
+    s_devices->open_telemetry = NULL;
+    ui_endstop_status_close();
+    ui_devices_catalog_view_close();
 }
 
 void ui_devices_show(
@@ -102,6 +118,9 @@ void ui_devices_show(
     if (!devices_state_init()) {
         return;
     }
+
+    if (s_devices->root && s_devices->owner_generation != moonraker_config_generation())
+        ui_devices_hide();
 
     s_devices->open_telemetry =
         open_telemetry_cb;
@@ -114,6 +133,9 @@ void ui_devices_show(
 
     s_devices->root = lv_obj_create(
         lv_screen_active());
+
+    s_devices->owner_generation = moonraker_config_generation();
+    lv_obj_add_event_cb(s_devices->root, devices_root_deleted, LV_EVENT_DELETE, NULL);
 
     lv_obj_set_size(
         s_devices->root,
@@ -130,40 +152,19 @@ void ui_devices_show(
         s_devices->root,
         UI_SURFACE_PAGE_DEEP);
 
-    lv_obj_t *banner = ui_create_operator_banner(
-        s_devices->root,
-        20,
-        20,
-        800,
-        86,
-        UI_STATUS_INFO);
-
-    devices_label(
-        banner,
-        "DEVICES",
-        UI_FONT_TITLE,
-        UI_TEXT_BRIGHT,
-        20,
-        15,
-        300);
-
-    devices_label(
-        banner,
-        "Active-printer devices and live readings",
-        UI_FONT_CAPTION,
-        UI_TEXT_DIM,
-        20,
-        50,
-        440);
+    lv_obj_t *banner=ui_create_operator_page_header(s_devices->root,"Devices",
+        "Active-printer devices and live readings",UI_PAGE_RAIL_WIDTH);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,0),300,0);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,1),400,0);
 
     s_devices->banner_status = devices_label(
         banner,
-        "WAITING FOR PRINTER",
+        "Waiting for printer",
         UI_FONT_CAPTION,
         UI_ACCENT_BRIGHT,
-        560,
-        22,
-        220);
+        440,
+        6,
+        342);
 
     lv_obj_set_style_text_align(
         s_devices->banner_status,
@@ -173,10 +174,10 @@ void ui_devices_show(
     lv_obj_t *telemetry = ui_button_create(
         banner,
         UI_BUTTON_OUTLINED,
-        "TELEMETRY");
+        "Telemetry");
 
     if (telemetry) {
-        lv_obj_set_size(telemetry, 160, 34);
+        lv_obj_set_size(telemetry, 160, 44);
         lv_obj_align(
             telemetry,
             LV_ALIGN_BOTTOM_RIGHT,
@@ -189,9 +190,9 @@ void ui_devices_show(
             NULL);
     }
 
-    lv_obj_t *endstops = ui_button_create(banner, UI_BUTTON_OUTLINED, "ENDSTOPS");
+    lv_obj_t *endstops = ui_button_create(banner, UI_BUTTON_OUTLINED, "Endstops");
     if (endstops) {
-        lv_obj_set_size(endstops, 150, 32);
+        lv_obj_set_size(endstops, 150, 44);
         lv_obj_align(endstops, LV_ALIGN_BOTTOM_RIGHT, -192, -8);
         lv_obj_add_event_cb(endstops, endstops_cb, LV_EVENT_CLICKED, NULL);
     }
@@ -199,11 +200,13 @@ void ui_devices_show(
     if(ui_theme_is_studio()) {
         lv_obj_set_pos(banner,0,0);lv_obj_set_size(banner,976,48);
         lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(banner,0,0);lv_obj_set_style_pad_all(banner,0,0);
-        lv_obj_t *title=lv_obj_get_child(banner,0);lv_obj_set_pos(title,0,0);lv_obj_set_width(title,420);ui_apply_custom_label_style(title,&ui_studio_font_32,UI_TEXT);
+        lv_obj_t *title=lv_obj_get_child(banner,0);lv_obj_set_pos(title,0,0);lv_obj_set_width(title,420);ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT);
         lv_obj_add_flag(lv_obj_get_child(banner,1),LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(s_devices->banner_status,448,8);lv_obj_set_size(s_devices->banner_status,170,32);lv_label_set_long_mode(s_devices->banner_status,LV_LABEL_LONG_DOT);
-        if(telemetry){lv_obj_set_size(telemetry,160,44);lv_obj_set_pos(telemetry,636,0);}
-        if(endstops){lv_obj_set_size(endstops,164,44);lv_obj_set_pos(endstops,812,0);}
+        /* set_pos is an offset from the current alignment; retire the legacy
+         * bottom-right anchor before applying Studio's top-left geometry. */
+        if(telemetry){lv_obj_set_align(telemetry,LV_ALIGN_TOP_LEFT);lv_obj_set_size(telemetry,160,44);lv_obj_set_pos(telemetry,636,0);lv_label_set_text(lv_obj_get_child(telemetry,0),"Graphs");}
+        if(endstops){lv_obj_set_align(endstops,LV_ALIGN_TOP_LEFT);lv_obj_set_size(endstops,164,44);lv_obj_set_pos(endstops,812,0);}
     }
 
     ui_devices_catalog_view_create(
@@ -222,10 +225,9 @@ void ui_devices_hide(void)
     ui_endstop_status_close();
     ui_devices_catalog_view_close();
 
-    if (s_devices->root) {
-        lv_obj_delete(s_devices->root);
-    }
-
+    lv_obj_t *root = s_devices->root;
     s_devices->root = NULL;
     s_devices->banner_status = NULL;
+    s_devices->open_telemetry = NULL;
+    if (root) lv_obj_delete(root);
 }

@@ -63,7 +63,7 @@ ui_dashboard_page_t ui_dashboard_page_create(
 
     if (!ui_theme_is_studio()) ui_page_title_create(
         page.root,
-        LV_SYMBOL_HOME " DASHBOARD",
+        LV_SYMBOL_HOME " Dashboard",
         layout->subtitle);
 
 

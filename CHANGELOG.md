@@ -1,5 +1,36 @@
 # Changelog
 
+## [7.0.0] - 2026-10-20
+
+### Added and improved
+
+- Studio interface redesign and system-wide LVGL 9.5 modernization.
+- Consistent responsive dialogs, keyboard layouts, cursor feedback, scrolling,
+  large-text controls and theme previews.
+- Printer setup, profiles, authentication/TLS/certificate selection and camera
+  configuration workflows.
+- Filament recovery, active-print temperature/fan controls, calibration and
+  motion diagnostics, Files previews, Console, telemetry and notification levels.
+- Plain/encrypted configuration backup and restore progress, results and
+  passphrase feedback, including TLS and primary camera settings.
+- Firmware channel/revision identity, OTA review, transfer metrics and cancellation.
+
+### Fixed
+
+- Stale dialog callbacks, popup teardown, duplicate dispatch, profile switching
+  and retry handling across operator controls.
+- Preview/camera ownership, file navigation, live refresh and status invalidations.
+- CA import rollback, duplicate-endpoint TLS downgrades, URL validation,
+  restored API-key validation, print filename JSON encoding and size bounds.
+- Backup serializer allocation failures, malformed/deep SD JSON, lost camera
+  URLs, truncated passphrases/firmware URLs and OTA catalog mutex failures.
+
+### Release notes
+
+- Stable publication builds ESP-IDF 6.0.2 P4 and ESP-Hosted 3.0.5 C6 assets.
+- The previous intermittent backup-to-OTA panic/rollback remains unconfirmed;
+  these changes are not claimed to resolve that event.
+
 ## [6.5.6] - 2026-10-04
 
 ### Added

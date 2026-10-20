@@ -6,8 +6,10 @@
 #include "esp_heap_caps.h"
 #include "ui_theme.h"
 
-#define CW 620
-#define CH 340
+static int32_t s_canvas_width,s_canvas_height,s_canvas_stride;
+static float s_origin_x,s_origin_y;
+#define CW s_canvas_width
+#define CH s_canvas_height
 
 typedef struct {
     float x;
@@ -101,9 +103,40 @@ static void project(vertex_t *v, float scale)
     float py = ry * cp - rz * sp;
     float pz = ry * sp + rz * cp;
 
-    v->sx = CW * .5f + s.view.pan_x + rx * scale * s.view.zoom;
-    v->sy = CH * .56f + s.view.pan_y + py * scale * s.view.zoom;
+    v->sx = s_origin_x + s.view.pan_x + rx * scale * s.view.zoom;
+    v->sy = s_origin_y + s.view.pan_y + py * scale * s.view.zoom;
     v->d = pz;
+}
+
+/* Fit the default orbit, including both height walls, to the actual canvas.
+ * Keep that baseline while orbiting so dragging does not change the zoom.
+ * Zoom=1 and zero pan therefore always mean the fitted opening/reset view.
+ */
+static float fitted_scale(float width,float height)
+{
+    const float cy=cosf(-0.72f),sy=sinf(-0.72f);
+    const float cp=cosf(0.88f),sp=sinf(0.88f);
+    float scale=fminf((CW-48.0f)/fmaxf(width,height),(CH-48.0f)/fmaxf(width,height));
+    float min_x=0,max_x=0,min_y=0,max_y=0;
+    for(unsigned pass=0;pass<8;pass++){
+        float low=(float)s.mesh.minimum*s.zscale,high=(float)s.mesh.maximum*s.zscale;
+        float center=(low+high)*.5f,span=high-low;
+        float minimum=40.0f/fmaxf(scale,.001f);
+        if(span<minimum){low=center-minimum*.5f;high=center+minimum*.5f;}
+        else {low-=span*.12f;high+=span*.12f;}
+        low=fminf(low,0);high=fmaxf(high,0);
+        min_x=min_y=INFINITY;max_x=max_y=-INFINITY;
+        for(unsigned corner=0;corner<8;corner++){
+            float x=(corner&1?1:-1)*width*.5f,y=(corner&2?1:-1)*height*.5f,z=corner&4?high:low;
+            float rx=x*cy-y*sy,py=(x*sy+y*cy)*cp-z*sp;
+            min_x=fminf(min_x,rx);max_x=fmaxf(max_x,rx);
+            min_y=fminf(min_y,py);max_y=fmaxf(max_y,py);
+        }
+        scale=fminf((CW-48.0f)/fmaxf(max_x-min_x,.001f),(CH-48.0f)/fmaxf(max_y-min_y,.001f));
+    }
+    s_origin_x=CW*.5f-(min_x+max_x)*.5f*scale;
+    s_origin_y=CH*.5f-(min_y+max_y)*.5f*scale;
+    return scale;
 }
 
 static void draw_line(
@@ -166,10 +199,10 @@ static void draw_height_grid(
 
     /*
      * A very flat bed still needs a readable height backdrop. Preserve the
-     * real mesh scale while guaranteeing roughly 112 pixels of vertical grid
+     * real mesh scale while guaranteeing roughly 40 pixels of vertical grid
      * at the default view.
      */
-    float minimum_span = scale > .001f ? 112.0f / scale : 112.0f;
+    float minimum_span = scale > .001f ? 40.0f / scale : 40.0f;
 
     if (z_span < minimum_span) {
         z_low = z_center - minimum_span * .5f;
@@ -551,7 +584,7 @@ static void rasterize_smooth_triangle(
                     (packed_b & 0xff) * weight_b +
                     (packed_c & 0xff) * weight_c);
 
-            pixels[(size_t)y * CW + x] =
+            pixels[(size_t)y * s_canvas_stride + x] =
                 rgb565_from_rgb(red, green, blue);
         }
     }
@@ -566,9 +599,14 @@ void ui_bed_mesh_renderer_render(
 
     s = *config;
 
-    if (!s.canvas || !s.mesh.valid) {
+    if (!s.canvas || !s.buf || !s.mesh.valid) {
         return;
     }
+    const lv_image_dsc_t *image=lv_canvas_get_image(s.canvas);
+    if(!image || image->header.cf!=LV_COLOR_FORMAT_RGB565 || !image->header.w || !image->header.h ||
+       image->header.stride<image->header.w*sizeof(uint16_t) || image->header.stride%sizeof(uint16_t))return;
+    s_canvas_width=image->header.w;s_canvas_height=image->header.h;
+    s_canvas_stride=image->header.stride/sizeof(uint16_t);
 
     uint16_t rows = s.mesh.rows;
     uint16_t cols = s.mesh.cols;
@@ -597,7 +635,7 @@ void ui_bed_mesh_renderer_render(
         height = rows - 1;
     }
 
-    float scale = 250.0f / (width > height ? width : height);
+    float scale = fitted_scale(width,height);
 
     for (uint16_t y = 0; y < rows; ++y) {
         for (uint16_t x = 0; x < cols; ++x) {

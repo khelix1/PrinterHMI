@@ -5,6 +5,7 @@
 #include "ui_theme_a.h"
 #include "ui_theme_b.h"
 #include "ui_theme_c.h"
+#include "ui_theme_studio.h"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
@@ -20,7 +21,7 @@ int main(void){
  lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];
  lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
  lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
- for(unsigned theme=0;theme<4;theme++)for(unsigned large=0;large<2;large++){
+ for(unsigned theme=0;theme<5;theme++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   for(unsigned cycle=0;cycle<5;cycle++){
    lv_obj_t *parent=lv_obj_create(lv_screen_active());
@@ -35,6 +36,8 @@ int main(void){
    lv_refr_now(d);invalidations=0;
    for(unsigned i=0;i<100;i++)ui_status_banner_set(a,"READY","NETWORK LINKED",NULL,NULL);
    assert(!invalidations && state_notifications==states && message_notifications==messages);
+   lv_obj_set_style_pad_left(a,13,0);ui_status_banner_set(a,"READY","NETWORK LINKED",NULL,NULL);
+   assert(lv_obj_get_style_pad_left(a,0)==0);
    ui_status_banner_set_simple_kind(a,"READY","FILAMENT CONDITIONING",UI_STATUS_WARNING);
    assert(lv_color_eq(lv_obj_get_style_text_color(ctx->state,0),ui_status_color(UI_STATUS_INFO)));
    if(theme!=UI_THEME_CLASSIC && theme!=UI_THEME_GLASS)
@@ -75,22 +78,24 @@ int main(void){
  /* Compare the guarded dispatcher against the unchanged concrete recipes,
   * including custom opacity, all themes, accessibility and status transitions.
   */
- for(unsigned theme=0;theme<4;theme++)for(unsigned accessible=0;accessible<2;accessible++){
+ for(unsigned theme=0;theme<5;theme++)for(unsigned accessible=0;accessible<2;accessible++){
   ui_theme_set_active((ui_theme_id_t)theme);
   ui_theme_set_accessibility((ui_accessibility_t){.high_contrast=accessible,.reduced_transparency=accessible,.reduced_motion=true});
   lv_obj_t *actual=lv_obj_create(lv_screen_active()),*reference=lv_obj_create(lv_screen_active());
   for(unsigned custom=0;custom<2;custom++)for(int kind=UI_STATUS_NEUTRAL;kind<=UI_STATUS_ACTIVE;kind++){
    custom_opacity=custom;opacity=170;
-   if(theme==UI_THEME_CLASSIC)ui_theme_a_apply_banner_style(reference);
+   if(theme==UI_THEME_STUDIO_DARK)ui_theme_studio_apply_banner_status_style(reference,(ui_status_kind_t)kind);
+   else if(theme==UI_THEME_CLASSIC)ui_theme_a_apply_banner_style(reference);
    else if(theme==UI_THEME_GLASS)ui_theme_c_apply_banner_status_style(reference,(ui_status_kind_t)kind);
    else ui_theme_b_apply_banner_status_style(reference,(ui_status_kind_t)kind);
-   if(custom)lv_obj_set_style_bg_opa(reference,opacity,0);
+   /* Studio keeps its accepted opaque surfaces. */
+   if(custom&&theme!=UI_THEME_STUDIO_DARK)lv_obj_set_style_bg_opa(reference,opacity,0);
    ui_apply_banner_status_style(actual,(ui_status_kind_t)kind);
    for(unsigned prop=1;prop<LV_STYLE_LAST_BUILT_IN_PROP;prop++){
     lv_style_value_t a={0},b={0};
     lv_style_res_t ra=lv_obj_get_local_style_prop(actual,(lv_style_prop_t)prop,&a,0);
     lv_style_res_t rb=lv_obj_get_local_style_prop(reference,(lv_style_prop_t)prop,&b,0);
-    assert(ra==rb);if(ra==LV_STYLE_RES_FOUND)assert(!memcmp(&a,&b,sizeof(a)));
+    assert(ra==rb);if(ra==LV_STYLE_RES_FOUND){if(memcmp(&a,&b,sizeof(a)))fprintf(stderr,"theme=%u accessible=%u custom=%u kind=%d property=%u actual=%lld reference=%lld\n",theme,accessible,custom,kind,prop,(long long)a.num,(long long)b.num);assert(!memcmp(&a,&b,sizeof(a)));}
    }
    lv_refr_now(d);invalidations=0;
    for(int repeat=0;repeat<20;repeat++)ui_apply_banner_status_style(actual,(ui_status_kind_t)kind);

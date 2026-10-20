@@ -1,4 +1,5 @@
 #include "custom_theme.h"
+#include "json_document_limits.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -466,11 +467,13 @@ static bool parse_theme_file(
 
     size_t read_count =
         fread(buffer, 1, (size_t)status.st_size, file);
-    fclose(file);
+    bool read_ok = !ferror(file) && read_count == (size_t)status.st_size;
+    if (fclose(file) != 0) read_ok = false;
     buffer[read_count] = 0;
 
-    cJSON *root =
-        cJSON_ParseWithLength(buffer, read_count);
+    cJSON *root = read_ok && json_document_within_limits(
+        buffer, read_count, CUSTOM_THEME_MAX_BYTES, 16)
+        ? cJSON_ParseWithLengthOpts(buffer, read_count + 1, NULL, true) : NULL;
     heap_caps_free(buffer);
     if (!root) return false;
 

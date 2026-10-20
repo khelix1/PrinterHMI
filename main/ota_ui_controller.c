@@ -7,6 +7,7 @@
 #include "esp_ota_ops.h"
 
 #include "ota_manager.h"
+#include "firmware_identity.h"
 #include "ui_ota_popup.h"
 #include "ui_ota_release_browser.h"
 #include "ui_toast.h"
@@ -15,15 +16,18 @@ static const char *TAG = "PrinterHMI";
 
 static bool ota_ui_controller_start_url(const char *url, bool save_custom_url)
 {
-    if (!url || !url[0]) return false;
+    if (!url || !url[0]) {
+        ui_ota_start_failure("No firmware URL. Close and select a release or enter a URL.");
+        return false;
+    }
     if (ota_manager_is_running()) {
         ESP_LOGW(TAG, "OTA: update already running");
+        /* The running update owns its existing progress and cancellation UI. */
         return false;
     }
     if (!ota_manager_start(url)) {
         ESP_LOGE(TAG, "OTA: unable to start update");
-        ui_toast_show(UI_STATUS_DANGER, "OTA NOT STARTED",
-                      "Another network operation is active. Try again.");
+        ui_ota_start_failure("Another network operation is active. Close and try again.");
         return false;
     }
     if (save_custom_url) ota_manager_set_url(url);
@@ -47,9 +51,11 @@ static void ota_open_custom_url_bridge(void)
     const esp_app_desc_t *app = esp_app_get_description();
     const esp_partition_t *running = esp_ota_get_running_partition();
     char ota_info[320];
+    char installed[160];
+    firmware_identity_format(installed, sizeof(installed));
     snprintf(ota_info, sizeof(ota_info),
-             "HTTPS verifies the server. Use HTTP only for a trusted local development server.  |  Current: %s  |  Built: %s %s  |  Slot: %s",
-             app ? app->version : "unknown", app ? app->date : __DATE__,
+             "%s | Built: %s %s | Slot: %s\nHTTPS verifies the server. HTTP is for a trusted local server.",
+             installed, app ? app->date : __DATE__,
              app ? app->time : __TIME__, running ? running->label : "unknown");
     ui_ota_popup_show(ota_manager_get_url(), ota_info,
                       ota_manager_url_capacity() - 1,

@@ -1,215 +1,277 @@
-#include "ui_value_update.h"
+#include "ui_widgets.h"
+#include "ui_text_fit.h"
+#include "ui_selector_style.h"
 #include "ui_telemetry.h"
-#include "ui_text.h"
-#include "ui_page_layout_profile.h"
 #include "ui_telemetry_components.h"
 #include "ui_telemetry_charts.h"
-
-#include <math.h>
-#include <stdio.h>
-
-#include "lvgl.h"
-
-#include "telemetry_history.h"
 #include "ui_theme.h"
-#include "ui_page_geometry.h"
+#include "ui_text.h"
+#include "ui_button.h"
+#include "ui_shell.h"
+#include "ui_value_update.h"
+#include "telemetry_history.h"
+#include "esp_timer.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
 
-static lv_obj_t *s_panel = NULL;
+static lv_obj_t *s_panel,*s_status,*s_history_status,*s_graph_host;
+static lv_obj_t *s_tabs[3],*s_range,*s_hotend_selector,*s_hold_button,*s_scale_button;
+static ui_telemetry_view_t s_view=UI_TELEMETRY_HEAT;
+static unsigned s_window=300;
+static bool s_held,s_include_targets=true,s_history_available;
+static char s_hotend[MOONRAKER_HOTEND_NAME_MAX],s_hotend_options[128];
+static moonraker_state_t s_latest;
+static int64_t s_now_us,s_plot_tick=-1;
+static uint32_t s_generation, s_telemetry_epoch;
+static void field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **fields[]={&s_status,&s_history_status,&s_range,&s_hotend_selector,&s_hold_button,&s_scale_button,&s_tabs[0],&s_tabs[1],&s_tabs[2]};
+    for(size_t i=0;i<9;i++)if(*fields[i]==target){*fields[i]=NULL;++s_telemetry_epoch;return;}
+    if(target==s_graph_host){s_graph_host=NULL;++s_telemetry_epoch;ui_telemetry_charts_reset();}
+}
 
-static lv_obj_t *s_nozzle_value = NULL;
-static lv_obj_t *s_bed_value = NULL;
-static lv_obj_t *s_air_value = NULL;
-static lv_obj_t *s_humidity_value = NULL;
+static void telemetry_render(bool force);
 
+static lv_obj_t *layout_row(lv_obj_t *parent,bool wrap)
+{
+    lv_obj_t *row=lv_obj_create(parent);lv_obj_remove_style_all(row);
+    lv_obj_clear_flag(row,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(row,LV_PCT(100),LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row,wrap?LV_FLEX_FLOW_ROW_WRAP:LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row,LV_FLEX_ALIGN_START,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row,8,0);lv_obj_set_style_pad_row(row,8,0);
+    return row;
+}
+
+static lv_obj_t *action(lv_obj_t *parent,const char *text,lv_event_cb_t cb,void *data)
+{
+    lv_obj_t *button=ui_button_create(parent,UI_BUTTON_OUTLINED,text);
+    lv_obj_t *label=lv_obj_get_child(button,0);
+    ui_apply_custom_label_style(label,UI_FONT_BODY,UI_TEXT_BRIGHT);
+    lv_obj_set_width(label,LV_SIZE_CONTENT);lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+    int32_t width=lv_obj_get_self_width(label)+28;if(width<96)width=96;
+    lv_obj_set_size(button,width,48);lv_obj_center(label);
+    if(cb)lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,data);
+    return button;
+}
+
+static void back_cb(lv_event_t *e)
+{
+    (void)e;ui_shell_page_action(UI_SHELL_PAGE_DEVICES);ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS);
+}
+
+static void view_cb(lv_event_t *e)
+{
+    if(!e || !s_panel || s_held || lv_event_get_code(e)!=LV_EVENT_CLICKED)return;
+    unsigned view=(unsigned)(uintptr_t)lv_event_get_user_data(e);
+    if(view>=3 || lv_event_get_target_obj(e)!=s_tabs[view])return;
+    s_view=(ui_telemetry_view_t)(uintptr_t)lv_event_get_user_data(e);
+    telemetry_render(true);
+}
+
+static void range_cb(lv_event_t *e)
+{
+    if(!s_panel || !s_range || s_held || (e && (lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED || lv_event_get_target_obj(e)!=s_range)))return;
+    unsigned selected=lv_dropdown_get_selected(s_range);
+    s_window=(unsigned[]){60,150,300}[selected<3?selected:2];telemetry_render(true);
+}
+
+static void hotend_cb(lv_event_t *e)
+{
+    if(!s_panel || !s_hotend_selector || s_held || (e && (lv_event_get_code(e)!=LV_EVENT_VALUE_CHANGED || lv_event_get_target_obj(e)!=s_hotend_selector)))return;
+    lv_dropdown_get_selected_str(s_hotend_selector,s_hotend,sizeof(s_hotend));
+    if(!strcmp(s_hotend,"Nozzle"))snprintf(s_hotend,sizeof(s_hotend),"%s",s_latest.active_hotend);
+    telemetry_render(true);
+}
+
+static void hold_cb(lv_event_t *e)
+{
+    if(!s_panel || !s_hold_button || (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_hold_button)))return;
+    s_held=!s_held;telemetry_render(!s_held);
+}
+
+static void scale_cb(lv_event_t *e)
+{
+    if(!s_panel || !s_scale_button || s_held || (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_scale_button)))return;
+    s_include_targets=!s_include_targets;telemetry_render(true);
+}
+
+static lv_obj_t *selector(lv_obj_t *parent,const char *options,int width,lv_event_cb_t callback)
+{
+    lv_obj_t *dropdown=lv_dropdown_create(parent);
+    lv_obj_set_size(dropdown,width,48);
+    lv_dropdown_set_options(dropdown,options);
+    ui_selector_style(dropdown,UI_FONT_BODY);
+    lv_obj_add_event_cb(dropdown,callback,LV_EVENT_VALUE_CHANGED,NULL);
+    return dropdown;
+}
+
+static void panel_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target(event)!=s_panel)return;
+    ++s_telemetry_epoch;
+    s_panel=s_status=s_history_status=s_graph_host=NULL;
+    memset(s_tabs,0,sizeof(s_tabs));s_range=s_hotend_selector=s_hold_button=s_scale_button=NULL;
+    s_held=false;s_plot_tick=-1;ui_telemetry_charts_reset();
+}
 
 void ui_telemetry_show(void)
 {
-    if (s_panel) {
-        lv_obj_move_foreground(s_panel);
-        ui_telemetry_charts_load_history();
-        return;
+    if(s_panel){lv_obj_move_foreground(s_panel);return;}
+    ++s_telemetry_epoch;
+    s_history_available=telemetry_history_init();s_generation=telemetry_history_generation();
+    s_now_us=esp_timer_get_time();moonraker_state_snapshot(&s_latest);
+    s_held=false;s_plot_tick=-1;s_view=UI_TELEMETRY_HEAT;
+    s_hotend_options[0]='\0';snprintf(s_hotend,sizeof(s_hotend),"%s",s_latest.active_hotend);
+    s_panel=lv_obj_create(lv_screen_active());
+    int32_t screen_width=lv_display_get_horizontal_resolution(NULL),screen_height=lv_display_get_vertical_resolution(NULL);
+    int32_t width=ui_theme_is_studio()?976:854,height=ui_theme_is_studio()?424:528;
+    int32_t x=ui_theme_is_studio()?24:170,y=ui_theme_is_studio()?80:72;
+    if(screen_width<1024){width=screen_width-32;x=16;}
+    if(screen_height<600){height=screen_height-32;y=16;}
+    lv_obj_set_size(s_panel,width,height);lv_obj_set_pos(s_panel,x,y);
+    ui_apply_surface_role(s_panel,UI_SURFACE_TELEMETRY_ROOT);
+    lv_obj_clear_flag(s_panel,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(s_panel,ui_theme_is_studio()?0:20,0);lv_obj_set_style_pad_row(s_panel,8,0);
+    lv_obj_set_flex_flow(s_panel,LV_FLEX_FLOW_COLUMN);lv_obj_add_event_cb(s_panel,panel_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_t *header;
+    if(ui_theme_is_studio()) {
+        header=layout_row(s_panel,false);
+        lv_obj_t *title=telemetry_make_label(header,"Telemetry",UI_FONT_TITLE,UI_TEXT_BRIGHT);
+        lv_obj_set_width(title,LV_SIZE_CONTENT);
+        action(header,"Devices",back_cb,NULL);
+    }else {
+        header=ui_create_operator_page_header(s_panel,"Telemetry","",LV_PCT(100));
+        for(unsigned i=0;i<2;i++)lv_obj_set_style_max_width(lv_obj_get_child(header,i),LV_PCT(55),0);
+        lv_obj_t *back=action(header,"Devices",back_cb,NULL);
+        lv_obj_set_width(back,128);lv_obj_align(back,LV_ALIGN_RIGHT_MID,-20,0);
+        ui_text_fit_single_line(lv_obj_get_child(back,0),UI_FONT_BODY);
     }
-
-    telemetry_history_init();
-
-    const ui_telemetry_layout_profile_t *layout =
-        &ui_page_layout_profile_current()->telemetry;
-
-    s_panel = lv_obj_create(lv_screen_active());
-
-    lv_obj_set_size(s_panel,
-                    UI_PAGE_ROOT_WIDTH,
-                    UI_PAGE_ROOT_HEIGHT);
-    lv_obj_set_pos(s_panel,
-                   UI_PAGE_ROOT_X,
-                   UI_PAGE_ROOT_Y);
-    lv_obj_clear_flag(s_panel, LV_OBJ_FLAG_SCROLLABLE);
-
-    ui_apply_surface_role(s_panel, UI_SURFACE_TELEMETRY_ROOT);
-
-    lv_obj_t *title = telemetry_make_label(
-        s_panel,
-        "TELEMETRY",
-        &lv_font_montserrat_22,
-        UI_TEXT_BRIGHT);
-
-    lv_obj_set_pos(title, UI_PAGE_RAIL_X, 20);
-
-    lv_obj_t *subtitle = telemetry_make_label(
-        s_panel,
-        layout->subtitle,
-        &lv_font_montserrat_14,
-        UI_TEXT_DIM);
-
-    lv_obj_set_pos(subtitle, UI_PAGE_RAIL_X, 52);
-
-    lv_obj_t *live = telemetry_make_label(
-        s_panel,
-        "LIVE",
-        &lv_font_montserrat_14,
-        UI_OK_BRIGHT);
-
-    lv_obj_align(live, LV_ALIGN_TOP_RIGHT, -26, 28);
-
-    telemetry_create_metric_card(
-        s_panel,
-        layout->metric_x[0],
-        "NOZZLE",
-        UI_ACCENT_CYAN,
-        &s_nozzle_value);
-
-    telemetry_create_metric_card(
-        s_panel,
-        layout->metric_x[1],
-        "BED",
-        UI_WARN,
-        &s_bed_value);
-
-    telemetry_create_metric_card(
-        s_panel,
-        layout->metric_x[2],
-        "CHAMBER",
-        UI_TELEMETRY_CHAMBER,
-        &s_air_value);
-
-    telemetry_create_metric_card(
-        s_panel,
-        layout->metric_x[3],
-        "HUMIDITY",
-        UI_TELEMETRY_HUMIDITY,
-        &s_humidity_value);
-
-    ui_telemetry_charts_create(s_panel);
+    s_status=ui_theme_is_studio()?telemetry_make_label(header,"Waiting",UI_FONT_CAPTION,UI_TEXT_DIM):lv_obj_get_child(header,1);
+    if(!ui_theme_is_studio())lv_label_set_long_mode(s_status,LV_LABEL_LONG_CLIP);
+    if(ui_theme_is_studio()){
+        lv_obj_set_width(s_status,0);lv_obj_set_flex_grow(s_status,1);
+        lv_obj_set_style_text_align(s_status,LV_TEXT_ALIGN_RIGHT,0);
+    }
+    lv_obj_t *tabs=layout_row(s_panel,true);
+    const char *names[]={"Thermal","Motion","Drybox"};
+    for(unsigned i=0;i<3;i++)s_tabs[i]=action(tabs,names[i],view_cb,(void *)(uintptr_t)i);
+    lv_obj_t *controls=tabs;
+    s_range=selector(controls,"2 min\n5 min\n10 min",120,range_cb);
+    lv_dropdown_set_selected(s_range,s_window==60?0:s_window==150?1:2);
+    s_hotend_selector=selector(controls,"Nozzle",170,hotend_cb);
+    s_scale_button=action(controls,"Targets on",scale_cb,NULL);
+    s_hold_button=action(controls,"Resume live",hold_cb,NULL);
+    ui_value_set_text(lv_obj_get_child(s_hold_button,0),"Hold graph");
+    s_graph_host=lv_obj_create(s_panel);lv_obj_remove_style_all(s_graph_host);
+    lv_obj_set_size(s_graph_host,LV_PCT(100),0);lv_obj_set_flex_grow(s_graph_host,1);
+    lv_obj_set_scroll_dir(s_graph_host,LV_DIR_VER);lv_obj_set_scrollbar_mode(s_graph_host,LV_SCROLLBAR_MODE_OFF);
+    ui_telemetry_charts_create(s_graph_host);
+    s_history_status=telemetry_make_label(s_panel,"",UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_obj_set_width(s_history_status,LV_PCT(100));
+    if(!ui_theme_is_studio()){
+        lv_label_set_long_mode(s_history_status,LV_LABEL_LONG_CLIP);
+        lv_obj_set_height(s_history_status,UI_FONT_CAPTION->line_height);
+        if(screen_height<500){lv_obj_set_style_pad_bottom(s_panel,8,0);lv_obj_set_style_pad_row(s_panel,4,0);}
+    }
+    lv_obj_t *fields[]={s_status,s_history_status,s_graph_host,s_range,s_hotend_selector,s_hold_button,s_scale_button,s_tabs[0],s_tabs[1],s_tabs[2]};
+    for(size_t i=0;i<10;i++)if(fields[i])lv_obj_add_event_cb(fields[i],field_deleted,LV_EVENT_DELETE,NULL);
+    telemetry_render(true);
 }
 
 void ui_telemetry_hide(void)
 {
-    if (!s_panel) {
-        return;
-    }
-
-    lv_obj_delete(s_panel);
-
-    s_panel = NULL;
-
-    s_nozzle_value = NULL;
-    s_bed_value = NULL;
-    s_air_value = NULL;
-    s_humidity_value = NULL;
-
-    ui_telemetry_charts_reset();
+    if(s_panel)lv_obj_delete(s_panel);
 }
 
-static void telemetry_set_temperature(
-    lv_obj_t *label,
-    double value)
+static void synchronize_hotends(void)
 {
-    if (!label) {
-        return;
+    if(!s_hotend_selector)return;
+    char options[sizeof(s_hotend_options)]="",first[MOONRAKER_HOTEND_NAME_MAX]="";
+    unsigned selected=0,count=0,active_index=0;bool found=false,active_found=false;
+    size_t used=0;
+    for(size_t i=0;i<s_latest.hotend_count && i<MOONRAKER_MAX_HOTENDS;i++) {
+        const char *name=s_latest.hotends[i].object_name;
+        size_t length=0;
+        while(length<MOONRAKER_HOTEND_NAME_MAX && name[length])length++;
+        if(!length || length==MOONRAKER_HOTEND_NAME_MAX ||
+           used+length+(count?1:0)>=sizeof(options))continue;
+        if(!count)snprintf(first,sizeof(first),"%s",name);
+        if(!strcmp(name,s_hotend)){selected=count;found=true;}
+        if(!strcmp(name,s_latest.active_hotend)){active_index=count;active_found=true;}
+        if(count)options[used++]='\n';
+        memcpy(options+used,name,length);used+=length;options[used]='\0';count++;
     }
-
-    char buf[32];
-
-    if (isfinite(value) && value > -100.0) {
-        snprintf(buf, sizeof(buf), "%.1f C", value);
-    } else {
-        snprintf(buf, sizeof(buf), "-- C");
+    if(!count){snprintf(options,sizeof(options),"Nozzle");snprintf(s_hotend,sizeof(s_hotend),"%s",s_latest.active_hotend);}
+    else if(!found) {
+        selected=active_found?active_index:0;
+        snprintf(s_hotend,sizeof(s_hotend),"%s",active_found?s_latest.active_hotend:first);
     }
-
-    ui_value_set_text(label, buf);
+    if(strcmp(options,s_hotend_options)) {
+        snprintf(s_hotend_options,sizeof(s_hotend_options),"%s",options);
+        lv_dropdown_set_options(s_hotend_selector,options);lv_dropdown_set_selected(s_hotend_selector,selected);
+        s_held=false;s_plot_tick=-1;
+    }
 }
 
-static void telemetry_set_humidity(
-    lv_obj_t *label,
-    double value)
+static void telemetry_render(bool force)
 {
-    if (!label) {
-        return;
+    if(!s_panel)return;
+    uint32_t epoch=s_telemetry_epoch;
+    if(s_generation!=telemetry_history_generation()) {
+        s_generation=telemetry_history_generation();s_held=false;s_plot_tick=-1;
+        s_hotend[0]='\0';s_hotend_options[0]='\0';force=true;
     }
-
-    char buf[32];
-
-    if (isfinite(value) && value >= 0.0) {
-        snprintf(buf, sizeof(buf), "%.1f %%RH", value);
-    } else {
-        snprintf(buf, sizeof(buf), "-- %%RH");
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
+    synchronize_hotends();
+    for(unsigned i=0;i<3;i++) {
+        if(!s_tabs[i])continue;
+        ui_button_set_filter_active(s_tabs[i],i==(unsigned)s_view);
+        if(s_held)lv_obj_add_state(s_tabs[i],LV_STATE_DISABLED);else lv_obj_remove_state(s_tabs[i],LV_STATE_DISABLED);
     }
-
-    ui_value_set_text(label, buf);
+    lv_obj_t *selectors[]={s_range,s_hotend_selector,s_scale_button};
+    for(unsigned i=0;i<3;i++){if(!selectors[i])continue;if(s_held)lv_obj_add_state(selectors[i],LV_STATE_DISABLED);else lv_obj_remove_state(selectors[i],LV_STATE_DISABLED);}
+    if(s_hotend_selector){if(s_view==UI_TELEMETRY_HEAT)lv_obj_remove_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_hotend_selector,LV_OBJ_FLAG_HIDDEN);}
+    if(s_scale_button){if(s_view!=UI_TELEMETRY_MOTION)lv_obj_remove_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(s_scale_button,LV_OBJ_FLAG_HIDDEN);}
+    /* Both action labels have room for either state, keeping touch geometry stable. */
+    lv_obj_t *hold_label=s_hold_button?lv_obj_get_child(s_hold_button,0):NULL;ui_value_set_text(hold_label,s_held?"Resume live":"Hold graph");
+    ui_value_set_text(s_scale_button?lv_obj_get_child(s_scale_button,0):NULL,s_include_targets?"Targets on":"Detail only");
+    ui_button_set_filter_active(s_hold_button,s_held);
+    ui_button_set_filter_active(s_scale_button,s_include_targets);
+    telemetry_sample_t sample;telemetry_history_from_state(&s_latest,s_now_us,&sample);
+    bool live=s_latest.live_data_ok;
+    char status[160];
+    if(!live)snprintf(status,sizeof(status),"%s%s",s_latest.moonraker_ok?"Waiting for Klipper":"Offline",s_held?" | Graph held":"");
+    else if(s_held)snprintf(status,sizeof(status),"Graph held | Values live");
+    else snprintf(status,sizeof(status),"Live | %s",s_latest.printer_state[0]?s_latest.printer_state:"connected");
+    ui_value_set_text(s_status,status);ui_value_set_color(s_status,live?UI_OK_BRIGHT:UI_WARN,LV_PART_MAIN);
+    ui_telemetry_charts_configure(s_view,s_window,s_hotend,s_include_targets);
+    ui_telemetry_charts_update_live(&sample,live,s_held);
+    int64_t tick=s_now_us/TELEMETRY_HISTORY_SAMPLE_INTERVAL_US;
+    if(!s_held && (force || tick!=s_plot_tick)) {ui_telemetry_charts_refresh(s_now_us,false);if(epoch!=s_telemetry_epoch || !s_panel)return;s_plot_tick=tick;}
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
+    size_t count=telemetry_history_count();telemetry_sample_t last;
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
+    if(count)s_history_available=true;
+    if(!s_history_available)snprintf(status,sizeof(status),"Live values only | History storage unavailable");
+    else if(count && telemetry_history_get(count-1,&last)) {
+        if(epoch!=s_telemetry_epoch || !s_panel)return;
+        long long age=s_now_us>=last.time_us?(s_now_us-last.time_us)/1000000:0;
+        snprintf(status,sizeof(status),"Every 2 s | Updated %lld s ago | %u/300 samples | Scroll for more%s",age,(unsigned)count,s_held?" | held":"");
+    } else if (!live) snprintf(status,sizeof(status),"No live history yet | %s",
+        s_latest.moonraker_ok ? "Waiting for Klipper to become ready" : "Reconnect the active printer to begin sampling");
+    else snprintf(status,sizeof(status),"2 s sampling | Waiting for this printer's first live sample");
+    if(epoch!=s_telemetry_epoch || !s_panel)return;
+    ui_value_set_text(s_history_status,status);
 }
 
-void ui_telemetry_refresh(
-    const moonraker_state_t *state,
-    int64_t now_us)
+void ui_telemetry_refresh(const moonraker_state_t *state,int64_t now_us)
 {
-    bool sampled =
-        telemetry_history_sample(state, now_us);
-
-    if (!state || !s_panel) {
-        return;
-    }
-
-    telemetry_set_temperature(
-        s_nozzle_value,
-        state->nozzle_temp);
-
-    if (state->capabilities.discovered &&
-        !state->capabilities.has_heated_bed) {
-        if (s_bed_value) {
-            ui_value_set_text(s_bed_value, ui_text("N/A"));
-        }
-    } else {
-        telemetry_set_temperature(
-            s_bed_value,
-            state->bed_temp);
-    }
-
-    if (state->capabilities.discovered &&
-        !state->capabilities.has_drybox_environment_sensor) {
-        if (s_air_value) {
-            ui_value_set_text(s_air_value, ui_text("N/A"));
-        }
-
-        if (s_humidity_value) {
-            ui_value_set_text(s_humidity_value, ui_text("N/A"));
-        }
-    } else {
-        telemetry_set_temperature(
-            s_air_value,
-            state->air_temp);
-
-        telemetry_set_humidity(
-            s_humidity_value,
-            state->humidity);
-    }
-
-    if (!sampled) {
-        return;
-    }
-
-    ui_telemetry_charts_push_sample(
-        state->nozzle_temp,
-        state->bed_temp,
-        state->air_temp,
-        state->humidity);
+    uint32_t epoch=s_telemetry_epoch;
+    telemetry_history_sample(state,now_us);
+    if(epoch!=s_telemetry_epoch)return;
+    if(state)s_latest=*state;else memset(&s_latest,0,sizeof(s_latest));
+    s_now_us=now_us;telemetry_render(false);
 }

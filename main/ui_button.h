@@ -39,7 +39,8 @@ typedef enum {
     UI_BUTTON_ICON_HORIZONTAL = 0,
     UI_BUTTON_ICON_VERTICAL,
     UI_BUTTON_ICON_HORIZONTAL_REVERSE,
-    UI_BUTTON_ICON_VERTICAL_REVERSE
+    UI_BUTTON_ICON_VERTICAL_REVERSE,
+    UI_BUTTON_ICON_HORIZONTAL_START
 } ui_button_icon_layout_t;
 
 
@@ -70,6 +71,9 @@ lv_obj_t *ui_button_create(
 void ui_button_apply_kind(
     lv_obj_t *button,
     ui_button_kind_t kind);
+
+/* Query-owned active filter feedback; tapping the button does not toggle it. */
+void ui_button_set_filter_active(lv_obj_t *button,bool active);
 
 /*
  * Creates and centers a themed button label.

@@ -3,14 +3,19 @@ set -euo pipefail
 
 # PRINTERHMI_STABLE_RELEASE_V2
 expected_origin_repo="khelix1/PrinterHMI"
-version="6.5.6"
-tag="v${version}"
 
 repo_dir="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "ERROR: run this inside the PrinterHMI Git repository" >&2
     exit 1
 }
 cd "$repo_dir"
+
+version="$(tr -d '[:space:]' < version.txt)"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    echo "ERROR: stable publication requires X.Y.Z; development firmware cannot be published as stable" >&2
+    exit 1
+}
+tag="v${version}"
 
 [[ "$(git branch --show-current)" == "main" ]] || {
     echo "ERROR: stable releases must be published from main" >&2
@@ -22,11 +27,6 @@ if [[ -n "$(git status --porcelain)" ]]; then
     git status --short
     exit 1
 fi
-
-[[ "$(tr -d '[:space:]' < version.txt)" == "$version" ]] || {
-    echo "ERROR: version.txt is not ${version}" >&2
-    exit 1
-}
 
 origin_url="$(git remote get-url origin 2>/dev/null)" || {
     echo "ERROR: remote 'origin' is not configured" >&2
@@ -105,7 +105,7 @@ if gh release view "$tag" --repo "$expected_origin_repo" >/dev/null 2>&1; then
 fi
 
 echo "Building complete PrinterHMI ${tag} stack from ${short_commit}..."
-"$repo_dir/tools/build_v6_stack.sh"
+PRINTERHMI_BUILD_CHANNEL=stable "$repo_dir/tools/build_v6_stack.sh"
 "$repo_dir/tools/audit/dependencies_lock_audit.sh"
 "$repo_dir/tools/audit/firmware_size_audit.sh"
 "$repo_dir/tools/audit/compiler_warning_audit.sh"

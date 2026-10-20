@@ -43,3 +43,8 @@ lv_obj_t *ui_settings_section_add_action_row(
     int y,
     lv_event_cb_t event_cb,
     bool danger);
+
+/* Up to three aligned read-only metrics share the normal row and divider. */
+void ui_settings_section_add_metrics_row(
+    lv_obj_t *section, const char *title, const char *description,
+    const char *const *captions, unsigned count, int y, lv_obj_t **values);

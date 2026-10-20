@@ -1,3 +1,4 @@
+#include "moonraker_command_route.h"
 #include <stdio.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -38,6 +39,7 @@
 #include "esp_heap_caps.h"
 
 #include "lvgl.h"
+#include "ui_graphics_diagnostics.h"
 #include "bsp/esp-bsp.h"
 #include "bsp/display.h"
 #include "bsp_board_extra.h"
@@ -157,6 +159,7 @@ static void sntp_wait_task(void *arg);
 #include "telemetry_history.h"
 #include "ui_printer.h"
 #include "ui_printer_motion.h"
+#include "ui_printer_toolhead.h"
 #include "ui_printer_popups.h"
 #include "ui_filament_recovery.h"
 #include "ui_printer_live_status.h"
@@ -855,6 +858,36 @@ static bool moonraker_get_live_objects(void)
         return false;
     }
 
+    /* A reachable Moonraker may expose stale print/temperature objects while
+     * Klipper is shut down. Confirm webhooks readiness before publication. */
+    cJSON *ready_root = cJSON_Parse(s_moonraker_objects);
+    cJSON *ready_result = cJSON_GetObjectItemCaseSensitive(ready_root, "result");
+    cJSON *ready_status = cJSON_GetObjectItemCaseSensitive(ready_result, "status");
+    cJSON *ready_hooks = cJSON_GetObjectItemCaseSensitive(ready_status, "webhooks");
+    cJSON *ready_state = cJSON_GetObjectItemCaseSensitive(ready_hooks, "state");
+    bool klipper_ready = cJSON_IsString(ready_state) && ready_state->valuestring &&
+        strcmp(ready_state->valuestring, "ready") == 0;
+    if (!klipper_ready) {
+        safe_copy(printer_state, sizeof(s_app_buffers->printer_state),
+                  cJSON_IsString(ready_state) ? ready_state->valuestring : "--");
+        s_live_data_ok = false;
+        moonraker_state_publish_http_fallback(
+            &(moonraker_http_fallback_update_t){
+                .moonraker_ok = true, .live_data_ok = false,
+                .printer_state = printer_state, .printer_file = "No file",
+                .nozzle_temp = -999.0, .nozzle_target = -999.0,
+                .bed_temp = -999.0, .bed_target = -999.0,
+                .chamber_temp = -999.0, .air_temp = -999.0,
+                .humidity = -999.0, .heater_target = -999.0,
+                .drybox_fan_speed = -999.0, .part_fan_speed = -1.0,
+                .progress = -1.0, .current_gcode_z = -1.0,
+                .current_layer = -1, .total_layer = -1,
+            });
+        cJSON_Delete(ready_root);
+        return true; /* Transport succeeded; the printer remains unavailable. */
+    }
+    cJSON_Delete(ready_root);
+
     double val = 0.0;
 
     if (json_find_number_after(s_moonraker_objects, "\"temperature_sensor drybox_center\"", "temperature", &val)) {
@@ -1126,7 +1159,9 @@ static void moonraker_live_poll_tasklet(void)
         websocket_was_authoritative = true;
         s_moonraker_code = 200;
         s_moonraker_ok = true;
-        s_live_data_ok = true;
+        moonraker_state_t ws_state;
+        moonraker_state_snapshot(&ws_state);
+        s_live_data_ok = ws_state.live_data_ok;
         return;
     }
 
@@ -1196,16 +1231,16 @@ static void moonraker_live_poll_tasklet(void)
     }
 }
 
-static bool moonraker_send_gcode_http(const char *cmd)
+static bool moonraker_send_gcode_http(const char *cmd, bool notify_failure)
 {
     if (!s_got_ip || !cmd || !cmd[0]) {
         safe_copy(moonraker_status,
                   sizeof(moonraker_status),
                   "Moonraker: no WiFi for command");
-        ui_toast_show(
+        if (notify_failure) ui_toast_show_link(
             UI_STATUS_DANGER,
             "COMMAND NOT SENT",
-            "Moonraker is offline.");
+            "Moonraker is offline.", UI_SHELL_PAGE_CONSOLE);
         return false;
     }
 
@@ -1252,10 +1287,10 @@ static bool moonraker_send_gcode_http(const char *cmd)
              "HTTP %d  %.110s",
              http_code,
              cmd);
-    ui_toast_show(
+    if (notify_failure) ui_toast_show_link(
         UI_STATUS_DANGER,
         "COMMAND FAILED",
-        toast_detail);
+        toast_detail, UI_SHELL_PAGE_CONSOLE);
 
     return false;
 }
@@ -1273,13 +1308,23 @@ static bool moonraker_send_gcode_raw(
         return true;
     }
 
-    return moonraker_send_gcode_http(command);
+    return moonraker_send_gcode_http(command, true);
 }
 
 
-static bool moonraker_send_gcode(
-    const char *requested)
+/* Console owns persistent editor feedback; preserve literal dispatch and the
+ * same WebSocket/HTTP fallback without a duplicate transient error toast. */
+static bool console_send_gcode(const char *command)
 {
+    if (!command || !command[0]) return false;
+    if (moonraker_live_websocket_send_gcode(command)) return true;
+    return moonraker_send_gcode_http(command, false);
+}
+
+static bool moonraker_send_gcode_impl(
+    const char *requested, bool notify_failure)
+{
+    if(moonraker_command_admin_method(requested))return notify_failure ? moonraker_send_gcode_raw(requested) : console_send_gcode(requested);
     printer_action_resolution_t resolution;
 
     if (!printer_action_resolver_resolve(
@@ -1302,8 +1347,15 @@ static bool moonraker_send_gcode(
             resolution.command);
     }
 
-    return moonraker_send_gcode_raw(
-        resolution.command);
+    return notify_failure ? moonraker_send_gcode_raw(resolution.command) : console_send_gcode(resolution.command);
+}
+static bool moonraker_send_gcode(const char *requested)
+{
+    return moonraker_send_gcode_impl(requested, true);
+}
+static bool action_send_gcode_inline(const char *requested)
+{
+    return moonraker_send_gcode_impl(requested, false);
 }
 
 void ui_printer_create(void);
@@ -1314,7 +1366,7 @@ static void scan_moonraker_now(void);
 static void moonraker_discovery_selected_bridge(
     const char *host,
     int port,
-    const char *identity);
+    const char *identity,uint32_t request);
 
 static void ui_network_tools_open_wifi_scan_cb(lv_event_t *e)
 {
@@ -1373,28 +1425,19 @@ static void ui_network_tools_open_printer_profiles_cb(
 
 static void scan_moonraker_now(void)
 {
-    if (!s_got_ip) {
-        moonraker_discovery_set_status("WiFi is not connected.");
-        moonraker_discovery_show(
-            NULL, NULL, moonraker_discovery_selected_bridge);
-        return;
+    uint32_t request=ui_printer_profiles_discovery_request();
+    if(!request)return;
+    if(!s_got_ip){
+        moonraker_discovery_show_for_request("WiFi is not connected.",ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request);return;
     }
-
-    if (moonraker_discovery_is_running()) {
-        moonraker_discovery_show(
-            NULL, NULL, moonraker_discovery_selected_bridge);
-        return;
+    if(moonraker_discovery_is_running()){
+        moonraker_discovery_show_for_request("Previous scan is finishing. Tap Retry after it stops.",
+            ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request);return;
     }
-
-    moonraker_discovery_show(
-        "Starting Moonraker discovery...\nClose cancels discovery.",
-        NULL,
-        moonraker_discovery_selected_bridge);
-
-    if (!moonraker_discovery_start(&s_ip)) {
-        moonraker_discovery_set_status(
-            "Unable to start Moonraker discovery task.");
-    }
+    if(!moonraker_discovery_show_for_request("Starting Moonraker discovery...\nClose cancels discovery.",
+        ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request))return;
+    if(request!=ui_printer_profiles_discovery_request()){moonraker_discovery_close_request(request);return;}
+    if(!moonraker_discovery_start(&s_ip))moonraker_discovery_set_status("Unable to start Moonraker discovery task.");
 }
 
 static void moon_port_popup_save_bridge(int port)
@@ -1519,7 +1562,7 @@ void ui_command_bar_action(const char *action)
     if (!action) return;
 
     if (strcmp(action, "RESUME") == 0) {
-        ui_filament_recovery_show(moonraker_send_gcode);
+        ui_filament_recovery_show(action_send_gcode_inline);
         return;
     }
 
@@ -1675,7 +1718,7 @@ static bool setup_connect_wifi(const char *ssid, const char *password)
 
 static void app_open_setup_wizard(void)
 {
-    ui_setup_wizard_show(setup_connect_wifi);
+    ui_setup_wizard_show_with_appearance_callback(setup_connect_wifi,app_theme_changed);
 }
 
 static void settings_open_setup_wizard_bridge(lv_event_t *event)
@@ -1743,7 +1786,7 @@ void ui_shell_page_action(ui_shell_page_t page)
     case UI_SHELL_PAGE_CALIBRATION:
         ui_calibration_show(
             calibration_open_bed_mesh_bridge,
-            moonraker_send_gcode);
+            action_send_gcode_inline);
         return;
 
     case UI_SHELL_PAGE_DEVICES:
@@ -1756,8 +1799,7 @@ void ui_shell_page_action(ui_shell_page_t page)
          * The operator explicitly selected this detected macro. Preserve its
          * exact catalog name instead of resolving it as another action.
          */
-        ui_macros_show(
-            moonraker_send_gcode_raw);
+        ui_macros_show(console_send_gcode);
         return;
 
     case UI_SHELL_PAGE_CONSOLE:
@@ -1766,7 +1808,7 @@ void ui_shell_page_action(ui_shell_page_t page)
          * WebSocket dispatch, but never rewrites operator-entered G-code.
          */
         ui_console_show(
-            moonraker_send_gcode_raw);
+            console_send_gcode);
         return;
 
     case UI_SHELL_PAGE_DRYBOX:
@@ -1797,7 +1839,6 @@ static void printer_thumb_cleanup_for_popup_close(void)
         thumb_poll_timer = NULL;
     }
 
-    dash_thumb_img = NULL;
     printer_thumb_box = NULL;
     printer_thumb_view = NULL;
 }
@@ -1827,6 +1868,8 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 
     moonraker_state_t telemetry_state;
     moonraker_state_snapshot(&telemetry_state);
+    ui_toast_observe_printer(&telemetry_state);
+    ui_toast_observe_profiles(&telemetry_state);
 
     moonraker_filament_state_t filament_state;
     moonraker_filament_state_snapshot(
@@ -1860,6 +1903,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         .file_label = printer_file_label,
         .topbar_eta_label = topbar_eta_label,
 
+        .motion_button = printer_actions.motion,
         .home_button = printer_home_btn,
         .pause_button = printer_pause_btn,
         .resume_button = printer_resume_btn,
@@ -1975,7 +2019,7 @@ static void filament_sensor_banner_event_cb(lv_event_t *e)
     moonraker_state_t printer;
     moonraker_state_snapshot(&printer);
     if (printer_controller_is_paused(printer.printer_state)) {
-        ui_filament_recovery_show(moonraker_send_gcode);
+        ui_filament_recovery_show(action_send_gcode_inline);
         return;
     }
 
@@ -2080,6 +2124,9 @@ static void printer_ui_controller_show_object_bridge(void)
 /* BEGIN LEGACY PRINTER PAGE BLOCK */
 void ui_printer_destroy(void)
 {
+    ui_printer_toolhead_close();
+    /* Retire page-owned actions before LVGL releases their objects. */
+    memset(&printer_actions, 0, sizeof(printer_actions));
 
     if (printer_panel) {
         lv_obj_delete(printer_panel);
@@ -2138,12 +2185,12 @@ static void clear_sensitive_buffer(
 }
 
 
-static void connect_selected_wifi(void)
+static bool connect_selected_wifi(void)
 {
     if (!ui_network_tools_selected_wifi_ssid[0]) {
         safe_copy(ui_network_tools_network_scan_status, sizeof(ui_network_tools_network_scan_status),
                   "No WiFi selected");
-        return;
+        return false;
     }
 
     wifi_config_t cfg = {0};
@@ -2185,7 +2232,7 @@ static void connect_selected_wifi(void)
             cfg.sta.password,
             sizeof(cfg.sta.password));
 
-        return;
+        return false;
     }
 
     /*
@@ -2206,6 +2253,7 @@ static void connect_selected_wifi(void)
         snprintf(ui_network_tools_network_scan_status, sizeof(ui_network_tools_network_scan_status),
                  "Connect failed starting WiFi:\n%s", esp_err_to_name(err));
     }
+    return err == ESP_OK;
 }
 
 
@@ -2226,7 +2274,12 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
         safe_copy(saved_wifi_password, sizeof(saved_wifi_password),
                   ui_network_tools_selected_wifi_password);
     }
-    connect_selected_wifi();
+    else {
+        ui_network_tools_wifi_password_set_status("Could not save WiFi credentials. Try again.");
+        clear_sensitive_buffer(ui_network_tools_selected_wifi_password,sizeof(ui_network_tools_selected_wifi_password));
+        return;
+    }
+    bool connection_started=connect_selected_wifi();
 
     clear_sensitive_buffer(
         ui_network_tools_selected_wifi_password,
@@ -2235,7 +2288,8 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
     ui_network_tools_wifi_scan_set_status(
         ui_network_tools_network_scan_status);
 
-    ui_network_tools_wifi_scan_close_owned();
+    if(connection_started)ui_network_tools_wifi_scan_close_owned();
+    else ui_network_tools_wifi_password_set_status(ui_network_tools_network_scan_status);
 }
 
 static void ui_network_tools_show_wifi_password_popup(void)
@@ -2399,7 +2453,7 @@ scan_finished:
 static void moonraker_discovery_selected_bridge(
     const char *host,
     int port,
-    const char *identity)
+    const char *identity,uint32_t request)
 {
     if (!host || !host[0] || port <= 0 || port >= 65536) {
         return;
@@ -2409,12 +2463,8 @@ static void moonraker_discovery_selected_bridge(
      * Discovery edits the open profile draft only. The operator remains
      * responsible for reviewing the result and pressing SAVE.
      */
-    ui_printer_profiles_set_discovered_endpoint(
-        host,
-        port,
-        identity);
-
-    moonraker_discovery_close();
+    (void)ui_printer_profiles_apply_discovered_endpoint(request,host,port,identity);
+    moonraker_discovery_close_request(request);
 }
 
 
@@ -2435,18 +2485,18 @@ static void test_moonraker_now(void)
                  "Host: %s:%d\nHTTP: %d\nStatus: connected\n\nMoonraker responded to /server/info.",
                  moonraker_config_host(), moonraker_config_port(), code);
         ui_network_tools_show_test_moonraker_popup(
-            "MOONRAKER CONNECTED",
+            "Moonraker connected",
             msg,
             true);
     } else {
         snprintf(msg, sizeof(msg),
-                 "Host: %s:%d\nHTTP: %d\nError: %s\n\nCheck IP, port, WiFi, or Moonraker service.",
+                 "Host: %s:%d\nHTTP: %d\nError: %s\n\nCheck IP, port, Wi-Fi, or Moonraker service.",
                  moonraker_config_host(),
                  moonraker_config_port(),
                  code,
                  esp_err_to_name(err));
         ui_network_tools_show_test_moonraker_popup(
-            "MOONRAKER FAILED",
+            "Moonraker failed",
             msg,
             false);
     }
@@ -2603,6 +2653,7 @@ static void app_theme_changed(void)
     ui_shell_set_active_nav(UI_SHELL_PAGE_SETTINGS);
     ui_shell_raise();
     ui_shell_update_status_icons();
+    ui_toast_refresh_appearance();
 }
 
 
@@ -2623,7 +2674,7 @@ static void close_printer_file_detail_popup(void)
 
 static void printer_file_detail_start_bridge(void)
 {
-    (void)printer_file_controller_start_selected_file(
+    bool started=printer_file_controller_start_selected_file(
         s_got_ip,
         moonraker_config_host(),
         moonraker_config_port(),
@@ -2631,6 +2682,9 @@ static void printer_file_detail_start_bridge(void)
         moonraker_status,
         sizeof(moonraker_status),
         close_printer_file_detail_popup);
+    if(!started) {
+        ui_files_print_feedback(moonraker_status);
+    }
 }
 
 
@@ -2702,273 +2756,93 @@ static bool printer_publish_selected_preview_cache(void)
 }
 
 
-static void dashboard_show_loaded_thumbnail(void)
+static bool dashboard_preview_current(uint32_t epoch,uint32_t generation,int profile,const char *file)
 {
-    if (!ui_dashboard_thumb_ready() ||
-        !thumbnail_manager_has_png()) {
-        return;
-    }
-
-    if (dash_thumb_canvas &&
-        thumbnail_session_selected_file()[0] &&
-        strcmp(ui_dashboard_thumb_canvas_file(),
-               thumbnail_session_selected_file()) == 0) {
-        return;
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        dash_thumb_canvas_buf = heap_caps_malloc(
-            DASH_THUMB_CANVAS_W *
-                DASH_THUMB_CANVAS_H *
-                sizeof(uint16_t),
-            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-        if (!dash_thumb_canvas_buf) {
-            dash_thumb_canvas_buf = heap_caps_malloc(
-                DASH_THUMB_CANVAS_W *
-                    DASH_THUMB_CANVAS_H *
-                    sizeof(uint16_t),
-                MALLOC_CAP_8BIT);
-        }
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        ESP_LOGW(TAG, "DASH_CANVAS malloc failed");
-        return;
-    }
-
-    int width = 0, height = 0;
-    if (!thumbnail_render_to_rgb565_aspect(
-            thumbnail_manager_image_dsc(),
-            dash_thumb_canvas_buf,
-            DASH_THUMB_CANVAS_W,
-            DASH_THUMB_CANVAS_H, &width, &height)) {
-        ESP_LOGW(TAG, "DASH_CANVAS shared render failed");
-        return;
-    }
-
-
-    dash_thumb_packed_width = width;
-    dash_thumb_packed_height = height;
-    /* CACHE_PUBLISH_SYNC: PREVIEW_PROFILE_OWNERSHIP_COMPLETE */
-    const char *cache_file =
-        thumbnail_session_selected_file();
-
-    if (cache_file && cache_file[0]) {
-        bool cache_published =
-            printer_preview_cache_publish_active(
-                cache_file,
-                dash_thumb_canvas_buf,
-                width,
-                height);
-
-        if (cache_published &&
-            thumbnail_manager_has_png()) {
-            printer_preview_store_store_active(
-                cache_file,
-                thumbnail_manager_png_data(),
-                thumbnail_manager_png_size());
-        }
-    }
-
-    if (dash_thumb_img) {
-        lv_obj_delete(dash_thumb_img);
-        dash_thumb_img = NULL;
-    }
-
-    if (!dash_thumb_canvas) {
-        dash_thumb_canvas =
-            lv_canvas_create(ui_dashboard_thumb_box());
-    }
-
-    lv_canvas_set_buffer(
-        dash_thumb_canvas,
-        dash_thumb_canvas_buf,
-        width,
-        height,
-        LV_COLOR_FORMAT_RGB565);
-
-    ui_thumbnail_fit_object(
-        dash_thumb_canvas,
-        ui_dashboard_thumb_box(),
-        width,
-        height, 0);
-    lv_obj_move_foreground(dash_thumb_canvas);
-
-    ui_dashboard_thumb_clear_placeholder();
-
-    safe_copy(
-        ui_dashboard_thumb_canvas_file(),
-        ui_dashboard_thumb_canvas_file_size(),
-        thumbnail_session_selected_file());
-
+    return epoch==ui_dashboard_thumb_generation() && generation==moonraker_config_generation() &&
+        profile==moonraker_config_active_profile_index() && (!file || (file[0] && !strcmp(file,thumbnail_session_selected_file())));
 }
 
+static void dashboard_show_loaded_thumbnail(void)
+{
+    if(!ui_dashboard_thumb_ready() || !thumbnail_manager_has_png())return;
+    uint32_t epoch=ui_dashboard_thumb_generation(),generation=moonraker_config_generation();
+    int profile=moonraker_config_active_profile_index();char file[160];
+    safe_copy(file,sizeof(file),thumbnail_session_selected_file());
+    if(ui_dashboard_thumb_canvas_matches(file))return;
+    uint16_t *candidate=heap_caps_malloc(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H*sizeof(uint16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(!candidate)return;
+    int w=0,h=0;
+    bool rendered=thumbnail_render_to_rgb565_aspect(thumbnail_manager_image_dsc(),candidate,DASH_THUMB_CANVAS_W,DASH_THUMB_CANVAS_H,&w,&h);
+    if(rendered && dashboard_preview_current(epoch,generation,profile,file) && ui_dashboard_thumb_ensure_canvas_buffer(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H)){
+        memcpy(dash_thumb_canvas_buf,candidate,(size_t)w*h*sizeof(uint16_t));
+        dash_thumb_packed_width=w;dash_thumb_packed_height=h;
+        bool published=printer_preview_cache_publish_active(file,candidate,w,h);
+        if(dashboard_preview_current(epoch,generation,profile,file))ui_dashboard_thumb_show_canvas_from_buffer(w,h,file);
+        if(published && dashboard_preview_current(epoch,generation,profile,file) && thumbnail_manager_has_png())
+            printer_preview_store_store_active(file,thumbnail_manager_png_data(),thumbnail_manager_png_size());
+    }
+    heap_caps_free(candidate);
+}
 
 static void dashboard_apply_rendered_thumbnail(void)
 {
-    if (!ui_dashboard_thumb_ready() || !dash_thumb_canvas_buf) return;
-
-    /*
-     * Minimal LVGL apply:
-     * - Do not delete labels/images here.
-     * - Do not recreate canvas if it already exists.
-     * - Worker already rendered pixels into dash_thumb_canvas_buf.
-     */
-    if (!dash_thumb_canvas) {
-        dash_thumb_canvas = lv_canvas_create(ui_dashboard_thumb_box());
-        lv_obj_move_foreground(dash_thumb_canvas);
-    }
-    /* Rebind even on reuse: a new file can have a different packed stride. */
-    lv_canvas_set_buffer(dash_thumb_canvas, dash_thumb_canvas_buf,
-        dash_thumb_packed_width, dash_thumb_packed_height, LV_COLOR_FORMAT_RGB565);
-    ui_thumbnail_fit_object(dash_thumb_canvas, ui_dashboard_thumb_box(),
-        dash_thumb_packed_width, dash_thumb_packed_height, 0);
-
-    ui_dashboard_thumb_clear_placeholder();
-
-    if (dash_thumb_img) {
-        lv_obj_add_flag(dash_thumb_img, LV_OBJ_FLAG_HIDDEN);
-    }
-
-    safe_copy(ui_dashboard_thumb_canvas_file(), ui_dashboard_thumb_canvas_file_size(), dash_thumb_render_file);
-
+    if(!ui_dashboard_thumb_ready() || !dash_thumb_canvas_buf ||
+        dash_thumb_render_generation!=moonraker_config_generation() ||
+        dash_thumb_render_profile_index!=moonraker_config_active_profile_index() ||
+        strcmp(dash_thumb_render_file,thumbnail_session_selected_file()))return;
+    ui_dashboard_thumb_apply_canvas_from_buffer(dash_thumb_packed_width,dash_thumb_packed_height,dash_thumb_render_file);
 }
-
-
 
 static void dashboard_restore_active_profile_preview(void)
 {
-    const char *file = NULL;
-    uint32_t revision = 0;
-
-    const lv_image_dsc_t *image =
-        printer_preview_cache_image(
-            moonraker_config_active_profile_index(),
-            &file,
-            &revision);
-
-    (void)revision;
-
-    if (!image ||
-        !file || !file[0] ||
-        image->header.cf != LV_COLOR_FORMAT_RGB565 ||
-        image->header.w == 0 || image->header.w > DASH_THUMB_CANVAS_W ||
-        image->header.h == 0 || image->header.h > DASH_THUMB_CANVAS_H ||
-        image->header.stride != image->header.w * sizeof(uint16_t) ||
-        image->data_size <
-            image->header.w * image->header.h * sizeof(uint16_t)) {
+    uint32_t epoch=ui_dashboard_thumb_generation(),generation=moonraker_config_generation();
+    int profile=moonraker_config_active_profile_index();const char *file=NULL;uint32_t revision=0;
+    const lv_image_dsc_t *image=printer_preview_cache_image(profile,&file,&revision);
+    if(!dashboard_preview_current(epoch,generation,profile,NULL))return;
+    if(!image || !image->data || !file || !file[0] || image->header.cf!=LV_COLOR_FORMAT_RGB565 ||
+        !image->header.w || image->header.w>DASH_THUMB_CANVAS_W || !image->header.h || image->header.h>DASH_THUMB_CANVAS_H ||
+        image->header.stride!=image->header.w*sizeof(uint16_t) || image->data_size<(size_t)image->header.w*image->header.h*sizeof(uint16_t)){
+        bool had_canvas=dash_thumb_canvas!=NULL;
         ui_dashboard_thumb_delete_canvas();
-        ui_dashboard_thumb_set_placeholder(
-            "PRINT\nTHUMBNAIL\n\nNo preview loaded");
+        if(dashboard_preview_current(epoch+(had_canvas?1U:0U),generation,profile,NULL))ui_dashboard_thumb_set_placeholder("Model preview\n\nNo preview loaded");
         return;
     }
-
-    if (!ui_dashboard_thumb_ensure_canvas_buffer(
-            DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H)) {
-        return;
-    }
-
-    memcpy(
-        dash_thumb_canvas_buf,
-        image->data,
-        image->header.w * image->header.h * sizeof(uint16_t));
-
-    dash_thumb_packed_width = image->header.w;
-    dash_thumb_packed_height = image->header.h;
-    ui_dashboard_thumb_show_canvas_from_buffer(
-        image->header.w,
-        image->header.h,
-        file);
+    char copied[160]="";if(strlen(file)<sizeof(copied))safe_copy(copied,sizeof(copied),file);
+    if(!ui_dashboard_thumb_ensure_canvas_buffer(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H))return;
+    memcpy(dash_thumb_canvas_buf,image->data,(size_t)image->header.w*image->header.h*sizeof(uint16_t));
+    dash_thumb_packed_width=image->header.w;dash_thumb_packed_height=image->header.h;
+    if(dashboard_preview_current(epoch,generation,profile,NULL))ui_dashboard_thumb_show_canvas_from_buffer(image->header.w,image->header.h,copied);
 }
-
 
 static void dash_thumb_render_task(void *arg)
 {
-    (void)arg;
-
-    dash_thumb_render_ready = false;
-    dash_thumb_render_failed = false;
-
-    if (!thumbnail_manager_has_png()) {
-        dash_thumb_render_failed = true;
-        dash_thumb_render_running = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        dash_thumb_canvas_buf = heap_caps_malloc(
-            DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H * sizeof(uint16_t),
-            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-        );
-
-        if (!dash_thumb_canvas_buf) {
-            dash_thumb_canvas_buf = heap_caps_malloc(
-                DASH_THUMB_CANVAS_W * DASH_THUMB_CANVAS_H * sizeof(uint16_t),
-                MALLOC_CAP_8BIT
-            );
+    (void)arg;dash_thumb_render_ready=false;dash_thumb_render_failed=false;
+    bool ok=false,published=false;int width=0,height=0;
+    uint32_t generation=dash_thumb_render_generation;int profile=dash_thumb_render_profile_index;
+    char file[160];safe_copy(file,sizeof(file),dash_thumb_render_file);
+    uint16_t *candidate=heap_caps_malloc(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H*sizeof(uint16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    if(candidate && thumbnail_manager_has_png() && bsp_display_lock(1000)){
+        uint32_t epoch=ui_dashboard_thumb_generation();
+        if(dashboard_preview_current(epoch,generation,profile,file))ok=thumbnail_render_to_rgb565_aspect(thumbnail_manager_image_dsc(),candidate,DASH_THUMB_CANVAS_W,DASH_THUMB_CANVAS_H,&width,&height);
+        ok=ok && dashboard_preview_current(epoch,generation,profile,file) && ui_dashboard_thumb_ensure_canvas_buffer(DASH_THUMB_CANVAS_W*DASH_THUMB_CANVAS_H);
+        if(ok){
+            memcpy(dash_thumb_canvas_buf,candidate,(size_t)width*height*sizeof(uint16_t));
+            dash_thumb_packed_width=width;dash_thumb_packed_height=height;
+            if(ui_dashboard_thumb_ready())ui_dashboard_thumb_apply_canvas_from_buffer(width,height,file);
+            if(dashboard_preview_current(epoch,generation,profile,file))published=printer_preview_cache_publish_active(file,candidate,width,height);
         }
-    }
-
-    if (!dash_thumb_canvas_buf) {
-        ESP_LOGW(TAG, "DASH_WORKER canvas malloc failed");
-        dash_thumb_render_failed = true;
-        dash_thumb_render_running = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    bool ok = false, cache_published = false;
-    int width = 0, height = 0;
-
-    if (bsp_display_lock(1000)) {
-        bool same_profile =
-            dash_thumb_render_generation == moonraker_config_generation() &&
-            dash_thumb_render_profile_index == moonraker_config_active_profile_index();
-        if (same_profile) {
-            ok = thumbnail_render_to_rgb565_aspect(
-                thumbnail_manager_image_dsc(), dash_thumb_canvas_buf,
-                DASH_THUMB_CANVAS_W, DASH_THUMB_CANVAS_H, &width, &height);
-        }
-        if (ok) {
-            dash_thumb_packed_width = width;
-            dash_thumb_packed_height = height;
-            /* Keep the visible descriptor and packed stride consistent before
-             * releasing the display lock. A stale job never writes the buffer. */
-            if (dash_thumb_canvas) {
-                lv_canvas_set_buffer(dash_thumb_canvas, dash_thumb_canvas_buf,
-                    width, height, LV_COLOR_FORMAT_RGB565);
-                ui_thumbnail_fit_object(dash_thumb_canvas, ui_dashboard_thumb_box(),
-                    width, height, 0);
-            }
-            if (dash_thumb_render_file[0]) {
-                cache_published = printer_preview_cache_publish_active(
-                    dash_thumb_render_file, dash_thumb_canvas_buf, width, height);
-            }
-        } else {
-            ESP_LOGW(TAG, "%s", same_profile ? "DASH_WORKER shared render failed" :
-                     "Discarded stale Dashboard preview render");
-        }
+        ok=ok && dashboard_preview_current(epoch,generation,profile,file);
         bsp_display_unlock();
-        if (cache_published && thumbnail_manager_has_png() &&
-            dash_thumb_render_generation == moonraker_config_generation() &&
-            dash_thumb_render_profile_index == moonraker_config_active_profile_index()) {
-            printer_preview_store_store_active(dash_thumb_render_file,
-                thumbnail_manager_png_data(), thumbnail_manager_png_size());
-        }
-    } else {
-        ESP_LOGW(TAG, "DASH_WORKER display lock timeout");
+        if(published && generation==moonraker_config_generation() && profile==moonraker_config_active_profile_index() &&
+            !strcmp(file,thumbnail_session_selected_file()) && thumbnail_manager_has_png())printer_preview_store_store_active(file,thumbnail_manager_png_data(),thumbnail_manager_png_size());
     }
-
-    dash_thumb_render_ready = ok;
-    dash_thumb_render_failed = !ok;
-    dash_thumb_render_running = false;
-    vTaskDelete(NULL);
+    heap_caps_free(candidate);
+    dash_thumb_render_ready=ok;dash_thumb_render_failed=!ok;dash_thumb_render_running=false;vTaskDelete(NULL);
 }
 
 static void dash_thumb_render_ui_poll_cb(lv_timer_t *t)
 {
+    if(!t || t!=dash_thumb_render_timer)return;
     if (dash_thumb_render_running) return;
 
     lv_timer_delete(t);
@@ -3083,10 +2957,10 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
         return;
     }
 
-    ui_thumbnail_show_image(
+    ui_thumbnail_show_file_image(
         printer_thumb_view,
         thumbnail_manager_image_dsc(),
-        0);
+        0, thumbnail_session_selected_file());
 
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
@@ -3237,6 +3111,7 @@ static void show_printer_file_detail_popup(void)
         &printer_thumb_view,
         close_printer_file_detail_popup,
         printer_file_detail_start_bridge);
+    ui_thumbnail_bind_owner(printer_thumb_view, &printer_thumb_view);
     printer_thumb_set_label("LOADING...");
 
     if (!file_detail_loader_start(
@@ -3393,6 +3268,8 @@ void ui_printer_create(void)
         printer_ui_controller_command_event_cb,
         printer_ui_controller_motion_event_cb);
 
+    printer_ui_controller_bind_actions(&printer_actions);
+
     printer_home_btn = printer_actions.home;
     printer_pause_btn = printer_actions.pause;
     printer_resume_btn = printer_actions.resume;
@@ -3436,7 +3313,7 @@ static void build_drybox_dashboard(void)
     lv_obj_set_style_text_color(scr, UI_TEXT, 0);
 
     /* Top bar now belongs to ui_shell. */
-    if (!ui_global_estop_init(moonraker_send_gcode)) {
+    if (!ui_global_estop_init(action_send_gcode_inline)) {
         ESP_LOGE(TAG, "Global E-stop unavailable");
     }
     ui_shell_create();
@@ -3896,6 +3773,10 @@ void app_main(void)
         (int)esp_reset_reason());
 
     theme_manager_init();
+    ui_toast_init();
+    ui_toast_set_printer_chooser_action(printer_chooser_open_from_topbar);
+    ui_printer_popups_set_control_sender(action_send_gcode_inline);
+    ui_printer_toolhead_set_sender(action_send_gcode_inline);
     onboarding_controller_init();
 
     /* Apply the saved local timezone before any clock or SNTP path starts. */
@@ -3995,6 +3876,9 @@ void app_main(void)
      */
     bsp_display_lock(0);
     ui_settings_module_init();
+    if (!ui_graphics_diagnostics_start(lv_display_get_default())) {
+        ESP_LOGW(TAG, "Graphics diagnostics unavailable");
+    }
     bsp_display_unlock();
 
     /* A solid backlight eliminates low-duty PWM flicker while the

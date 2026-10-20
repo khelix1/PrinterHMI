@@ -41,15 +41,17 @@ int main(void){
 }
 #else
 #include "offline_ws_extracted.inc"
-static unsigned stopped, created, elapsed;
+static unsigned stopped, created, elapsed, idle_requests;
+static int64_t clock_us=10000;
+static bool send_ok=true;
 static uint32_t selected=1;
 static bool switch_during_stop;
 uint32_t moonraker_config_generation(void){return selected;}
-int64_t esp_timer_get_time(void){return 10000;}
+int64_t esp_timer_get_time(void){return clock_us;}
 static void destroy_client(void){assert(in_runtime);stopped++;elapsed+=5000;s_client=NULL;s_connected=false;s_subscribed=false;if(switch_during_stop){selected++;moonraker_live_websocket_prepare_profile_change(selected);switch_during_stop=false;}}
 static bool create_client(const char *host,int port,const char *key,uint32_t g){(void)port;(void)key;assert(in_runtime);created++;s_client=(void*)2;strcpy(s_host,host);s_generation=g;__atomic_store_n(&s_accepted_generation,g,__ATOMIC_RELEASE);return true;}
 static bool send_identify(void){return true;}static bool send_object_list(void){return true;}static bool send_subscription(void){return true;}
-int esp_websocket_client_send_text(void *c,const char *s,int n,unsigned ticks){(void)c;(void)s;(void)ticks;return n;}
+int esp_websocket_client_send_text(void *c,const char *s,int n,unsigned ticks){assert(c==s_client&&ticks==0);if(strstr(s,"\"id\":1004")){idle_requests++;assert(strstr(s,"printer.objects.query")&&strstr(s,"webhooks")&&strstr(s,"print_stats")&&!strstr(s,"gcode.script"));}return send_ok?n:-1;}
 static void tick(uint32_t generation){in_runtime=true;moonraker_live_websocket_tasklet(true,"new",7125,"",generation);in_runtime=false;}
 int main(void){
  s_client=(void*)1;s_generation=s_accepted_generation=1;s_connected=s_subscribed=true;s_last_status_update_us=9999;s_file_change_pending=true;strcpy(s_host,"old");assert(moonraker_live_websocket_fresh(1000));
@@ -57,6 +59,13 @@ int main(void){
  tick(2);assert(stopped==1 && created==1 && s_generation==2);
  s_connected=s_subscribed=true;selected=3;moonraker_live_websocket_prepare_profile_change(3);switch_during_stop=true;tick(3);assert(stopped==2 && created==1 && selected==4 && !s_client);tick(4);assert(created==2 && s_generation==4);
  selected=5;moonraker_live_websocket_prepare_profile_change(5);tick(4);assert(created==2 && stopped==2);tick(5);assert(created==3 && stopped==3);
- puts("PASS: printer selection fences old connection without transport waits; runtime owns teardown/rebind and rapid selections reject stale snapshots");
+ s_connected=s_subscribed=s_subscription_ready=true;clock_us=10000000;s_last_status_update_us=clock_us;s_idle_status_request_us=0;
+ tick(selected);assert(!idle_requests);clock_us+=1500000;tick(selected);assert(idle_requests==1&&s_last_status_update_us==10000000);assert(moonraker_live_websocket_fresh(3000000));tick(selected);assert(idle_requests==1);
+ /* A verified response, not the request, advances sample freshness. */
+ s_last_status_update_us=clock_us;clock_us+=1000000;tick(selected);assert(idle_requests==1);clock_us+=500000;tick(selected);assert(idle_requests==2);
+ send_ok=false;clock_us+=1500000;tick(selected);assert(idle_requests==3);clock_us+=1000000;tick(selected);assert(idle_requests==3&&!moonraker_live_websocket_fresh(3000000));
+ s_connected=false;clock_us+=1500000;tick(selected);assert(idle_requests==3);s_connected=true;s_subscribed=false;tick(selected);assert(idle_requests==3);s_subscribed=true;s_subscription_ready=false;tick(selected);assert(idle_requests==3);s_subscription_ready=true;s_last_status_update_us=0;tick(selected);assert(idle_requests==3);
+ s_last_status_update_us=clock_us+1;tick(selected);assert(idle_requests==3);s_last_status_update_us=clock_us-2000000;selected++;tick(selected-1);assert(idle_requests==3);
+ puts("PASS: printer selection fences old connection without transport waits; runtime owns teardown/rebind and rapid selections reject stale snapshots; bounded quiet-link status requests preserve response-only freshness and offline fencing");
 }
 #endif

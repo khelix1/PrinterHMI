@@ -29,6 +29,9 @@ typedef enum {
     UI_THEME_STUDIO_DARK
 } ui_theme_id_t;
 
+/* Default for new/unreadable settings; persisted selections keep their IDs. */
+#define UI_THEME_DEFAULT UI_THEME_STUDIO_DARK
+
 typedef enum {
     UI_ACCENT_DEFAULT = 0,
     UI_ACCENT_ID_CYAN,
@@ -277,6 +280,8 @@ void ui_apply_banner_style(lv_obj_t *obj);
 void ui_apply_banner_status_style(
     lv_obj_t *obj,
     ui_status_kind_t kind);
+/* Full status banners own a fixed composition; compact banners use theme padding. */
+void ui_apply_banner_status_style_with_padding(lv_obj_t *obj,ui_status_kind_t kind,int32_t padding);
 void ui_apply_preview_style(lv_obj_t *obj);
 void ui_apply_info_box_style(lv_obj_t *obj);
 void ui_apply_popup_style(lv_obj_t *obj);

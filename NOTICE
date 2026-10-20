@@ -3,3 +3,12 @@ Copyright 2026 khelix
 
 PrinterHMI includes vendored and third-party components. Their licenses and
 copyright notices remain in their respective component directories.
+
+Created and directed by khelix, with AI-assisted development using OpenAI
+ChatGPT/Codex. Product, design and feature decisions and final approval remain
+with khelix. This acknowledgment does not change component authorship or licenses.
+
+Software, font, artwork, ecosystem and development-tool credits are documented
+in docs/SOFTWARE_CREDITS.md. Preserved notice copies for selected bundled
+libraries and fonts are in docs/licenses; additional component notices remain
+with their upstream sources and installed SDK/components.

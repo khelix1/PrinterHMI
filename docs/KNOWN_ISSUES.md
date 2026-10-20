@@ -7,6 +7,19 @@ Completed work is intentionally removed from this list so it remains an accurate
 ---
 
 
+# OTA investigation
+
+## Intermittent panic/rollback after encrypted backup
+
+**Status:** Unconfirmed; no matching panic trace
+
+Opening Settings → OTA update after an encrypted backup previously caused a
+panic/rollback sequence. The event could not subsequently be reproduced after
+installing the latest local build. Host reviews fixed several memory-failure
+and lifecycle paths, but none is established as the cause or resolution of
+this event. v7.0.0 retains this investigation and the remaining physical
+printing/recovery/soak coverage as disclosed validation limits.
+
 # Network Transport
 
 ## ESP-Hosted 3.0.5 compatibility pin

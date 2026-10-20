@@ -1,5 +1,6 @@
 #include "ui_page_state.h"
 #include "ui_text.h"
+#include "ui_value_update.h"
 
 #include "ui_theme.h"
 
@@ -9,21 +10,51 @@ struct ui_page_state {
     lv_obj_t *title;
     lv_obj_t *detail;
     lv_obj_t *spinner;
+    ui_page_state_t **owner_slot;
+    uint32_t epoch;
+    unsigned active_calls;
 };
+
+static void page_state_release(ui_page_state_t *state)
+{
+    if (--state->active_calls == 0 && !state->root) lv_free(state);
+}
+
+static void page_state_field_deleted(lv_event_t *event)
+{
+    ui_page_state_t *state=lv_event_get_user_data(event);
+    lv_obj_t *object=lv_event_get_target_obj(event);
+    lv_obj_t **fields[]={&state->icon,&state->title,&state->detail,&state->spinner};
+    for(unsigned i=0;i<4;++i)if(*fields[i]==object){*fields[i]=NULL;++state->epoch;}
+}
 
 static void page_state_delete_cb(lv_event_t *event)
 {
+    if(lv_event_get_target_obj(event)!=lv_event_get_current_target_obj(event))return;
     ui_page_state_t *state =
         (ui_page_state_t *)lv_event_get_user_data(event);
-    if (state) lv_free(state);
+    if (!state || lv_event_get_target_obj(event)!=state->root) return;
+    lv_obj_t *fields[]={state->icon,state->title,state->detail,state->spinner};
+    for(unsigned i=0;i<4;++i)if(fields[i])
+        lv_obj_remove_event_cb_with_user_data(fields[i],page_state_field_deleted,state);
+    if(state->owner_slot && *state->owner_slot==state)*state->owner_slot=NULL;
+    ++state->epoch;
+    state->root=state->icon=state->title=state->detail=state->spinner=NULL;
+    if(!state->active_calls)lv_free(state);
 }
 
 ui_page_state_t *ui_page_state_create(
     lv_obj_t *parent, int x, int y, int width, int height)
 {
+    return ui_page_state_create_owned(parent,x,y,width,height,NULL);
+}
+
+ui_page_state_t *ui_page_state_create_owned(
+    lv_obj_t *parent, int x, int y, int width, int height, ui_page_state_t **owner_slot)
+{
     if (!parent) return NULL;
 
-    ui_page_state_t *state = lv_malloc(sizeof(*state));
+    ui_page_state_t *state = lv_calloc(1,sizeof(*state));
     if (!state) return NULL;
 
     state->root = lv_obj_create(parent);
@@ -59,8 +90,12 @@ ui_page_state_t *ui_page_state_create(
 
     state->icon = lv_label_create(body);
     ui_apply_text_heading(state->icon);
+    /* Theme text fonts may omit LVGL symbols (notably Studio Inter). */
+    lv_obj_set_style_text_font(state->icon, &lv_font_montserrat_32, 0);
     state->spinner = lv_spinner_create(body);
     lv_obj_set_size(state->spinner, 34, 34);
+    lv_obj_set_style_arc_color(state->spinner,UI_BORDER,LV_PART_MAIN);
+    lv_obj_set_style_arc_color(state->spinner,UI_ACCENT_CYAN,LV_PART_INDICATOR);
     state->title = lv_label_create(body);
     lv_obj_set_width(state->title, lv_pct(100));
     lv_obj_set_style_text_align(state->title, LV_TEXT_ALIGN_CENTER, 0);
@@ -73,6 +108,11 @@ ui_page_state_t *ui_page_state_create(
     ui_apply_text_body(state->detail);
     ui_apply_label_dim(state->detail);
     lv_obj_add_flag(state->root, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *fields[]={state->icon,state->title,state->detail,state->spinner};
+    for(unsigned i=0;i<4;++i)
+        lv_obj_add_event_cb(fields[i],page_state_field_deleted,LV_EVENT_DELETE,state);
+    state->owner_slot=owner_slot;
+    if(owner_slot)*owner_slot=state;
     return state;
 }
 
@@ -82,6 +122,14 @@ void ui_page_state_show(ui_page_state_t *state,
                             const char *detail)
 {
     if (!state || !state->root) return;
+    ++state->active_calls;
+    uint32_t epoch=++state->epoch;
+    /* Widget events may retire this panel or replace an outer Show with Hide
+     * or another Show. Hold metadata until the active call has unwound. */
+#define STATE_UPDATE(field, operation) do { \
+    if(!state->root || state->epoch!=epoch)goto finished; \
+    if(state->field){operation;} \
+} while(0)
 
     const char *icon = LV_SYMBOL_WARNING;
     lv_color_t color = UI_TEXT_DIM;
@@ -90,40 +138,47 @@ void ui_page_state_show(ui_page_state_t *state,
     case UI_PAGE_STATE_LOADING:
         icon = "";
         color = UI_ACCENT_CYAN;
-        lv_obj_clear_flag(state->spinner, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
+        STATE_UPDATE(spinner,lv_obj_clear_flag(state->spinner, LV_OBJ_FLAG_HIDDEN));
+        STATE_UPDATE(icon,lv_obj_add_flag(state->icon, LV_OBJ_FLAG_HIDDEN));
         break;
     case UI_PAGE_STATE_EMPTY:
         icon = LV_SYMBOL_DIRECTORY;
         color = UI_ACCENT_CYAN;
-        lv_obj_add_flag(state->spinner, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
+        STATE_UPDATE(spinner,lv_obj_add_flag(state->spinner, LV_OBJ_FLAG_HIDDEN));
+        STATE_UPDATE(icon,lv_obj_clear_flag(state->icon, LV_OBJ_FLAG_HIDDEN));
         break;
     case UI_PAGE_STATE_OFFLINE:
         icon = LV_SYMBOL_WIFI;
         color = UI_DANGER_BRIGHT;
-        lv_obj_add_flag(state->spinner, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
+        STATE_UPDATE(spinner,lv_obj_add_flag(state->spinner, LV_OBJ_FLAG_HIDDEN));
+        STATE_UPDATE(icon,lv_obj_clear_flag(state->icon, LV_OBJ_FLAG_HIDDEN));
         break;
     case UI_PAGE_STATE_ERROR:
     default:
         color = UI_DANGER_BRIGHT;
-        lv_obj_add_flag(state->spinner, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(state->icon, LV_OBJ_FLAG_HIDDEN);
+        STATE_UPDATE(spinner,lv_obj_add_flag(state->spinner, LV_OBJ_FLAG_HIDDEN));
+        STATE_UPDATE(icon,lv_obj_clear_flag(state->icon, LV_OBJ_FLAG_HIDDEN));
         break;
     }
 
-    lv_label_set_text(state->icon, icon);
-    ui_apply_custom_label_style(state->icon, UI_FONT_HEADING, color);
-    lv_label_set_text(state->title, title ? title : ui_text(""));
-    lv_label_set_text(state->detail, detail ? detail : ui_text(""));
-    lv_obj_clear_flag(state->root, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_foreground(state->root);
+    STATE_UPDATE(icon,ui_value_set_text(state->icon, icon));
+    STATE_UPDATE(icon,lv_obj_set_style_text_font(state->icon,&lv_font_montserrat_32,0));
+    STATE_UPDATE(icon,ui_value_set_color(state->icon, color,0));
+    STATE_UPDATE(title,ui_value_set_text(state->title, title ? title : ui_text("")));
+    STATE_UPDATE(detail,ui_value_set_text(state->detail, detail ? detail : ui_text("")));
+    STATE_UPDATE(root,lv_obj_clear_flag(state->root, LV_OBJ_FLAG_HIDDEN));
+    STATE_UPDATE(root,lv_obj_move_foreground(state->root));
+finished:
+    page_state_release(state);
+#undef STATE_UPDATE
 }
 
 void ui_page_state_hide(ui_page_state_t *state)
 {
     if (state && state->root) {
+        ++state->active_calls;
+        ++state->epoch;
         lv_obj_add_flag(state->root, LV_OBJ_FLAG_HIDDEN);
+        page_state_release(state);
     }
 }

@@ -154,7 +154,8 @@ bool settings_backup_crypto_encrypt(
     size_t status_size)
 {
     if (!encrypted || !encrypted_size || !plaintext ||
-        plaintext_size == 0 || plaintext_size > UINT32_MAX) {
+        plaintext_size == 0 || plaintext_size > UINT32_MAX ||
+        plaintext_size > SIZE_MAX - sizeof(backup_crypto_header_t) - CRYPTO_TAG_BYTES) {
         set_status(status, status_size, "Encrypted backup input is invalid.");
         return false;
     }
@@ -227,7 +228,8 @@ bool settings_backup_crypto_decrypt(
     size_t size = header->plaintext_size;
     if (memcmp(header->magic, CRYPTO_MAGIC, CRYPTO_MAGIC_BYTES) != 0 ||
         header->version != SETTINGS_BACKUP_CRYPTO_FORMAT_VERSION ||
-        size == 0 || encrypted_size != sizeof(*header) + size + CRYPTO_TAG_BYTES) {
+        size == 0 || size > SIZE_MAX - sizeof(*header) - CRYPTO_TAG_BYTES ||
+        encrypted_size != sizeof(*header) + size + CRYPTO_TAG_BYTES) {
         set_status(status, status_size, "Encrypted backup format is not supported.");
         return false;
     }

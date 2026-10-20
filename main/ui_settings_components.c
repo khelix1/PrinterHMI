@@ -72,13 +72,7 @@ void ui_settings_section_add_divider(
     int y)
 {
     if(ui_theme_is_studio())return;
-    lv_obj_t *line = lv_obj_create(section);
-
-    lv_obj_set_size(line, UI_PAGE_RAIL_WIDTH - 36, 1);
-    lv_obj_set_pos(line, 18, y);
-    lv_obj_clear_flag(line, LV_OBJ_FLAG_SCROLLABLE);
-
-    ui_apply_surface_role(line, UI_SURFACE_DIVIDER);
+    ui_create_divider(section,18,y,UI_PAGE_RAIL_WIDTH-36,1);
 }
 
 lv_obj_t *ui_settings_section_add_row(
@@ -338,4 +332,41 @@ lv_obj_t *ui_settings_section_add_action_row(
     }
 
     return button;
+}
+
+void ui_settings_section_add_metrics_row(
+    lv_obj_t *section, const char *title, const char *description,
+    const char *const *captions, unsigned count, int y, lv_obj_t **values)
+{
+    if (!section || !captions || !values || count == 0 || count > 3) return;
+    lv_obj_t *placeholder=ui_settings_section_add_row(section,title,description,"",y,NULL);
+    lv_obj_t *row=lv_obj_get_parent(placeholder);
+    lv_obj_delete(placeholder);
+    /* Preserve the row's normal title/description and theme-specific rule. */
+    for(unsigned i=0;i<lv_obj_get_child_count(row);i++) {
+        lv_obj_t *child=lv_obj_get_child(row,i);
+        if(lv_obj_check_type(child,&lv_label_class))lv_obj_set_width(child,LV_PCT(38));
+    }
+    lv_obj_t *metrics=lv_obj_create(row);
+    ui_apply_surface_role(metrics,UI_SURFACE_TRANSPARENT);
+    lv_obj_set_size(metrics,LV_PCT(55),LV_SIZE_CONTENT);
+    lv_obj_clear_flag(metrics,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(metrics,LV_ALIGN_RIGHT_MID,ui_theme_is_studio()?-46:-4,0);
+    lv_obj_set_flex_flow(metrics,LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(metrics,8,0);
+    for(unsigned i=0;i<3;i++) {
+        lv_obj_t *column=lv_obj_create(metrics);
+        ui_apply_surface_role(column,UI_SURFACE_TRANSPARENT);
+        lv_obj_clear_flag(column,LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(column,0,LV_SIZE_CONTENT);lv_obj_set_flex_grow(column,1);
+        lv_obj_set_flex_flow(column,LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(column,4,0);
+        if(i>=count)continue; /* Keep Free now/Lowest aligned across memory rows. */
+        lv_obj_t *caption=settings_component_make_label(column,captions[i],UI_FONT_CAPTION,UI_TEXT_DIM);
+        lv_obj_set_width(caption,LV_PCT(100));lv_label_set_long_mode(caption,LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(caption,LV_TEXT_ALIGN_RIGHT,0);
+        values[i]=settings_component_make_label(column,"--",UI_FONT_BODY,UI_TEXT_BRIGHT);
+        lv_obj_set_width(values[i],LV_PCT(100));lv_label_set_long_mode(values[i],LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_align(values[i],LV_TEXT_ALIGN_RIGHT,0);
+    }
 }

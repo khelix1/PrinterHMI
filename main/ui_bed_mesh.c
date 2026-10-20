@@ -1,4 +1,7 @@
 #include "ui_bed_mesh.h"
+#include "printer_connection_policy.h"
+#include "moonraker_config_controller.h"
+#include "ui_value_update.h"
 #include "ui_text.h"
 #include "esp_log.h"
 #include <stdio.h>
@@ -11,19 +14,24 @@
 #include "esp_heap_caps.h"
 #include "ui_button.h"
 #include "ui_popup.h"
-#include "ui_theme.h"
+#include "ui_form_dialog.h"
 #include "ui_widgets.h"
+#include "ui_theme.h"
 #include "ui_page_geometry.h"
-#define CW (ui_theme_is_studio()?776:620)
-#define CH (ui_theme_is_studio()?250:340)
+#define CW (ui_theme_is_studio()?976:800)
+#define CH (ui_theme_is_studio()?298:324)
 #define VALUE_CAP ((size_t)BED_MESH_MAX_ROWS*BED_MESH_MAX_COLS)
 typedef struct {
     lv_obj_t *popup;
     lv_obj_t *canvas;
     lv_obj_t *stats;
+    lv_obj_t *metrics;
     lv_obj_t *surface_grid_button;
     lv_obj_t *surface_grid_label;
     lv_obj_t *calibrate_confirm;
+    lv_obj_t *calibrate_button;
+    lv_timer_t *connection_timer;
+    uint32_t owner_generation;
     uint16_t *buf;
     float *values;
     bed_mesh_profile_name_t *profile_names;
@@ -73,19 +81,43 @@ static void render(void)
     ui_bed_mesh_renderer_render(&config);
 }
 
-static void stats(void){if(!s.stats)return;if(!s.mesh.valid){lv_label_set_text(s.stats,ui_text("No active bed mesh. Calibrate or load a profile."));return;}char b[256];snprintf(
-        b,
-        sizeof(b),
-        "PROFILE %s   GRID %u x %u   Z %.0fx%s\n"
-        "MIN %+.3f mm   MAX %+.3f mm   RANGE %.3f mm",
-        s.mesh.profile_name,
-        s.mesh.cols,
-        s.mesh.rows,
-        s.zscale,
-        s.mesh.truncated ? "   TRUNCATED" : "",
-        s.mesh.minimum,
-        s.mesh.maximum,
-        s.mesh.range);lv_label_set_text(s.stats,b);}
+static const char *mesh_connection_reason(void){
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    return s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
+}
+static void mesh_caption_deleted(lv_event_t *event)
+{
+    lv_obj_t *object=lv_event_get_target_obj(event);
+    if(object==s.stats)s.stats=NULL;
+    if(object==s.metrics)s.metrics=NULL;
+}
+static void stats(void)
+{
+    if(!s.stats)return;
+    const char *reason=mesh_connection_reason();
+    if(reason[0]||!s.mesh.valid){
+        ui_value_set_text(s.stats,reason[0]?reason:"No active bed mesh. Calibrate or load a profile.");
+        if(s.metrics)ui_value_set_text(s.metrics,"");
+        return;
+    }
+    char summary[160];
+    snprintf(summary,sizeof(summary),"Profile %s | %u x %u | Z %.0fx%s",
+        s.mesh.profile_name[0]?s.mesh.profile_name:"Current mesh",s.mesh.cols,s.mesh.rows,s.zscale,
+        s.mesh.truncated?" | Truncated":"");
+    ui_value_set_text(s.stats,summary);
+    if(s.metrics){
+        char height[128];
+        snprintf(height,sizeof(height),"Min %+.3f mm  |  Max %+.3f mm  |  Range %.3f mm",
+            s.mesh.minimum,s.mesh.maximum,s.mesh.range);
+        ui_value_set_text(s.metrics,height);
+    }
+}
+static void mesh_connection_refresh(lv_timer_t *timer){
+    (void)timer;if(!s.popup)return;
+    if(s.calibrate_button){if(mesh_connection_reason()[0])lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
+    ui_bed_mesh_profiles_refresh_availability();
+    stats();
+}
 void ui_bed_mesh_refresh(void)
 {
     if (!s.popup) {
@@ -139,9 +171,7 @@ static void update_surface_grid_button(void)
     if (s.surface_grid_label) {
         lv_label_set_text(
             s.surface_grid_label,
-            s.surface_grid_visible
-                ? ui_text("GRID ON")
-                : ui_text("GRID OFF"));
+            ui_text("Grid"));
     }
 
     if (s.surface_grid_button) {
@@ -196,6 +226,7 @@ static void confirm_calibrate_cb(lv_event_t *e)
 {
     (void)e;
 
+    if(mesh_connection_reason()[0]){ui_cal_dialog_notice(UI_STATUS_WARNING,"BED MESH NOT READY",mesh_connection_reason());return;}
     /*
      * Preserve the command callback before closing the modal. The mesh
      * viewer remains open so its live snapshot can refresh after probing.
@@ -212,63 +243,57 @@ static void calibrate_cb(lv_event_t *e)
 {
     (void)e;
 
+    if(mesh_connection_reason()[0]){stats();return;}
     if (s.calibrate_confirm) {
         lv_obj_move_foreground(s.calibrate_confirm);
         return;
     }
 
-    /*
-     * Calibration belongs to the bed-mesh viewer, while all modal geometry
-     * and styling comes from the shared popup subsystem.
-     */
-    s.calibrate_confirm =
-        ui_popup_create(
-            s.popup ? s.popup : lv_screen_active(),
-            500,
-            280,
-            UI_POPUP_DANGER);
+    /* Keep the review owned by the viewer, with a scrolling warning and
+     * pinned actions so larger text cannot overlap the controls. */
+    lv_obj_t *parent = s.popup ? s.popup : lv_screen_active();
+    int32_t width = lv_obj_get_width(parent) - 32;
+    int32_t height = lv_obj_get_height(parent) - 32;
+    if (width > 560) width = 560;
+    if (height > 340) height = 340;
+    s.calibrate_confirm = ui_popup_create(parent, width, height, UI_POPUP_DANGER);
+    if (!s.calibrate_confirm) return;
+    lv_obj_set_flex_flow(s.calibrate_confirm, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s.calibrate_confirm, UI_PAD_POPUP, 0);
+    lv_obj_set_style_pad_row(s.calibrate_confirm, UI_GAP_ROW, 0);
+    lv_obj_t *title = ui_form_text(s.calibrate_confirm,
+        ui_text("Calibrate bed mesh?"), UI_FONT_TITLE, UI_TEXT_BRIGHT);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    ui_form_divide_title(s.calibrate_confirm);
 
-    if (!s.calibrate_confirm) {
-        return;
-    }
+    lv_obj_t *body = lv_obj_create(s.calibrate_confirm);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_size(body, LV_PCT(100), 0);
+    lv_obj_set_flex_grow(body, 1);
+    lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(body, UI_GAP_ROW, 0);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_t *warning = ui_form_text(body,
+        "This will move the toolhead across the bed and probe multiple points.",
+        UI_FONT_BODY, UI_TEXT);
+    lv_obj_set_style_text_line_space(warning, 4, 0);
+    lv_obj_t *readiness = ui_form_text(body,
+        "Make sure the bed is clear and the printer is ready.",
+        UI_FONT_CAPTION, UI_TEXT_MUTED);
+    lv_obj_set_style_text_line_space(readiness, 4, 0);
 
-    ui_popup_add_title(
-        s.calibrate_confirm,
-        ui_text("START BED MESH?"),
-        true,
-        4);
-    ui_popup_add_header_divider(
-        s.calibrate_confirm,
-        44);
-    ui_popup_add_body(
-        s.calibrate_confirm,
-        "This will move the toolhead across the bed and probe multiple "
-        "points.\n\nMake sure the bed is clear and the printer is ready.",
-        24,
-        70,
-        452);
-    ui_popup_add_standard_footer_divider(
-        s.calibrate_confirm);
-
-    ui_popup_add_footer_action(
-        s.calibrate_confirm,
-        UI_POPUP_ACTION_CANCEL,
-        LV_SYMBOL_LEFT " BACK",
-        160,
-        UI_POPUP_FOOTER_LEFT,
-        close_calibrate_confirm_cb,
-        NULL,
-        NULL);
-
-    ui_popup_add_footer_action(
-        s.calibrate_confirm,
-        UI_POPUP_ACTION_DANGER,
-        LV_SYMBOL_PLAY " START",
-        190,
-        UI_POPUP_FOOTER_RIGHT,
-        confirm_calibrate_cb,
-        NULL,
-        NULL);
+    lv_obj_t *footer = lv_obj_create(s.calibrate_confirm);
+    ui_responsive_column(footer);
+    ui_apply_divider_border(footer, LV_BORDER_SIDE_TOP);
+    lv_obj_set_style_pad_top(footer, 8, 0);
+    lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
+    ui_form_action(s.calibrate_confirm, UI_BUTTON_CANCEL, LV_SYMBOL_LEFT " Back",
+        close_calibrate_confirm_cb, NULL);
+    ui_form_action(s.calibrate_confirm, UI_BUTTON_DANGER, LV_SYMBOL_PLAY " Start probing",
+        confirm_calibrate_cb, NULL);
+    ui_form_finish(s.calibrate_confirm);
 }
 
 bool ui_bed_mesh_is_open(void)
@@ -282,13 +307,15 @@ void ui_bed_mesh_close(void)
      * The shared confirmation is a top-layer sibling, not a child of the
      * mesh viewer. Close it first so no modal surface can outlive its owner.
      */
+    if(s.connection_timer)lv_timer_delete(s.connection_timer);
+    s.connection_timer=NULL;
     close_calibrate_confirm_cb(NULL);
     ui_bed_mesh_profiles_close();
 
     ui_bed_mesh_gestures_close();
 
     if (s.popup) {
-        lv_obj_delete(s.popup);
+        lv_obj_t *popup=s.popup;s.popup=NULL;lv_obj_delete(popup);
     }
     if (s.buf) {
         heap_caps_free(s.buf);
@@ -303,10 +330,16 @@ void ui_bed_mesh_close(void)
     memset(&s, 0, sizeof(s));
 }
 
+static void mesh_deleted(lv_event_t *event){
+    if(lv_event_get_target_obj(event)!=s.popup)return;
+    s.popup=NULL;ui_bed_mesh_close();
+}
+
 void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
 {
     ui_bed_mesh_close();
     s.command = command;
+    s.owner_generation=moonraker_config_generation();
     s.zscale = 20.0f;
     ui_bed_mesh_gestures_init(
         &s.view,
@@ -323,6 +356,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         return;
     }
 
+    lv_obj_add_event_cb(s.popup,mesh_deleted,LV_EVENT_DELETE,NULL);
     ui_bed_mesh_profiles_init(
         s.popup,
         s.command);
@@ -340,27 +374,36 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s.popup);
 
-    ui_popup_add_title(
-        s.popup,
-        ui_text("BED MESH 3D"),
-        false,
-        8);
-    ui_popup_add_header_divider(
-        s.popup,
-        ui_theme_is_studio()?44:52);
+    if(ui_theme_is_studio()) {
+        /* Use eight pixels of the gap above the navigation shelf. */
+        lv_obj_set_height(s.popup,432);
+        lv_obj_t *title=ui_popup_add_caption(s.popup,"Bed mesh",0,0,976);
+        ui_apply_custom_label_style(title,UI_FONT_TITLE,UI_TEXT_BRIGHT);
+        ui_popup_add_header_divider(s.popup,36);
+        s.stats=ui_popup_add_caption(s.popup,ui_text(""),184,6,792);
+    }else {
+        lv_obj_t *header=ui_create_operator_page_header(s.popup,"Bed mesh","",UI_PAGE_RAIL_WIDTH);
+        s.stats=lv_obj_get_child(header,1);
+        /* A compact banner gives the interactive graph another twenty pixels. */
+        lv_obj_set_height(header,66);
+        lv_obj_set_y(lv_obj_get_child(header,0),8);
+        lv_obj_set_y(s.stats,42);
+    }
 
-    s.stats =
-        ui_popup_add_caption(
-            s.popup,
-            ui_text(""),
-            ui_theme_is_studio()?0:20,
-            ui_theme_is_studio()?50:58,
-            ui_theme_is_studio()?976:814);
+    ui_apply_custom_label_style(s.stats,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_label_set_long_mode(s.stats,LV_LABEL_LONG_CLIP);
+    lv_obj_set_height(s.stats,UI_FONT_CAPTION->line_height);
+    lv_obj_add_event_cb(s.stats,mesh_caption_deleted,LV_EVENT_DELETE,NULL);
+    s.metrics=ui_popup_add_caption(s.popup,"",ui_theme_is_studio()?0:20,ui_theme_is_studio()?344:430,CW);
+    ui_apply_custom_label_style(s.metrics,UI_FONT_CAPTION,UI_TEXT_DIM);
+    lv_label_set_long_mode(s.metrics,LV_LABEL_LONG_CLIP);
+    lv_obj_set_height(s.metrics,UI_FONT_CAPTION->line_height);
+    lv_obj_add_event_cb(s.metrics,mesh_caption_deleted,LV_EVENT_DELETE,NULL);
 
     s.buf =
         alloc_psram_first(
-            (size_t)CW * CH,
-            sizeof(uint16_t));
+            (size_t)lv_draw_buf_width_to_stride(CW,LV_COLOR_FORMAT_RGB565) * CH,
+            1);
 
     if (s.buf) {
         s.canvas = lv_canvas_create(s.popup);
@@ -373,7 +416,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         lv_obj_set_pos(
             s.canvas,
             ui_theme_is_studio()?0:20,
-            ui_theme_is_studio()?78:98);
+            ui_theme_is_studio()?40:94);
         lv_obj_add_flag(
             s.canvas,
             LV_OBJ_FLAG_CLICKABLE);
@@ -388,34 +431,28 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         ui_popup_add_action_aligned(
             s.popup,
             UI_POPUP_ACTION_SECONDARY,
-            "GRID OFF",
-            174,
-            60,
-            LV_ALIGN_TOP_RIGHT,
+            "Grid",
+            160,
+            48,
+            LV_ALIGN_BOTTOM_RIGHT,
             -20,
-            ui_theme_is_studio()?78:98,
+            -12,
             surface_grid_cb,
             NULL,
             &s.surface_grid_label);
     update_surface_grid_button();
 
-    if(ui_theme_is_studio())ui_popup_add_footer_divider(s.popup,360);
+    if(ui_theme_is_studio())ui_popup_add_footer_divider(s.popup,368);
     else ui_popup_add_standard_footer_divider(s.popup);
-    ui_popup_add_caption(
-        s.popup,
-        ui_text("DRAG ROTATE  •  2-FINGER PAN  •  PINCH ZOOM"),
-        ui_theme_is_studio()?0:20,
-        ui_theme_is_studio()?336:442,
-        ui_theme_is_studio()?976:814);
 
     ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
-        "RESET VIEW",
+        "Reset view",
         160,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -20,
+        -188,
         -12,
         reset_cb,
         NULL,
@@ -427,7 +464,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -190,
+        -356,
         -12,
         plus_cb,
         NULL,
@@ -439,19 +476,19 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         52,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -252,
+        -416,
         -12,
         minus_cb,
         NULL,
         NULL);
-    ui_popup_add_action_aligned(
+    s.calibrate_button=ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_PRIMARY,
-        "CALIBRATE",
+        "Calibrate",
         150,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -314,
+        -476,
         -12,
         calibrate_cb,
         NULL,
@@ -459,15 +496,16 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
     ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
-        "PROFILES",
+        "Profiles",
         140,
         48,
         LV_ALIGN_BOTTOM_RIGHT,
-        -474,
+        -634,
         -12,
         ui_bed_mesh_profiles_show_cb,
         NULL,
         NULL);
 
     ui_bed_mesh_refresh();
+    s.connection_timer=lv_timer_create(mesh_connection_refresh,250,NULL);mesh_connection_refresh(NULL);
 }

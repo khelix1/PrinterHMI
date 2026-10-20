@@ -1,10 +1,12 @@
 #include "settings_backup.h"
 #include "settings_backup_crypto.h"
+#include "json_document_limits.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -16,6 +18,7 @@
 #include "theme_manager.h"
 #include "timezone_config.h"
 #include "ui_settings.h"
+#include "ui_toast.h"
 
 #define SETTINGS_BACKUP_SCHEMA 1
 #define SETTINGS_BACKUP_PRODUCT "PrinterHMI"
@@ -43,6 +46,7 @@ typedef struct {
     ui_accent_id_t accent;
     ui_density_id_t density;
     ui_accessibility_t accessibility;
+    ui_notification_level_t notification_level;
 
     size_t timezone_index;
     int brightness;
@@ -156,6 +160,64 @@ static bool json_text(
 }
 
 
+static bool parse_profile_transport_security(const cJSON *item, moonraker_profile_t *profile)
+{
+    const cJSON *secure = cJSON_GetObjectItemCaseSensitive(item, "secure_transport");
+    if (secure) {
+        if (!cJSON_IsBool(secure)) return false;
+        profile->secure_transport = cJSON_IsTrue(secure);
+        return true;
+    }
+    /* Older backups omitted TLS. Preserve a known endpoint's TLS requirement
+     * instead of silently downgrading it when restoring the legacy schema. */
+    profile->secure_transport = false;
+    for (int i = 0; i < MOONRAKER_CONFIG_MAX_PROFILES; ++i) {
+        const moonraker_profile_t *current = moonraker_config_profile(i);
+        if (current && current->configured && current->secure_transport &&
+            current->port == profile->port && !strcasecmp(current->host, profile->host)) {
+            profile->secure_transport = true;
+            break;
+        }
+    }
+    return true;
+}
+
+static bool parse_profile_camera(const cJSON *item, moonraker_profile_t *profile, int slot)
+{
+    const cJSON *camera = cJSON_GetObjectItemCaseSensitive(item, "camera_stream_url");
+    profile->camera_stream_url[0] = '\0';
+    if (!camera) {
+        /* Prefer this slot's camera for legacy backups; duplicate endpoints
+         * may intentionally have different camera URLs. */
+        for (int attempt = -1; attempt < MOONRAKER_CONFIG_MAX_PROFILES; ++attempt) {
+            const moonraker_profile_t *current = moonraker_config_profile(attempt < 0 ? slot : attempt);
+            if (current && current->configured && current->port == profile->port &&
+                !strcasecmp(current->host, profile->host)) {
+                strlcpy(profile->camera_stream_url, current->camera_stream_url,
+                        sizeof(profile->camera_stream_url));
+                break;
+            }
+        }
+        return true;
+    }
+    if (!cJSON_IsString(camera) || !camera->valuestring ||
+        strnlen(camera->valuestring, sizeof(profile->camera_stream_url)) >= sizeof(profile->camera_stream_url)) return false;
+    if (camera->valuestring[0] && strncmp(camera->valuestring, "http://", 7) &&
+        strncmp(camera->valuestring, "https://", 8)) return false;
+    strlcpy(profile->camera_stream_url, camera->valuestring, sizeof(profile->camera_stream_url));
+    return true;
+}
+
+static cJSON *parse_backup_document(const char *document, size_t size)
+{
+    /* Bound recursive parser stack usage before cJSON sees SD-card input.
+     * Quotes/escapes matter: JSON-looking text inside a string is not nesting. */
+    if (!json_document_within_limits(document, size, SETTINGS_BACKUP_MAX_BYTES, 16)) return NULL;
+    /* Both loaders allocate and append a terminating NUL. Require the entire
+     * document, rejecting a valid prefix followed by junk or another object. */
+    return cJSON_ParseWithLengthOpts(document, size + 1, NULL, true);
+}
+
 static void capture_current(
     settings_backup_snapshot_t *snapshot)
 {
@@ -191,6 +253,8 @@ static void capture_current(
     snapshot->accessibility =
         theme_manager_accessibility();
 
+    snapshot->notification_level = ui_toast_level();
+
     snapshot->timezone_index =
         timezone_config_selected_index();
 
@@ -206,168 +270,80 @@ static cJSON *snapshot_to_json(
     const settings_backup_snapshot_t *snapshot,
     bool include_api_keys)
 {
-    if (!snapshot) {
-        return NULL;
-    }
-
+    if (!snapshot) return NULL;
     cJSON *root = cJSON_CreateObject();
+    if (!root) return NULL;
+    if (!cJSON_AddStringToObject(root, "product", SETTINGS_BACKUP_PRODUCT) ||
+        !cJSON_AddNumberToObject(root, "schema", SETTINGS_BACKUP_SCHEMA) ||
+        !cJSON_AddNumberToObject(root, "created_unix", (double)time(NULL)) ||
+        !cJSON_AddNumberToObject(root, "active_profile", snapshot->active_profile)) goto failed;
 
-    if (!root) {
-        return NULL;
-    }
-
-    cJSON_AddStringToObject(
-        root,
-        "product",
-        SETTINGS_BACKUP_PRODUCT);
-
-    cJSON_AddNumberToObject(
-        root,
-        "schema",
-        SETTINGS_BACKUP_SCHEMA);
-
-    cJSON_AddNumberToObject(
-        root,
-        "created_unix",
-        (double)time(NULL));
-
-    cJSON_AddNumberToObject(
-        root,
-        "active_profile",
-        snapshot->active_profile);
-
-    cJSON *profiles =
-        cJSON_AddArrayToObject(
-            root,
-            "profiles");
-
-    for (int index = 0;
-         profiles &&
-         index < MOONRAKER_CONFIG_MAX_PROFILES;
-         ++index) {
-        const moonraker_profile_t *profile =
-            &snapshot->profiles[index];
-
-        cJSON *item =
-            cJSON_CreateObject();
-
-        if (!item) {
-            cJSON_Delete(root);
-            return NULL;
+    cJSON *profiles = cJSON_AddArrayToObject(root, "profiles");
+    if (!profiles) goto failed;
+    for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index) {
+        const moonraker_profile_t *profile = &snapshot->profiles[index];
+        cJSON *item = cJSON_CreateObject();
+        if (!item) goto failed;
+        if (!cJSON_AddItemToArray(profiles, item)) {
+            cJSON_Delete(item);
+            goto failed;
         }
-
-        cJSON_AddNumberToObject(
-            item,
-            "slot",
-            index);
-
-        cJSON_AddBoolToObject(
-            item,
-            "configured",
-            profile->configured);
-
-        if (profile->configured) {
-            cJSON_AddStringToObject(
-                item,
-                "name",
-                profile->name);
-
-            cJSON_AddStringToObject(
-                item,
-                "host",
-                profile->host);
-
-            cJSON_AddNumberToObject(
-                item,
-                "port",
-                profile->port);
-
-            if (include_api_keys) {
-                cJSON_AddStringToObject(
-                    item,
-                    "api_key",
-                    profile->api_key);
-            }
-        }
-
-        cJSON_AddItemToArray(
-            profiles,
-            item);
+        if (!cJSON_AddNumberToObject(item, "slot", index) ||
+            !cJSON_AddBoolToObject(item, "configured", profile->configured)) goto failed;
+        if (profile->configured &&
+            (!cJSON_AddBoolToObject(item, "secure_transport", profile->secure_transport) ||
+             !cJSON_AddStringToObject(item, "camera_stream_url", profile->camera_stream_url) ||
+             !cJSON_AddStringToObject(item, "name", profile->name) ||
+             !cJSON_AddStringToObject(item, "host", profile->host) ||
+             !cJSON_AddNumberToObject(item, "port", profile->port) ||
+             (include_api_keys && !cJSON_AddStringToObject(item, "api_key", profile->api_key)))) goto failed;
     }
-
-    cJSON *appearance =
-        cJSON_AddObjectToObject(
-            root,
-            "appearance");
-
-    cJSON_AddNumberToObject(
-        appearance,
-        "theme",
-        snapshot->theme);
-
-    cJSON_AddStringToObject(
-        appearance,
-        "custom_theme_id",
-        snapshot->custom_theme_id);
-
-    cJSON_AddNumberToObject(
-        appearance,
-        "accent",
-        snapshot->accent);
-
-    cJSON_AddNumberToObject(
-        appearance,
-        "density",
-        snapshot->density);
-
-    cJSON *accessibility =
-        cJSON_AddObjectToObject(
-            appearance,
-            "accessibility");
-
-    cJSON_AddBoolToObject(
-        accessibility,
-        "large_text",
-        snapshot->accessibility.large_text);
-
-    cJSON_AddBoolToObject(
-        accessibility,
-        "high_contrast",
-        snapshot->accessibility.high_contrast);
-
-    cJSON_AddBoolToObject(
-        accessibility,
-        "reduced_transparency",
-        snapshot->accessibility.reduced_transparency);
-
-    cJSON_AddBoolToObject(
-        accessibility,
-        "reduced_motion",
-        snapshot->accessibility.reduced_motion);
-
-    cJSON_AddNumberToObject(
-        root,
-        "timezone_index",
-        (double)snapshot->timezone_index);
-
-    cJSON *display =
-        cJSON_AddObjectToObject(
-            root,
-            "display");
-
-    cJSON_AddNumberToObject(
-        display,
-        "brightness",
-        snapshot->brightness);
-
-    cJSON_AddNumberToObject(
-        display,
-        "sleep_timeout_minutes",
-        snapshot->sleep_timeout);
-
+    cJSON *appearance = cJSON_AddObjectToObject(root, "appearance");
+    if (!appearance ||
+        !cJSON_AddNumberToObject(appearance, "theme", snapshot->theme) ||
+        !cJSON_AddStringToObject(appearance, "custom_theme_id", snapshot->custom_theme_id) ||
+        !cJSON_AddNumberToObject(appearance, "accent", snapshot->accent) ||
+        !cJSON_AddNumberToObject(appearance, "density", snapshot->density) ||
+        !cJSON_AddNumberToObject(appearance, "notification_level", snapshot->notification_level) ||
+        !cJSON_AddBoolToObject(appearance, "optional_confirmations", snapshot->notification_level == UI_NOTIFY_DETAILED)) goto failed;
+    cJSON *accessibility = cJSON_AddObjectToObject(appearance, "accessibility");
+    if (!accessibility ||
+        !cJSON_AddBoolToObject(accessibility, "large_text", snapshot->accessibility.large_text) ||
+        !cJSON_AddBoolToObject(accessibility, "high_contrast", snapshot->accessibility.high_contrast) ||
+        !cJSON_AddBoolToObject(accessibility, "reduced_transparency", snapshot->accessibility.reduced_transparency) ||
+        !cJSON_AddBoolToObject(accessibility, "reduced_motion", snapshot->accessibility.reduced_motion) ||
+        !cJSON_AddNumberToObject(root, "timezone_index", (double)snapshot->timezone_index)) goto failed;
+    cJSON *display = cJSON_AddObjectToObject(root, "display");
+    if (!display ||
+        !cJSON_AddNumberToObject(display, "brightness", snapshot->brightness) ||
+        !cJSON_AddNumberToObject(display, "sleep_timeout_minutes", snapshot->sleep_timeout)) goto failed;
     return root;
+failed:
+    /* A partially built document must never replace a known-good backup. */
+    cJSON_Delete(root);
+    return NULL;
 }
 
+
+static bool parse_notification_preference(const cJSON *appearance, ui_notification_level_t *level,
+    char *status, size_t status_size)
+{
+    const cJSON *new_level=cJSON_GetObjectItemCaseSensitive(appearance,"notification_level");
+    if(new_level) {
+        if(!cJSON_IsNumber(new_level) || new_level->valuedouble<0 || new_level->valuedouble>2 ||
+           new_level->valuedouble!=(double)new_level->valueint) {
+            set_status(status,status_size,"Backup notification level is invalid.");return false;
+        }
+        *level=(ui_notification_level_t)new_level->valueint;return true;
+    }
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(appearance, "optional_confirmations");
+    if (item && !cJSON_IsBool(item)) {
+        set_status(status, status_size, "Backup notification preference is invalid.");
+        return false;
+    }
+    *level = item && cJSON_IsTrue(item) ? UI_NOTIFY_DETAILED : UI_NOTIFY_QUIET;
+    return true;
+}
 
 static bool parse_snapshot(
     const cJSON *root,
@@ -503,6 +479,12 @@ static bool parse_snapshot(
             return false;
         }
 
+        if (!parse_profile_transport_security(profile_json, profile) ||
+            !parse_profile_camera(profile_json, profile, slot)) {
+            set_status(status, status_size, "Backup contains an invalid connection security setting.");
+            return false;
+        }
+
         if (include_api_keys) {
             const cJSON *api_key =
                 cJSON_GetObjectItemCaseSensitive(
@@ -558,7 +540,7 @@ static bool parse_snapshot(
             appearance,
             "theme",
             UI_THEME_CLASSIC,
-            UI_THEME_GLASS,
+            UI_THEME_STUDIO_DARK,
             &theme) ||
         !json_integer(
             appearance,
@@ -595,6 +577,8 @@ static bool parse_snapshot(
             "Backup appearance settings are invalid.");
         return false;
     }
+
+    if (!parse_notification_preference(appearance, &snapshot->notification_level, status, status_size)) return false;
 
     snapshot->theme = (ui_theme_id_t)theme;
     snapshot->accent = (ui_accent_id_t)accent;
@@ -682,6 +666,7 @@ static bool apply_snapshot(
 
     return
         theme_applied &&
+        ui_toast_set_level(snapshot->notification_level) &&
         theme_manager_select_accent(snapshot->accent) &&
         theme_manager_select_density(snapshot->density) &&
         theme_manager_set_accessibility(
@@ -698,10 +683,12 @@ static bool apply_snapshot(
 }
 
 
-bool settings_backup_export(
+bool settings_backup_export_with_progress(
+    settings_backup_progress_cb_t progress, void *user_data,
     char *status,
     size_t status_size)
 {
+    if(progress)progress(SETTINGS_BACKUP_STAGE_PREPARING,user_data);
     settings_backup_snapshot_t snapshot;
     capture_current(&snapshot);
 
@@ -743,6 +730,7 @@ bool settings_backup_export(
         return false;
     }
 
+    if(progress)progress(SETTINGS_BACKUP_STAGE_WRITING,user_data);
     FILE *file = fopen(
         SETTINGS_BACKUP_TEMP_PATH,
         "wb");
@@ -911,7 +899,7 @@ static bool load_backup_snapshot(
         return false;
     }
 
-    cJSON *root = cJSON_ParseWithLength(document, read_size);
+    cJSON *root = parse_backup_document(document, read_size);
     free(document);
 
     if (!root) {
@@ -1107,7 +1095,7 @@ static bool load_encrypted_backup_snapshot(
     if (!decrypted) {
         return false;
     }
-    cJSON *root = cJSON_ParseWithLength((const char *)document, document_size);
+    cJSON *root = parse_backup_document((const char *)document, document_size);
     settings_backup_crypto_free(document, document_size + 1);
     if (!root) {
         set_status(status, status_size, "Encrypted backup contains invalid JSON.");
@@ -1156,11 +1144,13 @@ bool settings_backup_encrypted_preflight(
     return true;
 }
 
-bool settings_backup_restore_encrypted(
+bool settings_backup_restore_encrypted_with_progress(
     const char *passphrase,
+    settings_backup_progress_cb_t progress, void *user_data,
     char *status,
     size_t status_size)
 {
+    if(progress)progress(SETTINGS_BACKUP_STAGE_AUTHENTICATING,user_data);
     settings_backup_snapshot_t restored;
     if (!load_encrypted_backup_snapshot(passphrase, &restored, status, status_size)) {
         operator_event_log_add(OPERATOR_EVENT_ERROR,
@@ -1169,7 +1159,9 @@ bool settings_backup_restore_encrypted(
     }
     settings_backup_snapshot_t previous;
     capture_current(&previous);
+    if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
+        if(progress)progress(SETTINGS_BACKUP_STAGE_ROLLING_BACK,user_data);
         (void)apply_snapshot(&previous);
         set_status(status, status_size,
             "Encrypted restore failed; previous settings were reapplied.");
@@ -1248,10 +1240,12 @@ bool settings_backup_preflight(
 }
 
 
-bool settings_backup_restore(
+bool settings_backup_restore_with_progress(
+    settings_backup_progress_cb_t progress, void *user_data,
     char *status,
     size_t status_size)
 {
+    if(progress)progress(SETTINGS_BACKUP_STAGE_READING,user_data);
     settings_backup_snapshot_t restored;
 
     if (!load_backup_snapshot(&restored, status, status_size)) {
@@ -1264,7 +1258,9 @@ bool settings_backup_restore(
     settings_backup_snapshot_t previous;
     capture_current(&previous);
 
+    if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
+        if(progress)progress(SETTINGS_BACKUP_STAGE_ROLLING_BACK,user_data);
         (void)apply_snapshot(&previous);
 
         set_status(
@@ -1289,3 +1285,11 @@ bool settings_backup_restore(
 
     return true;
 }
+
+/* Compatibility entry points keep existing callers and storage semantics. */
+bool settings_backup_export(char *status,size_t status_size)
+{return settings_backup_export_with_progress(NULL,NULL,status,status_size);}
+bool settings_backup_restore(char *status,size_t status_size)
+{return settings_backup_restore_with_progress(NULL,NULL,status,status_size);}
+bool settings_backup_restore_encrypted(const char *passphrase,char *status,size_t status_size)
+{return settings_backup_restore_encrypted_with_progress(passphrase,NULL,NULL,status,status_size);}

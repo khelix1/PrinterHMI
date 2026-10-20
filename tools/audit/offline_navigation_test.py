@@ -34,7 +34,8 @@ with tempfile.TemporaryDirectory(prefix="offline-navigation-") as directory:
 static void *s_client;
 static bool s_connected,s_subscribed,s_discovery_pending,s_macro_config_pending,s_subscription_ready,s_subscribe_pending,s_file_change_pending,in_runtime;
 static uint32_t s_generation,s_accepted_generation;
-static int64_t s_last_status_update_us,s_retry_after_us;
+static int64_t s_last_status_update_us,s_retry_after_us,s_idle_status_request_us;
+static uint32_t s_idle_status_generation;
 static char s_host[128];
 uint32_t moonraker_config_generation(void);
 int64_t esp_timer_get_time(void);
@@ -44,7 +45,7 @@ static bool send_identify(void),send_object_list(void),send_subscription(void);
 int esp_websocket_client_send_text(void*,const char*,int,unsigned);
 """
     names=["prepare_profile_change","connected","subscribed","fresh","file_change_pending","take_file_change","tasklet"]
-    (tmp/"offline_ws_extracted.inc").write_text(preamble+"\n".join(function(ws,"moonraker_live_websocket_"+name) for name in names))
+    (tmp/"offline_ws_extracted.inc").write_text(preamble+"\n".join((function(ws,"request_idle_status")+function(ws,"moonraker_live_websocket_"+name)) if name=="tasklet" else function(ws,"moonraker_live_websocket_"+name) for name in names))
     # UI-only call sites must never reintroduce the waiting camera stop path.
     camera=(root/"main/ui_camera.c").read_text()
     for name in ["ui_camera_hide","ui_camera_destroy","camera_picker_select_cb","camera_view_set_cb"]:

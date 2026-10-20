@@ -11,6 +11,7 @@
 #include "freertos/task.h"
 
 #include "moonraker.h"
+#include "moonraker_config_controller.h"
 #include "printer_files.h"
 #include "thumbnail_manager.h"
 
@@ -22,6 +23,7 @@ typedef struct {
     char file[160];
     int port;
     uint32_t generation;
+    uint32_t profile_generation;
     file_detail_loader_ready_cb_t ready_cb;
 } detail_job_t;
 
@@ -81,7 +83,7 @@ static void detail_task(void *argument)
         /* Visible-row downloads and reconnects can briefly deny a shared
          * request. Recover in this worker while the same popup is open.
          */
-        for (unsigned attempt = 0; attempt < 3 && generation_current(job->generation); ++attempt) {
+        for (unsigned attempt = 0; attempt < 3 && (generation_current(job->generation) && job->profile_generation==moonraker_config_generation()); ++attempt) {
             memset(body, 0, DETAIL_METADATA_BODY_SIZE);
             thumbnail[0] = '\0';
             if (moonraker_fetch_file_metadata(
@@ -96,7 +98,7 @@ static void detail_task(void *argument)
                          "Metadata request failed.\nHTTP %d\n%s",
                          http_code, esp_err_to_name(error));
             }
-            if (attempt + 1 < 3 && generation_current(job->generation)) {
+            if (attempt + 1 < 3 && (generation_current(job->generation) && job->profile_generation==moonraker_config_generation())) {
                 vTaskDelay(pdMS_TO_TICKS(500));
             }
         }
@@ -104,9 +106,9 @@ static void detail_task(void *argument)
 
     if (body) heap_caps_free(body);
 
-    if (job && job->ready_cb && generation_current(job->generation) &&
+    if (job && job->ready_cb && (generation_current(job->generation) && job->profile_generation==moonraker_config_generation()) &&
         bsp_display_lock(1500)) {
-        if (generation_current(job->generation)) {
+        if ((generation_current(job->generation) && job->profile_generation==moonraker_config_generation())) {
             job->ready_cb(job->file, ok, metadata, thumbnail);
         }
         bsp_display_unlock();
@@ -140,6 +142,7 @@ bool file_detail_loader_start(
     job->port = port;
     job->ready_cb = ready_cb;
     job->generation = next_generation();
+    job->profile_generation = moonraker_config_generation();
 
     if (xTaskCreatePinnedToCore(
             detail_task,

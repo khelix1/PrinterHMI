@@ -17,6 +17,8 @@
  */
 
 void ui_printer_toolhead_init(void);
+void ui_printer_toolhead_close(void);
+void ui_printer_toolhead_set_sender(bool (*send)(const char *command));
 
 bool ui_printer_toolhead_format_jog_command(const char *axis,
                                             double jog_step,

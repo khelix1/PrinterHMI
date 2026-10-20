@@ -3,6 +3,7 @@ idf_component_register(
         "dashboard_runtime_controller.c"
         # Application entry point
         "main.c"
+        "ui_graphics_diagnostics.c"
 
         # Theme and shared UI components
         "ui_theme.c"
@@ -181,6 +182,7 @@ idf_component_register(
         "ota_ui_controller.c"
         "ota_boot_validation.c"
         "ota_release_catalog.c"
+        "firmware_identity.c"
 
     INCLUDE_DIRS
         "."
@@ -209,3 +211,36 @@ idf_component_register(
         espressif__esp_lcd_jd9165
     PRIV_REQUIRES mbedtls
 )
+
+# Release entry points explicitly label Stable; a generated nightly identity
+# labels Nightly. Ordinary development builds always remain Custom.
+set(printerhmi_firmware_channel 0)
+if(PRINTERHMI_VERSION MATCHES "^nightly-")
+    set(printerhmi_firmware_channel 2)
+elseif("$ENV{PRINTERHMI_BUILD_CHANNEL}" STREQUAL "stable")
+    if(NOT PRINTERHMI_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+        message(FATAL_ERROR "Stable channel requires a release version without -dev")
+    endif()
+    set(printerhmi_firmware_channel 1)
+elseif(NOT "$ENV{PRINTERHMI_BUILD_CHANNEL}" STREQUAL "" AND
+       NOT "$ENV{PRINTERHMI_BUILD_CHANNEL}" STREQUAL "custom")
+    message(FATAL_ERROR "PRINTERHMI_BUILD_CHANNEL must be stable or custom for a semantic version")
+endif()
+execute_process(COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    OUTPUT_VARIABLE printerhmi_source_revision OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(NOT printerhmi_source_revision MATCHES "^[0-9a-f]+$")
+    set(printerhmi_source_revision "unknown")
+endif()
+execute_process(COMMAND git status --porcelain --untracked-files=no
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    OUTPUT_VARIABLE printerhmi_source_changes ERROR_QUIET)
+set(printerhmi_source_modified 0)
+if(NOT printerhmi_source_changes STREQUAL "")
+    set(printerhmi_source_modified 1)
+endif()
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    PRINTERHMI_FIRMWARE_CHANNEL=${printerhmi_firmware_channel}
+    PRINTERHMI_SOURCE_REVISION="${printerhmi_source_revision}"
+    PRINTERHMI_SOURCE_MODIFIED=${printerhmi_source_modified})

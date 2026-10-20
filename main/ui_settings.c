@@ -1,5 +1,8 @@
 #include "ui_settings.h"
+#include "firmware_identity.h"
+#include "ui_scroll_anchor.h"
 #include "ui_text.h"
+#include "ui_toast.h"
 #include "ui_global_estop.h"
 #include "ui_page_layout_profile.h"
 #include "ui_settings_popups.h"
@@ -11,6 +14,7 @@
 #include "timezone_config.h"
 #include "theme_manager.h"
 #include "ui_appearance_popups.h"
+#include "ui_value_update.h"
 
 #include "bsp/display.h"
 #include "esp_err.h"
@@ -45,7 +49,44 @@ static lv_obj_t *s_sleep_wake_overlay = NULL;
 static bool s_display_sleeping = false;
 static lv_obj_t *s_timezone_label = NULL;
 static lv_obj_t *s_theme_label = NULL;
+static lv_obj_t *s_notifications_label;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
+static lv_obj_t *s_settings_content;
+static lv_obj_t *s_brightness_slider,*s_brightness_value,*s_sleep_action,*s_reboot_action;
+static uint32_t s_settings_page_epoch;
+static bool s_display_io_dispatching,s_wake_pending;
+static void settings_display_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **fields[]={&s_brightness_slider,&s_brightness_value,&s_sleep_action,&settings_sleep_label,&s_timezone_label,&s_theme_label,&s_notifications_label,&s_settings_content,&s_reboot_action};
+    for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(*fields[i]==target)*fields[i]=NULL;
+}
+static void settings_display_field_own(lv_obj_t *field)
+{if(field)lv_obj_add_event_cb(field,settings_display_field_deleted,LV_EVENT_DELETE,NULL);}
+static void settings_page_retire(void)
+{
+    ++s_settings_page_epoch;
+    settings_panel=s_settings_content=s_brightness_slider=s_brightness_value=s_sleep_action=s_reboot_action=NULL;
+    settings_sleep_label=s_timezone_label=s_theme_label=s_notifications_label=NULL;
+    s_theme_rebuild_cb=NULL;
+    settings_system_info_unbind();
+    ui_toast_preferences_close();ui_appearance_popups_close_all();ui_settings_popups_close_all();ui_settings_backup_popup_close();ui_about_popup_close();
+}
+static void settings_page_deleted(lv_event_t *event)
+{if(lv_event_get_target_obj(event)==settings_panel)settings_page_retire();}
+static bool settings_brightness_event(lv_event_t *event,lv_event_code_t code)
+{
+    return event && settings_panel && s_brightness_slider && lv_event_get_code(event)==code &&
+        lv_event_get_target_obj(event)==s_brightness_slider && !s_display_io_dispatching &&
+        !lv_obj_has_state(s_brightness_slider,LV_STATE_DISABLED) && !s_display_sleeping;
+}
+static void settings_rebuild_preserving_scroll(void)
+{
+    if(!s_theme_rebuild_cb)return;
+    ui_scroll_anchor_t saved=ui_scroll_anchor_capture(s_settings_content);
+    s_theme_rebuild_cb();
+    ui_scroll_anchor_restore(s_settings_content,saved);
+}
 
 static void settings_timezone_changed(void)
 {
@@ -73,7 +114,7 @@ static void settings_theme_changed(void)
     }
 
     if (s_theme_rebuild_cb) {
-        s_theme_rebuild_cb();
+        settings_rebuild_preserving_scroll();
     }
 }
 
@@ -85,7 +126,7 @@ static void settings_theme_card_cb(lv_event_t *event)
 
 static void settings_appearance_changed(void)
 {
-    if (s_theme_rebuild_cb) s_theme_rebuild_cb();
+    settings_rebuild_preserving_scroll();
 }
 
 static void settings_accent_card_cb(lv_event_t *event)
@@ -104,6 +145,15 @@ static void settings_accessibility_card_cb(lv_event_t *event)
 {
     (void)event;
     ui_appearance_popups_show_accessibility(settings_appearance_changed);
+}
+
+static void settings_notifications_changed(void)
+{
+    if (s_notifications_label) lv_label_set_text(s_notifications_label,ui_toast_preference_label());
+}
+static void settings_notifications_cb(lv_event_t *event)
+{
+    (void)event; ui_toast_preferences_show(settings_notifications_changed);
 }
 
 static void settings_event_history_cb(lv_event_t *event)
@@ -128,98 +178,40 @@ static void settings_backup_cb(lv_event_t *event)
 
 static void settings_brightness_changed_cb(lv_event_t *e)
 {
-    lv_obj_t *slider = lv_event_get_target(e);
-
-    if (!slider) {
-        return;
+    if(!settings_brightness_event(e,LV_EVENT_VALUE_CHANGED))return;
+    int requested=lv_slider_get_value(s_brightness_slider);
+    if(requested<10 || requested>100)return;
+    uint32_t epoch=s_settings_page_epoch;
+    s_display_io_dispatching=true;
+    esp_err_t error=bsp_display_brightness_set(requested);
+    if(error==ESP_OK)s_display_brightness_percent=requested;
+    if(epoch==s_settings_page_epoch && s_brightness_slider){
+        if(error!=ESP_OK)lv_slider_set_value(s_brightness_slider,s_display_brightness_percent,LV_ANIM_OFF);
+        char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
+        ui_value_set_text(s_brightness_value,value);
+        if(error!=ESP_OK)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT APPLIED","The previous brightness is retained. Try the slider again.");
     }
-
-    int brightness =
-        lv_slider_get_value(slider);
-
-    lv_obj_t *value_label =
-        lv_obj_get_user_data(slider);
-
-    if (value_label) {
-        char text[16];
-
-        lv_snprintf(
-            text,
-            sizeof(text),
-            "%d%%",
-            brightness);
-
-        lv_label_set_text(
-            value_label,
-            text);
-    }
-
-    esp_err_t err =
-        bsp_display_brightness_set(brightness);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Brightness update failed: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    s_display_brightness_percent = brightness;
+    s_display_io_dispatching=false;
 }
 
 
 static void settings_brightness_save_cb(lv_event_t *e)
 {
-    (void)e;
-
-    if (s_display_brightness_percent ==
-        s_saved_display_brightness_percent) {
-        return;
-    }
-
+    if(!settings_brightness_event(e,LV_EVENT_RELEASED))return;
+    int requested=s_display_brightness_percent;
+    if(requested==s_saved_display_brightness_percent)return;
+    uint32_t epoch=s_settings_page_epoch;
+    s_display_io_dispatching=true;
     nvs_handle_t handle;
-
-    esp_err_t err =
-        nvs_open(
-            SETTINGS_NVS_NAMESPACE,
-            NVS_READWRITE,
-            &handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not open brightness storage: %s",
-            esp_err_to_name(err));
-        return;
+    esp_err_t error=nvs_open(SETTINGS_NVS_NAMESPACE,NVS_READWRITE,&handle);
+    if(error==ESP_OK){
+        error=nvs_set_u8(handle,SETTINGS_NVS_BRIGHTNESS_KEY,(uint8_t)requested);
+        if(error==ESP_OK)error=nvs_commit(handle);
+        nvs_close(handle);
     }
-
-    err = nvs_set_u8(
-        handle,
-        SETTINGS_NVS_BRIGHTNESS_KEY,
-        (uint8_t)s_display_brightness_percent);
-
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
-
-    nvs_close(handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not save display brightness: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    s_saved_display_brightness_percent =
-        s_display_brightness_percent;
-
-    ESP_LOGI(
-        TAG,
-        "Saved display brightness: %d%%",
-        s_saved_display_brightness_percent);
+    if(error==ESP_OK)s_saved_display_brightness_percent=requested;
+    else if(epoch==s_settings_page_epoch)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT SAVED","The live brightness is retained. Release the slider again to retry saving it.");
+    s_display_io_dispatching=false;
 }
 
 
@@ -242,190 +234,81 @@ static const char *settings_sleep_timeout_text(void)
 }
 
 
-static void settings_wake_display_cb(lv_event_t *e)
+static void settings_wake_display_cb(lv_event_t *event);
+static bool settings_create_wake_overlay(void);
+static void settings_wake_overlay_deleted(lv_event_t *event)
 {
-    (void)e;
-
-    if (!s_display_sleeping) {
+    if(lv_event_get_target_obj(event)!=s_sleep_wake_overlay)return;
+    s_sleep_wake_overlay=NULL;
+    if(s_display_sleeping){
+        s_wake_pending=true;
+        if(!s_display_io_dispatching)settings_wake_display_cb(NULL);
+    }
+}
+static bool settings_create_wake_overlay(void)
+{
+    if(s_sleep_wake_overlay)return true;
+    s_sleep_wake_overlay=lv_obj_create(lv_layer_top());
+    if(!s_sleep_wake_overlay)return false;
+    lv_obj_set_size(s_sleep_wake_overlay,LV_PCT(100),LV_PCT(100));
+    lv_obj_set_pos(s_sleep_wake_overlay,0,0);
+    lv_obj_clear_flag(s_sleep_wake_overlay,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_sleep_wake_overlay,LV_OBJ_FLAG_CLICKABLE);
+    ui_apply_surface_role(s_sleep_wake_overlay,UI_SURFACE_TRANSPARENT);
+    lv_obj_add_event_cb(s_sleep_wake_overlay,settings_wake_display_cb,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(s_sleep_wake_overlay,settings_wake_overlay_deleted,LV_EVENT_DELETE,NULL);
+    lv_obj_move_foreground(s_sleep_wake_overlay);
+    return true;
+}
+static void settings_wake_display_cb(lv_event_t *event)
+{
+    if(!s_display_sleeping || s_display_io_dispatching ||
+        (event && (lv_event_get_code(event)!=LV_EVENT_PRESSED || lv_event_get_target_obj(event)!=s_sleep_wake_overlay)))return;
+    s_display_io_dispatching=true;s_wake_pending=false;
+    esp_err_t error=bsp_display_brightness_set(s_display_brightness_percent);
+    if(error!=ESP_OK){
+        /* Keep the first-touch shield for another wake attempt. */
+        (void)settings_create_wake_overlay();
+        s_wake_pending=false;s_display_io_dispatching=false;
+        ESP_LOGE(TAG,"Display wake failed: %s",esp_err_to_name(error));
         return;
     }
-
-    s_display_sleeping = false;
-
-    esp_err_t err =
-        bsp_display_brightness_set(
-            s_display_brightness_percent);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Display wake failed: %s",
-            esp_err_to_name(err));
-    }
-
-    lv_display_trigger_activity(
-        lv_display_get_default());
-
-    if (s_sleep_wake_overlay) {
-        lv_obj_delete_async(
-            s_sleep_wake_overlay);
-
-        s_sleep_wake_overlay = NULL;
-    }
-
-    ESP_LOGI(
-        TAG,
-        "Display awake at %d%%",
-        s_display_brightness_percent);
+    s_display_sleeping=false;s_wake_pending=false;
+    lv_display_trigger_activity(lv_display_get_default());
+    lv_obj_t *overlay=s_sleep_wake_overlay;s_sleep_wake_overlay=NULL;
+    if(overlay)lv_obj_delete_async(overlay);
+    s_display_io_dispatching=false;
 }
-
-
 static void settings_enter_display_sleep(void)
 {
-    if (s_display_sleeping ||
-        s_sleep_timeout_minutes == 0) {
-        return;
+    if(s_display_sleeping || !s_sleep_timeout_minutes || s_display_io_dispatching || !settings_create_wake_overlay())return;
+    s_display_io_dispatching=true;s_display_sleeping=true;
+    esp_err_t error=bsp_display_backlight_off();
+    if(error!=ESP_OK){
+        s_display_sleeping=false;s_wake_pending=false;
+        lv_obj_t *overlay=s_sleep_wake_overlay;s_sleep_wake_overlay=NULL;
+        if(overlay)lv_obj_delete(overlay);
+        ESP_LOGE(TAG,"Display sleep failed: %s",esp_err_to_name(error));
     }
-
-    /*
-     * This transparent top-layer object consumes the first touch.
-     * That touch wakes the display without activating a hidden control.
-     */
-    s_sleep_wake_overlay =
-        lv_obj_create(lv_layer_top());
-
-    if (!s_sleep_wake_overlay) {
-        ESP_LOGE(TAG, "Could not create display wake overlay");
-        return;
-    }
-
-    lv_obj_set_size(
-        s_sleep_wake_overlay,
-        LV_PCT(100),
-        LV_PCT(100));
-
-    lv_obj_set_pos(
-        s_sleep_wake_overlay,
-        0,
-        0);
-
-    lv_obj_clear_flag(
-        s_sleep_wake_overlay,
-        LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_add_flag(
-        s_sleep_wake_overlay,
-        LV_OBJ_FLAG_CLICKABLE);
-
-    ui_apply_surface_role(s_sleep_wake_overlay, UI_SURFACE_TRANSPARENT);
-
-    lv_obj_add_event_cb(
-        s_sleep_wake_overlay,
-        settings_wake_display_cb,
-        LV_EVENT_PRESSED,
-        NULL);
-
-    lv_obj_move_foreground(
-        s_sleep_wake_overlay);
-
-    s_display_sleeping = true;
-
-    esp_err_t err =
-        bsp_display_backlight_off();
-
-    if (err != ESP_OK) {
-        s_display_sleeping = false;
-
-        lv_obj_delete(
-            s_sleep_wake_overlay);
-
-        s_sleep_wake_overlay = NULL;
-
-        ESP_LOGE(
-            TAG,
-            "Display sleep failed: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    ESP_LOGI(
-        TAG,
-        "Display sleeping after %u minutes",
-        (unsigned)s_sleep_timeout_minutes);
+    s_display_io_dispatching=false;
+    if(s_wake_pending && s_display_sleeping)settings_wake_display_cb(NULL);
 }
-
-
 static void settings_sleep_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (s_display_sleeping ||
-        s_sleep_timeout_minutes == 0) {
-        return;
-    }
-
-    lv_display_t *display =
-        lv_display_get_default();
-
-    if (!display) {
-        return;
-    }
-
-    uint32_t timeout_ms =
-        (uint32_t)s_sleep_timeout_minutes *
-        60U *
-        1000U;
-
-    if (lv_display_get_inactive_time(display) >=
-        timeout_ms) {
-        settings_enter_display_sleep();
-    }
+    if(timer!=s_sleep_timer || !s_sleep_timer || s_display_sleeping || !s_sleep_timeout_minutes || s_display_io_dispatching)return;
+    lv_display_t *display=lv_display_get_default();
+    if(display && lv_display_get_inactive_time(display)>=(uint32_t)s_sleep_timeout_minutes*60U*1000U)settings_enter_display_sleep();
 }
-
-
-static void settings_save_sleep_timeout(void)
+static bool settings_save_sleep_timeout(uint8_t requested)
 {
     nvs_handle_t handle;
-
-    esp_err_t err =
-        nvs_open(
-            SETTINGS_NVS_NAMESPACE,
-            NVS_READWRITE,
-            &handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not open sleep-timeout storage: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    err = nvs_set_u8(
-        handle,
-        SETTINGS_NVS_SLEEP_KEY,
-        s_sleep_timeout_minutes);
-
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
-
+    esp_err_t error=nvs_open(SETTINGS_NVS_NAMESPACE,NVS_READWRITE,&handle);
+    if(error!=ESP_OK)return false;
+    error=nvs_set_u8(handle,SETTINGS_NVS_SLEEP_KEY,requested);
+    if(error==ESP_OK)error=nvs_commit(handle);
     nvs_close(handle);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "Could not save sleep timeout: %s",
-            esp_err_to_name(err));
-        return;
-    }
-
-    ESP_LOGI(
-        TAG,
-        "Saved sleep timeout: %s",
-        settings_sleep_timeout_text());
+    return error==ESP_OK;
 }
-
 
 void ui_settings_module_init(void)
 {
@@ -571,15 +454,21 @@ void ui_settings_show_page(
             ? app->version
             : "--";
 
+    firmware_identity_t identity;
+    firmware_identity_get(&identity);
+    char source_revision[40];
+    snprintf(source_revision, sizeof(source_revision), "%s%s", identity.revision,
+             identity.modified ? " (modified)" : "");
+
     char image_build[48];
 
     if (app && app->date[0] && app->time[0]) {
         snprintf(
             image_build,
             sizeof(image_build),
-            "%s  %s",
-            app->date,
-            app->time);
+            "%.*s  %.*s",
+            (int)sizeof(app->date) - 1, app->date,
+            (int)sizeof(app->time) - 1, app->time);
     } else {
         snprintf(
             image_build,
@@ -588,6 +477,8 @@ void ui_settings_show_page(
     }
 
     settings_panel = lv_obj_create(lv_screen_active());
+    ++s_settings_page_epoch;
+    lv_obj_add_event_cb(settings_panel,settings_page_deleted,LV_EVENT_DELETE,NULL);
 
     lv_obj_set_size(settings_panel,
                     UI_PAGE_ROOT_WIDTH,
@@ -618,7 +509,7 @@ void ui_settings_show_page(
 
     lv_obj_t *banner_title = settings_make_label(
         banner,
-        "SETTINGS",
+        "Settings",
         &lv_font_montserrat_16,
         UI_TEXT_BRIGHT);
 
@@ -642,7 +533,7 @@ void ui_settings_show_page(
 
     lv_obj_t *status_label = settings_make_label(
         status,
-        "SYSTEM READY",
+        "System ready",
         &lv_font_montserrat_14,
         UI_TEXT_BRIGHT);
 
@@ -652,6 +543,8 @@ void ui_settings_show_page(
      * Scrollable Settings body
      */
     lv_obj_t *content = lv_obj_create(settings_panel);
+    settings_display_field_own(content);
+    s_settings_content = content;
 
     lv_obj_set_size(
         content,
@@ -663,7 +556,7 @@ void ui_settings_show_page(
         layout->content.y);
 
     lv_obj_set_scroll_dir(content, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_OFF);
 
     ui_apply_surface_role(content, UI_SURFACE_TRANSPARENT);
     /*
@@ -678,7 +571,7 @@ void ui_settings_show_page(
         lv_obj_set_pos(content,0,66);lv_obj_set_size(content,976,358);
         lv_obj_set_pos(banner,0,0);lv_obj_set_size(banner,976,62);
         lv_obj_set_style_bg_opa(banner,LV_OPA_TRANSP,0);lv_obj_set_style_border_width(banner,0,0);
-        lv_obj_set_pos(banner_title,0,0);ui_apply_custom_label_style(banner_title,&ui_studio_font_48,UI_TEXT);
+        lv_obj_set_pos(banner_title,0,0);ui_apply_custom_label_style(banner_title,UI_FONT_TITLE,UI_TEXT);
         lv_obj_add_flag(banner_subtitle,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(status,LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -692,14 +585,14 @@ void ui_settings_show_page(
     const int setup_height = first_row_y + action_height + 6;
     lv_obj_t *setup = ui_settings_section_create(
         content,
-        "SETUP CENTER",
+        "Setup center",
         section_y,
         setup_height);
     ui_settings_section_add_action_row(
         setup,
-        "Run System Setup Again",
+        "Run system setup again",
         "Guided Wi-Fi, printer, and camera configuration",
-        "OPEN SETUP",
+        "Open setup",
         first_row_y,
         setup_cb,
         false);
@@ -713,7 +606,7 @@ void ui_settings_show_page(
 
     lv_obj_t *connections = ui_settings_section_create(
         content,
-        "CONNECTIONS",
+        "Connections",
         section_y,
         connections_height);
 
@@ -721,7 +614,7 @@ void ui_settings_show_page(
         connections,
         "Network & Moonraker",
         "Wi-Fi, active printer connection and discovery settings",
-        "OPEN NETWORK",
+        "Open network",
         first_row_y,
         network_cb,
         false);
@@ -734,16 +627,18 @@ void ui_settings_show_page(
     const int firmware_row_1 = first_row_y;
     const int firmware_row_2 = firmware_row_1 + row_height + 1;
     const int firmware_row_3 = firmware_row_2 + row_height + 1;
-    const int firmware_height = firmware_row_3 + action_height + 6;
+    const int firmware_row_4 = firmware_row_3 + row_height + 1;
+    const int firmware_row_5 = firmware_row_4 + row_height + 1;
+    const int firmware_height = firmware_row_5 + action_height + 6;
     lv_obj_t *firmware = ui_settings_section_create(
         content,
-        "FIRMWARE & UPDATES",
+        "Firmware & updates",
         section_y,
         firmware_height);
 
     ui_settings_section_add_row(
         firmware,
-        "Firmware Version",
+        "Firmware version",
         "Version embedded in the running OTA image",
         firmware_version,
         firmware_row_1,
@@ -754,7 +649,7 @@ void ui_settings_show_page(
 
     ui_settings_section_add_row(
         firmware,
-        "Image Build",
+        "Image build",
         "Compilation date and time of the running image",
         image_build,
         firmware_row_2,
@@ -763,12 +658,21 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         firmware, firmware_row_2 + row_height);
 
+    ui_settings_section_add_row(
+        firmware, "Firmware channel", "Build channel of the running image",
+        firmware_identity_channel_name(identity.channel), firmware_row_3, NULL);
+    ui_settings_section_add_divider(firmware, firmware_row_3 + row_height);
+    ui_settings_section_add_row(
+        firmware, "Source revision", "Source commit used to build this image",
+        source_revision, firmware_row_4, NULL);
+    ui_settings_section_add_divider(firmware, firmware_row_4 + row_height);
+
     ui_settings_section_add_action_row(
         firmware,
-        "Firmware Update",
+        "Firmware update",
         "Check for and install an OTA update",
-        "OTA UPDATE",
-        firmware_row_3,
+        "OTA update",
+        firmware_row_5,
         ota_cb,
         false);
 
@@ -780,23 +684,23 @@ void ui_settings_show_page(
     const int device_row_1 = first_row_y;
     const int device_row_2 = device_row_1 + action_height + 1;
     const int device_row_3 = device_row_2 + action_height + 1;
-    const int device_row_4 = device_row_3 + row_height + 1;
-    const int device_height = device_row_4 + action_height + 6;
+    const int device_height = device_row_3 + action_height + 6;
     lv_obj_t *device = ui_settings_section_create(
         content,
-        "DEVICE",
+        "Maintenance",
         section_y,
         device_height);
 
-    ui_settings_section_add_action_row(
+    s_reboot_action=ui_settings_section_add_action_row(
         device,
-        "Reboot Controller",
+        "Reboot controller",
         "Restart the ESP32-P4 controller",
-        "REBOOT",
+        "Reboot",
         device_row_1,
         settings_reboot_cb,
         false);
 
+    settings_display_field_own(s_reboot_action);
     ui_settings_section_add_divider(
         device, device_row_1 + action_height);
 
@@ -804,7 +708,7 @@ void ui_settings_show_page(
         device,
         "Restart Klipper",
         "Restart the active printer firmware",
-        "RESTART KLIPPER",
+        "Restart Klipper",
         device_row_2,
         settings_klipper_restart_cb,
         true);
@@ -812,23 +716,12 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         device, device_row_2 + action_height);
 
-    settings_sleep_label = ui_settings_section_add_row(
-        device,
-        "Sleep Timeout",
-        "Tap to change display sleep behavior",
-        settings_sleep_timeout_text(),
-        device_row_3,
-        settings_sleep_card_cb);
-
-    ui_settings_section_add_divider(
-        device, device_row_3 + row_height);
-
     ui_settings_section_add_action_row(
         device,
-        "Factory Reset",
+        "Factory reset",
         "Erase saved connections and preferences",
-        "FACTORY RESET",
-        device_row_4,
+        "Factory reset",
+        device_row_3,
         reset_settings_cb,
         true);
 
@@ -840,13 +733,13 @@ void ui_settings_show_page(
     const int time_height = first_row_y + row_height + 6;
     lv_obj_t *time_region = ui_settings_section_create(
         content,
-        "TIME & REGION",
+        "Time & region",
         section_y,
         time_height);
 
     s_timezone_label = ui_settings_section_add_row(
         time_region,
-        "Time Zone",
+        "Time zone",
         "Tap to change local time and daylight-saving rules",
         timezone_config_selected_label(),
         first_row_y,
@@ -864,57 +757,31 @@ void ui_settings_show_page(
     const int system_height = system_row_4 + row_height + 6;
     lv_obj_t *system = ui_settings_section_create(
         content,
-        "SYSTEM INFORMATION",
+        "System information",
         section_y,
         system_height);
 
-    settings_system_info_bind_idf_label(
-        ui_settings_section_add_row(
-            system,
-            "ESP-IDF Version",
-            "Framework used to build the running image",
-            app && app->idf_ver[0]
-                ? app->idf_ver
-                : settings_system_info_idf_version(),
-            system_row_1,
-            NULL));
-
-    ui_settings_section_add_divider(
-        system, system_row_1 + row_height);
-
-    settings_system_info_bind_heap_label(
-        ui_settings_section_add_row(
-            system,
-            "Free Heap",
-            "Now / minimum / largest contiguous internal block",
-            "--",
-            system_row_2,
-            NULL));
-
-    ui_settings_section_add_divider(
-        system, system_row_2 + row_height);
-
-    settings_system_info_bind_psram_label(
-        ui_settings_section_add_row(
-            system,
-            "Free PSRAM",
-            "Now / minimum PSRAM since startup",
-            "--",
-            system_row_3,
-            NULL));
-
-    ui_settings_section_add_divider(
-        system, system_row_3 + row_height);
-
     settings_system_info_bind_uptime_label(
-        ui_settings_section_add_row(
-            system,
-            "Uptime",
-            "Time since controller startup",
-            "--",
-            system_row_4,
-            NULL));
+        ui_settings_section_add_row(system,"Uptime","Time since controller startup","--",system_row_1,NULL));
+    ui_settings_section_add_divider(system,system_row_1+row_height);
 
+    static const char *const heap_captions[]={"Free now","Lowest","Largest block"};
+    lv_obj_t *heap_values[3];
+    ui_settings_section_add_metrics_row(system,"Internal RAM","Lowest free since startup",
+        heap_captions,3,system_row_2,heap_values);
+    settings_system_info_bind_heap_metrics(heap_values[0],heap_values[1],heap_values[2]);
+    ui_settings_section_add_divider(system,system_row_2+row_height);
+
+    static const char *const psram_captions[]={"Free now","Lowest"};
+    lv_obj_t *psram_values[2];
+    ui_settings_section_add_metrics_row(system,"PSRAM","Lowest free since startup",
+        psram_captions,2,system_row_3,psram_values);
+    settings_system_info_bind_psram_metrics(psram_values[0],psram_values[1]);
+    ui_settings_section_add_divider(system,system_row_3+row_height);
+
+    settings_system_info_bind_idf_label(
+        ui_settings_section_add_row(system,"ESP-IDF version","Framework used to build the running image",
+            app && app->idf_ver[0] ? app->idf_ver : settings_system_info_idf_version(),system_row_4,NULL));
     section_y += system_height + section_gap;
 
     /*
@@ -927,7 +794,7 @@ void ui_settings_show_page(
         storage_row_3 + action_height + 6;
     lv_obj_t *storage = ui_settings_section_create(
         content,
-        "STORAGE",
+        "Storage & backup",
         section_y,
         storage_height);
 
@@ -944,7 +811,7 @@ void ui_settings_show_page(
 
     ui_settings_section_add_row(
         storage,
-        "Storage Capacity",
+        "Storage capacity",
         NULL,
         storage_text ? storage_text : "--",
         storage_row_2,
@@ -956,9 +823,9 @@ void ui_settings_show_page(
 
     ui_settings_section_add_action_row(
         storage,
-        "Configuration Backup",
+        "Configuration backup",
         "Back up or restore profiles and interface settings",
-        "BACKUP / RESTORE",
+        "Backup / restore",
         storage_row_3,
         settings_backup_cb,
         false);
@@ -969,21 +836,27 @@ void ui_settings_show_page(
      * Operator history
      */
     const int operator_height =
-        first_row_y + action_height + 6;
+        first_row_y + row_height + 1 + action_height + 6;
 
     lv_obj_t *operator_section =
         ui_settings_section_create(
             content,
-            "OPERATOR",
+            "Notifications & history",
             section_y,
             operator_height);
 
+    s_notifications_label = ui_settings_section_add_row(operator_section,
+        "Notifications", "System-wide level; faults remain visible",
+        ui_toast_preference_label(), first_row_y, settings_notifications_cb);
+
+    ui_settings_section_add_divider(operator_section,first_row_y+row_height);
+
     ui_settings_section_add_action_row(
         operator_section,
-        "Event History",
+        "Event history",
         "Recent connection, firmware, and machine events",
-        "VIEW HISTORY",
-        first_row_y,
+        "View history",
+        first_row_y + row_height + 1,
         settings_event_history_cb,
         false);
 
@@ -997,10 +870,11 @@ void ui_settings_show_page(
     const int display_row_3 = display_row_2 + row_height + 1;
     const int display_row_4 = display_row_3 + row_height + 1;
     const int display_row_5 = display_row_4 + row_height + 1;
-    const int display_height = display_row_5 + row_height + 6;
+    const int display_row_6 = display_row_5 + row_height + 1;
+    const int display_height = display_row_6 + row_height + 6;
     lv_obj_t *display = ui_settings_section_create(
         content,
-        "DISPLAY",
+        "Display & appearance",
         section_y,
         display_height);
 
@@ -1015,6 +889,9 @@ void ui_settings_show_page(
             display_row_1,
             settings_brightness_changed_cb);
 
+    s_brightness_slider=brightness_slider;
+    s_brightness_value=brightness_slider?lv_obj_get_user_data(brightness_slider):NULL;
+    settings_display_field_own(s_brightness_slider);settings_display_field_own(s_brightness_value);
     if (brightness_slider) {
         lv_obj_add_event_cb(
             brightness_slider,
@@ -1026,45 +903,59 @@ void ui_settings_show_page(
     ui_settings_section_add_divider(
         display, display_row_1 + row_height);
 
+    settings_sleep_label = ui_settings_section_add_row(
+        display,
+        "Sleep timeout",
+        "Tap to change display sleep behavior",
+        settings_sleep_timeout_text(),
+        display_row_2,
+        settings_sleep_card_cb);
+
+    s_sleep_action=settings_sleep_label?lv_obj_get_parent(settings_sleep_label):NULL;
+    settings_display_field_own(settings_sleep_label);settings_display_field_own(s_sleep_action);
+    ui_settings_section_add_divider(
+        display, display_row_2 + row_height);
+
+
     s_theme_label = ui_settings_section_add_row(
         display,
         "Theme",
         "Tap to change the operator interface appearance",
         theme_manager_active_label(),
-        display_row_2,
-        settings_theme_card_cb);
-
-    ui_settings_section_add_divider(
-        display, display_row_2 + row_height);
-
-    ui_settings_section_add_row(
-        display,
-        "Accent Color",
-        "Override the theme accent while preserving semantic colors",
-        theme_manager_accent_label(),
         display_row_3,
-        settings_accent_card_cb);
+        settings_theme_card_cb);
 
     ui_settings_section_add_divider(
         display, display_row_3 + row_height);
 
     ui_settings_section_add_row(
         display,
-        "Display Density",
-        "Choose compact, comfortable, or spacious type and spacing",
-        theme_manager_density_label(),
+        "Accent color",
+        "Override the theme accent while preserving semantic colors",
+        theme_manager_accent_label(),
         display_row_4,
-        settings_density_card_cb);
+        settings_accent_card_cb);
 
     ui_settings_section_add_divider(
         display, display_row_4 + row_height);
 
     ui_settings_section_add_row(
         display,
+        "Display density",
+        "Choose compact, comfortable, or spacious type and spacing",
+        theme_manager_density_label(),
+        display_row_5,
+        settings_density_card_cb);
+
+    ui_settings_section_add_divider(
+        display, display_row_5 + row_height);
+
+    ui_settings_section_add_row(
+        display,
         "Accessibility",
         "Text, contrast, transparency, and motion preferences",
         theme_manager_accessibility_label(),
-        display_row_5,
+        display_row_6,
         settings_accessibility_card_cb);
 
     section_y += display_height + section_gap;
@@ -1077,7 +968,7 @@ void ui_settings_show_page(
 
     lv_obj_t *about = ui_settings_section_create(
         content,
-        "ABOUT",
+        "About",
         section_y,
         about_height);
 
@@ -1085,18 +976,20 @@ void ui_settings_show_page(
         about,
         "About PrinterHMI",
         "Product information, software credits and acknowledgements",
-        "VIEW ABOUT",
+        "View about",
         first_row_y,
         settings_about_cb,
         false);
 
-    if(ui_theme_is_studio()) {
-        lv_obj_t *sections[]={display,connections,setup,device,time_region,firmware,system,storage,operator_section,about};
-        int y=0;lv_obj_update_layout(content);
-        for(unsigned i=0;i<sizeof(sections)/sizeof(sections[0]);i++) {
-            lv_obj_set_pos(sections[i],0,y);y+=lv_obj_get_height(sections[i])+20;
-        }
+    /* Everyday preferences first; maintenance and reference details follow.
+     * Keep one order across themes while retaining their section styling. */
+    lv_obj_t *sections[]={display,operator_section,connections,time_region,storage,firmware,setup,device,system,about};
+    int y=0;lv_obj_update_layout(content);
+    for(unsigned i=0;i<sizeof(sections)/sizeof(sections[0]);i++) {
+        lv_obj_set_pos(sections[i],0,y);
+        y+=lv_obj_get_height(sections[i])+(ui_theme_is_studio()?20:section_gap);
     }
+    settings_display_field_own(s_timezone_label);settings_display_field_own(s_theme_label);settings_display_field_own(s_notifications_label);
     ui_settings_refresh();
 }
 
@@ -1111,7 +1004,15 @@ void ui_settings_refresh(void)
         return;
     }
 
+    uint32_t epoch=s_settings_page_epoch;
     settings_system_info_refresh();
+    if(epoch!=s_settings_page_epoch || !settings_panel || s_display_io_dispatching)return;
+    if(s_brightness_slider && lv_slider_get_value(s_brightness_slider)!=s_display_brightness_percent)
+        lv_slider_set_value(s_brightness_slider,s_display_brightness_percent,LV_ANIM_OFF);
+    char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
+    ui_value_set_text(s_brightness_value,value);
+    ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
+    ui_value_set_text(s_timezone_label,timezone_config_selected_label());
 }
 
 int ui_settings_brightness_percent(void)
@@ -1130,7 +1031,7 @@ bool ui_settings_restore_display_preferences(
     int brightness_percent,
     uint8_t sleep_timeout_minutes)
 {
-    if (brightness_percent < 10 ||
+    if (s_display_io_dispatching || brightness_percent < 10 ||
         brightness_percent > 100 ||
         (sleep_timeout_minutes != 0 &&
          sleep_timeout_minutes != 5 &&
@@ -1139,6 +1040,8 @@ bool ui_settings_restore_display_preferences(
         return false;
     }
 
+    s_display_io_dispatching=true;
+    uint32_t epoch=s_settings_page_epoch;
     nvs_handle_t handle;
 
     esp_err_t error = nvs_open(
@@ -1147,7 +1050,7 @@ bool ui_settings_restore_display_preferences(
         &handle);
 
     if (error != ESP_OK) {
-        return false;
+        s_display_io_dispatching=false;return false;
     }
 
     error = nvs_set_u8(
@@ -1169,7 +1072,7 @@ bool ui_settings_restore_display_preferences(
     nvs_close(handle);
 
     if (error != ESP_OK) {
-        return false;
+        s_display_io_dispatching=false;return false;
     }
 
     s_display_brightness_percent =
@@ -1181,36 +1084,24 @@ bool ui_settings_restore_display_preferences(
     s_sleep_timeout_minutes =
         sleep_timeout_minutes;
 
-    (void)bsp_display_brightness_set(
-        brightness_percent);
+    if(!s_display_sleeping)(void)bsp_display_brightness_set(brightness_percent);
 
-    if (settings_sleep_label) {
+    if (epoch==s_settings_page_epoch && settings_sleep_label) {
         lv_label_set_text(
             settings_sleep_label,
             settings_sleep_timeout_text());
     }
 
+    s_display_io_dispatching=false;
+    if(s_display_sleeping && (s_wake_pending || sleep_timeout_minutes==0))settings_wake_display_cb(NULL);
     return true;
 }
 
 
 void hide_settings_tab(void)
 {
-    if (settings_panel) {
-        lv_obj_delete(settings_panel);
-        settings_panel = NULL;
-
-        settings_sleep_label = NULL;
-        s_timezone_label = NULL;
-        s_theme_label = NULL;
-        s_theme_rebuild_cb = NULL;
-        settings_system_info_unbind();
-        ui_appearance_popups_close_all();
-        ui_settings_popups_close_all();
-        ui_settings_backup_popup_close();
-    }
-
-
+    lv_obj_t *panel=settings_panel;
+    if(panel){settings_page_retire();lv_obj_delete(panel);}
     ui_shell_raise();
 }
 
@@ -1223,42 +1114,25 @@ static void settings_klipper_restart_cb(lv_event_t *e)
 
 void settings_reboot_cb(lv_event_t *e)
 {
-    (void)e;
-    esp_restart();
+    if(!settings_panel || !s_reboot_action || s_display_io_dispatching || lv_obj_has_state(s_reboot_action,LV_STATE_DISABLED) ||
+        (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_reboot_action)))return;
+    ui_settings_popups_show_reboot();
 }
 
 
 void settings_sleep_card_cb(lv_event_t *e)
 {
-    (void)e;
-
-    switch (s_sleep_timeout_minutes) {
-        case 0:
-            s_sleep_timeout_minutes = 5;
-            break;
-
-        case 5:
-            s_sleep_timeout_minutes = 15;
-            break;
-
-        case 15:
-            s_sleep_timeout_minutes = 30;
-            break;
-
-        case 30:
-        default:
-            s_sleep_timeout_minutes = 0;
-            break;
+    if(!settings_panel || !settings_sleep_label || !s_sleep_action || s_display_io_dispatching || s_display_sleeping ||
+        (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_sleep_action)))return;
+    uint8_t requested=s_sleep_timeout_minutes==0?5:s_sleep_timeout_minutes==5?15:s_sleep_timeout_minutes==15?30:0;
+    uint32_t epoch=s_settings_page_epoch;
+    s_display_io_dispatching=true;
+    bool saved=settings_save_sleep_timeout(requested);
+    if(saved)s_sleep_timeout_minutes=requested;
+    if(epoch==s_settings_page_epoch){
+        ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
+        if(!saved)ui_toast_show(UI_STATUS_WARNING,"SLEEP TIMEOUT NOT SAVED","The previous sleep timeout is unchanged. Tap again to retry.");
     }
-
-    lv_display_trigger_activity(
-        lv_display_get_default());
-
-    if (settings_sleep_label) {
-        lv_label_set_text(
-            settings_sleep_label,
-            settings_sleep_timeout_text());
-    }
-
-    settings_save_sleep_timeout();
+    if(saved)lv_display_trigger_activity(lv_display_get_default());
+    s_display_io_dispatching=false;
 }

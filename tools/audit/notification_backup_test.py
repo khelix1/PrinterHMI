@@ -7,7 +7,7 @@ a=s.index('static bool parse_notification_preference(');parser=s[a:s.index('\n}\
 a=s.index('static bool json_integer(');integer=s[a:s.index('\n}\n',a)+3]
 assert 'UI_THEME_CLASSIC,\n            UI_THEME_STUDIO_DARK,' in s
 assert 'snapshot->notification_level = ui_toast_level();' in s
-assert 'cJSON_AddNumberToObject(appearance, "notification_level", snapshot->notification_level);' in s
+assert 'cJSON_AddNumberToObject(appearance, "notification_level", snapshot->notification_level)' in s
 assert 'ui_toast_set_level(snapshot->notification_level)' in s
 library=ctypes.util.find_library('cjson')
 if not library:raise SystemExit('Real libcJSON is required for this host parser audit.')

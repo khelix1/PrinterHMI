@@ -510,7 +510,7 @@ cancelled:
 
 bool ota_manager_start(const char *url)
 {
-    if (!url || !url[0] || s_task_running) {
+    if (!url || !url[0] || strnlen(url, sizeof(s_task_url)) >= sizeof(s_task_url) || s_task_running) {
         return false;
     }
 

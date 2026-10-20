@@ -2504,3 +2504,14 @@ libcJSON). It exercises actual owners/serializers with SDK fault fixtures,
 strict warnings and UBSan; 32-bit size limits are simulated. The complete review,
 remaining deployment boundaries and device-evidence limits are documented in
 [SECURITY_REVIEW.md](SECURITY_REVIEW.md). No repeated panel sequence is required.
+
+### Deep failure-path follow-up after 9166420
+
+The deep pass adds strict bounded JSON for SD backups/themes, all-or-nothing
+backup serialization under allocation failures, camera URL backup/legacy
+preservation, exact passphrase/firmware URL length handling, and release catalog
+mutex-allocation error handling. Run `security_boundaries_test.py`,
+`deep_failure_paths_test.py`, `notification_backup_test.py` and
+`ota_transfer_test.py` under `tools/audit/`. Real libcJSON is required by the
+JSON fixtures; SDK operations are mocked. See the deep-follow-up section in
+[SECURITY_REVIEW.md](SECURITY_REVIEW.md) for scope and hardware evidence limits.

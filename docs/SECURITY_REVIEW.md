@@ -75,3 +75,42 @@ physical SD operations, or cryptographic interoperability tests.
 
 No eFuses, provisioning settings, version, commits, remotes, or release policy
 are changed.
+
+## Deep follow-up after checkpoint 9166420
+
+The user's pushed checkpoint was verified to have the same source tree as the
+review baseline. GitHub remains read-only for this workflow; the following
+changes are a separate, uncommitted follow-up.
+
+| Area | Additional confirmed finding | Fix |
+| --- | --- | --- |
+| Backup creation | cJSON allocation failures could leave a partial document that was still written over the previous backup. | Check every serializer allocation/addition and free the partial tree on failure. Fault-inject every allocation position in both plain and encrypted serialization. |
+| Camera settings | Backups omitted the primary camera URL; restore or rollback could clear it. | Store the URL in both formats, validate its type/length/scheme on restore, and retain a matching known endpoint's camera when an old backup omits the field. An explicit empty URL still clears it. |
+| SD JSON parsing | Backup and theme parsers accepted valid prefixes with trailing data and allowed deeply nested input into the recursive parser. Theme reads did not require complete file contents. | Enforce byte/depth limits before parsing, handle quoted braces/escapes correctly, reject embedded NULs/trailing data, and require complete successful theme reads. |
+| Passphrase handling | The encrypted worker accepted overlong input and silently truncated it to 96 bytes. | Reject input outside 12–96 bytes before scheduling a task; preserve accepted bytes exactly. |
+| OTA URL handling | The update task and release catalog could silently truncate firmware URLs. | Reject an overlong task URL before changing progress/task state; omit catalog entries whose URLs cannot fit intact. |
+| Release-browser allocation failure | Failed mutex allocation was followed by a FreeRTOS call with a null handle. | Check lock creation/acquisition in catalog entry points and return an error snapshot when unavailable. |
+
+Camera URLs are configuration data. Plain backups store these URLs in plaintext;
+use encrypted backups when a URL itself contains credentials or private tokens.
+CA certificates and additional camera catalog slots remain panel-local.
+
+The new `deep_failure_paths_test.py` exercises actual encrypted-worker task
+control, the actual catalog mutex/public APIs and release parser, and the theme
+file-reader/parser stage with deterministic SDK fixtures and real libcJSON.
+`security_boundaries_test.py` adds camera round trips, legacy behavior, strict
+JSON/depth cases and serializer allocation fault injection. `ota_transfer_test.py`
+checks overlong URL rejection and exact boundary preservation. Full backup and
+custom-theme translation units also compile on the host against LVGL 9.5 and
+cJSON 1.7.19 with SDK boundary stubs and warnings as errors.
+
+These failure paths are real code defects, but none is claimed to explain the
+previous intermittent panel panic. Target firmware build, actual cryptography,
+SD hardware, mutex scheduling and TLS/device behavior remain outside host test
+coverage. No Secure Boot/eFuse, flash-encryption or release-policy changes are
+part of this follow-up.
+
+Deep follow-up validation: all 78 individual host suites passed, followed by
+reruns of the security and failure-path suites after the final shared JSON guard
+and duplicate-camera legacy handling changes. Eight source/documentation audits
+passed. Firmware compilation and hardware verification remain separate.

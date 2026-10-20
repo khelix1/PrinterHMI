@@ -98,11 +98,11 @@ static bool settings_backup_encrypted_worker_start(
     char *status,
     size_t status_size)
 {
-    if (!passphrase ||
-        strnlen(passphrase, sizeof(s_passphrase)) <
-            SETTINGS_BACKUP_CRYPTO_MIN_PASSPHRASE_LENGTH) {
+    size_t length = passphrase ? strnlen(passphrase, sizeof(s_passphrase)) : 0;
+    if (length < SETTINGS_BACKUP_CRYPTO_MIN_PASSPHRASE_LENGTH ||
+        length > WORKER_PASSPHRASE_MAX) {
         if (status && status_size) {
-            strlcpy(status, "Use a passphrase of at least 12 characters.", status_size);
+            strlcpy(status, "Use a passphrase of 12 to 96 bytes.", status_size);
         }
         return false;
     }

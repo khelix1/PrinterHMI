@@ -70,6 +70,9 @@ static inline size_t strlcpy(char *d,const char *s,size_t n) {
     (folder / 'print.c').write_text(function(http, 'moonraker_start_print_file'))
     backup = (ROOT / 'main/settings_backup.c').read_text()
     assert 'parse_profile_transport_security(profile_json, profile)' in function(backup, 'parse_snapshot')
+    assert 'parse_profile_camera(profile_json, profile, slot)' in function(backup, 'parse_snapshot')
+    for loader in ['load_backup_snapshot', 'load_encrypted_backup_snapshot']:
+        assert 'parse_backup_document(' in function(backup, loader), loader
     start = backup.index('typedef struct {')
     end = backup.index('} settings_backup_snapshot_t;', start) + len('} settings_backup_snapshot_t;')
     (folder / 'backup.c').write_text('''#include <time.h>
@@ -80,7 +83,10 @@ typedef struct {bool large_text,high_contrast,reduced_transparency,reduced_motio
 #define SETTINGS_BACKUP_PRODUCT "PrinterHMI"
 #define SETTINGS_BACKUP_SCHEMA 1
 ''' + backup[start:end] + '\n' + function(backup, 'snapshot_to_json') + '\n' +
-        function(backup, 'parse_profile_transport_security'))
+        function(backup, 'parse_profile_transport_security') + '\n' +
+        function(backup, 'parse_profile_camera') + '\n' +
+        '#define SETTINGS_BACKUP_MAX_BYTES (16 * 1024)\n' +
+        function(backup, 'parse_backup_document'))
     crypto = (ROOT / 'main/settings_backup_crypto.c').read_text()
     encrypt = function(crypto, 'settings_backup_crypto_encrypt')
     guard = encrypt[encrypt.index('    if (!encrypted'):encrypt.index('    size_t total_size')]

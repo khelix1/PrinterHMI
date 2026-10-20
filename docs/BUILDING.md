@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v7.0.0-dev.
+- `partitions.csv` is the only supported partition layout for v7.0.0.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy
@@ -112,9 +112,11 @@ are expected to work from an arbitrary checkout path.
 
 ## Development and release versions
 
-`version.txt` owns the current build identity: `7.0.0-dev`. Regular local builds
+`version.txt` owns the current build identity: `7.0.0`. Regular local builds
 are Custom. CMake accepts `X.Y.Z`, `X.Y.Z-dev` and generated nightly identities.
 Stable release tooling reads the version source and rejects development suffixes
 before build or network publication. Nightly tooling restores the exact original
-version after its temporary nightly build. Removing `-dev` is a separate release
-preparation step after pending hardware validation; do not label local builds Stable.
+version after its temporary nightly build. Release preparation updates the version and release notes together. Use
+`./tools/release_stable.sh` from a clean, integrated `main` checkout to build and
+publish the Stable channel; regular local builds remain Custom. Known device
+validation limits are retained in the release notes.

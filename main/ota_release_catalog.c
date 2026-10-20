@@ -44,7 +44,7 @@ static bool s_task_running = false;
 static char *s_error = NULL;
 
 
-static void ensure_lock(void)
+static bool ensure_lock(void)
 {
     if (!s_lock) {
         /*
@@ -54,13 +54,13 @@ static void ensure_lock(void)
         s_lock = xSemaphoreCreateMutexWithCaps(
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
+    return s_lock != NULL;
 }
 
 
-static void lock_catalog(void)
+static bool lock_catalog(void)
 {
-    ensure_lock();
-    xSemaphoreTake(s_lock, portMAX_DELAY);
+    return ensure_lock() && xSemaphoreTake(s_lock, portMAX_DELAY) == pdTRUE;
 }
 
 
@@ -91,7 +91,7 @@ static void *psram_calloc(size_t count, size_t size)
 
 static void catalog_fail(const char *message)
 {
-    lock_catalog();
+    if (!lock_catalog()) return;
 
     if (!s_error) {
         s_error = psram_calloc(1, 128);
@@ -368,7 +368,9 @@ static bool parse_releases(
             matched_asset, "browser_download_url");
         if (!cJSON_IsString(url) ||
             !url->valuestring ||
-            !url->valuestring[0]) {
+            !url->valuestring[0] ||
+            strnlen(url->valuestring, sizeof(catalog->entries[0].asset_url)) >=
+                sizeof(catalog->entries[0].asset_url)) {
             continue;
         }
 
@@ -542,7 +544,11 @@ static void release_catalog_task(void *argument)
     free(response);
 
     release_catalog_t *old_catalog = NULL;
-    lock_catalog();
+    if (!lock_catalog()) {
+        free(catalog);
+        vTaskDeleteWithCaps(NULL);
+        return;
+    }
     old_catalog = s_catalog;
     s_catalog = catalog;
     if (s_error) {
@@ -564,7 +570,7 @@ static void release_catalog_task(void *argument)
 
 bool ota_release_catalog_start(void)
 {
-    lock_catalog();
+    if (!lock_catalog()) return false;
     if (s_task_running) {
         unlock_catalog();
         return true;
@@ -608,7 +614,11 @@ void ota_release_catalog_snapshot(
 
     memset(snapshot, 0, sizeof(*snapshot));
 
-    lock_catalog();
+    if (!lock_catalog()) {
+        snapshot->state = OTA_RELEASE_CATALOG_ERROR;
+        snprintf(snapshot->error, sizeof(snapshot->error), "Not enough memory to open release catalog");
+        return;
+    }
     snapshot->state = s_state;
     snapshot->count = s_catalog ? s_catalog->count : 0;
     snprintf(
@@ -629,7 +639,7 @@ bool ota_release_catalog_entry(
     }
 
     bool found = false;
-    lock_catalog();
+    if (!lock_catalog()) return false;
 
     if (s_catalog && index < s_catalog->count) {
         *entry = s_catalog->entries[index];

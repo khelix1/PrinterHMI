@@ -6,6 +6,7 @@
 #include "nvs.h"
 #include "moonraker_transport_security_controller.h"
 #include "moonraker_tls_trust_store.h"
+#include "json_document_limits.h"
 
 static moonraker_profile_t profiles[MOONRAKER_CONFIG_MAX_PROFILES];
 static int active;
@@ -37,7 +38,14 @@ extern int cJSON_AddItemToArray(cJSON *,cJSON *);
 extern cJSON *cJSON_GetArrayItem(const cJSON *,int);
 extern int cJSON_IsBool(const cJSON *);
 extern int cJSON_IsTrue(const cJSON *);
+extern int cJSON_IsString(const cJSON *);
+extern cJSON *cJSON_ParseWithLengthOpts(const char *,size_t,const char **,int);
+typedef struct {void *(*malloc_fn)(size_t);void (*free_fn)(void *);} cJSON_Hooks;
+extern void cJSON_InitHooks(cJSON_Hooks *);
 #include "backup.c"
+static int allocations,fail_allocation,outstanding;
+static void *checked_malloc(size_t size){allocations++;if(allocations==fail_allocation)return NULL;void *p=malloc(size);if(p)outstanding++;return p;}
+static void checked_free(void *p){if(p){outstanding--;free(p);}}
 #define ESP_FAIL -1
 #define ESP_ERR_INVALID_STATE -2
 #define HTTP_METHOD_POST 1
@@ -111,6 +119,7 @@ int main(int argc,char **argv){
  assert(profile_valid(&profiles[0]));strcpy(profiles[0].api_key,"key\r\nInjected: yes");assert(!profile_valid(&profiles[0]));
  strcpy(profiles[0].api_key,"abc-_.123");assert(profile_valid(&profiles[0]));
  memset(profiles[0].name,'n',sizeof(profiles[0].name));assert(!profile_valid(&profiles[0]));strcpy(profiles[0].name,"Printer");
+ strcpy(profiles[0].camera_stream_url,"http://camera.local/stream?x=1&y=2");
  settings_backup_snapshot_t snapshot={0};snapshot.profiles[0]=profiles[0];
  for(int include_keys=0;include_keys<2;include_keys++)for(int tls=0;tls<2;tls++){
   snapshot.profiles[0].secure_transport=tls;
@@ -118,15 +127,34 @@ int main(int argc,char **argv){
   cJSON *item=cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(j,"profiles"),0);assert(item);
   moonraker_profile_t restored=profiles[0];restored.secure_transport=!tls;
   assert(parse_profile_transport_security(item,&restored)&&restored.secure_transport==tls);
+  restored.camera_stream_url[0]=0;assert(parse_profile_camera(item,&restored,0));assert(!strcmp(restored.camera_stream_url,snapshot.profiles[0].camera_stream_url));
   assert((cJSON_GetObjectItemCaseSensitive(item,"api_key")!=NULL)==include_keys);cJSON_Delete(j);
  }
  profiles[1]=profiles[0];profiles[1].secure_transport=true;
  cJSON *legacy=cJSON_Parse("{}");moonraker_profile_t restored=profiles[0];
  strcpy(restored.host,"PRINTER.LOCAL");
  assert(parse_profile_transport_security(legacy,&restored)&&restored.secure_transport);
+ assert(parse_profile_camera(legacy,&restored,0)&&!strcmp(restored.camera_stream_url,profiles[0].camera_stream_url));
+ strcpy(profiles[1].camera_stream_url,"http://second-camera.local/stream");
+ assert(parse_profile_camera(legacy,&restored,1)&&!strcmp(restored.camera_stream_url,profiles[1].camera_stream_url));
  strcpy(restored.host,"other.local");assert(parse_profile_transport_security(legacy,&restored)&&!restored.secure_transport);cJSON_Delete(legacy);
  const char *invalid_tls[]={"{\"secure_transport\":1}","{\"secure_transport\":null}","{\"secure_transport\":\"true\"}"};
  for(unsigned i=0;i<3;i++){cJSON *j=cJSON_Parse(invalid_tls[i]);assert(!parse_profile_transport_security(j,&restored));cJSON_Delete(j);}
+ const char *bad_camera[]={"{\"camera_stream_url\":true}","{\"camera_stream_url\":null}","{\"camera_stream_url\":\"file:///etc/passwd\"}"};
+ for(unsigned i=0;i<3;i++){cJSON *j=cJSON_Parse(bad_camera[i]);assert(!parse_profile_camera(j,&restored,0));cJSON_Delete(j);}
+ cJSON *empty_camera=cJSON_Parse("{\"camera_stream_url\":\"\"}");assert(parse_profile_camera(empty_camera,&restored,0)&&!restored.camera_stream_url[0]);cJSON_Delete(empty_camera);
+ cJSON_Hooks hooks={checked_malloc,checked_free};cJSON_InitHooks(&hooks);
+ for(int keys=0;keys<2;keys++){
+  allocations=fail_allocation=0;assert(!outstanding);cJSON *j=snapshot_to_json(&snapshot,keys);assert(j);int count=allocations;cJSON_Delete(j);assert(!outstanding);
+  for(int fail=1;fail<=count;fail++){allocations=0;fail_allocation=fail;j=snapshot_to_json(&snapshot,keys);assert(!j&&!outstanding);}
+ }
+ cJSON_InitHooks(NULL);
+ const char *bad_json[]={"{} trailing","{} {}","{\"name\":\"unterminated}","{]","}",""};
+ for(unsigned i=0;i<sizeof(bad_json)/sizeof(*bad_json);i++)assert(!parse_backup_document(bad_json[i],strlen(bad_json[i])));
+ char embedded[]={ '{','}',0,'x',0 };assert(!parse_backup_document(embedded,4));
+ char nested[100];memset(nested,'[',17);memset(nested+17,']',17);nested[34]=0;assert(!parse_backup_document(nested,34));
+ memset(nested,'[',16);memset(nested+16,']',16);nested[32]=0;cJSON *bounded=parse_backup_document(nested,32);assert(bounded);cJSON_Delete(bounded);
+ const char *valid_json="{\"text\":\"[[[\\\"{\\\\}\"}\r\n ";bounded=parse_backup_document(valid_json,strlen(valid_json));assert(bounded);cJSON_Delete(bounded);
  const char *names[]={"models/test.gcode","quote\".gcode","back\\slash.gcode","line\nfeed\t.gcode","a\",\"filename\":\"other.gcode","unicode-\xc3\xa9.gcode"};
  for(unsigned i=0;i<sizeof(names)/sizeof(*names);i++){
   assert(moonraker_start_print_file("p",7125,"key",names[i],NULL,NULL));
@@ -143,6 +171,6 @@ int main(int argc,char **argv){
  assert(size_guard(&byte,(size_t)UINT32_MAX-57,&out,&out_size,message,sizeof(message)));
  assert(!size_guard(&byte,(size_t)UINT32_MAX-56,&out,&out_size,message,sizeof(message)));
  assert(!size_guard(&byte,UINT32_MAX,&out,&out_size,message,sizeof(message)));
- puts("PASS: TLS import rollback, duplicate-endpoint TLS, URL validation, restore key validation, plain/encrypted backup TLS round trips and legacy migration, real JSON filename round trips, HTTP failures, 32-bit encrypted-size guards (UBSan)");
+ puts("PASS: TLS import rollback, duplicate-endpoint TLS, URL validation, profile validation, backup TLS/camera round trips and legacy migration, every JSON allocation failure, strict bounded JSON, filename round trips, HTTP failures and 32-bit size guards (UBSan)");
  return 0;
 }

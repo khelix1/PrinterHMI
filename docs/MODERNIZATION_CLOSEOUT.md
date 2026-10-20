@@ -1,5 +1,10 @@
 # Final project review: 7.0.0-dev
 
+Release preparation: current identity is 7.0.0. This report records the earlier
+7.0.0-dev UI review; later security/failure-path results and remaining limitations
+are included in [the v7.0.0 release notes](releases/v7.0.0.md) and
+[the security review](SECURITY_REVIEW.md).
+
 Review base: `004f6c2d27c8918a6133eef6600a128cb48f306c` on `feature/profile-setup-dialogs`, fetched into a clean integration checkout. Review date: 2026-10-19 (America/Chicago). This supersedes the earlier closeout/application-order notes. The final follow-up includes the small integration caption/test corrections, whether or not their earlier installer was applied.
 
 ## Findings and fixes

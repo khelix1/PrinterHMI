@@ -80,6 +80,9 @@ esp_err_t esp_https_ota_abort(esp_https_ota_handle_t h){assert(h==(void*)1);abor
 void esp_restart(void){reboots++;longjmp(reboot,1);}
 static void reset(int m){mode=m;read_timeout=0;reads=aborts=finishes=releases=reboots=pumps=closes=0;clock_us=1000000;complete=ready=exclusive=task_accept=true;s_task_running=s_cancel_requested=s_cancel_complete=false;}
 int main(void){
+ reset(0);char too_long[sizeof(s_task_url)+1];memset(too_long,'x',sizeof(too_long)-1);too_long[sizeof(too_long)-1]=0;
+ assert(!ota_manager_start(too_long)&&!s_task_running&&!progress_snapshot().started_us);
+ too_long[sizeof(s_task_url)-1]=0;assert(ota_manager_start(too_long)&&!strcmp(s_task_url,too_long));
  for(volatile int m=0;m<=6;m++){
   reset(m);if(m==6)complete=false;
   assert(ota_manager_start("https://fixture/fw.bin"));
@@ -114,7 +117,7 @@ with tempfile.TemporaryDirectory(prefix='ota-transfer-') as directory:
     for name,text in stubs.items():
         p=tmp/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
     (tmp/'fixture.c').write_text(fixture)
-    common=['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wformat-truncation=2','-Wrestrict','-I',str(tmp),'-I',str(root/'main')]
+    common=['cc','-D_POSIX_C_SOURCE=200809L','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wformat-truncation=2','-Wrestrict','-I',str(tmp),'-I',str(root/'main')]
     subprocess.run([*common,str(tmp/'fixture.c'),'-o',str(tmp/'worker')],check=True)
     subprocess.run([str(tmp/'worker')],check=True)
     subprocess.run([*common,'-c',str(root/'main/ota_manager.c'),'-o',str(tmp/'owner.o')],check=True)

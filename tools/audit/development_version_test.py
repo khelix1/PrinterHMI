@@ -43,6 +43,11 @@ with tempfile.TemporaryDirectory(prefix='development-version-') as directory:
         destination = repo / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, destination)
+        # Keep this fixture in development mode even when the checkout is stable.
+        if name == 'version.txt':
+            destination.write_text('7.0.0-dev\n')
+        elif name.endswith('.md'):
+            destination.write_text(re.sub(r'7\.0\.0(?!-dev)', '7.0.0-dev', destination.read_text()))
     result = run(repo, 'bash', 'tools/audit/version_audit.sh')
     assert result.returncode == 0, result.stdout + result.stderr
     assert run(repo, 'git', 'add', '--all').returncode == 0

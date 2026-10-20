@@ -1,9 +1,3 @@
-+++
-version = "2.1"
-aliases = ["/version/2/1"]
-reportingPlaceholder = "the repository owner through GitHub private vulnerability reporting at https://github.com/khelix1/PrinterHMI/security/advisories/new"
-+++
-
 # Contributor Covenant Code of Conduct
 
 ## Our Pledge

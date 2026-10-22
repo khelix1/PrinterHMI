@@ -4,12 +4,19 @@ PrinterHMI supports complete, versioned custom-theme packages stored on the SD
 card. The firmware applies, remembers, rescans, and removes packages; it does
 not include an on-device theme editor or Theme Laboratory.
 
-Built-in **Foundry**, **Operator**, and **Dark Glass** themes remain part of the
+Built-in **Studio**, **Foundry**, **Operator**, and **Dark Glass** themes remain part of the
 firmware and cannot be removed.
+
+Open **Settings → Theme → Custom themes** on the panel to scan the SD card,
+select an installed package, then Apply. The theme-maker firmware restores
+this chooser entry alongside the built-in previews.
 
 ## Create a theme
 
-Create the package on a computer with a JSON-aware editor, then save it as
+Launch the Linux desktop Theme Maker; installation and source launch are
+documented in `tools/theme-maker/linux/README.md`.
+See [its README](../tools/theme-maker/README.md) for compatibility and current
+preview limits. You can also create a package with a JSON-aware editor. Save it as
 UTF-8 JSON with the `.phmitheme` extension. Theme packages are strict and must
 be complete: partial palette, metric, or layout overrides are rejected rather
 than guessed.
@@ -38,11 +45,11 @@ must also contain every item in the validation checklist below.
 
 - Use an ID of 2–32 characters: lowercase letters, numbers, and hyphens only.
   It must start with a letter or number. Example: `midnight-forge`.
-- Use a human-readable name of up to 40 characters. Example: `Midnight Forge`.
+- Use a human-readable name of up to 40 UTF-8 bytes. Example: `Midnight Forge`.
 - Use `id.phmitheme` as the filename. The filename is not required to match the
   ID, but matching names make backup and recovery much clearer.
-- Author is optional (up to 40 characters); description is optional (up to 120
-  characters).
+- Author is optional (up to 40 UTF-8 bytes); description is optional (up to 120
+  UTF-8 bytes).
 - Choose exactly one base theme: `foundry`, `operator`, or `glass`.
 
 ### Required palette
@@ -112,3 +119,68 @@ also be kept with the backup.
   854 × 528.
 - **Theme disappears after restore:** copy the matching `.phmitheme` package
   back to the SD card, then rescan Custom Themes.
+
+## Version 2 / Studio (theme-maker branch firmware)
+
+Released v7.0.0 accepts version 1. The updated loader on this branch also accepts
+version 2. A Studio package must set `base_theme` to `studio`, provide all 58
+palette entries listed by `tools/theme-maker/theme-spec.js`, and include the
+same four metrics. Studio requires `surface_opacity: 255` and must **omit**
+`layouts`; its native composition is not compatible with the legacy 854 × 528
+rectangle format. The maker exports this format automatically for Studio.
+
+Version 2 colors cover the shared Studio color tokens, including popup,
+telemetry and bed-mesh colors. Common card, panel and button corner tokens use
+the three radius metrics. Special-purpose recipe shapes remain built in.
+Version 1 packages keep their existing 27-color contract and legacy geometry.
+A version 2 package using a legacy base still requires its complete layouts.
+The file-size limit remains 48 KiB and the registry remains limited to eight
+loaded themes. Package identity/name limits and SD installation are unchanged.
+
+Font files, image assets, arbitrary shader/effect data and executable content
+are not part of version 1 or 2. Version 3 adds prepared background assets. The editor rejects unsupported imported fields
+rather than quietly dropping them on export.
+
+## Version 3 / background artwork (artwork branch firmware)
+
+Use **Design → Background image** in the Linux app. Artwork themes use
+`schema_version: 3` plus a `background` object containing `asset`, `fit`
+(`cover`, `contain`, `stretch`), `position_x`, `position_y`, `overlay_color`
+and `overlay_opacity`. Position/opacity are integers 0–100. Studio retains its
+58-color palette and native composition; other bases retain the 27-color
+palette and complete legacy layouts. Studio surfaces remain opaque.
+
+The app bakes crop/position/readability overlay into a fixed 1024 × 600 RGB565
+image. The `asset` value must be a basename matching
+`bg-<64 lowercase hex digits>.phmibg`, located next to its `.phmitheme` file.
+Its 20-byte header is `PHMIBG01`, then little-endian width/height (16-bit),
+pixel-byte count (32-bit), and CRC32 of the following little-endian RGB565
+pixels (32-bit). Pixel count is exactly 1,228,800 bytes. JSON remains limited
+to 48 KiB. Filesystem path traversal and oversized/mismatched headers are
+rejected; a CRC failure or unavailable PSRAM uses the solid theme background.
+
+The app's export ZIP includes `PrinterHMI/themes/<id>.phmitheme`, its prepared
+`.phmibg`, `ThemeMaker/source.png` (an editable normalized source copy) and
+`INSTALL.txt`. Copy the `PrinterHMI` folder to the SD card root. Keep the whole
+ZIP for desktop re-import; firmware does not open ZIPs or decode source photos.
+Removing a theme does not delete shared/content-addressed asset files.
+
+The firmware shares one pixel allocation between the screen and cropped page
+views, retaining references until each LVGL owner is destroyed or restyled.
+A padded scanline meets LVGL's stride requirements for bottom-edge crops.
+At most two distinct image allocations (about 2.46 MiB total) are retained
+while previous-page owners retire. Larger allocations use PSRAM only.
+Backgrounds do not create interactive image objects. Native headers, navigation,
+dialogs, cards, and emergency controls keep their existing rendering and input
+ownership. High-contrast mode suppresses artwork.
+
+Version 3 is **not supported by released v7.0.0**. Apply the source patch,
+build with `./tools/build_idf6_hosted3.sh`, then OTA the resulting
+`build-idf6-hosted3/PrinterHMI.bin` using the local Custom URL flow in
+[Flashing and OTA](FLASHING_AND_OTA.md).
+
+Host checks cover the actual LVGL RGB565 render, full-screen/page crop
+alignment, parser and binary bounds, lifetime after registry changes,
+deallocation, bad CRC and allocation failure, high-contrast fallback,
+ZIP traversal/size rejection and editable bundle round trips. ESP-IDF target
+build and physical panel touch/appearance still require local validation.

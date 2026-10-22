@@ -28,7 +28,7 @@ static void color(lv_obj_t *obj, lv_color_t ink)
 }
 static void button(lv_obj_t *obj, lv_color_t bg, lv_color_t edge)
 {
-    surface(obj, bg, 24, 1, 6);
+    surface(obj, bg, ui_theme_studio_metric(10, 18, 20, 24), 1, 6);
     if (!obj) return;
     lv_obj_set_style_border_color(obj, edge, 0);
     lv_obj_set_style_bg_color(obj, UI_CONTROL, LV_STATE_PRESSED);
@@ -63,8 +63,8 @@ void ui_theme_studio_apply_root_style(lv_obj_t *obj)
     surface(obj,UI_BG,0,0,0);
     ui_theme_studio_page_frame(obj);
 }
-void ui_theme_studio_apply_panel_style(lv_obj_t *o) { surface(o, UI_PANEL, 18, 1, UI_PAD_PANEL); }
-void ui_theme_studio_apply_card_style(lv_obj_t *o) { surface(o, UI_CARD, 18, 1, UI_PAD_CARD); }
+void ui_theme_studio_apply_panel_style(lv_obj_t *o) { surface(o, UI_PANEL, UI_RADIUS_PANEL, 1, UI_PAD_PANEL); }
+void ui_theme_studio_apply_card_style(lv_obj_t *o) { surface(o, UI_CARD, UI_RADIUS_CARD, 1, UI_PAD_CARD); }
 void ui_theme_studio_apply_banner_style(lv_obj_t *o) { surface(o, UI_PANEL, 18, 1, UI_PAD_CARD); }
 void ui_theme_studio_apply_preview_style(lv_obj_t *o) { surface(o, UI_BG, 0, 0, 0); }
 void ui_theme_studio_apply_info_box_style(lv_obj_t *o) { surface(o, UI_PANEL_ALT, 18, 1, UI_PAD_CARD); }

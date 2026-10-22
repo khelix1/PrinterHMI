@@ -24,6 +24,8 @@ idf_component_register(
         "assets/fonts/studio/inter_96.c"
         "theme_manager.c"
         "custom_theme.c"
+        "custom_theme_background.c"
+        "theme_background_asset.c"
         "ui_theme_preview.c"
         "ui_appearance_popups.c"
         "ui_widgets.c"

@@ -1,0 +1,172 @@
+/* Application event/state regression fixture. No browser or rendering engine. */
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const M=require('./theme-model.js');
+class Element{
+ constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.dataset={};this.style={setProperty(){}};this.classList={toggle(){}};this.clientWidth=1100;this.clientHeight=720;this.attrs={};this.textContent='';}
+ append(...nodes){for(const n of nodes){this.children.push(n);if(n&&typeof n==='object')n.parentElement=this;}}
+ replaceChildren(...nodes){this.children=[];this.append(...nodes);}
+ getAttribute(k){return this.attrs[k]??null;}
+ querySelectorAll(){return [];}
+ setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this.attrs[k];}
+ addEventListener(k,fn){this['on'+k]=fn;}removeEventListener(){}
+ showModal(){this.open=true;}close(){this.open=false;}
+ focus(){}remove(){}setPointerCapture(){}
+ getBoundingClientRect(){return {width:1056};}
+ querySelector(selector){if(selector==='.p-body')return new Element();return this.walk().find(e=>e.tagName===selector.toUpperCase())||null;}
+ walk(){return this.children.filter(e=>e instanceof Element).flatMap(e=>[e,...e.walk()]);}
+ click(){if(!this.disabled)this.onclick?.();}
+}
+const html=fs.readFileSync(__dirname+'/index.html','utf8'),els={};
+for(const m of html.matchAll(/\bid="([^"]+)"/g)){assert(!els[m[1]],'duplicate id');els[m[1]]=new Element();}
+const tabs=['design','layout','project'].map(v=>{const el=new Element('button');el.dataset.tab=v;return el;});
+const views=['device','components','json'].map(v=>{const el=new Element('button');el.dataset.view=v;return el;});
+els['preview-wrap'].append(els.device);
+const storage=new Map(),outbound=[],documentHandlers={};
+const document={getElementById:id=>{assert(els[id],'Missing element '+id);return els[id];},createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text}),documentElement:new Element(),body:new Element(),activeElement:new Element(),addEventListener(k,fn){documentHandlers[k]=fn;},querySelector:()=>null,querySelectorAll:s=>s==='[data-tab]'?tabs:views};
+const context={TabletModel:require('./tablet-model'),TextEncoder,ThemeProject:require('./project-model'),StudioScene:require('./studio-scene.js'),ThemeModel:M,document,console,confirm:()=>true,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},ResizeObserver:class{observe(){}},setTimeout(){},setInterval(){return 1;},clearInterval(){},webkit:{messageHandlers:{themeMaker:{postMessage:v=>outbound.push(JSON.parse(v))}}}};
+context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/app.js','utf8'),context);
+const project=()=>JSON.parse(els.package.textContent);
+const before=project();
+els.workspace.click();assert(els.welcome.open,'upper-left control opens chooser');
+els['cancel-welcome'].click();assert(!els.welcome.open);assert.deepEqual(project(),before);
+els.new.click();els['blank-theme'].click();assert(!els.welcome.open);
+assert.equal(project().name,'Untitled theme');assert(Object.values(project().layouts.dashboard).every(r=>!r.visible));
+assert.equal(tabs[1].attrs['aria-selected'],'true');
+const add=els.editor.walk().find(e=>e.tagName==='BUTTON'&&e.textContent==='＋ Active print');assert(add);add.click();
+assert(project().layouts.dashboard.active_print.visible);
+let region=els.device.walk().find(e=>e.dataset.region==='active_print');assert(region);
+region.onkeydown({key:'ArrowRight',preventDefault(){},shiftKey:true});assert.equal(project().layouts.dashboard.active_print.x,26);
+region=els.device.walk().find(e=>e.dataset.region==='active_print');
+region.onpointerdown({preventDefault(){},clientX:100,clientY:100,pointerId:1,target:region.children.at(-1)});
+region.onpointermove({clientX:130,clientY:120});region.onpointerup();
+assert.equal(project().layouts.dashboard.active_print.width,428);assert.equal(project().layouts.dashboard.active_print.height,324);
+region=els.device.walk().find(e=>e.dataset.region==='active_print');region.onkeydown({key:'Delete',preventDefault(){}});assert(!project().layouts.dashboard.active_print.visible);
+els.undo.click();assert(project().layouts.dashboard.active_print.visible);
+els.export.click();assert.equal(outbound.length,1);assert.deepEqual(M.parse(outbound[0].text),project());
+assert(storage.size===1);console.log('PASS: upper-left chooser, cancel, blank creation, add/move/resize/delete block, undo, draft save and desktop export event flow (DOM fixture; no visual rendering)');
+function control(label){const result=els.editor.walk().find(e=>e.attrs['aria-label']===label);assert(result,'Missing control '+label);return result;}
+function drag(dx,dy,alt=false,cancel=false){const el=els.device.walk().find(e=>e.dataset.region==='active_print');el.onpointerdown({preventDefault(){},clientX:100,clientY:100,pointerId:1,target:el});el.onpointermove({clientX:100+dx,clientY:100+dy,altKey:alt});(cancel?el.onpointercancel:el.onpointerup)();}
+control('Snap to grid').checked=true;control('Snap to grid').onchange();
+drag(5,5);assert.equal(project().layouts.dashboard.active_print.x,32);assert.equal(project().layouts.dashboard.active_print.y,88);
+drag(3,3,true);assert.equal(project().layouts.dashboard.active_print.x,35);assert.equal(project().layouts.dashboard.active_print.y,91);
+const prior=project();drag(20,20,false,true);assert.deepEqual(project(),prior,'pointer cancellation restores composition');
+control('Align block right').click();assert.equal(project().layouts.dashboard.active_print.x,426);
+els.undo.click();assert.deepEqual(project(),prior);
+control('Align block fill width').click();assert.equal(project().layouts.dashboard.active_print.width,822);assert.equal(project().layouts.dashboard.active_print.x,16);
+assert(!Object.hasOwn(project(),'editor'),'editor preferences must not leak into firmware exports');
+const stored=JSON.parse([...storage.values()][0]);assert(stored.editor.snap);assert.equal(stored.editor.size,8);
+console.log('PASS: snap and Alt bypass event flow, cancelled drag rollback, alignment/undo, fill and separate persisted editor preferences');
+tabs[0].click();context.ThemeMakerArtworkSelected({asset:'bg-'+'a'.repeat(64)+'.phmibg'});assert.equal(project().schema_version,3);assert(project().background);
+let previewRequest=outbound.at(-1);assert.equal(previewRequest.action,'preview-artwork');
+context.ThemeMakerArtworkPreview({key:previewRequest.key,data_url:'data:image/png;base64,AAAA'});
+assert.equal(els.export.textContent,'Export theme bundle ↗');
+els.export.click();assert.equal(JSON.parse(outbound.at(-1).text).schema_version,3);
+const removeArt=els.editor.walk().find(e=>e.textContent==='Remove background image');assert(removeArt);removeArt.click();assert.equal(project().schema_version,1);assert(!project().background);
+els.undo.click();assert.equal(project().schema_version,3);assert(project().background);
+const invalidProject=M.copy(project());invalidProject.background.asset='../outside.phmibg';const safePrior=project();context.ThemeMakerProjectLoaded({project:invalidProject});assert.deepEqual(project(),safePrior);
+console.log('PASS: native artwork callback, bounded preview request, ZIP export action, removal/downgrade, undo and atomic invalid-import rejection');
+
+// The Studio preset must retain every firmware color, not the generic preset remap.
+els.workspace.click();const studio=els['starter-grid'].children[0];studio.click();
+assert.equal(project().base_theme,'studio');assert.deepEqual(project().palette,M.create('studio').palette);
+assert.deepEqual(project().metrics,M.create('studio').metrics);
+const nativeDock=els.device.walk().find(e=>e.className==='studio-dock-hit');assert(nativeDock);assert.equal(nativeDock.children.length,8);
+nativeDock.children[3].click();assert.equal(els['preview-label'].textContent,'CAMERA');assert(!els.export.disabled);
+els['pages'].children.find(e=>e.textContent==='Dashboard').click();assert.equal(els['preview-label'].textContent,'DASHBOARD');
+console.log('PASS: original Studio preset palette/metrics and eight-item Studio navigation, including Camera and return to Dashboard');
+
+views[1].click();assert(els.components.innerHTML.includes('Studio components'));
+assert(els.components.innerHTML.includes('Apply custom theme?'));
+const oldOutbound=outbound.length;els['save-project'].click();assert.equal(outbound.length,oldOutbound+1);
+let saved=outbound.at(-1);assert.equal(saved.action,'save-project');assert(saved.filename.endsWith('.phmiproject'));
+const P=require('./project-model'),workspace=P.parse(saved.text);assert.equal(workspace.editor.view,'components');assert.deepEqual(workspace.theme,project());
+els['open-project'].click();assert.equal(outbound.at(-1).action,'open-project');
+const replacement=P.create(M.createBlank(),{...P.defaults,tab:'layout',snap:true,size:16});
+context.ThemeMakerWorkspaceLoaded({document:replacement,filename:'blank.phmiproject'});assert.deepEqual(project(),replacement.theme);assert.equal(tabs[1].attrs['aria-selected'],'true');
+const state=JSON.parse(storage.values().next().value);assert.deepEqual(state.editor,{grid:true,snap:true,size:16});
+els.undo.click();assert.deepEqual(project(),workspace.theme);
+const valid=project(),bad=M.copy(replacement);bad.theme.palette.text='invalid';context.ThemeMakerWorkspaceLoaded({document:bad,filename:'bad.phmiproject'});assert.deepEqual(project(),valid);assert(els.feedback.textContent.includes('Project rejected'));
+console.log('PASS: Studio component gallery, native project Save/Open actions, restored workspace/grid, undo after opening and atomic invalid-project rejection');
+
+// Color picking navigates editor controls without changing the package.
+views[0].click();const pickPrior=project();els['pick-color'].click();assert.equal(els['pick-color'].attrs['aria-pressed'],'true');
+assert(els.device.walk().find(e=>e.className==='studio-dock-hit').children.every(b=>b.disabled));
+const buttonSurface=new Element('g');buttonSurface.setAttribute('data-theme-fill','panel');buttonSurface.setAttribute('data-theme-edge','accent');
+const labelTarget=new Element('text');labelTarget.setAttribute('data-theme-ink','text');labelTarget.parentElement=buttonSurface;
+function pickEvent(target){return {target:{closest:()=>target},preventDefault(){},stopPropagation(){}};}
+els.device.children[0].onclick(pickEvent(labelTarget));assert.deepEqual(project(),pickPrior);
+let selection=()=>els.editor.walk().find(e=>e.className==='picked-color');assert(selection());
+assert.equal(tabs[0].attrs['aria-selected'],'true');assert.equal(selection().walk().filter(e=>e.tagName==='BUTTON'&&e.attrs['aria-pressed']!==undefined).length,3);
+selection().walk().find(e=>e.textContent==='Fill').click();
+let pickedHex=selection().walk().find(e=>e.className==='hex');assert.equal(pickedHex.attrs['aria-label'],'Panel hex');pickedHex.value='#123456';pickedHex.onchange();assert.equal(project().palette.panel,'#123456');
+let reset=selection().walk().find(e=>e.className==='reset-color');reset.click();assert.equal(project().palette.panel,M.create('studio').palette.panel);els.undo.click();assert.equal(project().palette.panel,'#123456');
+// Invalid text cannot reach an export, and resetting also clears the invalid edit.
+pickedHex=selection().walk().find(e=>e.className==='hex');pickedHex.value='oops';pickedHex.onchange();assert(els.export.disabled);
+reset=selection().walk().find(e=>e.className==='reset-color');reset.click();assert(!els.export.disabled);assert.equal(project().palette.panel,M.create('studio').palette.panel);
+views[1].click();const lineTarget=new Element('path');lineTarget.setAttribute('data-theme-edge','border');els.components.onclick(pickEvent(lineTarget));assert(selection().walk().some(e=>e.attrs['aria-label']==='Border hex'));
+const untouched=project(),foreignTarget=new Element('rect');foreignTarget.setAttribute('data-theme-fill','__proto__');els.components.onclick(pickEvent(foreignTarget));assert.deepEqual(project(),untouched);
+selection().walk().find(e=>e.textContent==='Clear selection').click();assert(!selection());
+els['pick-color'].click();assert.equal(els['pick-color'].attrs['aria-pressed'],'false');els.components.onclick(pickEvent(lineTarget));assert(!selection());
+assert(!Object.hasOwn(project(),'picked'));assert(!Object.hasOwn(project(),'pickMode'));
+els['pick-color'].click();let escaped=false;documentHandlers.keydown({key:'Escape',preventDefault(){escaped=true;}});assert(escaped);assert.equal(els['pick-color'].attrs['aria-pressed'],'false');assert(els.device.walk().find(e=>e.className==='studio-dock-hit').children.every(b=>!b.disabled));
+els.workspace.click();els['blank-theme'].click();assert(els['pick-color'].disabled);
+console.log('PASS: preview/component color picking, text/fill/border roles, per-color reset and undo, invalid-hex recovery, unknown-token rejection, mode exit, legacy restrictions and clean exports');
+
+assert(els['compare-original'].disabled,'comparison is Studio-only');
+els.workspace.click();els['starter-grid'].children[0].click();
+const comparisonTheme=M.create('studio');comparisonTheme.palette.background='#223355';comparisonTheme.palette.text='#ABCDEF';comparisonTheme.metrics.radius_button=3;
+comparisonTheme.schema_version=3;comparisonTheme.background={asset:'bg-'+'b'.repeat(64)+'.phmibg',fit:'cover',position_x:40,position_y:60,overlay_color:'#000000',overlay_opacity:25};
+context.ThemeMakerWorkspaceLoaded({document:P.create(comparisonTheme),filename:'compare.phmiproject'});
+const comparisonArtwork=outbound.at(-1);assert.equal(comparisonArtwork.action,'preview-artwork');context.ThemeMakerArtworkPreview({key:comparisonArtwork.key,data_url:'data:image/png;base64,AAAA'});
+const customBefore=project(),storedBefore=storage.values().next().value,Scene=require('./studio-scene');
+assert.equal(els.device.children[0].innerHTML,Scene.render(customBefore,'dashboard',{artwork:'data:image/png;base64,AAAA'}));
+els['pick-color'].click();els['compare-original'].click();assert.equal(els['compare-original'].attrs['aria-pressed'],'true');assert.equal(els['pick-color'].attrs['aria-pressed'],'false');assert(els['pick-color'].disabled);assert(!els['comparison-banner'].hidden);
+assert.equal(els.device.children[0].innerHTML,Scene.render(M.create('studio'),'dashboard',{artwork:''}));assert.deepEqual(project(),customBefore);assert.equal(storage.values().next().value,storedBefore);
+els.export.click();assert.deepEqual(JSON.parse(outbound.at(-1).text),customBefore,'export must use the custom design while comparing');
+els['save-project'].click();assert.deepEqual(P.parse(outbound.at(-1).text).theme,customBefore,'project save must use the custom design while comparing');
+els.pages.children.find(e=>e.textContent==='Files').click();assert.equal(els.device.children[0].innerHTML,Scene.render(M.create('studio'),'files',{artwork:''}));
+views[1].click();assert.equal(els.components.innerHTML,Scene.renderComponents(M.create('studio')));
+els['compare-original'].click();assert(els['comparison-banner'].hidden);assert.equal(els.components.innerHTML,Scene.renderComponents(customBefore));assert(!els['pick-color'].disabled);
+els['compare-original'].click();const backgroundHex=els.editor.walk().find(e=>e.attrs['aria-label']==='Background hex');backgroundHex.value='#102030';backgroundHex.onchange();assert.equal(project().palette.background,'#102030');assert.equal(els['compare-original'].attrs['aria-pressed'],'false','an edit returns to the custom preview');
+els.undo.click();assert.equal(project().palette.background,customBefore.palette.background);
+els['compare-original'].click();views[2].click();assert(els['compare-original'].disabled);assert(els['comparison-banner'].hidden);assert(!Object.hasOwn(project(),'compareOriginal'));
+console.log('PASS: stock Studio palette/shapes without artwork, comparison across pages/Components, unchanged draft/theme, custom exports and project saves, picker exclusion, edit-to-design return, undo and Package restrictions');
+
+// Exercise the mounted tablet action path, not only the pure state model.
+views[0].click();els.workspace.click();els['starter-grid'].children[0].click();
+const tabletTheme=project(),traffic=outbound.length;
+function tabletClick(action,value=null){const target=new Element('g');target.setAttribute('data-tablet-action',action);if(value!==null)target.setAttribute('data-tablet-value',value);els.device.children[0].onclick(pickEvent(target));}
+tabletClick('pause');assert(els.device.children[0].innerHTML.includes('PAUSED'));tabletClick('pause');assert(els.device.children[0].innerHTML.includes('PRINTING'));
+tabletClick('stop');assert(els.device.children[0].innerHTML.includes('Stop print?'));assert(els.device.walk().find(e=>e.className==='studio-dock-hit').hidden,'navigation container must not intercept the dialog footer');tabletClick('close');assert(!els.device.children[0].innerHTML.includes('Stop print?'));assert(!els.device.walk().find(e=>e.className==='studio-dock-hit').hidden);
+tabletClick('nav:files');tabletClick('file:0');assert(els.device.children[0].innerHTML.includes('Layer height: 0.20 mm'));tabletClick('file-print');assert(els.device.children[0].innerHTML.includes('Start print?'));tabletClick('confirm-print');assert.equal(els['preview-label'].textContent,'DASHBOARD');
+tabletClick('nav:settings');let tabletScreen=els.device.children[0];tabletScreen.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});tabletScreen.onwheel({clientX:300,clientY:200,deltaY:440,preventDefault(){}});assert(els.device.children[0].innerHTML.includes('translate(0 -374)'));
+tabletClick('nav:console');tabletClick('command');let commandInput=els.device.walk().find(e=>e.className==='tablet-input');assert(commandInput);commandInput.value='G28';commandInput.oninput();tabletClick('command-apply');assert(els.device.children[0].innerHTML.includes('G28'));assert(els.device.children[0].innerHTML.includes('ok · simulated'));
+tabletClick('nav:files');tabletClick('files-search');tabletClick('key','c');tabletClick('key','u');tabletClick('key','b');tabletClick('key','e');commandInput=els.device.walk().find(e=>e.className==='tablet-input');assert.equal(commandInput.value,'cube');tabletClick('files-search-apply');assert(!els.device.children[0].innerHTML.includes('Tool tray.gcode'));
+tabletClick('nav:camera');tabletClick('fullscreen');assert(els.device.children[0].innerHTML.includes('Exit fullscreen'));documentHandlers.keydown({key:'Escape',preventDefault(){}});assert(!els.device.children[0].innerHTML.includes('Exit fullscreen'));
+assert.deepEqual(project(),tabletTheme);assert.equal(outbound.length,traffic,'tablet interactions must never invoke native I/O or printer transport');
+console.log('PASS: mounted tablet pause/confirm/navigation, modal ownership, file details/start, native viewport scroll, physical and on-screen command entry, search, fullscreen/Escape and zero native traffic or project mutation');
+
+// All footer modes hide the whole dock, including its transparent flex container.
+for(const action of ['stop','toolhead','temperature:nozzle','setting:about','fullscreen']){
+ tabletClick(action);assert(els.device.walk().find(e=>e.className==='studio-dock-hit').hidden);
+ tabletClick('close');assert(!els.device.walk().find(e=>e.className==='studio-dock-hit').hidden);
+}
+const outlined=Scene.render(M.create('studio'),'dashboard',{state:require('./tablet-model').dispatch(require('./tablet-model').create(),'stop')});
+assert(/data-tablet-action="close"[^>]*><rect[^>]*pointer-events="all"/.test(outlined),'transparent interiors must receive pointer hits');
+console.log('PASS: modal/fullscreen dock container isolation, Close restores navigation, outlined button interior hit areas');
+// Exercise the HTML slider and nested editor return, not just pure model actions.
+tabletClick('tune');let sliders=els.device.walk().filter(e=>e.className==='tablet-slider');assert.equal(sliders.length,2);sliders[0].value='135';sliders[0].oninput();sliders[0].onchange();assert(els.device.children[0].innerHTML.includes('135%'));tabletClick('close');
+tabletClick('temperature:nozzle');assert(!els.device.walk().some(e=>e.className==='tablet-input'));tabletClick('custom:nozzle');assert(els.device.walk().some(e=>e.className==='tablet-input'));tabletClick('back-control');assert(els.device.children[0].innerHTML.includes('Choose a preset'));tabletClick('close');
+assert.deepEqual(project(),tabletTheme);assert.equal(outbound.length,traffic);
+console.log('PASS: mounted Tune slider updates and custom entry/Back without project or native I/O changes');
+// The native bridge sends only fixture input, preserves theme data and ignores stale frames.
+const nativeBaseline=project();context.ThemeMakerNativeStatus({available:true});
+tabletClick('temperature:nozzle');let request=outbound.at(-1);assert.equal(request.action,'native-ui');assert.equal(request.kind,'nozzle');const token=request.token;
+assert(els.device.walk().some(e=>e.className==='native-tablet-overlay'));
+context.ThemeMakerNativeFrame({token,closed:false,image:'data:image/png;base64,AA==',nozzle:210,bed:60,fan:65,position:[110,110,12.8],zOffset:0});
+context.ThemeMakerNativeFrame({token,closed:true,nozzle:220,bed:60,fan:65,command:'M104 S220'});
+assert(!els.device.walk().some(e=>e.className==='native-tablet-overlay'));
+tabletClick('fan');const pending=outbound.at(-1).token;tabletClick('nav:files');context.ThemeMakerNativeFrame({token:pending,closed:true,nozzle:999,bed:60,fan:65});assert.equal(els['preview-label'].textContent,'FILES');assert.deepEqual(project(),nativeBaseline);
+context.ThemeMakerNativeStatus({available:false});
+console.log('PASS: native availability, supported-popup routing, frame lifecycle, delayed-frame isolation and unchanged theme data');

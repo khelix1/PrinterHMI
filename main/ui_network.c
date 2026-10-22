@@ -281,6 +281,7 @@ void ui_network_create_objects(
         s_network.root,
         0,
         0);
+    ui_theme_decorate_root(s_network.root);
 
     ui_page_title_create(
         s_network.root,

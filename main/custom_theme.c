@@ -1,5 +1,6 @@
 #include "custom_theme.h"
 #include "json_document_limits.h"
+#include "theme_background_asset.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -49,6 +50,37 @@ typedef enum {
     COLOR_TELEMETRY_BED,
     COLOR_TELEMETRY_CHAMBER,
     COLOR_TELEMETRY_HUMIDITY,
+    COLOR_BG_DANGER_POPUP,
+    COLOR_CONTROL_CLOSE,
+    COLOR_CONTROL_CANCEL,
+    COLOR_PROGRESS_TRACK,
+    COLOR_BORDER_POPUP,
+    COLOR_BORDER_BRIGHT,
+    COLOR_WIFI_INACTIVE,
+    COLOR_TEXT_ERROR,
+    COLOR_ACCENT_2,
+    COLOR_ACCENT_CYAN,
+    COLOR_ACCENT_INFO,
+    COLOR_ACCENT_PURPLE,
+    COLOR_ACCENT_ORANGE,
+    COLOR_ACCENT_SKY,
+    COLOR_GLASS_EDGE,
+    COLOR_GLASS_SHEEN,
+    COLOR_GLASS_AURORA,
+    COLOR_TELEMETRY_ROOT_BG,
+    COLOR_TELEMETRY_CHART_BG,
+    COLOR_TELEMETRY_CHART_CARD_BG,
+    COLOR_TELEMETRY_PANEL_BG,
+    COLOR_TELEMETRY_CARD_BG,
+    COLOR_BED_MESH_BG,
+    COLOR_BED_MESH_WIREFRAME,
+    COLOR_BED_MESH_LOW,
+    COLOR_BED_MESH_LEVEL,
+    COLOR_BED_MESH_HIGH,
+    COLOR_OK,
+    COLOR_WARN_DARK,
+    COLOR_DANGER_FILL,
+    COLOR_DANGER_DARK,
     COLOR_COUNT
 } custom_color_id_t;
 
@@ -66,6 +98,9 @@ typedef struct {
     uint32_t glass_rgb;
     custom_color_id_t id;
 } color_route_t;
+
+_Static_assert(COLOR_COUNT <= 64, "custom palette exceeds mask capacity");
+#define LEGACY_COLOR_ROUTE_COUNT 25
 
 static const color_route_t s_color_routes[] = {
     {"background", 0x0B1118, 0x18130F, 0x03040A, COLOR_BACKGROUND},
@@ -93,6 +128,39 @@ static const color_route_t s_color_routes[] = {
     {"telemetry_bed", 0xFFCF66, 0xF6C453, 0xFFD166, COLOR_TELEMETRY_BED},
     {"telemetry_chamber", 0x35E0D0, 0x61D0BE, 0x3BFFDA, COLOR_TELEMETRY_CHAMBER},
     {"telemetry_humidity", 0xA679FF, 0xC994E8, 0xE56BFF, COLOR_TELEMETRY_HUMIDITY},
+    {"bg_danger_popup", 0x171018, 0x2C1513, 0x1A0815, COLOR_BG_DANGER_POPUP},
+    {"control_close", 0x402020, 0x66332B, 0x351026, COLOR_CONTROL_CLOSE},
+    {"control_cancel", 0x39465C, 0x59483B, 0x222840, COLOR_CONTROL_CANCEL},
+    {"progress_track", 0x182230, 0x3A2B23, 0x0B1020, COLOR_PROGRESS_TRACK},
+    {"border_popup", 0x3D6F99, 0xB87545, 0x7440B5, COLOR_BORDER_POPUP},
+    {"border_bright", 0x8FD3FF, 0xF4B860, 0x7FEAFF, COLOR_BORDER_BRIGHT},
+    {"wifi_inactive", 0x3A4654, 0x705C4D, 0x29334A, COLOR_WIFI_INACTIVE},
+    {"text_error", 0xFF6B6B, 0xFF8580, 0xFF79A8, COLOR_TEXT_ERROR},
+    {"accent", 0x255A91, 0xC9693B, 0x6537D8, COLOR_ACCENT},
+    {"accent_2", 0x1266C3, 0xE07A3F, 0xB33CFF, COLOR_ACCENT_2},
+    {"accent_bright", 0x33C7FF, 0xFFAD66, 0xF45BFF, COLOR_ACCENT_BRIGHT},
+    {"accent_cyan", 0x19C7E8, 0x55C2B8, 0x38E8FF, COLOR_ACCENT_CYAN},
+    {"accent_info", 0x3AA8FF, 0x71B7C5, 0x5C91FF, COLOR_ACCENT_INFO},
+    {"accent_purple", 0xB65CFF, 0xC889D8, 0xD86CFF, COLOR_ACCENT_PURPLE},
+    {"accent_orange", 0xFF8C2A, 0xFF934F, 0xFF9A5C, COLOR_ACCENT_ORANGE},
+    {"accent_sky", 0x00D1FF, 0x77D4D0, 0x48F5FF, COLOR_ACCENT_SKY},
+    {"glass_edge", 0x8FD3FF, 0xF4B860, 0xD9FAFF, COLOR_GLASS_EDGE},
+    {"glass_sheen", 0x35506F, 0x8A6245, 0x1D3152, COLOR_GLASS_SHEEN},
+    {"glass_aurora", 0x255A91, 0xC9693B, 0xD85CFF, COLOR_GLASS_AURORA},
+    {"telemetry_root_bg", 0x040D17, 0x120E0B, 0x030513, COLOR_TELEMETRY_ROOT_BG},
+    {"telemetry_chart_bg", 0x040C15, 0x17110D, 0x030612, COLOR_TELEMETRY_CHART_BG},
+    {"telemetry_chart_card_bg", 0x06111D, 0x211813, 0x060B1A, COLOR_TELEMETRY_CHART_CARD_BG},
+    {"telemetry_panel_bg", 0x081522, 0x291E18, 0x080E20, COLOR_TELEMETRY_PANEL_BG},
+    {"telemetry_card_bg", 0x091827, 0x30231C, 0x0A1228, COLOR_TELEMETRY_CARD_BG},
+    {"bed_mesh_bg", 0x050D16, 0x15100C, 0x02040D, COLOR_BED_MESH_BG},
+    {"bed_mesh_wireframe", 0xD2ECFF, 0xFFE1C2, 0xD9FAFF, COLOR_BED_MESH_WIREFRAME},
+    {"bed_mesh_low", 0x168AAD, 0x4F86A6, 0x5C91FF, COLOR_BED_MESH_LOW},
+    {"bed_mesh_level", 0x30D5C8, 0x55C2B8, 0x38E8FF, COLOR_BED_MESH_LEVEL},
+    {"bed_mesh_high", 0xE45B5B, 0xF06A66, 0xFF4FA3, COLOR_BED_MESH_HIGH},
+    {"ok", 0x09743D, 0x2F7D5A, 0x087B6B, COLOR_OK},
+    {"warn_dark", 0x8A4B00, 0x9B5F20, 0x8B6714, COLOR_WARN_DARK},
+    {"danger_fill", 0xC83232, 0xC94F4F, 0xC32D78, COLOR_DANGER_FILL},
+    {"danger_dark", 0xA83232, 0x913C3C, 0x7D225A, COLOR_DANGER_DARK},
 };
 
 typedef struct {
@@ -110,6 +178,7 @@ static const metric_route_t s_metric_routes[] = {
 
 typedef struct {
     custom_theme_summary_t summary;
+    char background_path[CUSTOM_THEME_PATH_MAX];
     char path[CUSTOM_THEME_PATH_MAX];
     uint64_t color_mask;
     uint32_t colors[COLOR_COUNT];
@@ -265,20 +334,23 @@ static ui_theme_id_t parse_base_theme(const cJSON *root, bool *valid)
     if (strcmp(item->valuestring, "operator") == 0) return UI_THEME_OPERATOR;
     if (strcmp(item->valuestring, "foundry") == 0) return UI_THEME_CLASSIC;
     if (strcmp(item->valuestring, "glass") == 0) return UI_THEME_GLASS;
+    if (strcmp(item->valuestring, "studio") == 0) return UI_THEME_STUDIO_DARK;
     *valid = false;
     return UI_THEME_OPERATOR;
 }
 
 static bool parse_palette(
     const cJSON *root,
-    custom_theme_entry_t *entry)
+    custom_theme_entry_t *entry, int schema_version)
 {
     const cJSON *palette =
         cJSON_GetObjectItemCaseSensitive(root, "palette");
     if (!cJSON_IsObject(palette)) return false;
 
+    size_t count = schema_version == 1 ? LEGACY_COLOR_ROUTE_COUNT :
+        sizeof(s_color_routes) / sizeof(s_color_routes[0]);
     for (size_t index = 0;
-         index < sizeof(s_color_routes) / sizeof(s_color_routes[0]);
+         index < count;
          ++index) {
         const color_route_t *route = &s_color_routes[index];
         const cJSON *item =
@@ -439,6 +511,27 @@ static bool parse_layouts(
     return true;
 }
 
+static bool parse_background(const cJSON *root, const char *path, custom_theme_entry_t *entry, int version)
+{
+    const cJSON *bg = cJSON_GetObjectItemCaseSensitive(root, "background");
+    if (version != 3) return bg == NULL;
+    const cJSON *asset = cJSON_GetObjectItemCaseSensitive(bg, "asset");
+    const cJSON *fit = cJSON_GetObjectItemCaseSensitive(bg, "fit");
+    const cJSON *color = cJSON_GetObjectItemCaseSensitive(bg, "overlay_color");
+    int value = 0; uint32_t rgb = 0;
+    if (!cJSON_IsObject(bg) || !cJSON_IsString(asset) || !theme_background_asset_name_valid(asset->valuestring) ||
+        !cJSON_IsString(fit) || (strcmp(fit->valuestring, "cover") && strcmp(fit->valuestring, "contain") && strcmp(fit->valuestring, "stretch")) ||
+        !json_integer(bg, "position_x", 0, 100, &value) || !json_integer(bg, "position_y", 0, 100, &value) ||
+        !json_integer(bg, "overlay_opacity", 0, 100, &value) || !cJSON_IsString(color) || !parse_hex_color(color->valuestring, &rgb)) return false;
+    const char *slash = strrchr(path, '/');
+    if (!slash) return false;
+    size_t parent_length = (size_t)(slash - path) + 1;
+    if (parent_length + strlen(asset->valuestring) >= sizeof(entry->background_path)) return false;
+    memcpy(entry->background_path, path, parent_length);
+    strcpy(entry->background_path + parent_length, asset->valuestring);
+    return theme_background_asset_header_valid(entry->background_path);
+}
+
 static bool parse_theme_file(
     const char *path,
     custom_theme_entry_t *entry)
@@ -488,7 +581,7 @@ static bool parse_theme_file(
     bool valid =
         cJSON_IsString(schema) &&
         strcmp(schema->valuestring, "printerhmi.theme") == 0 &&
-        json_integer(root, "schema_version", 1, 1, &schema_version) &&
+        json_integer(root, "schema_version", 1, 3, &schema_version) &&
         json_string(root, "id",
                     entry->summary.id,
                     sizeof(entry->summary.id),
@@ -512,9 +605,17 @@ static bool parse_theme_file(
 
     valid = valid &&
         base_valid &&
-        parse_palette(root, entry) &&
+        (schema_version >= 2 || entry->summary.base_theme != UI_THEME_STUDIO_DARK) &&
+        parse_palette(root, entry, schema_version == 3 && entry->summary.base_theme != UI_THEME_STUDIO_DARK ? 1 : schema_version) &&
         parse_metrics(root, entry) &&
-        parse_layouts(root, entry);
+        parse_background(root, path, entry, schema_version);
+    if (valid && entry->summary.base_theme == UI_THEME_STUDIO_DARK) {
+        /* Studio owns its native 1024x600 composition. Do not accept legacy
+         * rectangles or transparency controls that Studio cannot honor. */
+        valid = !cJSON_GetObjectItemCaseSensitive(root, "layouts") && entry->surface_opacity == 255;
+    } else if (valid) {
+        valid = parse_layouts(root, entry);
+    }
 
     cJSON_Delete(root);
     return valid;
@@ -771,12 +872,18 @@ const ui_dashboard_layout_profile_t *
 custom_theme_dashboard_profile(void)
 {
     custom_theme_entry_t *entry = active_theme();
-    return entry ? &entry->dashboard : NULL;
+    return entry && entry->summary.base_theme != UI_THEME_STUDIO_DARK ? &entry->dashboard : NULL;
 }
 
 const ui_page_layout_profile_t *
 custom_theme_page_profile(void)
 {
     custom_theme_entry_t *entry = active_theme();
-    return entry ? &entry->pages : NULL;
+    return entry && entry->summary.base_theme != UI_THEME_STUDIO_DARK ? &entry->pages : NULL;
+}
+
+const char *custom_theme_background_path(void)
+{
+    custom_theme_entry_t *entry = active_theme();
+    return entry && entry->background_path[0] ? entry->background_path : NULL;
 }

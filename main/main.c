@@ -129,6 +129,7 @@ static void start_sntp_time_sync(void);
 static void sntp_wait_task(void *arg);
 
 #include "ui_theme.h"
+#include "custom_theme_background.h"
 #include "ui_theme_studio.h"
 #include "theme_manager.h"
 #include "ui_cards.h"
@@ -3203,6 +3204,7 @@ void ui_printer_create(void)
     lv_obj_set_style_border_width(printer_panel, 0, 0);
     lv_obj_set_style_radius(printer_panel, 0, 0);
     lv_obj_set_style_pad_all(printer_panel, 0, 0);
+    ui_theme_decorate_root(printer_panel);
 
     if (!ui_theme_is_studio()) {
     ui_page_title_create(
@@ -3307,10 +3309,12 @@ void ui_printer_create(void)
 
 static void build_drybox_dashboard(void)
 {
+    ui_theme_set_root_decorator(custom_theme_background_apply);
     lv_obj_t *scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, UI_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(scr, UI_TEXT, 0);
+    ui_theme_decorate_root(scr);
 
     /* Top bar now belongs to ui_shell. */
     if (!ui_global_estop_init(action_send_gcode_inline)) {

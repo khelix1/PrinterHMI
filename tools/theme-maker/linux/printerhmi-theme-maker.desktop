@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PrinterHMI Theme Maker
+Comment=Design and export themes for your PrinterHMI panel
+Exec=printerhmi-theme-maker
+Icon=printerhmi-theme-maker
+Terminal=false
+Categories=Graphics;Utility;
+StartupNotify=true
+StartupWMClass=io.github.khelix1.PrinterHMIThemeMaker
+Keywords=PrinterHMI;theme;designer;printer;

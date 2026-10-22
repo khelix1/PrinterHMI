@@ -63,3 +63,6 @@ custom_theme_dashboard_profile(void);
 
 const ui_page_layout_profile_t *
 custom_theme_page_profile(void);
+
+/* Borrowed registry path; callers copy it before any rescan. */
+const char *custom_theme_background_path(void);

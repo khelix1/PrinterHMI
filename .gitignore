@@ -50,3 +50,5 @@ credentials.*
 /build-idf6*/
 /build-v6-stack/
 /dist/
+
+/build-theme-maker-native/

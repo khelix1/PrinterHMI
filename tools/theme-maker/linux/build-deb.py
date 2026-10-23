@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
-VERSION = '0.1.0~preview12'
+VERSION = '0.1.0~preview19'
 APP = 'printerhmi-theme-maker'
 BASE = Path(__file__).resolve().parent.parent
 ROOT = BASE.parents[1]
@@ -15,6 +15,7 @@ parser.add_argument('--output-dir', type=Path, default=ROOT / 'dist')
 parser.add_argument('--native-helper', type=Path, default=ROOT / 'build-theme-maker-native/printerhmi-ui-host')
 args = parser.parse_args()
 if not args.native_helper.is_file(): parser.error('Build linux/native/build.py first; the native helper is required.')
+if subprocess.check_output([str(args.native_helper.resolve()), '--version'], stdin=subprocess.DEVNULL, text=True, timeout=5).strip() != 'printerhmi-ui-host 8': parser.error('Rebuild the native helper for this version.')
 architecture = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
 args.output_dir.mkdir(parents=True, exist_ok=True)
 output = args.output_dir.resolve() / (APP + '_' + VERSION + '_' + architecture + '.deb')

@@ -13,7 +13,7 @@ class Element{
  showModal(){this.open=true;}close(){this.open=false;}
  focus(){}remove(){}setPointerCapture(){}
  getBoundingClientRect(){return {width:1056};}
- querySelector(selector){if(selector==='.p-body')return new Element();return this.walk().find(e=>e.tagName===selector.toUpperCase())||null;}
+ querySelector(selector){if(selector==='.p-body')return new Element();return this.walk().find(e=>selector.startsWith('.')?e.className===selector.slice(1):e.tagName===selector.toUpperCase())||null;}
  walk(){return this.children.filter(e=>e instanceof Element).flatMap(e=>[e,...e.walk()]);}
  click(){if(!this.disabled)this.onclick?.();}
 }
@@ -24,7 +24,7 @@ const views=['device','components','json'].map(v=>{const el=new Element('button'
 els['preview-wrap'].append(els.device);
 const storage=new Map(),outbound=[],documentHandlers={};
 const document={getElementById:id=>{assert(els[id],'Missing element '+id);return els[id];},createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text}),documentElement:new Element(),body:new Element(),activeElement:new Element(),addEventListener(k,fn){documentHandlers[k]=fn;},querySelector:()=>null,querySelectorAll:s=>s==='[data-tab]'?tabs:views};
-const context={TabletModel:require('./tablet-model'),TextEncoder,ThemeProject:require('./project-model'),StudioScene:require('./studio-scene.js'),ThemeModel:M,document,console,confirm:()=>true,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},ResizeObserver:class{observe(){}},setTimeout(){},setInterval(){return 1;},clearInterval(){},webkit:{messageHandlers:{themeMaker:{postMessage:v=>outbound.push(JSON.parse(v))}}}};
+const context={TabletModel:require('./tablet-model'),TextEncoder,ThemeProject:require('./project-model'),StudioScene:require('./studio-scene.js'),ThemeModel:M,document,console,confirm:()=>true,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},ResizeObserver:class{observe(){}},setTimeout(){},setInterval(){return 1;},clearInterval(){},clearTimeout(){},webkit:{messageHandlers:{themeMaker:{postMessage:v=>outbound.push(JSON.parse(v))}}}};
 context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/app.js','utf8'),context);
 const project=()=>JSON.parse(els.package.textContent);
 const before=project();
@@ -170,3 +170,77 @@ assert(!els.device.walk().some(e=>e.className==='native-tablet-overlay'));
 tabletClick('fan');const pending=outbound.at(-1).token;tabletClick('nav:files');context.ThemeMakerNativeFrame({token:pending,closed:true,nozzle:999,bed:60,fan:65});assert.equal(els['preview-label'].textContent,'FILES');assert.deepEqual(project(),nativeBaseline);
 context.ThemeMakerNativeStatus({available:false});
 console.log('PASS: native availability, supported-popup routing, frame lifecycle, delayed-frame isolation and unchanged theme data');
+// The native Tools page routes only explicit firmware actions back into the editor.
+context.ThemeMakerNativeStatus({available:true});tabletClick('nav:tools');context.ThemeMakerNativeStatus({available:true});const toolsRequest=outbound.at(-1);assert.equal(toolsRequest.kind,'tools-page');
+context.ThemeMakerNativeFrame({token:toolsRequest.token,closed:false,command:'@nav:printer',nozzle:210,bed:60,fan:65});assert.equal(els['preview-label'].textContent,'PRINTER');assert(!els.device.walk().some(e=>e.className==='native-tablet-overlay'));
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:settings');let brightness=els.device.walk().find(e=>e.className==='tablet-brightness');assert(brightness);brightness.value='85';brightness.oninput();brightness.onchange();assert(els.device.children[0].innerHTML.includes('85%'));
+assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native Tools shell navigation and slider-only Settings brightness preserve the theme');
+
+context.ThemeMakerNativeStatus({available:true});tabletClick('nav:tools');context.ThemeMakerNativeStatus({available:true});
+let hoverLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');
+hoverLayer.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});
+hoverLayer.onpointerenter({clientX:800,clientY:350});let hoverRequest=outbound.at(-1);
+assert.equal(hoverRequest.operation,'hover');assert.equal(hoverRequest.x,800);
+context.ThemeMakerNativeHover({...hoverRequest,cursor:'pointer'});assert.equal(hoverLayer.style.cursor,'pointer');
+hoverLayer.onpointerleave();context.ThemeMakerNativeHover({...hoverRequest,cursor:'pointer'});assert.equal(hoverLayer.style.cursor,'default','late hover after leave is ignored');
+hoverLayer.onpointerenter({clientX:50,clientY:40});hoverRequest=outbound.at(-1);
+context.ThemeMakerNativeHover({...hoverRequest,cursor:'default'});assert.equal(hoverLayer.style.cursor,'default');
+const oldHover=hoverRequest;tabletClick('nav:console');context.ThemeMakerNativeStatus({available:true});
+assert.equal(outbound.at(-1).kind,'console-page');hoverLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');
+context.ThemeMakerNativeHover({...oldHover,cursor:'pointer'});assert.equal(hoverLayer.style.cursor,'default','old page response is ignored');
+assert.equal(hoverLayer.attrs['aria-label'],'Native firmware Console page');assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native widget hover cursor, pointer-leave and stale-response isolation, native Console routing and unchanged theme');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:printer');context.ThemeMakerNativeStatus({available:true});
+const printerRequest=outbound.at(-1);assert.equal(printerRequest.kind,'printer-page');assert.equal(printerRequest.job,'Spool holder.gcode');
+context.ThemeMakerNativeFrame({token:printerRequest.token,closed:false,image:'data:image/png;base64,AA==',printState:'paused',nozzle:200,bed:60,fan:65});
+context.ThemeMakerNativeFrame({token:printerRequest.token,closed:false,command:'@nav:tools',printState:'paused',nozzle:200,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).printState,'paused','native print state carries to another page');
+context.ThemeMakerNativeFrame({token:printerRequest.token,closed:false,printState:'printing',nozzle:999,bed:60,fan:65});
+assert.equal(outbound.at(-1).printState,'paused','retired Printer frame cannot change simulation');assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native Printer routing, job/state seed, Pause across pages, retired-frame isolation and unchanged theme');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:files');tabletClick('file:2');tabletClick('file-print');tabletClick('confirm-print');
+context.ThemeMakerNativeStatus({available:true});let dashboardRequest=outbound.at(-1);
+assert.equal(dashboardRequest.kind,'dashboard-page');assert.equal(dashboardRequest.progress,0);assert.equal(dashboardRequest.job,'Cable organizer.gcode');
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Dashboard page');
+context.ThemeMakerNativeFrame({token:dashboardRequest.token,closed:false,image:'data:image/png;base64,AA==',printState:'paused',progress:37.5,nozzle:200,bed:60,fan:65});
+context.ThemeMakerNativeFrame({token:dashboardRequest.token,closed:false,command:'@nav:printer',printState:'paused',progress:37.5,nozzle:200,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'printer-page');assert.equal(outbound.at(-1).progress,37.5);assert.equal(outbound.at(-1).printState,'paused');
+assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native Dashboard startup after file confirmation, zero progress/job seed, progress and Pause across native pages, unchanged theme');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:files');context.ThemeMakerNativeStatus({available:true});
+const filesRequest=outbound.at(-1);assert.equal(filesRequest.kind,'files-page');
+const filesLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');filesLayer.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});
+filesLayer.onwheel({preventDefault(){},stopPropagation(){},clientX:300,clientY:380,deltaY:3,deltaMode:1});
+assert.equal(outbound.at(-1).operation,'wheel');assert.equal(outbound.at(-1).delta,72);assert.equal(outbound.at(-1).x,300);
+context.ThemeMakerNativeFrame({token:filesRequest.token,closed:false,command:'@nav:dashboard',printState:'printing',progress:0,job:'Tool tray.gcode',nozzle:200,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'dashboard-page');assert.equal(outbound.at(-1).job,'Tool tray.gcode');assert.equal(outbound.at(-1).progress,0);
+const afterFiles=outbound.length;filesLayer.onwheel({preventDefault(){},stopPropagation(){},clientX:300,clientY:380,deltaY:100,deltaMode:0});
+filesLayer.onpointerenter({clientX:300,clientY:380});assert.equal(outbound.length,afterFiles,'retired overlay cannot send wheel or hover to the new page');
+assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native Files routing, wheel unit normalization, confirmed job/progress into Dashboard, stale-overlay isolation and unchanged theme');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:camera');context.ThemeMakerNativeStatus({available:true});
+const cameraRequest=outbound.at(-1);assert.equal(cameraRequest.kind,'camera-page');
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Camera page');
+context.ThemeMakerNativeFrame({token:cameraRequest.token,closed:false,command:'@nav:dashboard',printState:'printing',progress:0,job:'Tool tray.gcode',nozzle:200,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'dashboard-page');
+const cameraAfter=outbound.length;context.ThemeMakerNativeFrame({token:cameraRequest.token,closed:false,command:'@nav:camera',nozzle:999,bed:60,fan:65});
+assert.equal(outbound.length,cameraAfter);assert.equal(els['preview-label'].textContent,'DASHBOARD');assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native Camera routing, native shell return, stale-frame isolation and unchanged theme');
+
+const resetBefore=project();els['reset-tablet'].click();assert.equal(outbound.at(-1).operation,'reset');assert.deepEqual(project(),resetBefore);
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).progress,64);assert.equal(outbound.at(-1).job,'Spool holder.gcode');
+console.log('PASS: Reset tablet retires the native fixture process, restores sample machine state and preserves the theme');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:drybox');context.ThemeMakerNativeStatus({available:true});
+const dryboxRequest=outbound.at(-1);assert.equal(dryboxRequest.kind,'drybox-page');
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Drybox page');
+context.ThemeMakerNativeFrame({token:dryboxRequest.token,closed:false,command:'@nav:tools',printState:'printing',progress:64,job:'Spool holder.gcode',nozzle:210,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'tools-page');
+const afterDrybox=outbound.length;context.ThemeMakerNativeFrame({token:dryboxRequest.token,closed:false,command:'@nav:drybox',nozzle:999});
+assert.equal(outbound.length,afterDrybox);assert.equal(els['preview-label'].textContent,'TOOLS');assert.deepEqual(project(),resetBefore);
+console.log('PASS: native Drybox routing, native shell navigation, stale-frame isolation and unchanged theme');

@@ -42,3 +42,5 @@ dialog{max-height:90dvh;overflow:auto}.blank-starter{display:flex;align-items:ce
 .color-picking [data-tablet-action]>rect[fill=transparent]{pointer-events:none}
 
 .native-tablet-overlay{position:absolute;inset:0;width:1024px;height:600px;z-index:5;touch-action:none;outline:none}.native-tablet-image{display:block;width:1024px;height:600px;pointer-events:none;user-select:none}.native-tablet-overlay:focus-visible{outline:1px solid var(--p-accent)}
+
+.studio-screen [aria-disabled=true]{cursor:default!important}.p-legacy .p-button{cursor:default}

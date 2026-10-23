@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import re
+import subprocess
 from native_preview import NativePreview
 
 from desktop_io import export_request, atomic_save, atomic_save_bytes, MAX_BYTES
@@ -32,10 +33,22 @@ class ThemeMaker(Gtk.Application):
         self.window = None
         self.export_busy = False
         self.native = None
+        self.native_path = None
+        self.native_probed = False
 
     def native_executable(self):
+        if self.native_probed: return self.native_path
+        self.native_probed = True
         candidates = [BASE.parents[1] / "build-theme-maker-native/printerhmi-ui-host", Path("/usr/lib/printerhmi-theme-maker/printerhmi-ui-host")]
-        return next((p for p in candidates if p.is_file()), None)
+        for path in candidates:
+            if path.is_file():
+                try:
+                    version=subprocess.check_output([str(path),'--version'],timeout=2,text=True,stdin=subprocess.DEVNULL,stderr=subprocess.DEVNULL).strip()
+                    if version=='printerhmi-ui-host 8':
+                        self.native_path=path
+                        return path
+                except (OSError,subprocess.SubprocessError): pass
+        return None
 
     def native_status(self, view, event):
         if event == WebKit2.LoadEvent.FINISHED:
@@ -132,11 +145,14 @@ class ThemeMaker(Gtk.Application):
             if action == 'native-ui':
                 executable = self.native_executable()
                 if not executable: raise ValueError('Native UI helper is not installed.')
-                if self.native is None: self.native = NativePreview(executable)
                 operation = request.get('operation'); setup = []
+                if operation == 'reset':
+                    if self.native: self.native.close(); self.native = None
+                    return
+                if self.native is None: self.native = NativePreview(executable)
                 if operation == 'open':
                     kind = request.get('kind')
-                    if kind not in ('nozzle', 'bed', 'fan', 'stop', 'toolhead', 'tune'): raise ValueError('Unsupported native popup.')
+                    if kind not in ('nozzle', 'bed', 'fan', 'stop', 'toolhead', 'tune', 'tools-page', 'console-page', 'printer-page', 'dashboard-page', 'files-page', 'camera-page', 'drybox-page'): raise ValueError('Unsupported native popup.')
                     palette = request.get('palette')
                     if not isinstance(palette, dict) or len(palette) > 64: raise ValueError('Invalid native palette.')
                     for name, color in palette.items():
@@ -156,7 +172,25 @@ class ThemeMaker(Gtk.Application):
                     factors=request.get('factors',[100,100])
                     if not isinstance(factors,list) or len(factors)!=2 or any(type(v) not in (int,float) or not 10<=v<=300 for v in factors):raise ValueError('Invalid native tuning factors.')
                     setup.append('factors '+' '.join(str(v) for v in factors))
+                    state=request.get('printState','printing')
+                    if state=='stopped':state='shutdown'
+                    if state not in ('printing','paused','ready','standby','cancelled','complete','shutdown','error','offline'):raise ValueError('Invalid simulated print state.')
+                    job=request.get('job','Spool holder.gcode')
+                    if not isinstance(job,str) or len(job.encode('utf-8'))>255 or any(ord(c)<32 for c in job):raise ValueError('Invalid simulated job.')
+                    progress=request.get('progress',64)
+                    if type(progress) not in (int,float) or not 0<=progress<=100:raise ValueError('Invalid simulated progress.')
+                    setup.extend(['state '+state,'job '+job,'progress '+str(progress)])
                     line = 'open ' + kind + ' 1'
+                elif operation == 'wheel':
+                    x,y,delta=request.get('x'),request.get('y'),request.get('delta')
+                    if any(type(v) is not int for v in (x,y,delta)):raise ValueError('Invalid native wheel.')
+                    line='wheel %d %d %d' % (max(0,min(1023,x)),max(0,min(599,y)),max(-600,min(600,delta)))
+                elif operation == 'hover':
+                    x,y=request.get('x'),request.get('y')
+                    if type(x) is not int or type(y) is not int: raise ValueError('Invalid native hover.')
+                    cursor=self.native.hover(max(0,min(1023,x)),max(0,min(599,y)))
+                    self.callback('ThemeMakerNativeHover', {'token':request.get('token'),'sequence':request.get('sequence'),'cursor':cursor})
+                    return
                 elif operation == 'pointer':
                     x, y, down = request.get('x'), request.get('y'), request.get('down')
                     if type(x) is not int or type(y) is not int or down not in (0, 1): raise ValueError('Invalid native pointer.')

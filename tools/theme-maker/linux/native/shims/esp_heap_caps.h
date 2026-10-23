@@ -6,3 +6,5 @@
 #define heap_caps_malloc(n,c) malloc(n)
 #define heap_caps_calloc(n,s,c) calloc(n,s)
 #define heap_caps_free(p) free(p)
+
+#define heap_caps_check_integrity(c,p) true

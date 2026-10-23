@@ -7,4 +7,3 @@ void host_tuning_show(bool (*send)(const char *)){
  host_tuning_close();host_tuning_owner=lv_obj_create(lv_screen_active());lv_obj_add_flag(host_tuning_owner,LV_OBJ_FLAG_HIDDEN);
  s_tuning_owner=host_tuning_owner;s_tuning_generation=moonraker_config_generation();s_send_gcode_cb=send;studio_tuning_open(NULL);
 }
-void ui_toast_show(ui_status_kind_t kind,const char *title,const char *body){(void)kind;(void)title;(void)body;}

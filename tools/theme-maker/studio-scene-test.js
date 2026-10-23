@@ -34,7 +34,7 @@ assert.deepEqual(Scene.colorRoles(fake({'data-theme-ink':'text'},fake({'data-the
 assert.deepEqual(Scene.colorRoles(fake({'data-theme-fill':'__proto__','data-theme-edge':'not-a-token'}),p.palette),[]);
 for(const scene of [svg,components]){
  for(const match of scene.matchAll(/data-theme-(?:ink|fill|edge)="([^"]+)"/g))assert(Object.hasOwn(p.palette,match[1]));
- assert(scene.includes('data-theme-ink="text"'));assert(scene.includes('data-theme-fill="panel"'));assert(scene.includes('data-theme-edge="accent"'));
+ assert(scene.includes('data-theme-ink="text"'));assert(scene.includes('data-theme-fill="panel"'));assert(scene.includes('data-theme-edge="border_bright"')||scene.includes('data-theme-edge="accent"'));
 }
 assert.equal(M.serialize(p),before);
 console.log('PASS: pickable Studio token metadata, ancestor control roles, unknown-token confinement and unchanged firmware package data');

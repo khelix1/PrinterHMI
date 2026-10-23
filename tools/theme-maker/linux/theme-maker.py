@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from threading import current_thread, main_thread
 from native_preview import NativePreview
 
 from desktop_io import export_request, atomic_save, atomic_save_bytes, MAX_BYTES
@@ -35,6 +37,7 @@ class ThemeMaker(Gtk.Application):
         self.native = None
         self.native_path = None
         self.native_probed = False
+        self.native_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tablet-preview")
 
     def native_executable(self):
         if self.native_probed: return self.native_path
@@ -44,7 +47,7 @@ class ThemeMaker(Gtk.Application):
             if path.is_file():
                 try:
                     version=subprocess.check_output([str(path),'--version'],timeout=2,text=True,stdin=subprocess.DEVNULL,stderr=subprocess.DEVNULL).strip()
-                    if version=='printerhmi-ui-host 8':
+                    if version=='printerhmi-ui-host 16':
                         self.native_path=path
                         return path
                 except (OSError,subprocess.SubprocessError): pass
@@ -55,6 +58,7 @@ class ThemeMaker(Gtk.Application):
             self.callback("ThemeMakerNativeStatus", {"available": bool(self.native_executable())})
 
     def do_shutdown(self):
+        self.native_worker.shutdown(wait=True, cancel_futures=True)
         if self.native: self.native.close(); self.native = None
         Gtk.Application.do_shutdown(self)
 
@@ -111,6 +115,9 @@ class ThemeMaker(Gtk.Application):
         self.view.evaluate_javascript(script, -1, None, None, None, None, None)
 
     def callback(self, name, data):
+        if current_thread() is not main_thread():
+            GLib.idle_add(lambda: (self.callback(name, data), False)[1])
+            return
         script = 'window.' + name + '(' + json.dumps(data) + ');'
         self.view.evaluate_javascript(script, -1, None, None, None, None, None)
 
@@ -130,82 +137,95 @@ class ThemeMaker(Gtk.Application):
         finally:
             dialog.destroy()
 
-    def message(self, manager, result):
-        if self.export_busy or self.view.get_uri() not in (ENTRY, ENTRY + '#'):
+    def native_message(self, request):
+        try:
+            executable = self.native_executable()
+            if not executable: raise ValueError('Native UI helper is not installed.')
+            operation = request.get('operation'); setup = []
+            if operation == 'reset':
+                if self.native: self.native.close(); self.native = None
+                return
+            if self.native is None: self.native = NativePreview(executable)
+            if operation == 'open':
+                kind = request.get('kind')
+                if kind not in ('nozzle', 'bed', 'fan', 'stop', 'toolhead', 'tune', 'tools-page', 'console-page', 'printer-page', 'dashboard-page', 'files-page', 'camera-page', 'drybox-page', 'settings-page', 'network-page', 'chooser-page', 'telemetry-page', 'devices-page', 'macros-page', 'mesh-page', 'calibration-page'): raise ValueError('Unsupported native popup.')
+                palette = request.get('palette')
+                if not isinstance(palette, dict) or len(palette) > 64: raise ValueError('Invalid native palette.')
+                for name, color in palette.items():
+                    if not re.fullmatch(r'[a-z_0-9]{1,48}', name) or not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color): raise ValueError('Invalid native color.')
+                    setup.append('color ' + name + ' ' + color[1:])
+                metrics = request.get('metrics', {})
+                for name in ('radius_card', 'radius_button', 'radius_panel'):
+                    value = metrics.get(name)
+                    if type(value) is not int or not 0 <= value <= 64: raise ValueError('Invalid native metric.')
+                    setup.append('metric ' + name + ' ' + str(value))
+                targets = request.get('targets', [210, 60, 65])
+                if not isinstance(targets, list) or len(targets) != 3 or any(type(v) not in (int, float) or not 0 <= v <= limit for v, limit in zip(targets, (300, 120, 100))): raise ValueError('Invalid native targets.')
+                setup.append('targets ' + ' '.join(str(v) for v in targets))
+                position=request.get('position',[110,110,12.8,0])
+                if not isinstance(position,list) or len(position)!=4 or any(type(v) not in (int,float) or not -1000<=v<=1000 for v in position):raise ValueError('Invalid native position.')
+                setup.append('position '+' '.join(str(v) for v in position))
+                factors=request.get('factors',[100,100])
+                if not isinstance(factors,list) or len(factors)!=2 or any(type(v) not in (int,float) or not 10<=v<=300 for v in factors):raise ValueError('Invalid native tuning factors.')
+                setup.append('factors '+' '.join(str(v) for v in factors))
+                state=request.get('printState','printing')
+                if state=='stopped':state='shutdown'
+                if state not in ('printing','paused','ready','standby','cancelled','complete','shutdown','error','offline'):raise ValueError('Invalid simulated print state.')
+                job=request.get('job','Spool holder.gcode')
+                if not isinstance(job,str) or len(job.encode('utf-8'))>255 or any(ord(c)<32 for c in job):raise ValueError('Invalid simulated job.')
+                progress=request.get('progress',64)
+                if type(progress) not in (int,float) or not 0<=progress<=100:raise ValueError('Invalid simulated progress.')
+                setup.extend(['state '+state,'job '+job,'progress '+str(progress)])
+                line = 'open ' + kind + ' 1'
+            elif operation == 'wheel':
+                x,y,delta=request.get('x'),request.get('y'),request.get('delta')
+                if any(type(v) is not int for v in (x,y,delta)):raise ValueError('Invalid native wheel.')
+                line='wheel %d %d %d' % (max(0,min(1023,x)),max(0,min(599,y)),max(-600,min(600,delta)))
+            elif operation == 'hover':
+                x,y=request.get('x'),request.get('y')
+                if type(x) is not int or type(y) is not int: raise ValueError('Invalid native hover.')
+                cursor=self.native.hover(max(0,min(1023,x)),max(0,min(599,y)))
+                self.callback('ThemeMakerNativeHover', {'token':request.get('token'),'sequence':request.get('sequence'),'cursor':cursor})
+                return
+            elif operation == 'pointer':
+                x, y, down = request.get('x'), request.get('y'), request.get('down')
+                if type(x) is not int or type(y) is not int or down not in (0, 1): raise ValueError('Invalid native pointer.')
+                line = 'pointer %d %d %d' % (max(0,min(1023,x)), max(0,min(599,y)),down)
+            elif operation == 'key':
+                key = request.get('key')
+                if type(key) is not int or not 0 <= key <= 0x10ffff: raise ValueError('Invalid native key.')
+                line = 'key ' + str(key)
+            elif operation == 'close': line = 'close'
+            elif operation == 'frame': line = 'frame'
+            else: raise ValueError('Invalid native UI operation.')
+            response = self.native.request(line, setup)
+            response['token'] = request.get('token')
+            self.callback('ThemeMakerNativeFrame', response)
             return
-        self.export_busy = True
-        request = {}
+        except Exception as error:
+            if self.native: self.native.close(); self.native = None
+            self.callback("ThemeMakerNativeError", {"token": request.get("token"), "message": str(error)})
+
+    def message(self, manager, result):
+        if self.view.get_uri() not in (ENTRY, ENTRY + '#'):
+            return
         try:
             raw = result.get_js_value().to_string()
             if len(raw.encode('utf-8')) > 2 * MAX_TEXT:
                 raise ValueError('Desktop request is too large.')
             request = json.loads(raw)
             if not isinstance(request, dict): raise ValueError('Invalid desktop request.')
-            action = request.get('action')
-            if action == 'native-ui':
-                executable = self.native_executable()
-                if not executable: raise ValueError('Native UI helper is not installed.')
-                operation = request.get('operation'); setup = []
-                if operation == 'reset':
-                    if self.native: self.native.close(); self.native = None
-                    return
-                if self.native is None: self.native = NativePreview(executable)
-                if operation == 'open':
-                    kind = request.get('kind')
-                    if kind not in ('nozzle', 'bed', 'fan', 'stop', 'toolhead', 'tune', 'tools-page', 'console-page', 'printer-page', 'dashboard-page', 'files-page', 'camera-page', 'drybox-page'): raise ValueError('Unsupported native popup.')
-                    palette = request.get('palette')
-                    if not isinstance(palette, dict) or len(palette) > 64: raise ValueError('Invalid native palette.')
-                    for name, color in palette.items():
-                        if not re.fullmatch(r'[a-z_0-9]{1,48}', name) or not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color): raise ValueError('Invalid native color.')
-                        setup.append('color ' + name + ' ' + color[1:])
-                    metrics = request.get('metrics', {})
-                    for name in ('radius_card', 'radius_button', 'radius_panel'):
-                        value = metrics.get(name)
-                        if type(value) is not int or not 0 <= value <= 64: raise ValueError('Invalid native metric.')
-                        setup.append('metric ' + name + ' ' + str(value))
-                    targets = request.get('targets', [210, 60, 65])
-                    if not isinstance(targets, list) or len(targets) != 3 or any(type(v) not in (int, float) or not 0 <= v <= limit for v, limit in zip(targets, (300, 120, 100))): raise ValueError('Invalid native targets.')
-                    setup.append('targets ' + ' '.join(str(v) for v in targets))
-                    position=request.get('position',[110,110,12.8,0])
-                    if not isinstance(position,list) or len(position)!=4 or any(type(v) not in (int,float) or not -1000<=v<=1000 for v in position):raise ValueError('Invalid native position.')
-                    setup.append('position '+' '.join(str(v) for v in position))
-                    factors=request.get('factors',[100,100])
-                    if not isinstance(factors,list) or len(factors)!=2 or any(type(v) not in (int,float) or not 10<=v<=300 for v in factors):raise ValueError('Invalid native tuning factors.')
-                    setup.append('factors '+' '.join(str(v) for v in factors))
-                    state=request.get('printState','printing')
-                    if state=='stopped':state='shutdown'
-                    if state not in ('printing','paused','ready','standby','cancelled','complete','shutdown','error','offline'):raise ValueError('Invalid simulated print state.')
-                    job=request.get('job','Spool holder.gcode')
-                    if not isinstance(job,str) or len(job.encode('utf-8'))>255 or any(ord(c)<32 for c in job):raise ValueError('Invalid simulated job.')
-                    progress=request.get('progress',64)
-                    if type(progress) not in (int,float) or not 0<=progress<=100:raise ValueError('Invalid simulated progress.')
-                    setup.extend(['state '+state,'job '+job,'progress '+str(progress)])
-                    line = 'open ' + kind + ' 1'
-                elif operation == 'wheel':
-                    x,y,delta=request.get('x'),request.get('y'),request.get('delta')
-                    if any(type(v) is not int for v in (x,y,delta)):raise ValueError('Invalid native wheel.')
-                    line='wheel %d %d %d' % (max(0,min(1023,x)),max(0,min(599,y)),max(-600,min(600,delta)))
-                elif operation == 'hover':
-                    x,y=request.get('x'),request.get('y')
-                    if type(x) is not int or type(y) is not int: raise ValueError('Invalid native hover.')
-                    cursor=self.native.hover(max(0,min(1023,x)),max(0,min(599,y)))
-                    self.callback('ThemeMakerNativeHover', {'token':request.get('token'),'sequence':request.get('sequence'),'cursor':cursor})
-                    return
-                elif operation == 'pointer':
-                    x, y, down = request.get('x'), request.get('y'), request.get('down')
-                    if type(x) is not int or type(y) is not int or down not in (0, 1): raise ValueError('Invalid native pointer.')
-                    line = 'pointer %d %d %d' % (max(0,min(1023,x)), max(0,min(599,y)),down)
-                elif operation == 'key':
-                    key = request.get('key')
-                    if type(key) is not int or not 0 <= key <= 0x10ffff: raise ValueError('Invalid native key.')
-                    line = 'key ' + str(key)
-                elif operation == 'close': line = 'close'
-                elif operation == 'frame': line = 'frame'
-                else: raise ValueError('Invalid native UI operation.')
-                response = self.native.request(line, setup)
-                response['token'] = request.get('token')
-                self.callback('ThemeMakerNativeFrame', response)
-                return
+        except Exception as error:
+            self.notify('Could not complete the action: ' + str(error), True)
+            return
+        action = request.get('action')
+        if action == 'native-ui':
+            self.native_worker.submit(self.native_message, request)
+            return
+        if self.export_busy:
+            return
+        self.export_busy = True
+        try:
             if action == 'save-project':
                 name, text = save_request(raw)
                 data = pack(text, self.artwork_dir)

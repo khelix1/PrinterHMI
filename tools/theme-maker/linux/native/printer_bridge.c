@@ -69,7 +69,7 @@ void host_printer_refresh(void){
 }
 /* Sample data has no transport. The real thumbnail and lightbox builders own
  * sizing, fitting, click handling and cleanup. */
-int moonraker_config_active_profile_index(void){return 0;}
+
 const lv_image_dsc_t *printer_preview_cache_image(int profile,const char **file,uint32_t *revision){
  (void)profile;static uint16_t pixels[300*200];static lv_image_dsc_t image;static bool ready;
  if(!ready){for(int y=0;y<200;y++)for(int x=0;x<300;x++){
@@ -79,5 +79,3 @@ const lv_image_dsc_t *printer_preview_cache_image(int profile,const char **file,
  }image.header.magic=LV_IMAGE_HEADER_MAGIC;image.header.cf=LV_COLOR_FORMAT_RGB565;image.header.w=300;image.header.h=200;image.header.stride=600;image.data_size=sizeof(pixels);image.data=(const uint8_t *)pixels;ready=true;}
  *file="Spool holder.gcode";*revision=1;return &image;
 }
-void macro_controller_status(macro_controller_status_t *out){*out=(macro_controller_status_t){.discovered=true,.count=4,.total_count=4,.generation=1};}
-bool macro_controller_get(size_t index,char *out,size_t size){const char *names[]={"HMI_FILAMENT_HEAT","HMI_FILAMENT_UNLOAD","HMI_FILAMENT_LOAD","HMI_FILAMENT_PURGE"};if(index>=4)return false;snprintf(out,size,"%s",names[index]);return true;}

@@ -22,9 +22,9 @@ for(const m of html.matchAll(/\bid="([^"]+)"/g)){assert(!els[m[1]],'duplicate id
 const tabs=['design','layout','project'].map(v=>{const el=new Element('button');el.dataset.tab=v;return el;});
 const views=['device','components','json'].map(v=>{const el=new Element('button');el.dataset.view=v;return el;});
 els['preview-wrap'].append(els.device);
-const storage=new Map(),outbound=[],documentHandlers={};
+const storage=new Map(),outbound=[],documentHandlers={},intervals=[];
 const document={getElementById:id=>{assert(els[id],'Missing element '+id);return els[id];},createElement:tag=>new Element(tag),createTextNode:text=>({textContent:text}),documentElement:new Element(),body:new Element(),activeElement:new Element(),addEventListener(k,fn){documentHandlers[k]=fn;},querySelector:()=>null,querySelectorAll:s=>s==='[data-tab]'?tabs:views};
-const context={TabletModel:require('./tablet-model'),TextEncoder,ThemeProject:require('./project-model'),StudioScene:require('./studio-scene.js'),ThemeModel:M,document,console,confirm:()=>true,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},ResizeObserver:class{observe(){}},setTimeout(){},setInterval(){return 1;},clearInterval(){},clearTimeout(){},webkit:{messageHandlers:{themeMaker:{postMessage:v=>outbound.push(JSON.parse(v))}}}};
+const context={TabletModel:require('./tablet-model'),TextEncoder,ThemeProject:require('./project-model'),StudioScene:require('./studio-scene.js'),ThemeModel:M,document,console,confirm:()=>true,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},ResizeObserver:class{observe(){}},setTimeout(){},setInterval(fn){intervals.push(fn);return intervals.length;},clearInterval(){},clearTimeout(){},webkit:{messageHandlers:{themeMaker:{postMessage:v=>outbound.push(JSON.parse(v))}}}};
 context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/app.js','utf8'),context);
 const project=()=>JSON.parse(els.package.textContent);
 const before=project();
@@ -213,6 +213,7 @@ console.log('PASS: native Dashboard startup after file confirmation, zero progre
 
 context.ThemeMakerNativeStatus({available:false});tabletClick('nav:files');context.ThemeMakerNativeStatus({available:true});
 const filesRequest=outbound.at(-1);assert.equal(filesRequest.kind,'files-page');
+context.ThemeMakerNativeFrame({token:filesRequest.token,closed:false,image:'files',nozzle:210,bed:60,fan:65});
 const filesLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');filesLayer.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});
 filesLayer.onwheel({preventDefault(){},stopPropagation(){},clientX:300,clientY:380,deltaY:3,deltaMode:1});
 assert.equal(outbound.at(-1).operation,'wheel');assert.equal(outbound.at(-1).delta,72);assert.equal(outbound.at(-1).x,300);
@@ -244,3 +245,112 @@ context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).ki
 const afterDrybox=outbound.length;context.ThemeMakerNativeFrame({token:dryboxRequest.token,closed:false,command:'@nav:drybox',nozzle:999});
 assert.equal(outbound.length,afterDrybox);assert.equal(els['preview-label'].textContent,'TOOLS');assert.deepEqual(project(),resetBefore);
 console.log('PASS: native Drybox routing, native shell navigation, stale-frame isolation and unchanged theme');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:settings');context.ThemeMakerNativeStatus({available:true});
+let settingsRequest=outbound.at(-1);assert.equal(settingsRequest.kind,'settings-page');
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Settings page');
+const settingsTheme=project();context.ThemeMakerNativeFrame({token:settingsRequest.token,closed:false,command:'@setting:ota',nozzle:210,bed:60,fan:65});
+assert(els.device.children[0].innerHTML.includes('OTA update'),'unmigrated OTA uses the existing fixture dialog');
+tabletClick('close');context.ThemeMakerNativeStatus({available:true});settingsRequest=outbound.at(-1);assert.equal(settingsRequest.kind,'settings-page');
+context.ThemeMakerNativeFrame({token:settingsRequest.token,closed:false,command:'@native-reset',nozzle:210,bed:60,fan:65});
+assert.equal(outbound.at(-1).operation,'reset');assert.deepEqual(project(),settingsTheme);
+context.ThemeMakerNativeStatus({available:true});settingsRequest=outbound.at(-1);assert.equal(settingsRequest.kind,'settings-page');
+context.ThemeMakerNativeFrame({token:settingsRequest.token,closed:false,command:'@nav:network',nozzle:210,bed:60,fan:65});
+assert.equal(els['preview-label'].textContent,'NETWORK');assert.deepEqual(project(),settingsTheme);
+console.log('PASS: native Settings routing, OTA fallback, factory-reset process retirement, Network navigation and unchanged theme');
+
+context.ThemeMakerNativeStatus({available:true});const networkRequest=outbound.at(-1);assert.equal(networkRequest.kind,'network-page');
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Network page');
+context.ThemeMakerNativeFrame({token:networkRequest.token,closed:false,command:'@printers',nozzle:210,bed:60,fan:65});
+assert.equal(outbound.at(-1).kind,'chooser-page','printer actions route to the native chooser');
+const chooserRequest=outbound.at(-1);
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Printers page');
+context.ThemeMakerNativeFrame({token:chooserRequest.token,closed:false,command:'@nav:network',nozzle:210,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});const networkReturn=outbound.at(-1);assert.equal(networkReturn.kind,'network-page');
+context.ThemeMakerNativeFrame({token:networkReturn.token,closed:false,command:'@nav:settings',nozzle:210,bed:60,fan:65});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'settings-page');
+const networkAfter=outbound.length;context.ThemeMakerNativeFrame({token:networkRequest.token,closed:false,command:'@nav:network',nozzle:999});
+assert.equal(outbound.length,networkAfter);assert.equal(els['preview-label'].textContent,'SETTINGS');assert.deepEqual(project(),settingsTheme);
+console.log('PASS: native Network startup from Settings, native chooser return, native Settings navigation, stale-frame isolation and unchanged theme');
+
+context.ThemeMakerNativeFrame({token:outbound.at(-1).token,closed:false,command:'@printers',nozzle:210,bed:60,fan:65});
+const profileChooser=outbound.at(-1);assert.equal(profileChooser.kind,'chooser-page');
+context.ThemeMakerNativeFrame({token:profileChooser.token,closed:false,command:'@nav:dashboard',printer:'Sermoon D1 #2',job:'',progress:0,printState:'standby',nozzle:0,bed:0,fan:0});
+context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'dashboard-page');assert.equal(outbound.at(-1).job,'');assert.equal(outbound.at(-1).progress,0);assert.equal(outbound.at(-1).printState,'standby');
+const profileAfter=outbound.length;context.ThemeMakerNativeFrame({token:profileChooser.token,closed:false,command:'@nav:printer',printer:'Old printer',job:'old.gcode',progress:99,printState:'printing',nozzle:999});
+assert.equal(outbound.length,profileAfter);assert.deepEqual(project(),settingsTheme);
+console.log('PASS: native profile selection carries printer identity, empty job, idle state and zero targets before Dashboard navigation; retired frames and project data stay isolated');
+
+// A slow native response must not build a queue of idle frames or wheel requests.
+tabletClick('nav:settings');context.ThemeMakerNativeStatus({available:true});
+const scrollOpen=outbound.at(-1),scrollFrame={token:scrollOpen.token,closed:false,image:'scroll-a',nozzle:0,bed:0,fan:0};
+let scrollLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');scrollLayer.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});
+let clock=1000;context.Date={now:()=>clock};
+const wheel=delta=>scrollLayer.onwheel({preventDefault(){},stopPropagation(){},clientX:500,clientY:350,deltaY:delta,deltaMode:0});
+let trafficBefore=outbound.length;wheel(400);wheel(400);intervals.at(-1)();
+assert.equal(outbound.length,trafficBefore,'opening frame absorbs wheel burst and suppresses idle polls');
+context.ThemeMakerNativeFrame(scrollFrame);assert.equal(outbound.at(-1).operation,'wheel');assert.equal(outbound.at(-1).delta,600);
+trafficBefore=outbound.length;clock+=20;wheel(100);intervals.at(-1)();assert.equal(outbound.length,trafficBefore,'in-flight wheel absorbs more input');
+context.ThemeMakerNativeFrame({...scrollFrame,image:'scroll-b'});assert.equal(outbound.at(-1).delta,300,'all remaining wheel distance survives coalescing');
+trafficBefore=outbound.length;context.ThemeMakerNativeFrame({...scrollFrame,image:'scroll-c'});assert.equal(outbound.length,trafficBefore,'empty wheel queue adds no request');
+intervals.at(-1)();assert.equal(outbound.at(-1).operation,'frame');trafficBefore=outbound.length;intervals.at(-1)();assert.equal(outbound.length,trafficBefore,'only one idle frame can be in flight');
+context.ThemeMakerNativeFrame({...scrollFrame,image:'scroll-c'});
+clock+=20;wheel(.4);clock+=20;wheel(.4);trafficBefore=outbound.length;clock+=20;wheel(.4);assert.equal(outbound.length,trafficBefore+1);assert.equal(outbound.at(-1).delta,1,'fractional touchpad distance accumulates');
+context.ThemeMakerNativeFrame({...scrollFrame,image:'scroll-d'});
+clock+=20;wheel(100);clock+=20;wheel(1500);trafficBefore=outbound.length;
+scrollLayer.onpointerdown({preventDefault(){},stopPropagation(){},clientX:500,clientY:350,pointerId:1,button:0});
+assert.deepEqual(outbound.slice(trafficBefore).map(r=>r.operation),['wheel','wheel','wheel','pointer'],'queued wheel distance is sent before the following press');
+assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: bounded in-flight wheel/idle traffic, lossless wheel bursts, fractional touchpad input and scroll-before-click ordering');
+
+context.ThemeMakerNativeFrame({...scrollFrame,image:'scroll-e'}); // one of the pending scroll frames
+// Enter a fresh page so the drag fixture starts without prior input responses.
+tabletClick('nav:console');context.ThemeMakerNativeStatus({available:true});
+const dragOpen=outbound.at(-1),dragFrame={token:dragOpen.token,closed:false,image:'drag-a',nozzle:0,bed:0,fan:0};
+context.ThemeMakerNativeFrame(dragFrame);
+const dragLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');dragLayer.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});
+const dragEvent=y=>({preventDefault(){},stopPropagation(){},clientX:500,clientY:y,pointerId:1,button:0});
+dragLayer.onpointerdown(dragEvent(400));trafficBefore=outbound.length;
+clock+=20;dragLayer.onpointermove(dragEvent(370));clock+=20;dragLayer.onpointermove(dragEvent(340));assert.equal(outbound.length,trafficBefore,'in-flight press coalesces drag movement');
+context.ThemeMakerNativeFrame({...dragFrame,image:'drag-b'});assert.equal(outbound.at(-1).operation,'pointer');assert.equal(outbound.at(-1).y,340);assert.equal(outbound.at(-1).down,1);
+clock+=20;dragLayer.onpointermove(dragEvent(310));dragLayer.onpointerup(dragEvent(290));
+assert.equal(outbound.at(-3).down,1);assert.equal(outbound.at(-3).y,290);assert.equal(outbound.at(-2).down,0);assert.equal(outbound.at(-2).y,290,'trailing drag position precedes release');
+console.log('PASS: drag backpressure retains the latest position and delivers it before release');
+
+// Telemetry joins the native page lifecycle and returns to its Devices owner.
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:telemetry');context.ThemeMakerNativeStatus({available:true});
+const telemetryOpen=outbound.at(-1);assert.equal(telemetryOpen.kind,'telemetry-page');
+assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Telemetry page');
+context.ThemeMakerNativeFrame({token:telemetryOpen.token,closed:false,command:'@tool:Devices',nozzle:210,bed:60,fan:65});
+assert.equal(outbound.at(-1).kind,'devices-page');assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Devices page');tabletClick('nav:dashboard');
+const afterTelemetry=outbound.length;context.ThemeMakerNativeFrame({token:telemetryOpen.token,closed:false,command:'@nav:settings',nozzle:999,bed:999,fan:99});
+assert.equal(els['preview-label'].textContent,'DASHBOARD');assert.equal(outbound.length,afterTelemetry);assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: native Telemetry routing, Devices return, stale-frame isolation and unchanged project');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:tools');context.ThemeMakerNativeStatus({available:true});
+const nativeTools=outbound.at(-1);context.ThemeMakerNativeFrame({token:nativeTools.token,closed:false,command:'@tool:Devices',nozzle:210,bed:60,fan:65});
+const nativeDevices=outbound.at(-1);assert.equal(nativeDevices.kind,'devices-page');
+context.ThemeMakerNativeFrame({token:nativeDevices.token,closed:false,command:'@nav:telemetry',nozzle:210,bed:60,fan:65});context.ThemeMakerNativeStatus({available:true});assert.equal(outbound.at(-1).kind,'telemetry-page');
+const afterGraphs=outbound.length;context.ThemeMakerNativeFrame({token:nativeDevices.token,closed:false,command:'@nav:settings',nozzle:999,bed:999,fan:99});assert.equal(outbound.length,afterGraphs);assert.equal(els['preview-label'].textContent,'TELEMETRY');assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: Tools opens native Devices, Graphs opens native Telemetry, retired Devices frames stay isolated');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:tools');context.ThemeMakerNativeStatus({available:true});
+const macroTools=outbound.at(-1);context.ThemeMakerNativeFrame({token:macroTools.token,closed:false,command:'@tool:Macros',nozzle:210,bed:60,fan:65});
+const macroOpen=outbound.at(-1);assert.equal(macroOpen.kind,'macros-page');assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Macros page');
+context.ThemeMakerNativeFrame({token:macroOpen.token,closed:false,command:'@nav:console',nozzle:210,bed:60,fan:65});assert.equal(els['preview-label'].textContent,'CONSOLE');
+const afterMacros=outbound.length;context.ThemeMakerNativeFrame({token:macroOpen.token,closed:false,command:'@nav:settings',nozzle:999,bed:999,fan:99});assert.equal(outbound.length,afterMacros);assert.equal(els['preview-label'].textContent,'CONSOLE');assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: Tools opens native Macros, shell routes return to pages and retired frames leave project/state unchanged');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:tools');context.ThemeMakerNativeStatus({available:true});
+const meshTools=outbound.at(-1);context.ThemeMakerNativeFrame({token:meshTools.token,closed:false,command:'@tool:Bed mesh',nozzle:210,bed:60,fan:65});
+const meshOpen=outbound.at(-1);assert.equal(meshOpen.kind,'mesh-page');const meshLayer=els.device.walk().find(e=>e.className==='native-tablet-overlay');assert.equal(meshLayer.attrs['aria-label'],'Native firmware Bed mesh page');meshLayer.getBoundingClientRect=()=>({left:0,top:0,width:1024,height:600});
+meshLayer.onpointerenter({clientX:500,clientY:250});const meshHover=outbound.at(-1);context.ThemeMakerNativeHover({...meshHover,cursor:'grab'});assert.equal(meshLayer.style.cursor,'grab');context.ThemeMakerNativeHover({...meshHover,cursor:'grabbing'});assert.equal(meshLayer.style.cursor,'grabbing');
+context.ThemeMakerNativeFrame({token:meshOpen.token,closed:false,command:'@nav:dashboard',nozzle:210,bed:60,fan:65});assert.equal(els['preview-label'].textContent,'DASHBOARD');const afterMesh=outbound.length;context.ThemeMakerNativeFrame({token:meshOpen.token,closed:false,command:'@nav:settings',nozzle:999,bed:999,fan:99});assert.equal(outbound.length,afterMesh);assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: Tools opens native Bed mesh, grab cursors and shell routing work, retired frames preserve state/project');
+
+context.ThemeMakerNativeStatus({available:false});tabletClick('nav:tools');context.ThemeMakerNativeStatus({available:true});
+const calibrationTools=outbound.at(-1);context.ThemeMakerNativeFrame({token:calibrationTools.token,closed:false,command:'@tool:Calibration',nozzle:210,bed:60,fan:65});
+const calibrationOpen=outbound.at(-1);assert.equal(calibrationOpen.kind,'calibration-page');assert.equal(els.device.walk().find(e=>e.className==='native-tablet-overlay').attrs['aria-label'],'Native firmware Calibration page');
+context.ThemeMakerNativeFrame({token:calibrationOpen.token,closed:false,command:'@tool:Bed mesh',nozzle:210,bed:60,fan:65});assert.equal(outbound.at(-1).kind,'mesh-page');
+const afterCalibration=outbound.length;context.ThemeMakerNativeFrame({token:calibrationOpen.token,closed:false,command:'@nav:settings',nozzle:999,bed:999,fan:99});assert.equal(outbound.length,afterCalibration);assert.deepEqual(project(),nativeBaseline);
+console.log('PASS: Tools opens native Calibration, Bed mesh routes natively, retired frames leave project/state unchanged');

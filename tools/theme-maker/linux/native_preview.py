@@ -11,6 +11,8 @@ from PIL import Image
 
 class NativePreview:
     def __init__(self, executable):
+        self._last_raw = None
+        self._last_image = None
         self.process = subprocess.Popen([str(executable)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL, bufsize=0)
 
@@ -41,7 +43,7 @@ class NativePreview:
             if len(header)>32: raise RuntimeError('Invalid native hover response.')
             header.extend(self._read(1,deadline))
         cursor=header.decode('ascii').strip().removeprefix('HIT ')
-        if cursor not in ('default','pointer','text'): raise RuntimeError('Invalid native cursor.')
+        if cursor not in ('default','pointer','text','grab','grabbing'): raise RuntimeError('Invalid native cursor.')
         return cursor
 
     def request(self, line, setup=()):
@@ -53,15 +55,22 @@ class NativePreview:
             if len(header)>256: raise RuntimeError('Invalid native frame header.')
             header.extend(self._read(1,deadline))
         parts=header.decode('ascii').split()
-        if len(parts)!=15 or parts[0]!='FRAME':raise RuntimeError('Invalid native frame.')
+        if len(parts)!=16 or parts[0]!='FRAME':raise RuntimeError('Invalid native frame.')
         modal,nozzle,bed,fan,length=map(int,parts[1:6])
-        if not 0<=length<=511 or not 0<=modal<=64:raise RuntimeError('Invalid native frame limits.')
+        if not 0<=length<=639 or not 0<=modal<=64:raise RuntimeError('Invalid native frame limits.')
         command=self._read(length,deadline).decode('utf-8')
         job_length=int(parts[14])
         if not 0<=job_length<=255:raise RuntimeError('Invalid native job length.')
         job=self._read(job_length,deadline).decode('utf-8')
+        name_length=int(parts[15])
+        if not 0<=name_length<=31:raise RuntimeError('Invalid native printer name length.')
+        printer=self._read(name_length,deadline).decode('utf-8')
         raw=self._read(1024*600*4,deadline)
-        image=Image.frombytes('RGBA',(1024,600),raw,'raw','BGRA')
-        stream=io.BytesIO();image.save(stream,format='PNG')
-        return {'image':'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode(),
-                'closed':not modal,'nozzle':nozzle,'bed':bed,'fan':fan,'command':command,'position':list(map(float,parts[6:9])),'zOffset':float(parts[9]),'speed':int(parts[10]),'flow':int(parts[11]),'printState':parts[12],'progress':float(parts[13]),'job':job}
+        # Idle frames still advance LVGL timers, but reuse an identical encoded raster.
+        if raw != self._last_raw:
+            image=Image.frombytes('RGBA',(1024,600),raw,'raw','BGRA')
+            stream=io.BytesIO();image.save(stream,format='PNG',compress_level=1)
+            self._last_image='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+            self._last_raw=raw
+        return {'image':self._last_image,
+                'closed':not modal,'nozzle':nozzle,'bed':bed,'fan':fan,'command':command,'position':list(map(float,parts[6:9])),'zOffset':float(parts[9]),'speed':int(parts[10]),'flow':int(parts[11]),'printState':parts[12],'progress':float(parts[13]),'job':job,'printer':printer}

@@ -1259,6 +1259,13 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# PrinterHMI diagnostics
+#
+# default:
+# CONFIG_PRINTERHMI_GRAPHICS_DIAGNOSTICS is not set
+# end of PrinterHMI diagnostics
+
+#
 # Compiler options
 #
 # CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set

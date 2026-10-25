@@ -58,3 +58,17 @@ before sending commands, and confirm offline/unhomed/printer-switch states.
 Only run physical calibration on an attended, prepared printer. Existing
 printing-dependent recovery and active-print control tests remain pending.
 Stable version remains 6.5.6; this update neither commits nor pushes the branch.
+
+
+## Bed Mesh viewing during a print
+
+From v7.1.14-dev, an available Bed Mesh remains viewable during printing or paused
+states. Its profile/grid/height statistics no longer use the idle-only action
+message. The open page snapshots mesh updates every 250 ms, so a mesh received after
+opening appears without waiting for print completion or reopening the page. Metadata
+and a bounded content hash suppress redraws when the snapshot is unchanged.
+
+Viewing sends no printer command. Calibrate and profile mutation/activation actions
+still require the existing idle, connection and printer-owner checks. A valid last
+reported snapshot can be inspected offline and is labelled accordingly. Printer
+changes fence snapshot refresh and actions; no mesh is inferred if none is reported.

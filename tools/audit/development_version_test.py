@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='development-version-') as directory:
         if name == 'version.txt':
             destination.write_text('7.0.0-dev\n')
         elif name.endswith('.md'):
-            destination.write_text(re.sub(r'7\.0\.0(?!-dev)', '7.0.0-dev', destination.read_text()))
+            destination.write_text(re.sub(r'7\.0\.0(?!-dev)', '7.0.0-dev', destination.read_text().replace((ROOT / 'version.txt').read_text().strip(), '7.0.0-dev')))
     result = run(repo, 'bash', 'tools/audit/version_audit.sh')
     assert result.returncode == 0, result.stdout + result.stderr
     assert run(repo, 'git', 'add', '--all').returncode == 0

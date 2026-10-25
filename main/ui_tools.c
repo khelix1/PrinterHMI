@@ -15,6 +15,15 @@
 #include "ui_studio_layout.h"
 
 static lv_obj_t *s_root;
+static ui_tools_open_cb_t s_viewer_cb;
+void ui_tools_set_viewer_callback(ui_tools_open_cb_t viewer){s_viewer_cb=viewer;}
+static void viewer_clicked(lv_event_t *event){(void)event;if(s_viewer_cb)s_viewer_cb();}
+static void viewer_action(void){
+    lv_obj_t *button=ui_button_create(s_root,UI_BUTTON_SECONDARY,"3D G-code Viewer");
+    lv_obj_set_size(button,276,48);lv_obj_align(button,LV_ALIGN_TOP_RIGHT,-4,0);
+    if(!s_viewer_cb)lv_obj_add_state(button,LV_STATE_DISABLED);
+    lv_obj_add_event_cb(button,viewer_clicked,LV_EVENT_CLICKED,NULL);
+}
 static lv_obj_t *s_tiles;
 static lv_obj_t *s_banner;
 static lv_obj_t *s_center_rule;
@@ -197,7 +206,7 @@ void ui_tools_show(void)
     lv_obj_set_pos(s_root, UI_PAGE_ROOT_X, UI_PAGE_ROOT_Y);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
-    if(ui_theme_is_studio()){studio_tools_create();tools_rule_create();s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);return;}
+    if(ui_theme_is_studio()){studio_tools_create();tools_rule_create();s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);viewer_action();return;}
     s_banner=ui_create_operator_page_header(s_root,"Tools",
         "Calibration and operator utilities",UI_PAGE_RAIL_WIDTH);
 
@@ -226,7 +235,7 @@ void ui_tools_show(void)
              "Macros", "Run available printer macros.", 3);
     tools_rule_create();
     lv_obj_send_event(s_tiles, LV_EVENT_SIZE_CHANGED, NULL);
-    s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);
+    s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);viewer_action();
 }
 
 void ui_tools_hide(void)

@@ -50,5 +50,9 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     executable=tmp/"bed-mesh-profiles"
     subprocess.run([*common,str(root/"tools/audit/bed_mesh_profiles_layout_test.c"),*objects,str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
+    executable=tmp/"bed-mesh-live-view"
+    subprocess.run([*common,str(root/"tools/audit/bed_mesh_live_view_test.c"),*objects,str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
+    subprocess.run([str(executable)],check=True)
+    compile_ui("ui_bed_mesh.c")
     compile_ui("ui_bed_mesh_profiles.c")
     print("PASS: Bed Mesh profiles standalone translation unit with warnings treated as errors")

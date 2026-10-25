@@ -54,3 +54,5 @@ void ui_files_update_detail_metadata(const char *metadata_text,
                                          bool ready);
 
 void ui_files_print_feedback(const char *message);
+
+void ui_files_set_viewer_callback(ui_files_select_cb_t viewer);

@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.0.0 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.1.20-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -204,3 +204,20 @@ are not architecture modules and must not be tracked as production source.
 - `tools/regenerate_studio_fonts.py`: optional font regeneration.
 - `tools/audit/studio_layout_test.py` / `.c`: native layout, pointer and lifecycle validation.
 - `docs/STUDIO_DARK_TRIAL.md`: theme composition and validation status.
+
+## Experimental 3D G-code viewer
+
+- `main/mesh_preview.c/.h`: validated PHM reader, bounded gesture mesh clustering, owned-mesh cleanup, height-section caps, projected bounds and shaded/edge triangle rasterizer.
+- `main/mesh_preview_loader.c/.h`: parked local SD mesh experiment, excluded from firmware.
+- `main/ui_mesh_preview.c/.h`: parked standalone model UI, excluded from firmware.
+- `tools/mesh-preview/`: standalone converter, demo, format notes and host benchmark.
+- `main/gcode_toolpath.c/.h`: bounded streaming parser and RGB565 rasterizer.
+- `main/gcode_volume.c/.h`: bounded automatic extrusion occupancy, exterior extraction and smoothed mesh.
+- `main/gcode_surface.c/.h`: collinear/adjacent-layer wall panels and incremental surface raster.
+- `main/gcode_cache.c/.h`: indexed session SD geometry, record validation and cleanup.
+- `main/gcode_viewer_loader.c/.h`: cancellable read-only Moonraker stream worker.
+- `main/ui_gcode_viewer.c/.h`: native Tools/Files viewer and offline sample.
+- `tools/audit/gcode_*`: core, transport and native LVGL host validation.
+- `tools/gcode-viewer/`: standalone raster benchmark and sample G-code.
+
+- `tools/audit/bed_mesh_live_view_test.c`: real page coverage for print-time viewing, late mesh arrival, snapshot changes and action restrictions (run by the Bed Mesh profiles audit).

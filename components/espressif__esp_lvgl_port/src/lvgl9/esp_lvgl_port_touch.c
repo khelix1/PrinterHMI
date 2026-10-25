@@ -25,6 +25,11 @@ void printerhmi_bed_mesh_multitouch_update(
     int32_t x1,
     int32_t y1) __attribute__((weak));
 
+/* Same raw-point path as Bed Mesh; application viewers remain optional. */
+void printerhmi_gcode_viewer_multitouch_update(
+    uint8_t count, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
+    __attribute__((weak));
+
 /*******************************************************************************
 * Types definitions
 *******************************************************************************/
@@ -141,7 +146,7 @@ static void lvgl_port_touchpad_read(lv_indev_t *indev_drv, lv_indev_data_t *data
     ESP_ERROR_CHECK(esp_lcd_touch_get_data(touch_ctx->handle, touch_data, &touch_cnt, CONFIG_ESP_LCD_TOUCH_MAX_POINTS));
 
 
-    if (printerhmi_bed_mesh_multitouch_update) {
+    if (printerhmi_bed_mesh_multitouch_update || printerhmi_gcode_viewer_multitouch_update) {
         int32_t x0 = 0;
         int32_t y0 = 0;
         int32_t x1 = 0;
@@ -156,12 +161,14 @@ static void lvgl_port_touchpad_read(lv_indev_t *indev_drv, lv_indev_data_t *data
             y1 = (int32_t)(touch_ctx->scale.y * touch_data[1].y);
         }
 
-        printerhmi_bed_mesh_multitouch_update(
-            touch_cnt > 2 ? 2 : touch_cnt,
-            x0,
-            y0,
-            x1,
-            y1);
+        if (printerhmi_bed_mesh_multitouch_update) {
+            printerhmi_bed_mesh_multitouch_update(
+                touch_cnt > 2 ? 2 : touch_cnt, x0, y0, x1, y1);
+        }
+        if (printerhmi_gcode_viewer_multitouch_update) {
+            printerhmi_gcode_viewer_multitouch_update(
+                touch_cnt > 2 ? 2 : touch_cnt, x0, y0, x1, y1);
+        }
     }
 
 #if (CONFIG_ESP_LCD_TOUCH_MAX_POINTS > 1 && CONFIG_LV_USE_GESTURE_RECOGNITION)

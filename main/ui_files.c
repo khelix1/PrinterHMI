@@ -33,6 +33,8 @@ static ui_page_state_t *s_files_state = NULL;
 static ui_files_refresh_cb_t s_refresh_cb = NULL;
 static ui_files_select_cb_t s_select_cb = NULL;
 static ui_files_preview_cb_t s_preview_cb = NULL;
+static ui_files_select_cb_t s_viewer_cb;
+void ui_files_set_viewer_callback(ui_files_select_cb_t viewer){s_viewer_cb=viewer;}
 static ui_files_search_cb_t s_search_cb = NULL;
 static ui_files_action_cb_t s_sort_cb = NULL;
 static ui_files_folder_cb_t s_folder_cb = NULL;
@@ -1456,6 +1458,12 @@ static void detail_preview_resized(lv_event_t *event)
     }
 }
 
+static void detail_viewer_open(lv_event_t *event)
+{
+    (void)event;
+    if(s_file_detail_popup&&s_detail_filename&&s_viewer_cb&&s_detail_generation==moonraker_config_generation())s_viewer_cb(s_detail_filename);
+}
+
 static void detail_update_more_action(void)
 {
     if(!s_detail_more_button || !s_file_detail_popup || !s_detail_info_label)return;
@@ -1586,6 +1594,10 @@ void ui_files_show_detail_popup(const char *filename_text,
         lv_obj_add_event_cb(s_detail_cancel_button,detail_field_deleted,LV_EVENT_DELETE,NULL);
         lv_obj_t *connection=studio_text(s_file_detail_popup,"",0,344,352,UI_FONT_CAPTION,UI_WARN);
         lv_label_set_long_mode(connection,LV_LABEL_LONG_WRAP);
+        if(s_viewer_cb){
+            lv_obj_t *viewer=studio_action(s_file_detail_popup,"3D view",216,8,136,48,detail_viewer_open,NULL);
+            lv_obj_move_foreground(viewer);
+        }
         detail_watch(connection);
         ui_files_update_detail_metadata(metadata_text,false);
         return;
@@ -1652,6 +1664,10 @@ void ui_files_show_detail_popup(const char *filename_text,
     lv_obj_set_style_pad_column(footer,UI_GAP_ROW,0);
     lv_obj_set_style_pad_row(footer,UI_GAP_ROW,0);
     ui_apply_divider_border(footer,LV_BORDER_SIDE_TOP);lv_obj_set_style_pad_top(footer,8,0);
+    if(s_viewer_cb){
+        lv_obj_t *viewer=ui_popup_add_action_at(footer,UI_POPUP_ACTION_SECONDARY,"3D view",0,0,LV_SIZE_CONTENT,48,detail_viewer_open,NULL,NULL);
+        lv_obj_set_flex_grow(viewer,1);
+    }
     lv_obj_t *cancel=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CANCEL,LV_SYMBOL_CLOSE " Cancel",0,0,LV_SIZE_CONTENT,48,detail_cancel_event_cb,NULL,NULL);
     lv_obj_set_flex_grow(cancel,1);
     s_detail_start_button=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CONFIRM,LV_SYMBOL_PLAY " Start print",0,0,LV_SIZE_CONTENT,48,detail_start_event_cb,NULL,NULL);

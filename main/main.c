@@ -192,6 +192,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_thumbnail.h"
 #include "ui_toast.h"
 #include "file_detail_loader.h"
+#include "ui_gcode_viewer.h"
 #include "moonraker.h"
 #include "moonraker_config_controller.h"
 #include "moonraker_transport_security_controller.h"
@@ -1647,6 +1648,7 @@ static void printer_chooser_manage_bridge(int profile_index)
 
 static void app_hide_operator_pages(void)
 {
+    ui_gcode_viewer_close();
     ui_camera_hide();
     ui_tools_hide();
     ui_bed_mesh_close();
@@ -1676,6 +1678,9 @@ static void calibration_open_bed_mesh_bridge(void)
     ui_shell_set_active_nav(UI_SHELL_PAGE_BED_MESH);
     ui_shell_page_action(UI_SHELL_PAGE_BED_MESH);
 }
+
+static void tools_open_viewer_bridge(void){ui_gcode_viewer_open(thumbnail_session_selected_file());}
+static void files_open_viewer_bridge(const char *file){ui_gcode_viewer_open(file);}
 
 static void tools_open_calibration_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_CALIBRATION); ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS); }
 static void tools_open_bed_mesh_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_BED_MESH); ui_shell_set_active_nav(UI_SHELL_PAGE_TOOLS); }
@@ -1762,11 +1767,13 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_TOOLS:
+        ui_tools_set_viewer_callback(tools_open_viewer_bridge);
         ui_tools_set_callbacks(tools_open_calibration_bridge, tools_open_bed_mesh_bridge, tools_open_devices_bridge, tools_open_macros_bridge);
         ui_tools_show();
         return;
 
     case UI_SHELL_PAGE_FILES:
+        ui_files_set_viewer_callback(files_open_viewer_bridge);
         ui_files_set_callbacks(
             files_refresh_bridge,
             files_select_bridge,
@@ -2663,6 +2670,7 @@ static void app_theme_changed(void)
 
 static void close_printer_file_detail_popup(void)
 {
+    ui_gcode_viewer_close();
     file_detail_loader_cancel();
     printer_thumb_cleanup_for_popup_close();
     ui_files_close_detail_popup();

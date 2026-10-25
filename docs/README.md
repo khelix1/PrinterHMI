@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v7.0.0 behavior unless they are
+Documents in this directory describe current v7.1.20-dev behavior unless they are
 under `history/`.
 
 | Document | Purpose |
@@ -56,3 +56,5 @@ Settings and large-text source closeout: [validation and pending follow-ups](SET
 
 - [Console layouts, command feedback and pressed button frames](CONSOLE.md)
 - [Notification policy and remaining migration](NOTIFICATIONS.md)
+
+- [Experimental 3D G-code viewer](GCODE_VIEWER.md): scope, limits and validation.

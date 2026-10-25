@@ -1,5 +1,168 @@
 # Changelog
 
+## [7.1.20-dev]
+
+- Join the detailed top layer to the coarse shell with a narrow inside cut-edge band.
+- Intersect the band with an even/odd section mask to preserve holes and open interiors.
+- Add an optional 39 KiB mask with open-cut fallback and normal viewer cleanup.
+- Reproduce and verify the reported clip at Up to 42/47, Z8.40, with 0.19935 mm cells.
+
+## [7.1.19-dev]
+
+- Flatten exposed extrusion tops so dense top skin no longer looks like separate round strips.
+- Use planar face lighting and small bounded endpoint overlaps at path joins.
+- Keep source top Z, gold material, display thickness aid and open sparse-infill gaps.
+- Add a continuous-top-skin regression that fails with the preceding rounded renderer.
+
+## [7.1.18-dev]
+
+- Give exposed selected-layer material the solid body's gold shading instead of Lines tool colors.
+- Give unresolved extrusion cross-sections a 3 by 2 display-pixel minimum so their faces remain visible.
+- Scale this display aid with gesture staging resolution and keep source paths/dimensions unchanged.
+- Retain matching loaded layer detail during Lines comparisons to restore the same full interior.
+- Verify actual cached-interior UI routing differs from explicit Lines in all five themes.
+
+## [7.1.17-dev]
+
+- Replace selected-layer infill strokes with closed, shaded extrusion faces using path width and height.
+- Use bounded batches of 64 extrusions without allocating a persistent layer mesh.
+- Raise inspection zoom to 16x and keep the point beneath the pinch centroid fixed.
+- Share the shifted camera across solid, paths, sections and damage bounds; keep one-finger orbit unchanged.
+
+## [7.1.16-dev]
+
+- Keep the prepared solid in All, Single, Up to and Travel view combinations.
+- Show actual selected-layer extrusion/infill strands instead of a filled artificial cut cap.
+- Read cached layer detail in Solid Up to as well as Single; retain explicit sampled fallbacks.
+- Overlay gray travel moves with depth testing in the same mesh camera.
+- Track extrusion-overlay damage and finish all frame phases before publication.
+
+## [7.1.15-dev]
+
+- Stop mesh camera auto-fit from changing apparent zoom during one-finger orbit.
+- Cache a rotation-independent fit radius once and share it with the gesture mesh.
+- Preserve pinch/button zoom, fast interaction, height sections and damage bounds.
+
+## [7.1.14-dev]
+
+- Keep Up to on the shaded mesh, with a height cut and hole-preserving section cap.
+- Wake rendering on the first pixel of orbit input; match Bed Mesh horizontal sensitivity.
+- Invalidate old/new mesh bounds and stop per-frame status churn to reduce display work.
+- Report raster, publish and display-cycle costs in viewer Details.
+- Show available Bed Mesh data during printing/paused and refresh newly received meshes.
+- Keep calibration/profile changes idle-only and suppress unchanged mesh redraws.
+
+## [7.1.13-dev]
+
+- Build a separate shaded gesture mesh capped at 4,096 triangles.
+- Draw drag/pinch frames at half width/height using the existing buffers.
+- Restore the unchanged full-detail mesh and canvas resolution after all fingers lift.
+- Keep camera framing and atomic publication; abort stale full frames when movement starts.
+- Make gesture-mesh allocation optional and free it with its owning model.
+
+## [7.1.12-dev]
+
+- Replace per-pixel mesh divisions/color conversion with stepped gradients and a shade table.
+- Cull rear-facing triangles only on generated, outward-wound exterior meshes.
+- Resume unfinished rendering after 5 ms rather than 33 ms; retain bounded batches.
+- Keep full mesh geometry, shaded interaction and complete-frame publication.
+- Measure complete frame latency in logs and support repeatable multi-view host benchmarks.
+
+## [7.1.11-dev]
+
+- Keep Solid shaded during orbit and pinch rather than switching to Lines.
+- Render camera snapshots offscreen and publish complete frames; coalesce new input.
+- Stop stationary touch samples from restarting redraws; bound work across timer ticks.
+- Show the active mesh/surface/path renderer and preparation progress/failure first.
+- Check displayed mode differences, staging allocation failure and gesture frame ownership.
+
+## [7.1.10-dev]
+
+- Prepare a shaded solid automatically from ordinary G-code; default file loads to Solid.
+- Use all supported generated extrusions, including paths omitted from RAM samples.
+- Reuse the SD geometry cache or reread and fingerprint the original file automatically.
+- Bound volume and mesh memory, coarsen when needed, smooth surfaces and report cell size.
+- Preserve path/layer controls and fall back to the loaded preview on preparation failure.
+- Park the manual STL/PHM entry; no conversion or accompanying model file is required.
+
+## [7.1.9-dev]
+
+- Add standalone binary/ASCII STL conversion to compact PHM display meshes.
+- Add SD model chooser, smooth shaded/edge mesh view and a fluted-ring demo.
+- Keep model inspection separate from G-code layers; pause parent rendering while open.
+- Preserve sharp edges, report simplification, and support refusing simplification.
+- Validate bounded mesh files/CRCs/indices before adoption; fence background SD reads.
+
+## [7.1.8-dev]
+
+- Merge collinear extrusions and matching adjacent-layer runs into wall panels.
+- Use compact surface overviews for Solid/All and Solid/Up to when coverage fits.
+- Cache generated paths on SD and read Single layers on demand without HTTP.
+- Preserve path fallbacks, bounded storage and explicit detail diagnostics.
+- Fence cache reads by printer/request and retain file lifetime through cancellation.
+
+## [7.1.7-dev]
+
+- Add shaded, depth-tested Solid extrusion view alongside Lines.
+- Expand path capacity to 262,144, with bounded PSRAM fallbacks to 32,768.
+- Keep layer/travel/tool controls and reduced-detail diagnostics in both views.
+- Use Lines while orbiting/pinching, then restore Solid after finger release.
+- Handle depth-buffer allocation failure without losing the loaded preview.
+
+## [7.1.6-dev]
+
+- Continue parsing after STOP_PRINT using the existing known print-macro warning.
+- Omit unknown macro motion and reset the XY endpoint to prevent a false chord.
+
+## [7.1.5-dev]
+
+- Continue past the geometry sample cap instead of stopping at an arc.
+- Keep bounded independent samples across input, with layer/tool anchors, the
+  final path and full generated bounds; label reduced detail explicitly.
+- Coarsen exceptionally large arcs rather than stopping their file.
+- Raise streaming budgets to 64 MiB/60 seconds and show request-fenced load
+  progress; Close, printer changes and exclusive operations still cancel.
+
+
+## [7.1.4-dev]
+
+- Add bounded G2/G3 arc tessellation: CW/CCW, full circles, helices, all planes,
+  center offsets/absolute centers and signed radius form.
+- Track T0-T15/canonical extruder changes with independent E state and colors.
+- Parse inch/mm units, explicit offsets and bounded saved-state return moves.
+- Handle known slicer bookkeeping and report exact stop commands/physical lines
+  in a scrollable Details popup, including empty/partial previews.
+- Include two-tool arc rings in Sample; prevent stale sample geometry from
+  remaining under a file name during failed reloads.
+
+
+## [7.1.3-dev]
+
+- Add a layer slider and Single/Up to inspection modes in one control batch.
+- Add pinch zoom through the Bed Mesh raw touch path, with its sensitivity,
+  smoothing and lift-all-fingers guard; keep Bed Mesh input intact.
+- Keep layer/Z captions, fine-step buttons, presets and Reset synchronized.
+- Assign transition travel to the layer being approached, avoiding next-layer
+  travel in a cumulative preview.
+- Disable impossible endpoint steps and layer controls for travel-only models.
+
+
+## [7.1.2-dev]
+
+- Reverse horizontal 3D viewer drag to match tablet feedback.
+- Add Top, Front and 3D orientation presets in the same view-control batch.
+- Test both horizontal directions and presets with real LVGL pointer input.
+- Use `tools/build_idf6_hosted3.sh` for PrinterHMI builds.
+
+
+## [7.1.1-dev]
+
+- Start experimental 3D G-code viewer on `feature/gcode-viewer-3d`.
+- Tools entry and Files shortcut, read-only background loading, bounded linear
+  toolpath parsing, orbit/zoom, layer selection, travel toggle and offline sample.
+- Branch baseline is v7.1.0-dev; increment the patch number per delivered patch.
+- P4 build, hardware performance and actual-file verification remain pending.
+
 ## [7.0.0] - 2026-10-20
 
 ### Added and improved

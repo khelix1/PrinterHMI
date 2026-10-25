@@ -2515,3 +2515,326 @@ mutex-allocation error handling. Run `security_boundaries_test.py`,
 `ota_transfer_test.py` under `tools/audit/`. Real libcJSON is required by the
 JSON fixtures; SDK operations are mocked. See the deep-follow-up section in
 [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for scope and hardware evidence limits.
+
+
+## v7.1.1-dev G-code viewer experiment
+
+See [G-code viewer](GCODE_VIEWER.md) for the bounded parser, loader ownership,
+native UI checks and pending P4/Moonraker performance verification. Branch
+baseline is v7.1.0-dev, with +0.0.1 per delivered patch. Theme Maker is paused.
+
+### v7.1.2-dev horizontal orbit
+
+User verified the previous patch builds with `tools/build_idf6_hosted3.sh` and
+reported reversed left/right drag. Reverse yaw and check both pointer directions
+in all five themes. Corrected tablet feel remains pending; continue using the
+verified wrapper and `build-idf6-hosted3/PrinterHMI.bin` for OTA.
+
+The same v7.1.2-dev batch adds Top/Front/3D view presets with 1x zoom and
+layer/Travel preservation. Check the three presets, both drag directions, zoom
+and Reset together after one wrapper build/flash.
+
+### v7.1.3-dev layer inspection batch
+
+On Sample, scrub to the first, middle and last layer, fine-step, toggle Single/Up
+to, rotate or select presets, then All/Reset. Check disabled boundary steps,
+travel visibility and preserved layer/mode across presets. Native checks cover
+these controls in five themes plus travel-only/single-layer models. The parser
+now associates layer-transition travel with its destination layer. Build with
+`tools/build_idf6_hosted3.sh` and OTA `build-idf6-hosted3/PrinterHMI.bin`.
+
+The same batch includes pinch zoom based on Bed Mesh's raw two-point path,
+sensitivity/damping and lift-all-fingers guard. On the tablet, pinch both ways,
+lift only one finger (no orbit should resume), lift both and rotate again.
+Check pinch outside the canvas/over a newer modal does nothing, then confirm
+Bed Mesh touch still works. Host checks cover the touch-reader body with scaled
+0/1/2/5-point input, optional observers, unchanged pointer state, both pinch
+directions, limits, control/overlay rejection and orbit exclusion.
+
+### v7.1.4-dev motion/compatibility batch
+
+Run the gcode_toolpath, gcode_viewer_loader, gcode_viewer_ui and gcode_touch_port
+checks, touch navigation and version audits. The core suite now includes
+gcode_motion_test.c for arcs, tools, units, offsets/states and diagnostic coverage.
+Native Sample adds T1 rings; Details has a scrollable body and pinned Close.
+Test an actual arc/tool file on the tablet and inspect partial coverage rather
+than interpreting the preview as validation of that printer's accepted commands.
+G-code is never dispatched by these controls. See GCODE_VIEWER.md for exact scope
+and remaining printer-macro/offset limits. Use tools/build_idf6_hosted3.sh.
+
+### v7.1.5-dev geometry cap regression
+
+The core audit now runs gcode_retention_test.c under ASan/UBSan: it reproduces
+32,759 paths plus a G3 larger than the remaining nine slots, continues through
+901 layers, and checks uniform independent samples, late tool/layer/final anchors,
+full bounds, post-compaction travel ownership, zero storage and raster guards.
+Loader/UI checks cover request-fenced progress, 60-second timeout behavior,
+reduced-detail notices, selected-layer anchors, Details and existing teardown.
+
+Tablet: load the originally failing file, inspect later layers and Details,
+check reduced-detail notices, then test rotation, pinch, Close and profile change
+during loading. Input/time/Z-level/unsupported-command stops remain meaningful
+partial reasons; gaps in reduced detail are intentional and explicitly reported.
+Build with tools/build_idf6_hosted3.sh; OTA build-idf6-hosted3/PrinterHMI.bin.
+
+### v7.1.6-dev STOP_PRINT regression
+
+`python3 tools/audit/gcode_toolpath_test.py` checks continued parsing after
+STOP_PRINT, omitted-macro diagnostics without parameter leakage, endpoint reset,
+and exact-name matching.
+
+### v7.1.7-dev Solid and detail checks
+
+Run the existing core, loader and native UI audit commands. The core runner now
+includes `gcode_solid_test.c`: shaded thickness, near/far order independence,
+selected/cumulative/travel filtering, end-on and diagonal paths, clipping and
+pixel/depth guards. Retention checks 200,000 paths at stride 1; loader tests cover
+262,144/131,072/65,536/32,768 capacities and complete allocation failure. Native pointer
+checks cover Solid allocation failure/retry, mode toggle, incremental frame completion/restart/Close, orbit/pinch restoration,
+five themes and depth-buffer cleanup.
+
+On the tablet, compare Lines and Solid on Sample and the original large file;
+check Details sampling stride, isolated layers, hidden rear paths, travel,
+pinch/orbit release, repeated open/close, printer switching and navigation.
+No full ESP-IDF build or target timing was available on the host.
+
+### v7.1.8-dev compact surfaces and SD detail
+
+Run `python3 tools/audit/gcode_surface_cache_test.py`, the existing core runner,
+loader runner and five-theme native UI runner. The loader runner now also executes
+the actual SD-cache file/layer workers against temporary host storage.
+
+Coverage includes 400,000 extrusions merged to four panels, 1,000 indexed levels,
+all 400 extrusion paths from a late level despite a 32-path RAM fixture, travel
+ownership, hole preservation, Up to clipping, incremental/full raster agreement,
+pixel/depth guards, corruption rejection, cache cap/cleanup, no-network detail,
+worker-held references after UI dismissal, profile/task/SD/display failures,
+UI debounce/adoption/mode cancellation and previous five-theme controls.
+
+Tablet: ensure Settings reports mounted SD, load the original file, check Details
+for SD Ready/panel eligibility, compare Solid/All and Up to with the thumbnail,
+then inspect several Single levels and confirm the SD count/stride. Exercise
+rapid scrubbing, mode changes and Close during SD reads; repeat with no card to
+confirm fallback. Check navigation and memory recovery. No full ESP-IDF build or
+target SD/render benchmark was available in this host environment.
+
+### v7.1.9-dev standalone STL/PHM model batch
+
+Run `python3 tools/audit/mesh_preview_test.py` and
+`python3 tools/audit/mesh_preview_loader_test.py`, plus the existing native viewer
+runner. That runner now also builds/runs a separate mesh UI executable with real
+LVGL input over five themes and compiles the model UI with warnings as errors.
+
+Checks cover STL binary/ASCII and solid-prefixed binary headers, deterministic
+demo bytes, triangle budget/grid reporting, input/output protection, PHM header/
+payload CRCs, malformed counts/indices/normals/NaNs/truncation, allocation/cancel/
+profile/deadline/display/task cleanup, full versus incremental raster identity,
+hole preservation, shaded/edge output and pixel/depth guards. Mesh UI checks
+cover SD chooser, allocation retry, old identity on failure, drag direction,
+presets, pinch/modal/lift guards, pinned Details Close, parent entry/forwarding,
+50 nested cleanups and printer retirement.
+
+Tablet: copy demo.phm into /PrinterHMI/meshes/, choose Tools > 3D G-code Viewer >
+Mesh, then inspect shade/detail, orbit, pinch, presets and return to toolpaths.
+Repeat with a real STL converted at 5k/20k/40k triangle budgets. Check serial
+mesh_view chunk timing, memory recovery, cancellation and invalid/missing files.
+The host cannot run the full ESP-IDF build or establish target frame rate.
+
+
+### v7.1.10-dev automatic G-code solid
+
+Run `python3 tools/audit/gcode_volume_test.py` with the existing toolpath,
+surface/cache, loader and LVGL UI audits. The volume test builds a multilayer ring
+from all generated G-code despite only eight retained samples; it checks an open
+center, finite bounded mesh/raster buffers, frame equivalence and allocation cleanup.
+Loader tests cover actual cached refinement, no-SD replay, changed-source rejection,
+profile/request/exclusive cancellation and ownership. UI checks cover automatic
+Solid defaults, result adoption, All/Single reuse and close cleanup.
+
+On the tablet, build with `./tools/build_idf6_hosted3.sh` and flash
+`build-idf6-hosted3/PrinterHMI.bin`. Open a normal sliced file with Files > 3D view;
+observe the initial path preview and automatic solid status, then orbit/pinch, inspect
+Single/Up to/All, toggle Lines/Travel, close/reopen and switch printers during work.
+Repeat with and without an SD card and under lower free PSRAM. Confirm failed
+preparation retains an operable path preview. Compare holes, walls, small features,
+load duration and RAM against the original thumbnail. Target results are pending.
+
+
+### v7.1.11-dev solid frame publication
+
+The real LVGL viewer audit compares both canvas and flushed display pixels for
+Lines/Solid/Lines transitions across five themes. A forced slow clock checks that
+partial raster chunks never change the visible buffer, moving input cannot starve
+a snapshot, the next frame uses the latest camera, and a stationary held finger or
+release does not trigger another redraw. Staging allocation failure leaves Lines
+usable; close and model/detail replacement cancel work before freeing its geometry.
+
+On target, verify normal G-code reaches SOLID MESH or reports a visible preparation
+failure, then toggle Lines/Solid and drag/pinch. Solid should stay shaded; completed
+frames replace the prior image without progressive fill. Check response time, low
+PSRAM, repeated close/reload and layer changes. Full target validation is pending.
+
+
+### v7.1.12-dev mesh raster performance
+
+Run the volume, mesh-preview, viewer-loader and native LVGL viewer audits. The volume
+audit compares outward-face culling to two-sided images from eight directions while
+preserving the center hole and memory guards. Mesh decode/clipping/incremental checks
+also cover the optimized gradient rasterizer. Native UI checks require unfinished
+frames to progress after 6 ms instead of waiting 33 ms, while preserving complete
+frame publication and the five-theme gesture/mode/lifecycle checks.
+
+For timing, build tools/gcode-viewer/auto-render.c using the command in GCODE_VIEWER.md
+and use the optional 60-view argument. Host comparisons are directional evidence,
+not target FPS. After applying and building the patch, compare tablet orbit, pinch,
+zoom, All/layer switching, close response and serial gcode_view frame_us on the same
+normal file. Verify the same mesh detail and no holes or rear-face disappearance.
+Initial volume preparation is not accelerated in this batch. Target results pending.
+
+
+### v7.1.13-dev adaptive gesture detail
+
+Run mesh-preview, viewer-loader, volume and real LVGL viewer audits. The mesh audit
+checks bounded clustering, stable camera bounds, unchanged full-detail raster,
+each scratch/output allocation failure, mid-build cancellation and child cleanup.
+Loader audits verify the worker's additional child allocations return to zero.
+The real UI audit supplies a distinct gesture child and verifies its selection,
+476x166 rendering/2x presentation, exact full-detail pixel restoration after drag,
+pinch and a one-finger tail, and release without an extra movement event, across
+all five themes. Existing mode, staging OOM, atomic publication and lifetime checks
+continue to pass.
+
+On target, compare the same file's orbit and pinch to v7.1.12-dev. The shaded model
+may soften during movement; releasing all fingers should restore full detail at the
+same camera angle without a framing jump. Check quick re-grabs during a full redraw,
+layer/mode changes, close/reload/profile switching, and operation with low PSRAM.
+Inspect gesture triangle count in Details. The host benchmark excludes presentation
+and LCD costs; tablet verification remains pending.
+
+
+### v7.1.14-dev viewer presentation and live Bed Mesh
+
+Run the mesh-preview, volume, viewer-loader and native viewer audits. Section tests
+check height clipping, incremental/full equivalence, generated closed-mesh caps,
+open holes and stencil sentinels. Projected-bounds tests cover all drawn pixels over
+80 camera/zoom settings. Native viewer tests cover first-pixel orbit and immediate
+wake-up, Up-to mesh selection/preparation, reduced actual flush areas, optional cap
+OOM, complete-frame publication, mode switches and display observer cleanup.
+
+Run `python3 tools/audit/bed_mesh_profiles_layout_test.py --lvgl-dir <LVGL> --lvgl-lib <archive>`.
+It now also builds the real Bed Mesh page with snapshot/render stubs. Across five
+themes it verifies that new mesh data appears during a print, printing/paused states
+retain mesh statistics, unchanged snapshots do not redraw, changed values do redraw,
+cached offline data is labelled, and calibration remains idle/owner guarded. Existing
+profile tests continue to reject mutation/activation while printing or paused.
+
+On the tablet, compare orbit start, pinch, Up to and Full/All using the same file;
+release should restore full-detail capped sections. If still slow, record the viewer
+Details timing lines after interaction. For Bed Mesh, open before the print's mesh
+arrives and verify it appears during the print; inspect without probing or changing
+profiles. Target performance remains unverified; host timings do not predict FPS.
+
+
+### v7.1.15-dev fixed orbit scale
+
+The mesh audit derives normalized projection scale over 80 orbit/pitch/zoom settings
+and requires it to remain constant, checks that the gesture mesh shares its root's
+fit radius, and reruns clipping, section, bounds and pixel/depth guards. Native UI
+checks require one-pixel orbit to leave zoom unchanged while existing two-finger
+pinch tests must still change zoom. On target, orbit without size pumping, then
+pinch in/out and release to verify stable gesture/full-detail framing. Existing
+fast rendering and print-time Bed Mesh behavior remain in place. Target verification
+is pending.
+
+
+### v7.1.16-dev solid mode consistency and active infill
+
+Run the parser/solid, mesh-preview, volume, viewer-loader and native viewer audits.
+The native matrix exercises All/Single/Up to, Travel off/on and all three camera
+presets in five themes, requires mesh retention, and verifies cached infill adoption
+in Up to/Single. Mesh raster tests verify actual strands have width/shading and
+empty gaps, matched-camera depth-tested travel overlays, layer filtering, damage
+bounds and incremental/full equivalence. Volume tests verify both upper and lower
+height clipping. The parked mesh-loader audit now links the shared bead raster.
+
+On target, load a sliced file with visible infill, select a middle retained level
+in Solid Up to, and let Reading layer detail finish. Inspect the top layer pattern,
+then switch Single, Travel and camera presets. The layer material should remain
+shaded and Travel should add gray moves without replacing the exterior solid.
+Without SD or after cache failure, confirm reduced active-layer coverage is labelled.
+Check close, reload and switching layers while a detail read or overlay is in flight.
+All-view speed and fixed-scale orbit should remain as accepted; section/overlay
+performance and actual infill appearance are still target validation items.
+
+
+### v7.1.17-dev extrusion volume and focused zoom
+
+The mesh audit renders a nominal 0.45 by 0.2 mm extrusion end-on at 16x, requires a
+filled elliptical face, then increases height to 0.8 mm and checks increased visible
+area. It also retains shading, gap, depth, bounds, canary and incremental checks.
+Camera guard coverage reaches 16x. Volume tests move a hole-preserving section away
+from center to check the shared projection; native UI tests keep a noncentral model
+point fixed through pinch and verify one-finger orbit leaves zoom unchanged.
+
+On target, open a file, select Solid Up to at a middle layer and let cached detail
+finish. Zoom into the infill with two fingers and tilt: strands should have shaded
+sides, height and filled ends. Confirm gaps remain empty and compare Single, Travel,
+camera presets and Reset. Whole-object strands can still appear thin. Check pinch
+focus, All speed, selected-layer responsiveness and release-to-full-resolution on
+the tablet; full firmware build and hardware verification remain pending here.
+
+
+### v7.1.18-dev solid interior versus Lines
+
+The mesh raster audit uses nominal 0.45 by 0.2 mm paths in a 200 mm envelope at fit
+scale and checks visible gold rows, multiple shades and a separated gap. It checks
+half-resolution staging scales the display aid, plus existing physical-height,
+end-face, depth, damage and canary checks. The native five-theme viewer audit adopts
+actual cached infill, switches Top/Solid/Lines, requires gold interior in Solid and
+cyan paths in Lines, and requires exact restoration when Solid is selected again.
+
+On target, use the same Up to layer where the interior resembled cyan Lines.
+Compare Solid and Lines after Reading layer detail finishes: exposed material in
+Solid should now be gold with visible width/shading, while Lines stays thin and
+tool-colored. Tilt and pinch, release, switch Single, then return All to compare
+responsiveness. Check narrow gaps at closer zoom: the fit-scale minimum display
+thickness can obscure gaps below the screen resolution. Hardware validation is
+pending; host tests do not establish tablet appearance or frame rate.
+
+
+### v7.1.19-dev top-skin continuity
+
+The mesh audit renders seven nominal 0.45 by 0.2 mm strands spaced at 0.42 mm and
+requires a central dense-skin rectangle to have one top color and level depth,
+with no background gaps. The old rounded-strand implementation fails this check.
+It verifies incremental/full equivalence, then removes middle paths and requires
+an open infill bay. Tilted sparse paths must still show distinct lit faces. Top-down
+flat faces now intentionally have consistent lighting, replacing the former test
+that required a separate highlight across each strand. End dimensions/height,
+16x clipping, staging ratio, bounds and guard tests remain in place.
+
+On target, revisit Solid Up to 42/47 at Z8.40 from the reported clip screenshot.
+The dense top should look like a skin rather than separate raised round strips.
+Tilt and zoom, compare a sparse-infill layer, and switch Single/All/Lines to check
+mode consistency. The generated body remains approximate; target appearance and
+speed are unverified here. Build using the hosted3 IDF6 wrapper.
+
+
+### v7.1.20-dev actual clip shell join
+
+The supplied clip was parsed and replayed at the same 512-cell target as the tablet:
+1,780 paths, 47 layers, 61,064 shell triangles, 0.19935 mm cells. At Up to 42/47,
+Z8.40, default 3D orbit angles and 4x zoom, the host comparison closed 906 background
+seam pixels with zero new fill outside the section mask. The supplied source file
+was read without modification and is not bundled into the updater.
+
+Volume audits compare full cap, open cut and joined sections on a hollow generated
+ring. Joined pixels must stay inside the section mask; its hole must remain open;
+its top-plane area must be smaller than a full cap. Incremental calls must match
+a complete render and preserve mask/pixel/depth guards. A NULL mask must match the
+open cut. Native UI checks simulate optional mask allocation failure, retry and
+cleanup, plus the existing five-theme view/camera/gesture and cached-detail matrix.
+
+On target, revisit the same clip layer/camera and inspect the skin-to-shell edge.
+Check sparse infill and holes, then Single, gesture/release and All responsiveness.
+No target frame-rate or final appearance claim is made from host rendering.

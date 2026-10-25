@@ -81,6 +81,13 @@ idf_component_register(
 
         # Tools
         "ui_tools.c"
+        "mesh_preview.c"
+        "gcode_volume.c"
+        "gcode_toolpath.c"
+        "gcode_surface.c"
+        "gcode_cache.c"
+        "gcode_viewer_loader.c"
+        "ui_gcode_viewer.c"
 
         # Dashboard
         "ui_dashboard.c"

@@ -81,7 +81,7 @@ static void render(void)
     ui_bed_mesh_renderer_render(&config);
 }
 
-static const char *mesh_connection_reason(void){
+static const char *mesh_action_reason(void){
     moonraker_state_t live;moonraker_state_snapshot(&live);
     return s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
 }
@@ -94,8 +94,9 @@ static void mesh_caption_deleted(lv_event_t *event)
 static void stats(void)
 {
     if(!s.stats)return;
-    const char *reason=mesh_connection_reason();
-    if(reason[0]||!s.mesh.valid){
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    const char *reason=s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_connection_reason(&live);
+    if(s.owner_generation!=moonraker_config_generation()||!s.mesh.valid){
         ui_value_set_text(s.stats,reason[0]?reason:"No active bed mesh. Calibrate or load a profile.");
         if(s.metrics)ui_value_set_text(s.metrics,"");
         return;
@@ -103,7 +104,7 @@ static void stats(void)
     char summary[160];
     snprintf(summary,sizeof(summary),"Profile %s | %u x %u | Z %.0fx%s",
         s.mesh.profile_name[0]?s.mesh.profile_name:"Current mesh",s.mesh.cols,s.mesh.rows,s.zscale,
-        s.mesh.truncated?" | Truncated":"");
+        reason[0]?" | Last reported mesh":s.mesh.truncated?" | Truncated":"");
     ui_value_set_text(s.stats,summary);
     if(s.metrics){
         char height[128];
@@ -114,9 +115,15 @@ static void stats(void)
 }
 static void mesh_connection_refresh(lv_timer_t *timer){
     (void)timer;if(!s.popup)return;
-    if(s.calibrate_button){if(mesh_connection_reason()[0])lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
+    if(s.calibrate_button){if(mesh_action_reason()[0])lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
     ui_bed_mesh_profiles_refresh_availability();
+    if(s.owner_generation==moonraker_config_generation())ui_bed_mesh_refresh();
     stats();
+}
+static uint32_t mesh_content_hash(void){
+    uint32_t hash=2166136261u;const unsigned char *bytes=(const unsigned char *)s.values;size_t count=s.mesh.valid?(size_t)s.mesh.rows*s.mesh.cols*sizeof(float):0;
+    for(size_t i=0;i<count;i++){hash^=bytes[i];hash*=16777619u;}
+    bytes=(const unsigned char *)s.profile_names;count=s.mesh.profile_count*sizeof(bed_mesh_profile_name_t);for(size_t i=0;bytes&&i<count;i++){hash^=bytes[i];hash*=16777619u;}return hash;
 }
 void ui_bed_mesh_refresh(void)
 {
@@ -124,6 +131,7 @@ void ui_bed_mesh_refresh(void)
         return;
     }
 
+    bed_mesh_snapshot_t previous=s.mesh;uint32_t previous_hash=mesh_content_hash();
     if (!s.values) {
         s.values =
             alloc_psram_first(
@@ -148,6 +156,7 @@ void ui_bed_mesh_refresh(void)
                 ? BED_MESH_MAX_PROFILES
                 : 0)) {
         memset(&s.mesh, 0, sizeof(s.mesh));
+        if(!memcmp(&previous,&s.mesh,sizeof(s.mesh))&&previous_hash==mesh_content_hash()){stats();return;}
         ui_bed_mesh_profiles_update(&s.mesh);
         stats();
 
@@ -161,6 +170,7 @@ void ui_bed_mesh_refresh(void)
         return;
     }
 
+    if(!memcmp(&previous,&s.mesh,sizeof(s.mesh))&&previous_hash==mesh_content_hash()){stats();return;}
     ui_bed_mesh_profiles_update(&s.mesh);
     stats();
     render();
@@ -226,7 +236,7 @@ static void confirm_calibrate_cb(lv_event_t *e)
 {
     (void)e;
 
-    if(mesh_connection_reason()[0]){ui_cal_dialog_notice(UI_STATUS_WARNING,"BED MESH NOT READY",mesh_connection_reason());return;}
+    if(mesh_action_reason()[0]){ui_cal_dialog_notice(UI_STATUS_WARNING,"BED MESH NOT READY",mesh_action_reason());return;}
     /*
      * Preserve the command callback before closing the modal. The mesh
      * viewer remains open so its live snapshot can refresh after probing.
@@ -243,7 +253,7 @@ static void calibrate_cb(lv_event_t *e)
 {
     (void)e;
 
-    if(mesh_connection_reason()[0]){stats();return;}
+    if(mesh_action_reason()[0]){stats();return;}
     if (s.calibrate_confirm) {
         lv_obj_move_foreground(s.calibrate_confirm);
         return;

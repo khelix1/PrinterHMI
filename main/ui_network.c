@@ -146,10 +146,6 @@ void ui_network_hide(void)
     ui_network_destroy();
 }
 
-void ui_network_refresh(void)
-{
-}
-
 static lv_obj_t *network_studio_row(lv_obj_t *parent, const char *name,
                                       const char *value, int y, int width)
 {
@@ -211,19 +207,11 @@ static void network_studio_create(const char *banner_text, int port,
 void ui_network_create_objects(
     const char *banner_text,
     int moonraker_port,
-    ui_network_make_info_cb_t make_info_cb,
     lv_event_cb_t wifi_clicked_cb,
-    lv_event_cb_t host_clicked_cb,
-    lv_event_cb_t port_clicked_cb)
+    lv_event_cb_t host_clicked_cb)
 {
     const ui_network_layout_profile_t *layout =
         &ui_page_layout_profile_current()->network;
-
-    /*
-     * Compatibility parameter retained while main.c still uses the old
-     * create bridge. The new page uses shared Operator components directly.
-     */
-    (void)make_info_cb;
 
     if (s_network.root) {
         lv_obj_move_foreground(s_network.root);
@@ -589,13 +577,6 @@ void ui_network_create_objects(
                     NULL);
             }
         }
-
-        /*
-         * Host and port editing now belong to the modular printer-profile
-         * manager. Keep the legacy callback parameter temporarily so this
-         * page API remains compatible during migration.
-         */
-        (void)port_clicked_cb;
 
         lv_obj_t *profiles_button =
             ui_button_create_icon(

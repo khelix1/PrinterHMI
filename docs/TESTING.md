@@ -2515,3 +2515,42 @@ mutex-allocation error handling. Run `security_boundaries_test.py`,
 `ota_transfer_test.py` under `tools/audit/`. Real libcJSON is required by the
 JSON fixtures; SDK operations are mocked. See the deep-follow-up section in
 [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for scope and hardware evidence limits.
+
+## Independent fixes and cleanup (v7.1.33-dev)
+
+Run the source membership and viewer-boundary checks, then actual UI/worker checks:
+
+```bash
+python3 tools/audit/source_membership_test.py
+python3 tools/audit/non_viewer_boundary_test.py
+python3 tools/audit/files_row_rgb_cache_test.py
+python3 tools/audit/thumbnail_manager_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/preview_cache_ownership_test.py --lvgl-dir /path/to/lvgl --cjson-dir /path/to/cJSON
+python3 tools/audit/files_load_worker_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/status_observers_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/dashboard_offline_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/dashboard_camera_safety_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/bed_mesh_profiles_layout_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/responsive_layout_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/studio_pages_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/shared_popup_safety_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/lvgl95_modernization_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/telemetry_refresh_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/aspect_preview_pipeline_test.py --lvgl-dir /path/to/lvgl
+python3 tools/audit/development_version_test.py
+bash tools/audit/version_audit.sh
+bash tools/audit/public_tree_audit.sh
+```
+
+LVGL runners accept `--lvgl-lib` to reuse a compatible host archive. Bed Mesh checks
+include all five themes, printing/paused snapshots, late arrival, unchanged refresh,
+offline labels, profile fences and denied calibration commands. Cache tests cover
+revision changes, 256-bucket collisions, corrupt/oversized/trailing records,
+capacity checks and FatFS replacement failure. Thumbnail-manager sanitizers cover
+ownership, result state, retries, duplicate tasks and allocation/task-start failure.
+The row test drives actual list/worker flows, RAM/SD reuse and stale-profile results.
+
+Target gate: build only with `./tools/build_idf6_hosted3.sh`; check Files after
+reboots and file replacement, large-text Dashboard filename/progress, Bed Mesh
+while printing, toolhead controls, themes and absence of viewer buttons in Tools
+and file details. Commit/push/merge remain operator actions after device verification.

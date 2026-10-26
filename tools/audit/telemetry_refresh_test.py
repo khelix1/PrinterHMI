@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="telemetry-refresh-") as directory:
     subprocess.run([str(executable)],check=True)
     # Compile all modified consumers, including their untouched code, with
     # firmware warning settings. Network/RTOS functions remain host stubs.
-    for name in ["ui_dashboard_status.c","dashboard_runtime_controller.c","ui_printer_info_cards.c"]:
+    for name in ["dashboard_runtime_controller.c","ui_printer_info_cards.c"]:
         subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict",*flags,
                         "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
                         "-c",str(root/"main"/name),"-o",str(tmp/(name+".o"))],check=True)

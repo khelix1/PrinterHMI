@@ -12,7 +12,6 @@
 #include "ui_active_print.h"
 #include "ui_machine_status.h"
 #include "ui_command_bar.h"
-#include "ui_dashboard_status.h"
 #include "ui_dashboard_page.h"
 #include "ui_button.h"
 #include "ui_popup.h"
@@ -25,23 +24,9 @@
 
 static lv_obj_t *dash32_root = NULL;
 
-/*
- * TEST12_NEW_DASHBOARD_OWNER
- *
- * The public ui_dashboard_* API remains the application-facing
- * Dashboard interface. Creation and destruction now delegate to the
- * new Theme B Dashboard page.
- */
+/* Dashboard construction delegates to the shared theme-aware page layout. */
 static ui_dashboard_page_t dash32_page = {0};
 
-/*
- * TEST9_DASHBOARD_STATUS_OWNER
- *
- * Dashboard Status construction is now routed through the Dashboard
- * module. The returned label handles remain available to main.c
- * during the legacy transition.
- */
-static ui_dashboard_status_t dash32_status = {0};
 
 lv_obj_t **ui_dashboard_thumb_canvas_ref(void)
 {
@@ -79,35 +64,6 @@ static bool dash32_camera_quiesced = false;
 static bool dash32_camera_restore_after_ota = false;
 static uint32_t dash32_camera_epoch,dash32_camera_generation;
 static bool dash32_camera_polling,dash32_camera_dispatching;
-
-ui_dashboard_status_t ui_dashboard_create_status(
-    lv_obj_t *parent)
-{
-    /*
-     * The replacement page normally creates Print Status as part of
-     * ui_dashboard_create(). Preserve a guarded fallback for the
-     * legacy startup ordering.
-     */
-    if (dash32_page.print_status.root) {
-        dash32_status = dash32_page.print_status;
-        return dash32_status;
-    }
-
-    ui_dashboard_status_t empty = {0};
-
-    if (!parent) {
-        return empty;
-    }
-
-    dash32_status =
-        ui_dashboard_status_create(parent);
-
-    dash32_page.print_status = dash32_status;
-    dash32_page.print_status_host = dash32_status.root;
-
-    return dash32_status;
-}
-
 
 typedef struct {lv_obj_t *root;uint32_t epoch,generation;int profile;} dashboard_camera_context_t;
 static dashboard_camera_context_t dashboard_camera_context(void)
@@ -305,7 +261,7 @@ static void dashboard_camera_root_deleted(lv_event_t *event)
     dash32_camera_timer=NULL;dash32_camera_frame=NULL;dash32_camera_mode=false;
     dash32_camera_image=dash32_camera_toggle=dash32_camera_status=NULL;
     dash32_root=dash32_banner=dash32_machine=dash32_active_print=dash32_thumb_box=dash32_thumb_label=NULL;
-    dash32_page=(ui_dashboard_page_t){0};dash32_status=(ui_dashboard_status_t){0};
+    dash32_page=(ui_dashboard_page_t){0};
     if(timer)lv_timer_delete(timer);
     dashboard_camera_release_owned(image,frame);
     if(epoch==dash32_camera_epoch)camera_stream_request_stop();
@@ -326,7 +282,6 @@ void ui_dashboard_create(void)
     dash32_banner = dash32_page.banner_host;
     dash32_active_print = dash32_page.active_print_host;
     dash32_machine = dash32_page.machine_status_host;
-    dash32_status = dash32_page.print_status;
 
     if (!dash32_root ||
         !dash32_banner ||
@@ -642,12 +597,6 @@ void ui_dashboard_thumb_delete_canvas(void)
 {
     ui_active_print_thumb_delete_canvas();
 }
-
-void ui_dashboard_thumb_forget_canvas_file(void)
-{
-    ui_active_print_thumb_forget_canvas_file();
-}
-
 
 void ui_dashboard_thumb_show_canvas_from_buffer(int w, int h, const char *file)
 {

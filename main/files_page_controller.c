@@ -331,8 +331,6 @@ static void files_load_publish(files_load_job_t *job)
         ui_files_set_status(message);
         return;
     }
-    files_row_preview_begin(job->host, job->port, job->api_key,
-                            job->sd_available, files_page_controller_preview_ready);
     memset(s_entries, 0,
            FILES_PAGE_ENTRY_CAPACITY * sizeof(*s_entries));
     int count = printer_files_parse_entries(
@@ -347,6 +345,9 @@ static void files_load_publish(files_load_job_t *job)
         count = (int)fallback_count;
     }
     s_entry_count = count > 0 ? (size_t)count : 0;
+    files_row_preview_begin(job->host, job->port, job->api_key,
+                            job->sd_available, s_entries, s_entry_count,
+                            files_page_controller_preview_ready);
     s_index_generation = job->generation;
     s_index_ready = true;
     render_entries();

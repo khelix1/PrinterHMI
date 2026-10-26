@@ -401,16 +401,21 @@ lv_obj_t *ui_status_banner_create(
         lv_obj_set_pos(ctx->state,0,0); lv_obj_set_width(ctx->state,316);
         lv_label_set_long_mode(ctx->state,LV_LABEL_LONG_MODE_DOTS);
         ui_apply_custom_label_style(ctx->state,UI_FONT_BODY_LARGE,UI_TEXT);
-        lv_obj_set_pos(ctx->file,0,32); lv_obj_set_width(ctx->file,316);
+        lv_obj_set_pos(ctx->file,0,32); lv_obj_set_width(ctx->file,700);
         lv_obj_set_height(ctx->file,ui_font_with_fallback(UI_FONT_VALUE_SMALL)->line_height);
         lv_obj_set_height(ctx->state,ui_font_with_fallback(UI_FONT_BODY_LARGE)->line_height);
-        lv_label_set_long_mode(ctx->file,LV_LABEL_LONG_MODE_DOTS);
-        lv_obj_set_pos(ctx->progress,340,54); lv_obj_set_width(ctx->progress,360);
+        /* Use the whole row above the percentage; scroll only if still needed. */
+        lv_label_set_long_mode(ctx->file,LV_LABEL_LONG_SCROLL_CIRCULAR);
+        int progress_y=32+ui_font_with_fallback(UI_FONT_VALUE_SMALL)->line_height+8;
+        if (progress_y<54) progress_y=54;
+        int bar_y=progress_y+ui_font_with_fallback(UI_FONT_PERCENT)->line_height+8;
+        if (bar_y<176) bar_y=176;
+        lv_obj_set_pos(ctx->progress,340,progress_y); lv_obj_set_width(ctx->progress,360);
         ui_apply_text_percent(ctx->progress);
         lv_obj_set_style_text_align(ctx->progress,LV_TEXT_ALIGN_LEFT,0);
-        lv_obj_set_pos(ctx->bar,340,176); lv_obj_set_size(ctx->bar,360,12);
+        lv_obj_set_pos(ctx->bar,340,bar_y); lv_obj_set_size(ctx->bar,360,12);
         ui_apply_progress_bar_style(ctx->bar);
-        lv_obj_set_pos(ctx->eta,340,194); lv_obj_set_width(ctx->eta,360);
+        lv_obj_set_pos(ctx->eta,340,bar_y+18); lv_obj_set_width(ctx->eta,360);
         lv_obj_set_style_text_align(ctx->eta,LV_TEXT_ALIGN_LEFT,0);
     }
 

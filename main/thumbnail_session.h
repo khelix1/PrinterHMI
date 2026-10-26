@@ -37,9 +37,6 @@ bool thumbnail_session_get_layer_metadata(
 
 void thumbnail_session_clear_png_buffer(void);
 void thumbnail_session_free_thumbnail(void);
-void thumbnail_session_install_png_buffer(
-    uint8_t *buffer,
-    size_t length);
 
 void thumbnail_session_save_last_selected_file(void);
 
@@ -48,7 +45,4 @@ thumbnail_session_restore_last_selected_file(
     bool sd_card_available);
 
 bool thumbnail_session_load_selected_cache(
-    bool sd_card_available);
-
-void thumbnail_session_store_selected_cache(
     bool sd_card_available);

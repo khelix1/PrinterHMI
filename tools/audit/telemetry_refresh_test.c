@@ -5,7 +5,6 @@
 #include <string.h>
 #include "ui_value_update.h"
 #include "telemetry_history.h"
-#include "ui_dashboard_status.c"
 #include "ui_printer_info_cards.c"
 
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d) { (void)a;(void)b;(void)c;(void)d;return false; }
@@ -44,24 +43,6 @@ int main(void)
     lv_refr_now(d);invalidations=0;ui_value_set_color(child,red,0);assert(!invalidations);
     ui_value_set_color(child,blue,0);assert(lv_color_eq(lv_obj_get_style_text_color(child,0),blue));
 
-    s_dash_status=(ui_dashboard_status_t){
-        .state=lv_label_create(parent),.progress=lv_label_create(parent),
-        .elapsed=lv_label_create(parent),.remaining=lv_label_create(parent),
-        .eta=lv_label_create(parent),.progress_bar=lv_bar_create(parent)};
-    ui_dashboard_status_set_print_state("printing");
-    ui_dashboard_status_set_progress("72 %",72,red);
-    ui_dashboard_status_set_times("02:30","00:58","22:15");
-    lv_refr_now(d);invalidations=0;
-    for(int i=0;i<10;i++) {
-        ui_dashboard_status_set_print_state("printing");
-        ui_dashboard_status_set_progress("72 %",72,red);
-        ui_dashboard_status_set_times("02:30","00:58","22:15");
-    }
-    assert(!invalidations && lv_bar_get_value(s_dash_status.progress_bar)==72);
-    ui_dashboard_status_set_progress("73 %",73,blue);
-    assert(invalidations && lv_bar_get_value(s_dash_status.progress_bar)==73);
-    ui_dashboard_status_set_progress("100 %",120,blue);
-    assert(lv_bar_get_value(s_dash_status.progress_bar)==100);
     ui_printer_info_cards_t cards={.progress=lv_label_create(parent),
         .nozzle=lv_label_create(parent),.bed=lv_label_create(parent),
         .part_fan=lv_label_create(parent),.elapsed=lv_label_create(parent),
@@ -105,5 +86,5 @@ int main(void)
     telemetry_history_reset();assert(!telemetry_history_count());
     lv_obj_delete(parent);
     lv_display_delete(d);lv_deinit();
-    puts("PASS: Dashboard/Printer repeated refresh and live transitions, unchanged text/color produces no invalidation, inherited style safety, exact shift/wrap/gap equivalence, 2-second flat samples, bounded timestamped history and teardown");
+    puts("PASS: Printer repeated refresh and live transitions, unchanged text/color produces no invalidation, inherited style safety, exact shift/wrap/gap equivalence, 2-second flat samples, bounded timestamped history and teardown");
 }

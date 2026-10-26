@@ -58,3 +58,11 @@ before sending commands, and confirm offline/unhomed/printer-switch states.
 Only run physical calibration on an attended, prepared printer. Existing
 printing-dependent recovery and active-print control tests remain pending.
 Stable version remains 6.5.6; this update neither commits nor pushes the branch.
+
+## View available mesh during a print
+
+Bed Mesh displays a valid current-printer snapshot while printing or paused and
+refreshes when new mesh data arrives. Unchanged snapshots avoid unnecessary
+redraw. A disconnected cached snapshot is labeled "Last reported mesh"; a printer
+change fences the old viewer until reopened. Calibration and profile-changing
+commands still require the original connected/idle conditions.

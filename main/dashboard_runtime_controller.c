@@ -13,7 +13,6 @@
 #include "printer_layer_resolver.h"
 #include "thumbnail_preview_coordinator.h"
 #include "thumbnail_session.h"
-#include "ui_dashboard_status.h"
 #include "ui_dashboard.h"
 #include "ui_printer.h"
 #include "ui_theme.h"
@@ -105,10 +104,6 @@ static void update_status_cards(
             0);
     }
 
-    ui_dashboard_status_refresh(
-        state->progress,
-        state->print_duration);
-
     printer_layer_result_t display_layers =
         printer_layer_resolver_resolve(
             state->current_layer,
@@ -145,8 +140,6 @@ static void update_status_cards(
         elapsed,
         remaining);
 
-    ui_dashboard_status_set_print_state(
-        dashboard_print_state_text(state));
 }
 
 static void update_live_preview(
@@ -211,16 +204,6 @@ static void update_print_complete_cleanup(
           strcmp(now_state, "CONNECTED") == 0))) {
         ui_dashboard_set_active_print_file(
             "No active file");
-
-        ui_dashboard_status_set_progress(
-            "-- %",
-            0,
-            UI_TEXT);
-
-        ui_dashboard_status_set_times(
-            "--:--",
-            "--:--",
-            "--:--");
 
         if (context->dashboard_image &&
             *context->dashboard_image) {

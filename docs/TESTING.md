@@ -2838,3 +2838,109 @@ cleanup, plus the existing five-theme view/camera/gesture and cached-detail matr
 On target, revisit the same clip layer/camera and inspect the skin-to-shell edge.
 Check sparse infill and holes, then Single, gesture/release and All responsiveness.
 No target frame-rate or final appearance claim is made from host rendering.
+
+
+### v7.1.23-dev first performance batch
+
+Loader audits verify complete-RAM refinement makes no extra HTTP request, while
+reduced samples and optional-copy OOM still use fingerprint-checked HTTP replay.
+The SD refinement fixture explicitly disables RAM eligibility to keep that route
+covered. Tests retire the original model before the RAM worker runs, cancel both
+before and during a yield, fail task creation, change profiles and request network
+exclusivity; allocations must return to zero. A fixed-clock preparation must yield
+once rather than at every cancellation probe. Existing source-change rejection,
+TLS/key snapshots and single-flight guards remain covered.
+
+Using the supplied clip, host-emulated 1 ms scheduler waits changed refinement from
+2,299 ms / 1,567 waits to 738 ms / 34 waits, with no second GET and identical
+61,064-triangle geometry. A 120-view 1x/4x/16x raster comparison kept identical pixel
+hashes while offscreen rejection reduced measured CPU work. These host numbers
+include an artificial sleep model and do not predict panel FPS or network latency.
+
+On target, compare Files > 3D load/preparation with the same clip, then a larger
+file; verify Solid appears, close/reload/profile change remains safe, and inspect
+zoomed orbit, Up to and Single with the same visual detail. Compare elapsed times
+separately for file loading, Preparing mesh, and rendered interaction. Live progress
+remains deferred until target performance is satisfactory.
+
+
+### v7.1.23-dev bug and security review
+
+`docs/GCODE_VIEWER_REVIEW.md` records scope and confirmed fixes. Loader tests now
+change profiles during endpoint/key capture and require an abort before HTTP/task
+publication. A unique key marker is checked against tracked allocation contents
+at release, covering successful requests, cancellation and task-start failures.
+Parser/cache/volume GCC analyzer passes complement sanitizers and malformed-input
+checks; they are not a substitute for target verification.
+
+
+### v7.1.25-dev all route gesture and pixel checks
+
+The native viewer audit now compares complete rendered pixels for the cross-product
+of Solid/Lines, All/Up to/Single, Travel off/on, Top/Front/3D and drag/pinch/release,
+in five themes. Moving All/Up to must select the optional small body; moving Single
+must match only selected-layer material/travel; release must match the full section
+and source overlays. It checks selected Z stability and unchanged layer/mode flags.
+
+Separate tests cover merged surfaces and deposited paths without a prepared mesh,
+missing gesture mesh, missing section mask, and Lines with a prepared mesh but no
+Solid depth/staging buffers after simulated allocation failure. This exercises the
+new Solid-only interaction gate and prevents a missing-buffer write in Single.
+The supplied clip host benchmark compares full versus gesture Up to bodies at
+half resolution over 60 views (61,064 versus 2,627 triangles). Target checks still
+need Up to/Single responsiveness, transient cut shape, release detail and gaps.
+
+
+### v7.1.26-dev clipping equivalence
+
+`python3 tools/audit/mesh_preview_test.py` builds an independent reference renderer
+with the interior-face shortcut removed. `mesh_section_parity_test.c` compares
+192 incremental section/slab frames with complete reference frames, byte for byte
+for pixels, depth and contact masks. Cases vary exact vertex cuts, upper/lower
+planes, culling, optional masks, camera, zoom and pan. ASan/UBSan is enabled.
+The existing five-theme native viewer route matrix also passes.
+
+
+### v7.1.27-dev dense material and movement timing
+
+`mesh_preview_test.py` builds the frozen `mesh_layer_reference.inc` (v26) into a
+separate renderer. Ninety-six 1500-path views compare full/half-resolution pixels,
+depths and damage bounds exactly, including travel filtering, tiny curved paths,
+long infill, slopes, vertical extrusion, camera sides, minimum thickness and zoom.
+The existing 192-frame section/slab reference remains. ASan/UBSan are enabled.
+Native viewer checks cover movement sample persistence after release, mode identity,
+all rendering routes/fallbacks, five themes, and non-overlapping Details timing/file
+text with a pinned Close button. Host synthetic timing is not tablet FPS.
+
+
+### v7.1.28-dev selected-layer movement throughput
+
+`mesh_gesture_material_test.c`, run by `mesh_preview_test.py`, verifies all 1500
+independent material paths appear as gold solids at their original top Z, with
+empty gaps, depth occlusion, no deposited travel/other layers, incremental/full
+agreement and pixel/depth canaries. ASan/UBSan are enabled. Its host CPU comparison
+covers 48 half-resolution views; it is not device FPS or a visual parity assertion
+between the simplified moving bead and the detailed settled bevels.
+
+The frozen v26 settled-material and clipping references remain exact. Native UI
+route comparisons now expect the gesture material API only while moving. A dense
+1500-path layer with simulated per-call timing proves moving sections use fewer
+handler slices than the 8 ms settled path, remain multi-slice, never publish a
+partial frame and retain movement metrics after release. Five-theme mode, camera,
+travel, pointer/pinch and memory-fallback checks pass. The Details timing/file
+layout and pinned Close button are checked in every theme. The 20 ms budget may
+overshoot by one work quantum/publish; on-target input fairness remains to verify.
+
+
+### v7.1.29-dev Files thumbnail loading
+
+Run `python3 tools/audit/preview_cache_ownership_test.py --lvgl-dir /path/to/lvgl
+--lvgl-lib /path/to/liblvgl.a --cjson-dir /path/to/cJSON` (one shell line).
+Real cJSON exercises multiple sizes/orderings, portrait, missing/invalid dimensions,
+large-only fallback and invalid/no thumbnail JSON. Injected storage/HTTP checks
+prove warm caches skip metadata/download, cold rows fetch the small source, writes
+use the separate row namespace, and no-SD/failure paths release their allocations.
+Native LVGL checks cover row packed dimensions/stride, buffer transfer/replacement,
+failed/stale results and all fullscreen ownership/worker/tap/theme/text-size paths.
+Target checks: first-screen loading, scrolling past 24 files, reload/cache reuse
+and original-resolution lightbox after tapping a 96-pixel row fallback.

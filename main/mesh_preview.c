@@ -151,6 +151,13 @@ static unsigned clip_plane(const cut_vertex_t *in,unsigned count,cut_vertex_t ou
 }
 static void clipped_triangle(mesh_preview_t *m,mesh_triangle_t t,float low,float cut,uint16_t *pixels,float *depth,int w,int h,uint32_t *cap){
     if((m->vertex[t.a].z>cut&&m->vertex[t.b].z>cut&&m->vertex[t.c].z>cut)||(m->vertex[t.a].z<low&&m->vertex[t.b].z<low&&m->vertex[t.c].z<low))return;
+    /* Interior faces need the same raster work as All, without polygon clipping.
+     * Keep boundary-crossing faces on the original path so section masks and
+     * clipped edges retain exactly the same coverage and depth. */
+    if(m->vertex[t.a].z<=cut&&m->vertex[t.b].z<=cut&&m->vertex[t.c].z<=cut&&
+       m->vertex[t.a].z>=low&&m->vertex[t.b].z>=low&&m->vertex[t.c].z>=low){
+        triangle(pixels,depth,w,h,m->projected[t.a],m->projected[t.b],m->projected[t.c],m->cull_backfaces,shades);return;
+    }
     unsigned ids[3]={t.a,t.b,t.c};cut_vertex_t input[6],upper[6],lower[6];mesh_projected_t crossing[2];unsigned crossings=0;
     for(unsigned i=0;i<3;i++)input[i]=(cut_vertex_t){m->projected[ids[i]],m->vertex[ids[i]].z};
     unsigned count=clip_plane(input,3,upper,cut,true,crossing,&crossings);if(crossings==2)cap_edge(cap,w,h,crossing[0],crossing[1]);cut_vertex_t *poly=upper;
@@ -292,7 +299,7 @@ size_t mesh_preview_render_travel_step(const mesh_preview_t *mesh,const gcode_to
 
 /* Flattened deposited bead: broad top, bevelled sides and closed end faces.
  * Vertices are transient, so inspecting a layer does not allocate another mesh. */
-static void extrusion_faces(const gcode_segment_t *s,const gcode_view_t *v,camera_t c,uint16_t *pixels,float *depth,int w,int h,int bounds[4]){
+static void extrusion_faces_impl(const gcode_segment_t *s,const gcode_view_t *v,camera_t c,uint16_t *pixels,float *depth,int w,int h,int bounds[4],bool coarse){
     float dx=s->b.x-s->a.x,dy=s->b.y-s->a.y,dz=s->b.z-s->a.z,length=sqrtf(dx*dx+dy*dy+dz*dz);if(length<.000001f)return;
     float width=s->width>0?s->width:.45f,height=s->height>0?s->height:.2f;
     /* Below the pixel grid physical faces alias to the same hairline as Lines.
@@ -309,38 +316,60 @@ static void extrusion_faces(const gcode_segment_t *s,const gcode_view_t *v,camer
     dx=b.x-a.x;dy=b.y-a.y;length=sqrtf(dx*dx+dy*dy+dz*dz);tx=dx/length;ty=dy/length;tz=dz/length;
     a.z-=height*.5f;b.z-=height*.5f;mesh_projected_t ca=project_point(a,c),cb=project_point(b,c);float pad=(rw+rh)*c.scale;
     if(fmaxf(ca.x,cb.x)+pad<0||fminf(ca.x,cb.x)-pad>w-1||fmaxf(ca.y,cb.y)+pad<0||fminf(ca.y,cb.y)-pad>h-1)return;
-    static const float co[8]={1,.95f,-.95f,-1,-1,-.95f,.95f,1},si[8]={.75f,1,1,.75f,-.75f,-1,-1,-.75f};
+    static const float detailed_co[8]={1,.95f,-.95f,-1,-1,-.95f,.95f,1},detailed_si[8]={.75f,1,1,.75f,-.75f,-1,-1,-.75f};
+    static const float block_co[4]={1,-1,-1,1},block_si[4]={1,1,-1,-1};
+    const float *co=coarse?block_co:detailed_co,*si=coarse?block_si:detailed_si;
+    unsigned corners=coarse?4:8;
     mesh_projected_t q[16];float minx=FLT_MAX,miny=FLT_MAX,maxx=-FLT_MAX,maxy=-FLT_MAX;
-    for(unsigned i=0;i<8;i++){
+    for(unsigned i=0;i<corners;i++){
         float x=rw*co[i]*sx+rh*si[i]*ux,y=rw*co[i]*sy+rh*si[i]*uy,z=rw*co[i]*sz+rh*si[i]*uz;
-        q[i]=project((mesh_vertex_t){.x=a.x+x,.y=a.y+y,.z=a.z+z},c);q[i+8]=project((mesh_vertex_t){.x=b.x+x,.y=b.y+y,.z=b.z+z},c);
-        for(unsigned end=0;end<2;end++){mesh_projected_t *p=&q[i+8*end];p->z+=.002f;minx=fminf(minx,p->x);miny=fminf(miny,p->y);maxx=fmaxf(maxx,p->x);maxy=fmaxf(maxy,p->y);}
+        /* Vertex lighting is replaced by planar face lighting below. Avoid
+         * evaluating the normal/specular shader sixteen times for zero normals. */
+        q[i]=project_point((gcode_point_t){a.x+x,a.y+y,a.z+z},c);q[i+corners]=project_point((gcode_point_t){b.x+x,b.y+y,b.z+z},c);
+        for(unsigned end=0;end<2;end++){mesh_projected_t *p=&q[i+corners*end];p->z+=.002f;minx=fminf(minx,p->x);miny=fminf(miny,p->y);maxx=fmaxf(maxx,p->x);maxy=fmaxf(maxy,p->y);}
     }
     if(bounds){int rect[4]={(int)fmaxf(0,fminf(w-1,floorf(minx)-2)),(int)fmaxf(0,fminf(h-1,floorf(miny)-2)),(int)fmaxf(0,fminf(w-1,ceilf(maxx)+2)),(int)fmaxf(0,fminf(h-1,ceilf(maxy)+2))};if(rect[0]<bounds[0])bounds[0]=rect[0];if(rect[1]<bounds[1])bounds[1]=rect[1];if(rect[2]>bounds[2])bounds[2]=rect[2];if(rect[3]>bounds[3])bounds[3]=rect[3];}
     const uint16_t *palette=shades;
-    for(unsigned i=0;i<8;i++){
-        unsigned j=(i+1)%8;float ds=rw*(co[j]-co[i]),du=rh*(si[j]-si[i]);
+    for(unsigned i=0;i<corners;i++){
+        unsigned j=(i+1)%corners;
+        mesh_projected_t p0=q[i],p1=q[j],p2=q[j+corners],p3=q[i+corners];
+        float den0=(p1.y-p2.y)*(p0.x-p2.x)+(p2.x-p1.x)*(p0.y-p2.y);
+        float den1=(p2.y-p3.y)*(p0.x-p3.x)+(p3.x-p2.x)*(p0.y-p3.y);
+        bool front0=den0>=.0001f,front1=den1>=.0001f;
+        if(!front0&&!front1)continue;
+        float ds=rw*(co[j]-co[i]),du=rh*(si[j]-si[i]);
         float vx=ds*sx+du*ux,vy=ds*sy+du*uy,vz=ds*sz+du*uz;
         float nx=vy*tz-vz*ty,ny=vz*tx-vx*tz,nz=vx*ty-vy*tx,n=sqrtf(nx*nx+ny*ny+nz*nz);if(n<.0000001f)continue;
         float light=project((mesh_vertex_t){.nx=nx/n,.ny=ny/n,.nz=nz/n},c).light;
-        mesh_projected_t p0=q[i],p1=q[j],p2=q[j+8],p3=q[i+8];p0.light=p1.light=p2.light=p3.light=light;
-        triangle(pixels,depth,w,h,p0,p1,p2,true,palette);triangle(pixels,depth,w,h,p0,p2,p3,true,palette);
+        p0.light=p1.light=p2.light=p3.light=light;
+        if(front0)triangle(pixels,depth,w,h,p0,p1,p2,true,palette);
+        if(front1)triangle(pixels,depth,w,h,p0,p2,p3,true,palette);
     }
     float lighta=project((mesh_vertex_t){.nx=-tx,.ny=-ty,.nz=-tz},c).light,lightb=project((mesh_vertex_t){.nx=tx,.ny=ty,.nz=tz},c).light;
-    for(unsigned i=0;i<8;i++){q[i].light=lighta;q[i+8].light=lightb;}
-    for(unsigned i=1;i<7;i++){triangle(pixels,depth,w,h,q[0],q[i+1],q[i],true,palette);triangle(pixels,depth,w,h,q[8],q[8+i],q[9+i],true,palette);}
+    for(unsigned i=0;i<corners;i++){q[i].light=lighta;q[i+corners].light=lightb;}
+    for(unsigned i=1;i+1<corners;i++){triangle(pixels,depth,w,h,q[0],q[i+1],q[i],true,palette);triangle(pixels,depth,w,h,q[corners],q[corners+i],q[corners+1+i],true,palette);}
+}
+static void extrusion_faces(const gcode_segment_t *s,const gcode_view_t *v,camera_t c,uint16_t *pixels,float *depth,int w,int h,int bounds[4]){
+    extrusion_faces_impl(s,v,c,pixels,depth,w,h,bounds,false);
 }
 static size_t layer_bound(const gcode_toolpath_t *m,unsigned layer,bool after){
     size_t lo=0,hi=m->count;while(lo<hi){size_t mid=lo+(hi-lo)/2;unsigned value=m->segments[mid].layer;if(value<layer||(after&&value==layer))lo=mid+1;else hi=mid;}return lo;
 }
-size_t mesh_preview_render_layer_step(const mesh_preview_t *mesh,const gcode_toolpath_t *m,const gcode_view_t *v,uint16_t *pixels,float *depth,int w,int h,size_t first,size_t budget,int bounds[4]){
+static size_t render_layer(const mesh_preview_t *mesh,const gcode_toolpath_t *m,const gcode_view_t *v,uint16_t *pixels,float *depth,int w,int h,size_t first,size_t budget,int bounds[4],bool coarse){
     if(!mesh||!m||!v||!pixels||!depth||!budget||w<1||h<1||w>2048||h>2048||v->layer<0||!isfinite(v->yaw)||!isfinite(v->pitch)||!isfinite(v->zoom)||!isfinite(v->pan_x)||!isfinite(v->pan_y))return 0;
     /* Parser/cache arrays preserve monotonically assigned print-order level IDs. */
     size_t begin=layer_bound(m,(unsigned)v->layer,false),finish=layer_bound(m,(unsigned)v->layer,true),count=finish-begin,total=count+(m->sample_stride>1?1:0)+1;if(first>=total)return 0;size_t end=total-first>budget?first+budget:total;camera_t c=camera(mesh,v,w,h);
     for(size_t i=first;i<end;i++){
         const gcode_segment_t *s=i<count?&m->segments[begin+i]:i==count&&m->sample_stride>1?&m->last_segment:v->layer<m->layer_count?&m->layer_anchor[v->layer]:NULL;
         if(!s||!s->extrusion||s->layer!=v->layer)continue;
-        extrusion_faces(s,v,c,pixels,depth,w,h,bounds);
+        if(coarse)extrusion_faces_impl(s,v,c,pixels,depth,w,h,bounds,true);else extrusion_faces(s,v,c,pixels,depth,w,h,bounds);
     }
     return end<total?end:0;
+}
+
+size_t mesh_preview_render_layer_step(const mesh_preview_t *mesh,const gcode_toolpath_t *m,const gcode_view_t *v,uint16_t *pixels,float *depth,int w,int h,size_t first,size_t budget,int bounds[4]){
+    return render_layer(mesh,m,v,pixels,depth,w,h,first,budget,bounds,false);
+}
+size_t mesh_preview_render_layer_gesture_step(const mesh_preview_t *mesh,const gcode_toolpath_t *m,const gcode_view_t *v,uint16_t *pixels,float *depth,int w,int h,size_t first,size_t budget,int bounds[4]){
+    return render_layer(mesh,m,v,pixels,depth,w,h,first,budget,bounds,true);
 }

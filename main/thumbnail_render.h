@@ -5,7 +5,8 @@
 
 #include "lvgl.h"
 
-/* Shared source resolution for Files, Dashboard and Printer previews.
+/* Shared source resolution for Dashboard and Printer previews. Files rows use
+ * their own smaller canvas.
  * The lightbox initially uses this stable canvas, then loads the full original.
  */
 #define THUMBNAIL_PREVIEW_WIDTH 286

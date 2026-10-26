@@ -39,6 +39,10 @@ static struct {
     lv_point_t pointer;
     uint32_t owner,frames,progress_tick;
     int64_t render_started,raster_us,last_raster_us,publish_us,frame_us;
+    int64_t body_us,material_us,travel_us,last_body_us,last_material_us,last_travel_us;
+    int64_t gesture_frame_us,gesture_body_us,gesture_material_us,gesture_travel_us;
+    int gesture_layer;bool gesture_cumulative;uint32_t gesture_frames;
+    uint32_t render_slices,last_slices,gesture_slices;int64_t gesture_publish_us;
     float render_cut,render_low;
     bool displayed_mesh;
     int displayed_bounds[4],layer_bounds[4];
@@ -123,7 +127,15 @@ static void open_details(void)
     if(used_text<sizeof(text))snprintf(text+used_text,sizeof(text)-used_text,"\n\nAutomatic solid: %s\nSurface triangles: %lu | Volume cell: %.4f mm\nWidth/height tags: %lu\nThe automatic solid is a sampled extrusion envelope, not the original CAD model. Small gaps/features can change at this resolution. Single shows the selected layer as shaded extrusion strands over its exterior height interval; Lines retains path inspection. Travel overlays retained/cache paths in gray.",m->overview_mesh?"Ready":s.refining?"Preparing":s.refine_failed?"Unavailable; path fallback":"Pending",(unsigned long)(m->overview_mesh?m->overview_mesh->triangles:0),(double)(m->overview_mesh?m->overview_mesh->cell_mm:0),(unsigned long)m->dimension_tags);
     used_text=strlen(text);if(m->overview_mesh&&used_text<sizeof(text))snprintf(text+used_text,sizeof(text)-used_text,"\nGesture mesh: %lu triangles | Half-resolution shading during movement; full detail on release.",(unsigned long)(m->overview_mesh->interaction?m->overview_mesh->interaction->triangles:m->overview_mesh->triangles));
     used_text=strlen(text);if(s.refine_failed&&used_text<sizeof(text))snprintf(text+used_text,sizeof(text)-used_text,"\nPreparation error: %s",s.refine_error);
-    lv_obj_t *label=lv_label_create(body);lv_label_set_text(label,text);ui_apply_custom_label_style(label,UI_FONT_BODY,UI_TEXT);
+    /* Preserve the last movement sample across the final full-detail redraw. */
+    char timing[640];
+    snprintf(timing,sizeof(timing),"Last frame stages: body %.1f ms | material %.1f ms | travel %.1f ms\nLast movement: %s%s | %.1f ms total\nMovement stages: body %.1f ms | material %.1f ms | travel %.1f ms\nMovement: %lu slices | publish %.1f ms | other elapsed %.1f ms\nMovement samples: %lu. Detailed beads return on release.\n\n",
+        (double)s.last_body_us/1000,(double)s.last_material_us/1000,(double)s.last_travel_us/1000,
+        s.gesture_frames?"":"No sample ",s.gesture_layer<0?"All":s.gesture_cumulative?"Up to":"Single",
+        (double)s.gesture_frame_us/1000,(double)s.gesture_body_us/1000,(double)s.gesture_material_us/1000,(double)s.gesture_travel_us/1000,(unsigned long)s.gesture_slices,(double)s.gesture_publish_us/1000,
+        fmax(0,(double)(s.gesture_frame_us-s.gesture_body_us-s.gesture_material_us-s.gesture_travel_us-s.gesture_publish_us))/1000,(unsigned long)s.gesture_frames);
+    lv_obj_t *timing_label=lv_label_create(body);ui_apply_custom_label_style(timing_label,UI_FONT_BODY,UI_TEXT);lv_obj_set_width(timing_label,680);lv_label_set_text(timing_label,timing);
+    lv_obj_t *label=lv_label_create(body);lv_label_set_text(label,text);lv_obj_update_layout(timing_label);lv_obj_set_y(label,lv_obj_get_height(timing_label)+12);ui_apply_custom_label_style(label,UI_FONT_BODY,UI_TEXT);
     lv_obj_set_width(label,LV_PCT(100));lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);
     lv_obj_t *close=ui_button_create(s.details,UI_BUTTON_CLOSE,"Close");lv_obj_set_size(close,128,48);lv_obj_align(close,LV_ALIGN_BOTTOM_RIGHT,-20,-16);
     lv_obj_add_event_cb(close,close_details_event,LV_EVENT_CLICKED,NULL);
@@ -191,6 +203,8 @@ static bool ready(gcode_toolpath_t *model,const char *error)
     s.solid_rendering=false;gcode_viewer_loader_free(s.detail);s.detail=NULL;s.detail_loading=false;s.detail_wanted=-1;s.detail_failed=false;
     s.refining=false;s.refine_failed=false;s.refine_error[0]=0;s.refine_pending=file_load&&model->extrusion_seen;
     if(file_load){s.solid=solid_buffers();lv_label_set_text(lv_obj_get_child(s.solid_button,0),s.solid?"Solid":"Lines");}
+    s.gesture_frames=s.gesture_slices=0;s.gesture_publish_us=0;s.gesture_frame_us=s.gesture_body_us=s.gesture_material_us=s.gesture_travel_us=0;
+    s.frame_us=s.last_raster_us=s.publish_us=s.last_body_us=s.last_material_us=s.last_travel_us=0;
     s.solid_rendering=false;gcode_viewer_loader_free(s.model);s.model=model;gcode_view_reset(&s.view);s.pinch_active=false;s.drag=false;s.dirty=true;
     for(int i=0;i<11;i++){if(!model->count||(((i>=4&&i<=6)||i==10)&&!model->layer_count))lv_obj_add_state(s.controls[i],LV_STATE_DISABLED);else lv_obj_remove_state(s.controls[i],LV_STATE_DISABLED);}
     lv_slider_set_range(s.slider,0,model->layer_count?model->layer_count-1:0);
@@ -219,7 +233,7 @@ static bool refined(mesh_preview_t *mesh,const char *error){
     s.refining=false;
     if(!s.popup||!s.model)return false;
     if(error||!mesh){s.refine_failed=true;snprintf(s.refine_error,sizeof(s.refine_error),"%s",error?error:"Automatic solid unavailable");caption();return false;}
-    s.solid_rendering=false;mesh_preview_free(s.model->overview_mesh,release_mesh);s.model->overview_mesh=mesh;s.refine_pending=false;s.refine_failed=false;s.dirty=true;caption();return true;
+    s.solid_rendering=false;mesh_preview_free(s.model->overview_mesh,release_mesh);s.model->overview_mesh=mesh;s.gesture_frames=s.gesture_slices=0;s.gesture_publish_us=0;s.gesture_frame_us=s.gesture_body_us=s.gesture_material_us=s.gesture_travel_us=0;s.refine_pending=false;s.refine_failed=false;s.dirty=true;caption();return true;
 }
 static void refinement_tick(void){
     if(s.refining&&s.view.layer>=0&&!s.view.cumulative&&!s.solid){gcode_viewer_loader_cancel();s.refining=false;s.refine_pending=true;}
@@ -270,7 +284,7 @@ static void tick(lv_timer_t *timer)
     if(s.solid&&!gesture&&((s.display_interactive&&!s.solid_rendering)||(s.solid_rendering&&s.render_interactive)))s.dirty=true;
     bool redraw=s.dirty&&!s.solid_rendering;
     if(redraw){
-        s.dirty=false;s.solid_cursor=0;s.travel_cursor=0;s.travel_overlay=false;s.layer_cursor=0;s.layer_overlay=false;s.render_started=esp_timer_get_time();s.raster_us=0;
+        s.dirty=false;s.solid_cursor=0;s.travel_cursor=0;s.travel_overlay=false;s.layer_cursor=0;s.layer_overlay=false;s.render_started=esp_timer_get_time();s.raster_us=0;s.body_us=s.material_us=s.travel_us=0;s.render_slices=0;
         s.solid_rendering=s.solid&&s.depth&&s.solid_pixels&&s.model&&s.model->count;
         s.render_view=s.view;
         s.render_model=s.detail&&s.detail->cached_layer==s.view.layer&&!s.view.cumulative?s.detail:s.model;
@@ -278,10 +292,20 @@ static void tick(lv_timer_t *timer)
         s.render_mesh=s.model?s.model->overview_mesh:NULL;
         s.render_cut=s.render_mesh&&s.view.layer>=0?s.model->layer_z[s.view.layer]:FLT_MAX;s.render_low=-FLT_MAX;
         if(s.render_mesh&&s.view.layer>=0&&!s.view.cumulative)s.render_low=layer_floor(s.model,s.view.layer);
-        s.render_interactive=s.render_mesh&&gesture;
+        s.render_interactive=s.solid_rendering&&s.render_mesh&&gesture;
         s.render_width=s.render_interactive?s.width/2:s.width;s.render_height=s.render_interactive?s.height/2:s.height;s.render_view.raster_ratio=(float)s.render_width/s.width;
         s.layer_bounds[0]=s.render_width;s.layer_bounds[1]=s.render_height;s.layer_bounds[2]=s.layer_bounds[3]=-1;
-        if(s.render_interactive&&s.view.layer<0&&s.render_mesh->interaction)s.render_mesh=s.render_mesh->interaction;
+        /* Up to was still rasterizing the full exterior on every movement frame.
+         * Use the same optional shaded gesture mesh as All, clipped at the
+         * selected height. Single uses its actual selected-layer material. */
+        if(s.render_interactive&&(s.view.layer<0||s.view.cumulative)&&s.render_mesh->interaction)s.render_mesh=s.render_mesh->interaction;
+        if(s.render_interactive&&s.view.layer>=0&&!s.view.cumulative){
+            /* A coarse mesh can erase a thin Single slab. During movement,
+             * draw its actual shaded material directly in the root camera. */
+            size_t count=(size_t)s.render_width*s.render_height;
+            for(size_t i=0;i<count;i++){s.solid_pixels[i]=0x0863;s.depth[i]=-FLT_MAX;}
+            s.layer_overlay=true;
+        }
         s.rendering_surface=s.solid_rendering&&!s.render_mesh&&gcode_surface_usable(s.model->surface)&&!s.view.travel&&(s.view.layer<0||s.view.cumulative);
         if(s.solid_rendering&&!s.render_mesh&&s.model->count>2048)lv_label_set_text(s.status,"Rendering solid frame... Controls remain available.");
     }
@@ -291,26 +315,38 @@ static void tick(lv_timer_t *timer)
             /* Finish a camera snapshot into a private buffer. Incoming gesture
              * positions coalesce into the next frame rather than restarting it.
              * Never expose a cleared or partly filled frame on the canvas. */
-            for(unsigned batch=0;batch<8;batch++){
+            /* Amortize handler/tick handoffs for moving frames. Keep input
+             * opportunities between bounded slices, never render a whole frame
+             * synchronously. Settled/fallback paths retain their 8 ms budget. */
+            bool section_gesture=s.render_interactive&&s.render_view.layer>=0;
+            int64_t work_budget=section_gesture?20000:8000;
+            unsigned max_batches=section_gesture?32:8;s.render_slices++;
+            for(unsigned batch=0;batch<max_batches;batch++){
+                int64_t stage_start=esp_timer_get_time();
+                bool material_stage=s.render_mesh&&s.layer_overlay,travel_stage=s.render_mesh&&s.travel_overlay;
                 if(s.render_mesh){
-                    if(s.layer_overlay)s.layer_cursor=mesh_preview_render_layer_step(s.render_mesh,s.render_layer_model,&s.render_view,s.solid_pixels,s.depth,s.render_width,s.render_height,s.layer_cursor,64,s.layer_bounds);
+                    if(s.layer_overlay)s.layer_cursor=(s.render_interactive?mesh_preview_render_layer_gesture_step:mesh_preview_render_layer_step)(s.render_mesh,s.render_layer_model,&s.render_view,s.solid_pixels,s.depth,s.render_width,s.render_height,s.layer_cursor,64,s.layer_bounds);
                     else if(s.travel_overlay)s.travel_cursor=mesh_preview_render_travel_step(s.render_mesh,s.render_model,&s.render_view,s.solid_pixels,s.depth,s.render_width,s.render_height,s.travel_cursor,2048);
                     else if(s.render_view.layer>=0)s.solid_cursor=mesh_preview_render_joined_section_step(s.render_mesh,&s.render_view,s.solid_pixels,s.depth,s.render_width,s.render_height,s.solid_cursor,2048,s.render_low,s.render_cut,s.section_mask);
                     else s.solid_cursor=mesh_preview_render_section_step(s.render_mesh,&s.render_view,s.solid_pixels,s.depth,s.render_width,s.render_height,s.solid_cursor,2048,s.render_cut,NULL);
-                    if(!s.travel_overlay&&!s.layer_overlay&&!s.solid_cursor&&s.render_view.layer>=0){s.layer_overlay=true;s.layer_cursor=0;if(esp_timer_get_time()-start>=8000)break;continue;}
-                    if(!s.travel_overlay&&!s.solid_cursor&&(!s.layer_overlay||!s.layer_cursor)&&s.render_view.travel){s.layer_overlay=false;s.travel_overlay=true;s.travel_cursor=0;if(esp_timer_get_time()-start>=8000)break;continue;}
+                    int64_t stage_us=esp_timer_get_time()-stage_start;
+                    if(material_stage)s.material_us+=stage_us;else if(travel_stage)s.travel_us+=stage_us;else s.body_us+=stage_us;
+                    if(!s.travel_overlay&&!s.layer_overlay&&!s.solid_cursor&&s.render_view.layer>=0){s.layer_overlay=true;s.layer_cursor=0;if(esp_timer_get_time()-start>=work_budget)break;continue;}
+                    if(!s.travel_overlay&&!s.solid_cursor&&(!s.layer_overlay||!s.layer_cursor)&&s.render_view.travel){s.layer_overlay=false;s.travel_overlay=true;s.travel_cursor=0;if(esp_timer_get_time()-start>=work_budget)break;continue;}
                 }
                 else if(s.rendering_surface)s.solid_cursor=gcode_surface_render_step(s.model,&s.render_view,s.solid_pixels,s.depth,s.width,s.height,s.solid_cursor,128);
                 else s.solid_cursor=gcode_toolpath_render_solid_step(s.render_model,&s.render_view,s.solid_pixels,s.depth,s.width,s.height,s.solid_cursor,2048);
+                if(!s.render_mesh)s.body_us+=esp_timer_get_time()-stage_start;
                 if(!s.solid_cursor&&(!s.layer_overlay||!s.layer_cursor)&&(!s.travel_overlay||!s.travel_cursor)){
                     int64_t copy_start=esp_timer_get_time();s.raster_us+=copy_start-start;
                     if(s.render_interactive){
                         for(int y=0;y<s.render_height;y++){const uint16_t *row=s.solid_pixels+(size_t)y*s.render_width;uint16_t *out=s.pixels+(size_t)(2*y)*s.width;for(int x=0;x<s.render_width;x++)out[2*x]=out[2*x+1]=row[x];memcpy(out+s.width,out,(size_t)s.width*sizeof(*out));}
                     }else memcpy(s.pixels,s.solid_pixels,(size_t)s.width*s.height*sizeof(*s.pixels));
-                    s.display_interactive=s.render_interactive;s.publish_us=esp_timer_get_time()-copy_start;s.frame_us=esp_timer_get_time()-s.render_started;s.last_raster_us=s.raster_us;
+                    s.display_interactive=s.render_interactive;s.publish_us=esp_timer_get_time()-copy_start;s.frame_us=esp_timer_get_time()-s.render_started;s.last_raster_us=s.raster_us;s.last_body_us=s.body_us;s.last_material_us=s.material_us;s.last_travel_us=s.travel_us;s.last_slices=s.render_slices;
+                    if(s.render_interactive){s.gesture_frame_us=s.frame_us;s.gesture_body_us=s.body_us;s.gesture_material_us=s.material_us;s.gesture_travel_us=s.travel_us;s.gesture_layer=s.render_view.layer;s.gesture_cumulative=s.render_view.cumulative;s.gesture_slices=s.render_slices;s.gesture_publish_us=s.publish_us;s.gesture_frames++;}
                     s.solid_rendering=false;publish=true;if(!s.render_mesh)caption();break;
                 }
-                if(esp_timer_get_time()-start>=8000)break;
+                if(esp_timer_get_time()-start>=work_budget)break;
             }
             if(s.solid_rendering)s.raster_us+=esp_timer_get_time()-start;
         }else{

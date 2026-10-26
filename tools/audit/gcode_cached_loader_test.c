@@ -12,7 +12,8 @@ static void execute(void){assert(task);void (*f)(void*)=task;void *p=job;task=NU
 int main(void){
  body="G90\nM83\nG1 X0 Y0 Z.2\nG1 X10 E1\nG1 Y10 E1\nG0 X0 Y0 Z.4\nG1 X10 E1\nG1 Y10 E1\n";
  assert(gcode_viewer_loader_start("file.gcode",overview_callback));execute();assert(overview&&overview->cache->layers==2);
- unsigned before_refine=requests;assert(gcode_viewer_loader_refine("file.gcode",overview,refined_callback));execute();assert(requests==before_refine&&overview->cache->refs==1);
+ switch_during_endpoint=true;assert(!gcode_viewer_loader_refine("file.gcode",overview,refined_callback));generation--;assert(overview->cache->refs==1);
+ unsigned before_refine=requests;overview->sample_stride=2;assert(gcode_viewer_loader_refine("file.gcode",overview,refined_callback));execute();overview->sample_stride=1;assert(requests==before_refine&&overview->cache->refs==1);
  char filename[128];strcpy(filename,overview->cache->file);unsigned http_requests=requests;
  assert(gcode_viewer_loader_detail(overview,1,detail_callback));assert(!gcode_viewer_loader_detail(overview,0,detail_callback));
  execute();assert(detail&&detail->segments[0].layer==1&&!detail->segments[0].extrusion&&detail->capacity==32768&&requests==http_requests);

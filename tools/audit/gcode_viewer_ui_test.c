@@ -86,6 +86,38 @@ static void pinch_checks(lv_indev_t *input){
 static uint64_t canvas_hash(void){uint64_t h=14695981039346656037ull;for(size_t i=0;i<(size_t)s.width*s.height;i++){h^=s.pixels[i];h*=1099511628211ull;}return h;}
 static uint64_t display_hash(void){lv_refr_now(NULL);lv_area_t a;lv_obj_get_coords(s.canvas,&a);uint64_t h=14695981039346656037ull;for(int y=a.y1;y<=a.y2;y++)for(int x=a.x1;x<=a.x2;x++){assert(x>=0&&x<1024&&y>=0&&y<600);h^=raster[y*1024+x];h*=1099511628211ull;}return h;}
 static void finish_frame(void){for(unsigned i=0;(s.solid_rendering||s.dirty)&&i<1024;i++){lv_tick_inc(40);lv_timer_handler();}assert(!s.solid_rendering&&!s.dirty);}
+/* Reference complete raster for each route; moving Single intentionally omits
+ * the approximate shell, while settled sections must restore it exactly. */
+static void check_route_pixels(mesh_preview_t *root,mesh_preview_t *gesture,bool moving){
+ int w=s.render_interactive?s.width/2:s.width,h=s.render_interactive?s.height/2:s.height;size_t n=(size_t)w*h;
+ uint16_t *p=calloc(n,sizeof(*p));float *d=calloc(n,sizeof(*d));uint32_t *mask=s.section_mask?calloc((size_t)((w+31)/32)*h,sizeof(uint32_t)):NULL;assert(p&&d&&(!s.section_mask||mask));
+ if(s.solid&&root){
+  mesh_preview_t *body=moving&&(s.render_view.layer<0||s.render_view.cumulative)&&gesture?gesture:root;assert(s.render_mesh==body);
+  if(moving&&s.render_view.layer>=0&&!s.render_view.cumulative){for(size_t i=0;i<n;i++){p[i]=0x0863;d[i]=-FLT_MAX;}}
+  else if(s.render_view.layer>=0)mesh_preview_render_joined_section_step(body,&s.render_view,p,d,w,h,0,SIZE_MAX,s.render_low,s.render_cut,mask);
+  else mesh_preview_render_step(body,&s.render_view,p,d,w,h,0,SIZE_MAX);
+  if(s.render_view.layer>=0)(moving?mesh_preview_render_layer_gesture_step:mesh_preview_render_layer_step)(body,s.render_layer_model,&s.render_view,p,d,w,h,0,SIZE_MAX,NULL);
+  if(s.render_view.travel)mesh_preview_render_travel_step(body,s.render_model,&s.render_view,p,d,w,h,0,SIZE_MAX);
+ }else if(s.solid&&s.rendering_surface)gcode_surface_render_step(s.model,&s.render_view,p,d,w,h,0,SIZE_MAX);
+ else if(s.solid)gcode_toolpath_render_solid(s.render_model,&s.render_view,p,d,w,h);
+ else gcode_toolpath_render(s.render_model,&s.render_view,p,w,h);
+ if(s.render_interactive){for(int y=0;y<h;y++)for(int x=0;x<w;x++){uint16_t color=p[(size_t)y*w+x];for(int yy=0;yy<2;yy++)for(int xx=0;xx<2;xx++)assert(s.pixels[(size_t)(2*y+yy)*s.width+2*x+xx]==color);}}
+ else assert(!memcmp(p,s.pixels,n*sizeof(*p)));
+ free(p);free(d);free(mask);
+}
+static void check_route_gestures(lv_indev_t *input,mesh_preview_t *root,mesh_preview_t *gesture){
+ int layer=s.view.layer;bool cumulative=s.view.cumulative,solid=s.solid,travel=s.view.travel;
+ touch=(lv_point_t){420,240};pressed=true;lv_indev_read(input);touch.x+=2;lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();finish_frame();
+ assert(s.solid==solid&&s.view.layer==layer&&s.view.cumulative==cumulative&&s.view.travel==travel);assert(s.display_interactive==(solid&&root!=NULL));check_route_pixels(root,gesture,true);
+ uint32_t movement_samples=s.gesture_frames;int64_t movement_time=s.gesture_frame_us,movement_body=s.gesture_body_us,movement_material=s.gesture_material_us,movement_travel=s.gesture_travel_us;
+ pressed=false;lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();finish_frame();assert(!s.display_interactive);check_route_pixels(root,gesture,false);
+ assert(s.gesture_frames==movement_samples&&s.gesture_frame_us==movement_time&&s.gesture_body_us==movement_body&&s.gesture_material_us==movement_material&&s.gesture_travel_us==movement_travel);
+ if(s.solid&&root){assert(s.gesture_layer==layer&&s.gesture_cumulative==cumulative);assert(s.last_body_us>=0&&s.last_material_us>=0&&s.last_travel_us>=0);}
+
+ printerhmi_gcode_viewer_multitouch_update(2,400,240,500,240);printerhmi_gcode_viewer_multitouch_update(2,370,240,530,240);lv_tick_inc(40);lv_timer_handler();finish_frame();check_route_pixels(root,gesture,true);
+ printerhmi_gcode_viewer_multitouch_update(0,0,0,0,0);lv_tick_inc(40);lv_timer_handler();finish_frame();assert(!s.display_interactive);check_route_pixels(root,gesture,false);
+ assert(s.solid==solid&&s.view.layer==layer&&s.view.cumulative==cumulative&&s.view.travel==travel);
+}
 static void pinch_anchor_checks(void){
  lv_obj_update_layout(s.popup);lv_area_t a;lv_obj_get_coords(s.canvas,&a);gcode_view_t saved=s.view;s.view.zoom=1;s.view.pan_x=s.view.pan_y=0;int x=a.x1+s.width*3/4,y=a.y1+s.height*2/3;float ax=(float)(x-a.x1)/s.width-.5f,ay=(float)(y-a.y1)/s.height-.5f;
  printerhmi_gcode_viewer_multitouch_update(2,x-20,y,x+20,y);printerhmi_gcode_viewer_multitouch_update(2,x-40,y,x+40,y);assert(s.view.zoom>1&&fabsf((ax-s.view.pan_x)/s.view.zoom-ax)<.00001f&&fabsf((ay-s.view.pan_y)/s.view.zoom-ay)<.00001f);printerhmi_gcode_viewer_multitouch_update(0,0,0,0,0);s.view=saved;s.dirty=true;
@@ -104,15 +136,22 @@ int main(void){
   fail_staging=true;tap(input,find(s.popup,"Lines"));assert(!s.solid&&!s.depth&&!s.solid_pixels);fail_staging=false;
   fail_section=true;tap(input,find(s.popup,"Lines"));assert(s.solid&&s.depth&&s.solid_pixels&&!s.section_mask);fail_section=false;
   tap(input,find(s.popup,"Solid"));tap(input,find(s.popup,"Lines"));assert(s.solid&&s.section_mask);capture_env("GCODE_SOLID_CAPTURE");
+  finish_frame();assert(s.rendering_surface);check_route_gestures(input,NULL,NULL);
+  tap(input,find(s.popup,"Single"));finish_frame();assert(s.view.cumulative&&s.rendering_surface);check_route_gestures(input,NULL,NULL);
+  tap(input,find(s.popup,"Up to"));finish_frame();assert(!s.view.cumulative&&!s.rendering_surface);check_route_gestures(input,NULL,NULL);
+  tap(input,find(s.popup,"Reset"));finish_frame();tap(input,find(s.popup,"Travel off"));finish_frame();assert(s.view.travel&&!s.rendering_surface);check_route_gestures(input,NULL,NULL);tap(input,find(s.popup,"Reset"));finish_frame();
   touch=(lv_point_t){420,240};pressed=true;lv_indev_read(input);touch.x+=20;lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();assert(s.solid&&s.drag);
   pressed=false;lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();assert(s.solid&&!s.drag);
   pinch_checks(input);pinch_anchor_checks();assert(s.solid);tap(input,find(s.popup,"Reset"));
   tap(input,find(s.popup,"Solid"));assert(!s.solid&&s.depth);
-  tap(input,find(s.popup,"Details"));assert(s.details&&contains_text(s.details,"Tools: T0 T1")&&contains_text(s.details,"Arcs: 3"));
+  tap(input,find(s.popup,"Details"));assert(s.details&&contains_text(s.details,"Movement stages:")&&contains_text(s.details,"Tools: T0 T1")&&contains_text(s.details,"Arcs: 3"));
   if(theme==4)capture_env("GCODE_VIEWER_DETAILS_SCREENSHOT");
   assert(lv_obj_get_style_bg_opa(lv_obj_get_child(s.details,1),LV_PART_MAIN)==LV_OPA_TRANSP);
   lv_obj_t *detail_close=find(s.details,"Close");lv_area_t close_before,close_after;
   lv_obj_update_layout(s.details);lv_obj_get_coords(detail_close,&close_before);
+  lv_obj_t *detail_body=lv_obj_get_child(s.details,1),*timing=lv_obj_get_child(detail_body,0),*file_text=lv_obj_get_child(detail_body,1);
+  assert(lv_obj_get_y(file_text)>lv_obj_get_y(timing)+lv_obj_get_height(timing));
+  assert(lv_obj_get_height(timing)<lv_obj_get_height(detail_body));
   lv_obj_scroll_to_y(lv_obj_get_child(s.details,1),2000,LV_ANIM_OFF);lv_obj_update_layout(s.details);lv_obj_get_coords(detail_close,&close_after);assert(!memcmp(&close_before,&close_after,sizeof(close_before)));
   tap(input,detail_close);assert(!s.details&&s.popup);
   tap(input,find(s.popup,"Details"));lv_obj_delete(s.details);assert(!s.details);
@@ -197,6 +236,7 @@ int main(void){
   lv_tick_inc(40);lv_timer_handler();assert(s.drag&&s.solid&&s.frames>frames&&!s.solid_rendering&&s.dirty);assert(s.render_view.yaw==snapshot.yaw&&s.view.yaw!=snapshot.yaw);
   lv_tick_inc(40);lv_timer_handler();assert(s.solid_rendering&&!s.dirty&&s.render_view.yaw==s.view.yaw);
   finish_frame();uint64_t solid=canvas_hash();assert(solid!=lines&&strstr(lv_label_get_text(s.status),"SOLID PATHS"));
+  clock_step=0;check_route_gestures(input,NULL,NULL);tap(input,find(s.popup,"Reset"));finish_frame();solid=canvas_hash();clock_step=10000;
   frames=s.frames;for(unsigned i=0;i<10;i++){lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();}assert(s.frames==frames&&!s.dirty&&!s.solid_rendering&&canvas_hash()==solid);
   pressed=false;lv_indev_read(input);printerhmi_gcode_viewer_multitouch_update(0,0,0,0,0);lv_tick_inc(40);lv_timer_handler();assert(!s.drag&&s.frames==frames&&canvas_hash()==solid);
   tap(input,find(s.popup,"Solid"));uint64_t moved_lines=canvas_hash();assert(!s.solid&&moved_lines!=solid&&strstr(lv_label_get_text(s.status),"LINES"));
@@ -217,6 +257,20 @@ int main(void){
   /* A visibly different gesture child proves geometry selection, quarter-pixel
    * rasterization and exact full-detail restoration after one/two-finger input. */
   mesh_preview_t *gesture_mesh=calloc(1,sizeof(*gesture_mesh)+3*(sizeof(mesh_vertex_t)+sizeof(mesh_projected_t))+sizeof(mesh_triangle_t));assert(gesture_mesh);*gesture_mesh=*auto_mesh;gesture_mesh->interaction=NULL;gesture_mesh->vertex=(mesh_vertex_t *)(gesture_mesh+1);gesture_mesh->projected=(mesh_projected_t *)(gesture_mesh->vertex+3);gesture_mesh->triangle=(mesh_triangle_t *)(gesture_mesh->projected+3);memcpy(gesture_mesh->vertex,auto_mesh->vertex,3*sizeof(mesh_vertex_t));memcpy(gesture_mesh->triangle,auto_mesh->triangle,sizeof(mesh_triangle_t));for(unsigned i=0;i<3;i++){gesture_mesh->vertex[i].x=1.5f+.7f*gesture_mesh->vertex[i].x;gesture_mesh->vertex[i].y=1.5f+.7f*gesture_mesh->vertex[i].y;}auto_mesh->interaction=gesture_mesh;
+  /* Simulate fixed per-call CPU costs: larger movement slices must reduce
+   * handler handoffs without publishing a partly drawn frame. */
+  gcode_toolpath_t *saved_detail=s.detail,*dense_detail=calloc(1,sizeof(*dense_detail)+1500*sizeof(gcode_segment_t));assert(dense_detail);
+  *dense_detail=*s.model;dense_detail->segments=(gcode_segment_t *)(dense_detail+1);dense_detail->count=dense_detail->capacity=1500;dense_detail->cached_layer=0;dense_detail->surface=NULL;dense_detail->cache=NULL;dense_detail->overview_mesh=NULL;dense_detail->sample_stride=1;
+  for(unsigned i=0;i<1500;i++)dense_detail->segments[i]=(gcode_segment_t){.a={1,1+(i%8),.2f},.b={9,1+(i%8),.2f},.extrusion=true,.width=.45f,.height=.2f};
+  dense_detail->layer_anchor[0]=dense_detail->segments[0];s.detail=dense_detail;
+  gcode_view_t saved_view=s.view;s.view.layer=0;s.view.cumulative=true;s.drag=true;s.dirty=true;s.solid_rendering=false;clock_step=1000;
+  uint64_t unpublished=canvas_hash();unsigned movement_calls=0;
+  do{tick(NULL);movement_calls++;assert(movement_calls<100);if(s.solid_rendering)assert(canvas_hash()==unpublished);}while(s.solid_rendering);
+  assert(s.display_interactive&&movement_calls>1&&s.gesture_slices==movement_calls);uint32_t moving_slices=s.gesture_slices;int64_t saved_movement=s.gesture_frame_us;
+  s.drag=false;s.dirty=true;unsigned settled_calls=0;unpublished=canvas_hash();
+  do{tick(NULL);settled_calls++;assert(settled_calls<100);if(s.solid_rendering)assert(canvas_hash()==unpublished);}while(s.solid_rendering);
+  assert(settled_calls>movement_calls&&!s.display_interactive&&s.gesture_slices==moving_slices&&s.gesture_frame_us==saved_movement);
+  clock_step=0;s.detail=saved_detail;s.view=saved_view;free(dense_detail);s.dirty=true;finish_frame();
   touch=(lv_point_t){420,240};pressed=true;lv_indev_read(input);float first_pixel_yaw=s.view.yaw,orbit_zoom=s.view.zoom;touch.x+=1;lv_indev_read(input);assert(s.view.yaw<first_pixel_yaw&&s.view.zoom==orbit_zoom);lv_tick_inc(6);lv_timer_handler();assert(s.display_interactive&&s.render_mesh==gesture_mesh&&s.render_width==476&&s.render_height==166);
   display_hash();size_t flushed_before=flushed_pixels;touch.x+=1;lv_indev_read(input);lv_tick_inc(6);lv_timer_handler();display_hash();assert(s.view.zoom==orbit_zoom);assert(s.damaged_pixels<(size_t)s.width*s.height&&flushed_pixels-flushed_before<(size_t)s.width*s.height);if(theme==0)printf("PASS: held-finger mesh redraw damaged %lu and flushed %lu pixels vs %lu full canvas\n",(unsigned long)s.damaged_pixels,(unsigned long)(flushed_pixels-flushed_before),(unsigned long)((size_t)s.width*s.height));
   for(int y=0;y<s.height;y+=2)for(int x=0;x<s.width;x+=2){size_t i=(size_t)y*s.width+x;assert(s.pixels[i]==s.pixels[i+1]&&s.pixels[i]==s.pixels[i+s.width]&&s.pixels[i]==s.pixels[i+s.width+1]);}
@@ -229,10 +283,29 @@ int main(void){
    tap(input,find(s.popup,"Reset"));if(scope==1)tap(input,find(s.popup,"Layer +"));if(scope==2)tap(input,find(s.popup,"Single"));
    for(unsigned travel=0;travel<2;travel++){
     if(travel)tap(input,find(s.popup,"Travel off"));
-    const char *presets[]={"Top","Front","3D"};for(unsigned camera=0;camera<3;camera++){tap(input,find(s.popup,presets[camera]));finish_frame();assert(s.solid&&s.render_mesh==auto_mesh&&s.render_view.travel==(travel!=0)&&strstr(lv_label_get_text(s.status),"SOLID MESH"));if(scope==1)assert(s.render_low>-FLT_MAX&&s.render_low<s.render_cut);else assert(s.render_low==-FLT_MAX);}
+    const char *presets[]={"Top","Front","3D"};for(unsigned camera=0;camera<3;camera++){tap(input,find(s.popup,presets[camera]));finish_frame();assert(s.solid&&s.render_mesh==auto_mesh&&s.render_view.travel==(travel!=0)&&strstr(lv_label_get_text(s.status),"SOLID MESH"));if(scope==1)assert(s.render_low>-FLT_MAX&&s.render_low<s.render_cut);else assert(s.render_low==-FLT_MAX);
+     check_route_gestures(input,auto_mesh,gesture_mesh);
+     tap(input,find(s.popup,"Solid"));finish_frame();check_route_gestures(input,auto_mesh,gesture_mesh);tap(input,find(s.popup,"Lines"));finish_frame();
+    }
    }
   }
   tap(input,find(s.popup,"Reset"));finish_frame();tap(input,find(s.popup,"Single"));finish_frame();assert(s.solid&&s.view.cumulative&&s.render_mesh==auto_mesh&&s.render_cut==s.model->layer_z[s.view.layer]&&strstr(lv_label_get_text(s.status),"SOLID MESH"));
+  /* Up-to orbit/pinch must select the small shaded body during movement,
+   * retain the selected Z, and restore the exact full section on release. */
+  int selected_layer=s.view.layer;float selected_z=s.render_cut;
+  touch=(lv_point_t){420,240};pressed=true;lv_indev_read(input);touch.x+=2;lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();finish_frame();
+  assert(s.display_interactive&&s.render_mesh==gesture_mesh&&s.render_width==476&&s.render_height==166&&s.render_view.cumulative&&s.render_cut==selected_z&&s.view.layer==selected_layer);
+  pressed=false;lv_indev_read(input);lv_tick_inc(40);lv_timer_handler();finish_frame();assert(!s.display_interactive&&s.render_mesh==auto_mesh&&s.render_cut==selected_z);
+  uint16_t *section_expected=calloc((size_t)s.width*s.height,sizeof(uint16_t));float *section_depth=calloc((size_t)s.width*s.height,sizeof(float));uint32_t *section_mask=calloc((size_t)((s.width+31)/32)*s.height,sizeof(uint32_t));assert(section_expected&&section_depth&&section_mask);
+  mesh_preview_render_joined_section_step(auto_mesh,&s.render_view,section_expected,section_depth,s.width,s.height,0,SIZE_MAX,s.render_low,s.render_cut,section_mask);
+  mesh_preview_render_layer_step(auto_mesh,s.render_layer_model,&s.render_view,section_expected,section_depth,s.width,s.height,0,SIZE_MAX,NULL);
+  if(s.render_view.travel)mesh_preview_render_travel_step(auto_mesh,s.render_model,&s.render_view,section_expected,section_depth,s.width,s.height,0,SIZE_MAX);
+  assert(!memcmp(section_expected,s.pixels,(size_t)s.width*s.height*sizeof(uint16_t)));free(section_expected);free(section_depth);free(section_mask);
+  printerhmi_gcode_viewer_multitouch_update(2,400,240,500,240);printerhmi_gcode_viewer_multitouch_update(2,370,240,530,240);lv_tick_inc(40);lv_timer_handler();finish_frame();assert(s.display_interactive&&s.render_mesh==gesture_mesh&&s.render_cut==selected_z&&s.view.layer==selected_layer);
+  printerhmi_gcode_viewer_multitouch_update(0,0,0,0,0);lv_tick_inc(40);lv_timer_handler();finish_frame();assert(!s.display_interactive&&s.render_mesh==auto_mesh);
+  /* Allocation fallbacks must retain correct full sections and source material. */
+  auto_mesh->interaction=NULL;check_route_gestures(input,auto_mesh,NULL);auto_mesh->interaction=gesture_mesh;
+  uint32_t *saved_mask=s.section_mask;s.section_mask=NULL;s.dirty=true;finish_frame();check_route_gestures(input,auto_mesh,gesture_mesh);s.section_mask=saved_mask;s.dirty=true;finish_frame();
   /* Up to also requests/adopts exact cached layer paths for visible infill. */
   s.model->cache=calloc(1,sizeof(struct gcode_cache));s.model->cache->complete=true;s.model->cache->layers=1;accept_detail=true;lv_tick_inc(40);lv_timer_handler();lv_tick_inc(220);lv_timer_handler();assert(s.detail_loading&&pending_ready&&requested_detail==0);uint64_t reduced_layer=canvas_hash();
   gcode_toolpath_t *infill_detail=calloc(1,sizeof(*infill_detail)+4*sizeof(gcode_segment_t));*infill_detail=*s.model;infill_detail->surface=NULL;infill_detail->cache=NULL;infill_detail->overview_mesh=NULL;infill_detail->segments=(gcode_segment_t *)(infill_detail+1);infill_detail->count=infill_detail->capacity=infill_detail->input_segments=4;infill_detail->sample_stride=1;infill_detail->cached_layer=0;for(unsigned i=0;i<4;i++)infill_detail->segments[i]=(gcode_segment_t){.a={1,1+2*i,.2f},.b={9,1+2*i,.2f},.extrusion=true,.layer=0,.width=.5f,.height=.2f};infill_detail->layer_anchor[0]=infill_detail->segments[0];assert(pending_ready(infill_detail,NULL));pending_ready=NULL;fake_running=false;finish_frame();assert(s.render_layer_model==infill_detail&&canvas_hash()!=reduced_layer&&s.render_mesh==auto_mesh);
@@ -245,9 +318,12 @@ int main(void){
   for(size_t i=0;i<(size_t)s.width*s.height;i++){uint16_t color=s.pixels[i];if(color!=0x0863&&color!=0x52aa&&(color&31)>(color>>11)*2)interior_cyan++;}
   assert(!s.solid&&interior_cyan>10&&canvas_hash()!=material_frame);
   tap(input,find(s.popup,"Lines"));finish_frame();assert(s.solid&&canvas_hash()==material_frame);
-  tap(input,find(s.popup,"Up to"));assert(s.detail==infill_detail&&s.render_layer_model==infill_detail);tap(input,find(s.popup,"All"));tap(input,find(s.popup,"Layer +"));tap(input,find(s.popup,"All"));assert(refinement_starts==starts&&s.model->overview_mesh==auto_mesh);tap(input,find(s.popup,"Close"));accept_refine=false;accept_detail=false;
+  tap(input,find(s.popup,"Up to"));assert(s.detail==infill_detail&&s.render_layer_model==infill_detail);tap(input,find(s.popup,"All"));tap(input,find(s.popup,"Layer +"));tap(input,find(s.popup,"All"));assert(refinement_starts==starts&&s.model->overview_mesh==auto_mesh);
+  /* Lines with a prepared mesh must not touch missing Solid staging buffers. */
+  tap(input,find(s.popup,"Layer +"));tap(input,find(s.popup,"Solid"));free(s.depth);s.depth=NULL;free(s.solid_pixels);s.solid_pixels=NULL;fail_depth=true;tap(input,find(s.popup,"Lines"));assert(!s.solid&&!s.depth&&!s.solid_pixels);check_route_gestures(input,auto_mesh,gesture_mesh);fail_depth=false;tap(input,find(s.popup,"Lines"));finish_frame();assert(s.solid&&s.depth&&s.solid_pixels);
+  tap(input,find(s.popup,"Close"));accept_refine=false;accept_detail=false;
   for(unsigned i=0;i<20;i++){ui_gcode_viewer_open(NULL);tap(input,find(s.popup,"Sample"));tap(input,find(s.popup,"Lines"));assert(s.depth);tap(input,find(s.popup,"Details"));lv_obj_delete(s.popup);assert(!s.popup&&!s.details&&!s.model&&!s.pixels&&!s.depth);}
   ui_gcode_viewer_open(NULL);tap(input,find(s.popup,"Sample"));generation++;lv_tick_inc(40);lv_timer_handler();assert(!s.popup&&!s.model);
  }
- lv_indev_delete(input);lv_display_delete(d);lv_deinit();puts("PASS: five themes, real pointer controls, sample, both drag directions, Top/Front/3D presets, slider endpoints/midpoint, cumulative/single layers, pinch damping/bounds/modal and lift guards, zoom/reset/travel, disabled empty actions, bounds, Details/no-path/reload identity, 100 nested external deletions, complete-frame publication, solid/line pixel differences, stationary-touch stability, camera coalescing, staging OOM, accelerated render scheduling, gesture LOD/half-resolution selection, exact settle restoration, 16x pinch anchoring, immediate one-pixel orbit, solid All/Single/Up-to x Travel x camera matrix, reduced display damage, Up-to/Single cached infill adoption and profile retirement");
+ lv_indev_delete(input);lv_display_delete(d);lv_deinit();puts("PASS: five themes, real pointer controls, sample, both drag directions, Top/Front/3D presets, slider endpoints/midpoint, cumulative/single layers, pinch damping/bounds/modal and lift guards, zoom/reset/travel, disabled empty actions, bounds, Details/no-path/reload identity, 100 nested external deletions, complete-frame publication, solid/line pixel differences, stationary-touch stability, camera coalescing, staging OOM, accelerated render scheduling, gesture LOD/half-resolution selection, exact settle restoration, 16x pinch anchoring, immediate one-pixel orbit, Solid/Lines All/Single/Up-to x Travel x camera drag/pinch/pixel matrix, Single material-only gestures, Up-to LOD, exact settle, merged/path/no-LOD/no-mask/no-staging fallbacks, reduced display damage, Up-to/Single cached infill adoption and profile retirement");
 }

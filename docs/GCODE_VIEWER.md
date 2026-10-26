@@ -723,3 +723,99 @@ close and nested deletion free it with the other solid buffers. There is no fill
 interior cap or new All-view raster phase. The band is a visual join to approximate
 shell geometry, not an additional printed path. Section rendering adds bounded
 mask scanline work; hardware performance still needs checking.
+
+
+## v7.1.23-dev preparation and raster work
+
+Preparation checks cancellation frequently without sleeping at every probe. One-tick
+cooperative yields are spaced by a 20 ms wall-time interval; request/profile,
+network exclusivity and the original deadline are still checked before and after
+yielding. This avoids a path-count/voxel-count-dependent chain of artificial pauses.
+
+Complete RAM path sets up to 32,768 records are copied into an optional worker-owned
+snapshot before scheduling refinement. Eligibility requires stride 1 and retained
+count equal to generated count; source bounds, fingerprint and dimensions come
+from the same loaded model. The worker does not borrow a retired UI buffer. The
+copy is at most 1.25 MiB, is freed on every worker/task-start exit, and avoids another
+source read/parse for those models. SD and fingerprint-verified HTTP replays remain
+for reduced/large sources or allocation failure. No persistent cache is introduced.
+
+Filled triangles now reject offscreen X/Y bounding ranges before scanline setup.
+The mesh, geometry limits, smoothing, section contact band, colors and resolution
+are unchanged. The host clip retained identical geometry and per-zoom image hashes;
+physical tablet/network/SD timing remains the acceptance check. Live following is
+paused until these changes are verified.
+
+
+## v7.1.24-dev movement regression isolation
+
+Tablet feedback reported slower movement after v23. The upfront triangle viewport
+checks are reverted to the exact preceding implementation; the earlier section
+join and flattened strands remain. Preparation optimizations and security fixes
+are retained. Compare movement after mesh preparation finishes; background-worker
+contention is a separate possible cost and is not changed by this rollback.
+
+
+## v7.1.25-dev all rendering routes during movement
+
+| Route | While dragging/pinching | After all fingers lift |
+| --- | --- | --- |
+| Solid All | Optional shaded gesture mesh, half resolution | Full exterior, full resolution |
+| Solid Up to | Gesture mesh clipped to selected Z, actual active material/travel | Full section, exact contact-band path and material |
+| Solid Single | Actual shaded selected-layer material/travel, root camera, half resolution | Full thin shell interval plus material/contact band |
+| Lines | Full-resolution tool-colored paths; no Solid staging | Same path renderer |
+| No prepared mesh | Existing merged-surface or deposited-path fallback | Same bounded fallback |
+
+Up to's moving cut contour can differ with the coarse gesture mesh; the full cut
+join returns on release. Without an optional gesture mesh it uses the prior full
+body at half resolution. Single does not depend on a reduced mesh, so its thin
+material cannot disappear through body clustering. Cached or reduced source
+coverage still applies. The source, current layer, travel flag and camera stay
+consistent across gestures, and publication remains a complete frame.
+
+The interaction flag now requires actual Solid rendering, preventing Lines from
+selecting half-resolution metadata or touching unavailable Solid staging buffers.
+Existing load/security changes and raster rollback remain. Next planned batch is
+extrusion-role colors from slicer type comments, with a legend and neutral fallback.
+
+
+## v7.1.26-dev interior triangle clipping shortcut
+
+Up to and Single triangles whose three vertices lie inside the visible interval
+use All's direct triangle raster routine. Only boundary-crossing triangles need
+polygon clipping. The contact mask still receives the same crossings, and active
+material remains present. This applies to both movement and settled sections,
+with no new allocation or reduced detail. All still avoids selected-layer work.
+
+
+## v7.1.27-dev selected-layer costs and timing
+
+Bead vertices now use position-only projection. Invisible side triangles are
+rejected before computing planar normals and lighting. A frozen v26 renderer
+verifies identical selected-layer pixels, depths and damage bounds at both
+resolutions; no strand is omitted and material geometry is unchanged.
+
+Details starts with the last frame's body/material/travel CPU stages and the last
+completed moving frame's same stages. Movement samples retain their own mode
+identity and survive the settled redraw, clearing on fresh source/mesh adoption.
+Frame elapsed time includes render-batch scheduling; stages exclude publish and
+waiting. No movement sample means no interactive solid frame has completed yet.
+The heavy-file tablet measurements remain an open performance issue.
+
+
+## v7.1.28-dev moving section throughput
+
+Up to/Single movement uses closed rectangular gold beads, 12 triangles per source
+path versus the detailed bead's 28. Every available selected-layer extrusion is
+still depth-tested; width, height, top Z, gaps and minimum thickness are retained.
+Bevel corners are simplified while moving. Release restores the detailed material
+and full section/contact band exactly; explicit Lines remains a separate renderer.
+No path dropping, per-frame allocations or persistent layer geometry are added.
+
+Moving sections use bounded 20 ms work slices (plus at most one quantum/publish
+overshoot), with 32 quanta maximum. Body/travel quanta remain 2048 work items and
+material quanta 64 paths. Other routes retain 8 ms/8 quanta. This amortizes handler
+handoffs without changing global LVGL/RTOS/display/touch settings. Complete-frame
+publication and camera coalescing remain. Details reports slices, publish time and
+other elapsed time for the retained movement sample; other elapsed includes all
+unmeasured work/waits and must not be read as pure sleep or LCD transfer time.

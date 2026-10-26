@@ -1,9 +1,10 @@
 # Preview rendering
 
 Dashboard, Printer and Files previews preserve the complete source image. The
-shared RGB565 renderer packs the complete original into an aspect-aware canvas
-within the existing 286×215 capacity, without synthetic letterbox pixels or
-cutting off model edges. A 900×520 source produces 286×165 pixels; a portrait
+shared RGB565 renderer packs the complete original into an aspect-aware canvas.
+Dashboard/Printer use a 286×215 capacity; Files row icons use 96×96. Neither adds
+synthetic letterbox pixels or
+cuts off model edges. A 900×520 source produces 286×165 pixels; a portrait
 520×900 source produces 124×215. Native LVGL `CONTAIN` fits that canvas into the page's
 preview frame with no extra inset. Different image/frame proportions leave
 unused space instead of cropping or stretching. This supersedes the earlier
@@ -24,14 +25,15 @@ source descriptor or its backing pixels change. Invalidation retains storage
 while old widgets may still reference it; reset requires consumers to be detached
 and keeps revision numbers advancing.
 
-Files keeps at most 24 RGB565 buffers with the same maximum capacity. The worker renders into one
+Files keeps at most 64 RGB565 row buffers bounded by 96×96 pixels, matching the
+64-file browser bound. Its queue also covers all 64 entries. The worker renders into one
 PSRAM staging buffer, then takes the display lock before the slot mutex and
 transfers ownership into the current slot. There is no second permanent copy.
 Stale generations are discarded; old storage is dropped/freed only under the
 same display lock. Slot buffers remain bounded across page generations rather
 than being treated as a leak when retained after navigation.
 
-The two pools together retain at most 3,443,440 bytes of RGB565 pixel data. This
+The two pools together retain at most 1,671,568 bytes of RGB565 pixel data. This
 excludes descriptor metadata, active page canvases, staging, compressed PNGs,
 transient decoder work and the fullscreen buffers. Pixel buffers in these pools
 use PSRAM only; allocation failure preserves the previous valid profile preview
@@ -105,3 +107,30 @@ Files, including the ready-to-print popup and fullscreen fallback. Images should
 use more of the frame where old cache padding limited them, retain the whole
 model and stay stable across profile/page/theme switches. Source PNG black
 borders remain. The full-resolution lightbox path is unchanged.
+
+
+## v7.1.29-dev Files row loading
+
+Row wells display at most 76 pixels, so full 286×215 intermediate canvases wasted
+sampling work and PSRAM. Rows now use a packed aspect-preserving 96×96 capacity:
+96×55 for a 900×520 image, or 55×96 for portrait. The per-slot pixel capacity falls
+from 122,980 to 18,432 bytes (6.7x smaller), while the full row pool supports all
+64 browser files instead of only 24. Maximum row-pool pixels fall from 2,951,520
+to 1,179,648 bytes. Profiles and detail/fullscreen rendering keep their capacities.
+
+On a cache miss, rows choose the smallest-area metadata thumbnail whose long
+edge is at least 96 pixels. If none is adequate, they choose the largest available;
+missing dimensions retain a valid path fallback. A large-only slicer source still
+requires a full PNG download/decode, but the row samples only its small destination.
+When a smaller suitable source exists, network and decoding work can also drop.
+Existing SD PNG caches are reusable. New row sources are stored at `.png.row.png`
+paths, so they never replace the full preview's `.png` cache. Tapping a row keeps
+its small fallback and the existing asynchronous original-resolution lightbox.
+No new slicer setup is required. Actual cold/warm and scrolling load times still
+need checking on the tablet.
+
+`preview_cache_ownership_test.py` accepts `--cjson-dir /path/to/cJSON` when the
+ESP-IDF/managed cJSON source is not discoverable. It uses real cJSON and LVGL for
+source selection, invalid/missing metadata, portrait/large-only fallback, SD and
+no-SD fetches, separate writes, failure cleanup, descriptor replacement and stale
+publication. The fullscreen worker/tap/profile/lifetime checks also pass.

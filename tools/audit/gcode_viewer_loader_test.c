@@ -4,7 +4,10 @@
 #include <string.h>
 #include "esp_http_client.h"
 #include "gcode_viewer_loader.h"
-static unsigned generation=1,allocations,callbacks,errors,requests,reads;
+static unsigned generation=1,allocations,callbacks,errors,requests,reads,delays;
+static bool fail_replay_copy,cancel_during_delay,switch_during_endpoint,verify_key_erasure;
+static const char key_marker[]="PRIVATE_API_KEY_ERASURE_CHECK_7123";
+static struct {void *p;size_t bytes;} heap_blocks[64];
 static bool shared_allowed=true,exclusive,locked,display_allowed=true;
 static int fail,code=200;
 static char api[160]="secret",ca[4096]="original-ca";
@@ -13,12 +16,12 @@ static void (*task)(void *);static void *job;
 static gcode_toolpath_t *adopted;
 static const char *body="G90\nM83\nG1 X10 Y10 Z.2\nG1 X20 E1\nG1 Y20 E1\n";
 static size_t offset;
-void *test_calloc(size_t n,size_t s){if(fail==1||(fail==14&&s>900000)||(fail==15&&s>sizeof(gcode_toolpath_t)+65535*sizeof(gcode_segment_t))||(fail==16&&s>sizeof(gcode_toolpath_t)+131072*sizeof(gcode_segment_t))||(fail==17&&s>sizeof(gcode_toolpath_t)+65536*sizeof(gcode_segment_t)))return NULL;void *p=calloc(n,s);if(p)allocations++;return p;}
-void test_free(void *p){if(p){assert(allocations);allocations--;free(p);}}
+void *test_calloc(size_t n,size_t s){if(fail_replay_copy&&n==2&&s==sizeof(gcode_segment_t))return NULL;if(fail==1||(fail==14&&s>900000)||(fail==15&&s>sizeof(gcode_toolpath_t)+65535*sizeof(gcode_segment_t))||(fail==16&&s>sizeof(gcode_toolpath_t)+131072*sizeof(gcode_segment_t))||(fail==17&&s>sizeof(gcode_toolpath_t)+65536*sizeof(gcode_segment_t)))return NULL;void *p=calloc(n,s);if(p){allocations++;unsigned i;for(i=0;i<64&&heap_blocks[i].p;i++);assert(i<64);heap_blocks[i].p=p;heap_blocks[i].bytes=n*s;}return p;}
+void test_free(void *p){if(p){assert(allocations);unsigned i;for(i=0;i<64&&heap_blocks[i].p!=p;i++);assert(i<64);if(verify_key_erasure){size_t n=sizeof(key_marker)-1;for(size_t k=0;k+n<=heap_blocks[i].bytes;k++)assert(memcmp((unsigned char *)p+k,key_marker,n));}heap_blocks[i].p=NULL;allocations--;free(p);}}
 uint32_t moonraker_config_generation(void){return generation;}
 const char *moonraker_config_host(void){return "printer.local";}
 int moonraker_config_port(void){return 443;}
-const char *moonraker_config_api_key(void){return api;}
+const char *moonraker_config_api_key(void){if(switch_during_endpoint){switch_during_endpoint=false;generation++;}return api;}
 bool moonraker_transport_security_build_http_url_for_endpoint(const char *h,int port,const char *path,char *out,size_t n,const char **pem){assert(!strcmp(h,"printer.local")&&port==443);snprintf(out,n,"https://printer.local%s",path);*pem=ca;return fail!=2;}
 bool network_activity_controller_acquire_shared(uint32_t timeout){assert(timeout==1500);if(!shared_allowed)return false;assert(!locked);locked=true;return true;}
 void network_activity_controller_end_shared(void){assert(locked);locked=false;}
@@ -28,7 +31,7 @@ void bsp_display_unlock(void){}
 int64_t esp_timer_get_time(void){return fail==13&&reads?65000000:0;}
 int xTaskCreatePinnedToCore(void (*f)(void *),const char *name,unsigned stack,void *p,int priority,void *handle,int core){(void)name;(void)priority;(void)handle;(void)core;assert(stack==8192);if(fail==3)return 0;assert(!task);task=f;job=p;return 1;}
 void vTaskDelete(void *p){assert(!p);}
-void vTaskDelay(unsigned n){(void)n;}
+void vTaskDelay(unsigned n){(void)n;delays++;if(cancel_during_delay)gcode_viewer_loader_cancel();}
 esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *config){assert(config->disable_auto_redirect&&config->method==HTTP_METHOD_GET);assert(config->timeout_ms==3000);strcpy(url_seen,config->url);strcpy(ca_seen,config->cert_pem);requests++;return fail==4?NULL:(void*)1;}
 int esp_http_client_set_header(esp_http_client_handle_t c,const char *name,const char *value){(void)c;assert(!strcmp(name,"X-Api-Key"));strcpy(key_seen,value);return fail==5?-1:0;}
 int esp_http_client_open(esp_http_client_handle_t c,int n){(void)c;assert(!n);return fail==6?-1:0;}

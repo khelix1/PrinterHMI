@@ -59,3 +59,7 @@ size_t mesh_preview_render_layer_step(const mesh_preview_t *,const gcode_toolpat
 /* Generated-shell contact band only, intersected with the section mask so holes
  * stay empty. Same mask sizing/lifetime as section; NULL keeps an open cut. */
 size_t mesh_preview_render_joined_section_step(mesh_preview_t *,const gcode_view_t *,uint16_t *,float *,int,int,size_t,size_t,float,float,uint32_t *);
+
+/* Movement-only rectangular solid beads: every source path, width, height, depth
+ * and gold face shading remain; detailed bevels return through layer_step. */
+size_t mesh_preview_render_layer_gesture_step(const mesh_preview_t *,const gcode_toolpath_t *,const gcode_view_t *,uint16_t *,float *,int,int,size_t,size_t,int [4]);

@@ -1,5 +1,65 @@
 # Changelog
 
+## [7.1.29-dev]
+
+- Render Files row icons into 96x96 aspect-preserving buffers instead of shared 286x215 preview buffers.
+- Prefer the smallest adequate thumbnail source for rows, with largest-available fallback.
+- Keep row PNG writes separate from full preview caches; retain existing cache reuse and high-resolution lightbox loading.
+- Match row slots and queue capacity to the 64-file browser limit so scrolling cannot exhaust the previous 24 slots/12-job queue.
+- Verify source selection, cache/failure paths, publication ownership and fullscreen lifecycle across themes/text sizes.
+
+## [7.1.28-dev]
+
+- Amortize render-handler handoffs using bounded 20 ms work slices for moving Up to/Single frames; retain the 8 ms budget for other routes.
+- Use closed rectangular gold beads for selected-layer movement: every source path, width/height and depth remain, with detailed bevels restored on release.
+- Reduce per-path movement geometry from 28 to 12 triangles without new allocations.
+- Report movement slice count, publish time and other elapsed time in Details.
+- Check 1500 independent material paths, holes, source Z, depth, gesture routing and exact settled restoration across five themes.
+
+## [7.1.27-dev]
+
+- Reduce selected-layer solid work by projecting positions without unused vertex lighting and shading only visible bead side faces.
+- Preserve exact material geometry and full/half-resolution pixels, depths and damage bounds against v26.
+- Put body/material/travel stage timings at the top of Details and retain the last movement sample across the settled redraw.
+- Record the heavy-file tablet result; movement performance remains under investigation.
+
+## [7.1.26-dev]
+
+- Draw triangles fully inside Up to or Single directly, using All's raster path.
+- Keep polygon clipping and contact masks for boundary-crossing faces.
+- Compare 192 section/slab frames against the original clipping routine, including exact pixels, depths and masks.
+
+## [7.1.25-dev]
+
+- Use the optional shaded gesture mesh for Up to movement, clipped at the selected height.
+- Draw Single's shaded selected-layer material directly during movement instead of scanning the full shell.
+- Restore full-detail sections and joins on release; keep active material/travel in the same camera.
+- Restrict mesh interaction bookkeeping to Solid frames so Lines cannot inherit half-resolution/staging behavior.
+- Verify all view/travel/camera/gesture routes and memory fallbacks across five themes.
+
+## [7.1.24-dev]
+
+- Revert the v7.1.23 upfront triangle visibility checks after reported slower tablet movement.
+- Restore the preceding raster path while retaining faster preparation, RAM reuse and security fixes.
+
+## [7.1.23-dev]
+
+- Rate-limit cooperative pauses during solid preparation instead of sleeping at every cancellation probe.
+- Refine from a private copy of complete RAM paths when available, avoiding a second file read/download.
+- Retain SD and fingerprint-checked HTTP fallbacks when RAM is sampled, large or unavailable.
+- Reject offscreen triangles before scanline setup to speed zoomed rendering without reducing detail.
+- Fence endpoint/key capture against profile changes and explicitly wipe copied API keys on every exit.
+
+## [7.1.22-dev]
+
+- Extend the Studio Dashboard filename across the row above the percentage.
+- Keep scrolling for names wider than the row and space the percentage, bar and ETA below it.
+
+## [7.1.21-dev]
+
+- Restore circular scrolling for long filenames in the Studio Dashboard status banner.
+- Preserve the compact one-line layout and existing marquee timing.
+
 ## [7.1.20-dev]
 
 - Join the detailed top layer to the coarse shell with a narrow inside cut-edge band.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import importlib.util,struct,subprocess,tempfile,os,hashlib
+import importlib.util,struct,subprocess,tempfile,os,hashlib,re
 root=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('mesh_converter',root/'tools/mesh-preview/convert_stl.py');mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
 blob,info=mod.encode(mod.demo());assert blob==(root/'tools/mesh-preview/demo.phm').read_bytes() and info['cell_mm']==0 and info['triangles']==6144
@@ -25,4 +25,19 @@ with tempfile.TemporaryDirectory(prefix='mesh-preview-') as d:
  else:raise AssertionError('overwrote output without --force')
  exe=d/'test';subprocess.run(['cc','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(root/'main'),str(root/'main/mesh_preview.c'),str(root/'main/gcode_toolpath.c'),str(root/'tools/audit/mesh_preview_test.c'),'-lm','-o',str(exe)],check=True)
  subprocess.run([str(exe),str(root/'tools/mesh-preview/demo.phm')],check=True,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})
+ # Differential reference keeps the original polygon-clipping path for every face.
+ source=(root/'main/mesh_preview.c').read_text()
+ begin=source.index('    /* Interior faces need the same raster work as All,')
+ end=source.index('    unsigned ids[3]=',begin)
+ reference=source[:begin]+source[end:]
+ begin=reference.index('static void extrusion_faces(');end=reference.index('static size_t layer_bound(',begin)
+ reference=reference[:begin]+(root/'tools/audit/mesh_layer_reference.inc').read_text()+reference[end:]
+ functions=set(re.findall(r'\b(mesh_preview_\w+)\s*\(',source))
+ ref=d/'reference.c';ref.write_text(''.join(f'#define {name} reference_{name}\n' for name in sorted(functions))+reference)
+ parity=d/'section-parity'
+ subprocess.run(['cc','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(root/'main'),str(root/'main/mesh_preview.c'),str(ref),str(root/'main/gcode_toolpath.c'),str(root/'tools/audit/mesh_section_parity_test.c'),'-lm','-o',str(parity)],check=True)
+ subprocess.run([str(parity),str(root/'tools/mesh-preview/demo.phm')],check=True,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})
+ gesture=d/'gesture-material'
+ subprocess.run(['cc','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(root/'main'),str(root/'main/mesh_preview.c'),str(root/'main/gcode_toolpath.c'),str(root/'tools/audit/mesh_gesture_material_test.c'),'-lm','-o',str(gesture)],check=True)
+ subprocess.run([str(gesture)],check=True,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})
 print('PASS: standalone binary/ASCII STL conversion, binary solid-header detection, simplification budget, deterministic demo, malformed input and source/output preservation')

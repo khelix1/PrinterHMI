@@ -1,6 +1,8 @@
 #include "files_row_preview.h"
 
 #include <stdint.h>
+#include <math.h>
+#include "cJSON.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -18,13 +20,13 @@
 #include "misc/cache/instance/lv_image_cache.h"
 
 #define TAG "files_row_preview"
-/* Keep the full shared canvas even though the list displays a small icon.
- * The lightbox uses this descriptor directly, without another download.
- */
-#define ROW_PREVIEW_WIDTH THUMBNAIL_PREVIEW_WIDTH
-#define ROW_PREVIEW_HEIGHT THUMBNAIL_PREVIEW_HEIGHT
-#define ROW_PREVIEW_SLOT_COUNT 24
-#define ROW_PREVIEW_QUEUE_LENGTH 12
+/* Row wells are at most 76 px. The lightbox loads its own original on tap. */
+#define ROW_PREVIEW_WIDTH 96
+#define ROW_PREVIEW_HEIGHT 96
+/* Match the Files browser's 64-entry bound; avoid silently losing requests
+ * after scrolling beyond 24 slots or overflowing a twelve-job queue. */
+#define ROW_PREVIEW_SLOT_COUNT 64
+#define ROW_PREVIEW_QUEUE_LENGTH ROW_PREVIEW_SLOT_COUNT
 #define ROW_PREVIEW_METADATA_SIZE 8192
 
 typedef enum {
@@ -88,6 +90,38 @@ static bool ensure_runtime(void)
     return s_slots && s_lock && s_queue;
 }
 
+/* Row-only source selection: smallest adequate long edge, or largest available.
+ * The Dashboard/Printer/lightbox continue to use the largest original. */
+static bool row_thumbnail_path(const char *metadata,char *out,size_t size)
+{
+    if(!out||!size)return false;
+    out[0]=0;if(!metadata)return false;
+    cJSON *root=cJSON_Parse(metadata);
+    cJSON *result=cJSON_GetObjectItemCaseSensitive(root,"result");
+    cJSON *items=cJSON_GetObjectItemCaseSensitive(result,"thumbnails");
+    const char *best=NULL,*fallback=NULL;double best_area=INFINITY,fallback_area=-1;
+    cJSON *item=NULL;
+    cJSON_ArrayForEach(item,items){
+        cJSON *path=cJSON_GetObjectItemCaseSensitive(item,"relative_path");
+        if(!cJSON_IsString(path)||!path->valuestring||!path->valuestring[0]||strlen(path->valuestring)>=size)continue;
+        cJSON *w=cJSON_GetObjectItemCaseSensitive(item,"width"),*h=cJSON_GetObjectItemCaseSensitive(item,"height");
+        double width=cJSON_IsNumber(w)?w->valuedouble:0,height=cJSON_IsNumber(h)?h->valuedouble:0;
+        bool valid=isfinite(width)&&isfinite(height)&&width>0&&height>0&&width<=32768&&height<=32768;
+        double area=valid?width*height:0;
+        if(area>fallback_area){fallback=path->valuestring;fallback_area=area;}
+        if(valid&&fmax(width,height)>=ROW_PREVIEW_WIDTH&&area<best_area){best=path->valuestring;best_area=area;}
+    }
+    if(best||fallback)snprintf(out,size,"%s",best?best:fallback);
+    cJSON_Delete(root);return out[0]!=0;
+}
+static bool row_cache_path(const char *file,char *out,size_t size)
+{
+    char original[220];
+    if(!out||!size||!thumbnail_manager_cache_path_for_file(file,original,sizeof(original)))return false;
+    /* Separate namespace: a small row source must never replace a full preview. */
+    int n=snprintf(out,size,"%s.row.png",original);return n>0&&(size_t)n<size;
+}
+
 static bool fetch_preview_png(
     const char *host,
     int port,
@@ -100,7 +134,9 @@ static bool fetch_preview_png(
     *png_out = NULL;
     *png_size_out = 0;
 
-    char cache_path[220];
+    char cache_path[240];
+    if(sd_available&&row_cache_path(file,cache_path,sizeof(cache_path))&&
+        thumbnail_manager_load_cache_file(cache_path,png_out,png_size_out))return true;
     if (sd_available &&
         thumbnail_manager_cache_path_for_file(
             file,
@@ -127,7 +163,7 @@ static bool fetch_preview_png(
 
     if (!metadata) return false;
 
-    char encoded_file[256];
+    char encoded_file[512];
     thumbnail_manager_url_encode(
         file,
         encoded_file,
@@ -147,7 +183,7 @@ static bool fetch_preview_png(
 
     char thumbnail_path[192] = "";
     bool has_thumbnail = metadata_ok &&
-        json_find_best_thumbnail_path(
+        row_thumbnail_path(
             metadata,
             thumbnail_path,
             sizeof(thumbnail_path));
@@ -156,7 +192,7 @@ static bool fetch_preview_png(
 
     if (!has_thumbnail) return false;
 
-    char encoded_thumbnail[256];
+    char encoded_thumbnail[768];
     thumbnail_manager_url_encode(
         thumbnail_path,
         encoded_thumbnail,
@@ -171,11 +207,7 @@ static bool fetch_preview_png(
         return false;
     }
 
-    if (sd_available &&
-        thumbnail_manager_cache_path_for_file(
-            file,
-            cache_path,
-            sizeof(cache_path))) {
+    if (sd_available && row_cache_path(file,cache_path,sizeof(cache_path))) {
         (void)thumbnail_manager_store_cache_file(
             cache_path,
             *png_out,

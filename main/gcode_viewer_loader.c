@@ -22,9 +22,12 @@ typedef struct {
     gcode_toolpath_t snapshot;
     unsigned layer;
     gcode_viewer_refined_cb refined;
-    int64_t deadline;
+    int64_t deadline,yield_due;
+    gcode_segment_t *replay_segments;size_t replay_count;
     gcode_volume_t *volume;bool feed_ok;
 } job_t;
+/* Explicit volatile stores keep key erasure from being optimized away before free. */
+static void wipe_key(job_t *job){volatile unsigned char *p=(volatile unsigned char *)job->key;for(size_t i=0;i<sizeof(job->key);i++)p[i]=0;}
 static portMUX_TYPE s_lock=portMUX_INITIALIZER_UNLOCKED;
 static uint32_t s_request;
 static bool s_running;
@@ -125,7 +128,7 @@ done:
         if(current(job)&&job->ready(ok?model:NULL,ok?NULL:error))model=NULL;
         bsp_display_unlock();
     }
-    gcode_viewer_loader_free(model);memset(job->key,0,sizeof(job->key));heap_caps_free(job);
+    gcode_viewer_loader_free(model);wipe_key(job);heap_caps_free(job);
     taskENTER_CRITICAL(&s_lock);s_running=false;taskEXIT_CRITICAL(&s_lock);
     vTaskDelete(NULL);
 }
@@ -151,10 +154,11 @@ bool gcode_viewer_loader_start(const char *file,gcode_viewer_ready_cb_t ready)
     for(const char *part=file;*part;){const char *slash=strchr(part,'/');size_t n=slash?(size_t)(slash-part):strlen(part);if(!n||(n==1&&part[0]=='.')||(n==2&&!strncmp(part,"..",2)))return false;if(!slash)break;part=slash+1;if(!*part)return false;}
     taskENTER_CRITICAL(&s_lock);bool busy=s_running;taskEXIT_CRITICAL(&s_lock);if(busy)return false;
     job_t *job=heap_caps_calloc(1,sizeof(*job),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);if(!job)return false;
-    if(!endpoint(job,file)){memset(job->key,0,sizeof(job->key));heap_caps_free(job);return false;}
-    job->profile=moonraker_config_generation();job->ready=ready;
+    job->profile=moonraker_config_generation();
+    if(!endpoint(job,file)||job->profile!=moonraker_config_generation()){wipe_key(job);heap_caps_free(job);return false;}
+    job->ready=ready;
     taskENTER_CRITICAL(&s_lock);job->request=++s_request;s_running=true;s_progress_request=s_request;s_progress=(gcode_viewer_progress_t){0};taskEXIT_CRITICAL(&s_lock);
-    if(xTaskCreatePinnedToCore(worker,"gcode_view",8192,job,3,NULL,0)!=pdPASS){taskENTER_CRITICAL(&s_lock);s_running=false;taskEXIT_CRITICAL(&s_lock);memset(job->key,0,sizeof(job->key));heap_caps_free(job);return false;}
+    if(xTaskCreatePinnedToCore(worker,"gcode_view",8192,job,3,NULL,0)!=pdPASS){taskENTER_CRITICAL(&s_lock);s_running=false;taskEXIT_CRITICAL(&s_lock);wipe_key(job);heap_caps_free(job);return false;}
     return true;
 }
 
@@ -200,7 +204,14 @@ bool gcode_viewer_loader_detail(const gcode_toolpath_t *model,unsigned layer,gco
     return true;
 }
 
-static bool volume_cancel(void *context){job_t *j=context;vTaskDelay(1);return !current(j)||network_activity_controller_exclusive_requested()||esp_timer_get_time()>j->deadline;}
+static bool volume_cancel(void *context){
+    job_t *j=context;int64_t now=esp_timer_get_time();
+    if(!current(j)||network_activity_controller_exclusive_requested()||now>j->deadline)return true;
+    /* Cancellation probes are frequent inside volume construction. Keep them
+     * cheap; yield for other tasks at a wall-time interval, not at every probe. */
+    if(now>=j->yield_due){vTaskDelay(1);j->yield_due=esp_timer_get_time()+20000;}
+    return !current(j)||network_activity_controller_exclusive_requested()||esp_timer_get_time()>j->deadline;
+}
 static void volume_progress(void *context,unsigned percent,float cell){job_t *j=context;taskENTER_CRITICAL(&s_lock);if(j->request==s_request){s_progress.phase=1;s_progress.percent=percent;s_progress.cell_mm=cell;}taskEXIT_CRITICAL(&s_lock);}
 static void *volume_allocate(size_t n){return heap_caps_calloc(1,n,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);}
 static void volume_release(void *p){heap_caps_free(p);}
@@ -213,6 +224,13 @@ static void refine_worker(void *argument){
     for(unsigned i=0;i<sizeof(resolutions)/sizeof(resolutions[0]);i++){j->volume=gcode_volume_create(&j->snapshot,resolutions[i],volume_allocate,volume_release,volume_cancel,volume_progress,j);if(j->volume)break;}
     if(!j->volume){error="Not enough memory for solid refinement. Path preview remains available.";goto done;}
     j->feed_ok=true;
+    if(j->replay_segments){
+        for(size_t i=0;i<j->replay_count;i++){
+            if(i%256==0){if(volume_cancel(j))goto done;volume_progress(j,(unsigned)(50ull*i/j->replay_count),0);}
+            if(!gcode_volume_feed(j->volume,&j->replay_segments[i]))goto done;
+        }
+        ok=true;goto prepared;
+    }
     if(j->cache){
         uint32_t ignored;file=gcode_cache_open_layer(j->cache,0,&ignored);if(!file)goto replay_http;
         for(uint32_t i=0;i<j->cache->count;i++){
@@ -250,16 +268,21 @@ prepared:
 done:
     if(file)fclose(file);
     if(client){esp_http_client_close(client);esp_http_client_cleanup(client);}if(shared)network_activity_controller_end_shared();
-    gcode_volume_destroy(j->volume);heap_caps_free(parser);gcode_viewer_loader_free(model);
+    gcode_volume_destroy(j->volume);heap_caps_free(j->replay_segments);heap_caps_free(parser);gcode_viewer_loader_free(model);
     if(current(j)&&bsp_display_lock(1500)){if(current(j)&&j->refined(mesh,mesh?NULL:error))mesh=NULL;bsp_display_unlock();}
-    mesh_preview_free(mesh,volume_release);cache_drop(j->cache);memset(j->key,0,sizeof(j->key));heap_caps_free(j);
+    mesh_preview_free(mesh,volume_release);cache_drop(j->cache);wipe_key(j);heap_caps_free(j);
     taskENTER_CRITICAL(&s_lock);s_running=false;taskEXIT_CRITICAL(&s_lock);vTaskDelete(NULL);
 }
 bool gcode_viewer_loader_refine(const char *file,const gcode_toolpath_t *model,gcode_viewer_refined_cb ready){
     if(!model||!model->extrusion_seen||!model->source_hash_valid||!ready||model->profile!=moonraker_config_generation())return false;
     taskENTER_CRITICAL(&s_lock);bool busy=s_running;taskEXIT_CRITICAL(&s_lock);if(busy)return false;
     job_t *j=volume_allocate(sizeof(*j));if(!j)return false;j->snapshot=*model;j->profile=model->profile;j->refined=ready;
-    if(model->cache&&model->cache->complete){j->cache=model->cache;if(!endpoint(j,file)){j->url[0]=0;memset(j->key,0,sizeof(j->key));}}else if(!endpoint(j,file)){memset(j->key,0,sizeof(j->key));heap_caps_free(j);return false;}
+    if(model->cache&&model->cache->complete){j->cache=model->cache;if(!endpoint(j,file)){j->url[0]=0;wipe_key(j);}}else if(!endpoint(j,file)){wipe_key(j);heap_caps_free(j);return false;}
+    if(j->profile!=moonraker_config_generation()){wipe_key(j);heap_caps_free(j);return false;}
+    if(model->segments&&model->count&&model->count<=model->capacity&&model->count==model->input_segments&&model->sample_stride==1&&model->count<=GCODE_TOOLPATH_SEGMENTS_MIN){
+        j->replay_segments=heap_caps_calloc(model->count,sizeof(*j->replay_segments),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        if(j->replay_segments){memcpy(j->replay_segments,model->segments,model->count*sizeof(*j->replay_segments));j->replay_count=model->count;}
+    }
     taskENTER_CRITICAL(&s_lock);if(j->cache)j->cache->refs++;j->request=++s_request;s_running=true;s_progress_request=s_request;s_progress=(gcode_viewer_progress_t){.phase=1};taskEXIT_CRITICAL(&s_lock);
-    if(xTaskCreatePinnedToCore(refine_worker,"gcode_solid",8192,j,3,NULL,0)!=pdPASS){taskENTER_CRITICAL(&s_lock);s_running=false;taskEXIT_CRITICAL(&s_lock);cache_drop(j->cache);heap_caps_free(j);return false;}return true;
+    if(xTaskCreatePinnedToCore(refine_worker,"gcode_solid",8192,j,3,NULL,0)!=pdPASS){taskENTER_CRITICAL(&s_lock);s_running=false;taskEXIT_CRITICAL(&s_lock);cache_drop(j->cache);heap_caps_free(j->replay_segments);wipe_key(j);heap_caps_free(j);return false;}return true;
 }

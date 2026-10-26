@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v7.1.20-dev behavior unless they are
+Documents in this directory describe current v7.1.29-dev behavior unless they are
 under `history/`.
 
 | Document | Purpose |

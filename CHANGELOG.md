@@ -1,5 +1,26 @@
 # Changelog
 
+## [7.1.32-dev]
+
+- Retire the unconstructed Dashboard status panel and its no-op runtime update chain; keep current banner/card owners.
+- Remove the unused Phase-1 thumbnail state/path prototype and narrow the live thumbnail API.
+- Remove 14 unconsumed popup/layout/session helpers and inline two private PNG ownership forwarding helpers.
+- Validate active Dashboard, popup, thumbnail-worker and preview-cache behavior with native/sanitizer checks.
+
+## [7.1.31-dev]
+
+- Preserve decoded Files row thumbnails across list reloads when endpoint, profile and file revision still match.
+- Add a bounded, revision-keyed RGB565 disk cache so repeat/restart row loads skip PNG download and decoding.
+- Validate cached dimensions, identity, length and checksums; fall back to fresh metadata/PNG on misses or damage.
+- Fence stale worker stages and ready callbacks on profile changes; retain original-resolution lightbox behavior.
+
+## [7.1.30-dev]
+
+- Retire 59 unreferenced one-time source migration scripts and an unbuilt preview widget.
+- Remove the obsolete Printer motion forwarding module and route callers directly to the existing toolhead implementation.
+- Remove eight unused UI helper exports, the unused Dashboard startup fallback and ignored Network callback adapters.
+- Add source-membership checks and document retained experiments, build patches and runtime compatibility code.
+
 ## [7.1.29-dev]
 
 - Render Files row icons into 96x96 aspect-preserving buffers instead of shared 286x215 preview buffers.

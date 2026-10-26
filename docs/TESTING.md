@@ -2944,3 +2944,67 @@ Native LVGL checks cover row packed dimensions/stride, buffer transfer/replaceme
 failed/stale results and all fullscreen ownership/worker/tap/theme/text-size paths.
 Target checks: first-screen loading, scrolling past 24 files, reload/cache reuse
 and original-resolution lightbox after tapping a 96-pixel row fallback.
+
+
+### v7.1.30-dev first large cleanup batch
+
+Run `python3 tools/audit/source_membership_test.py` for CMake membership, known host
+experiments, missing UI headers and negative inventory fixtures. Real-LVGL checks:
+`responsive_layout_test.py` (Tools/Files/Macros/Network across themes, density,
+text size and widths), `studio_pages_test.py --variant PRINTER` (direct toolhead
+entry), `theme_default_test.py`, `theme_dialog_layout_test.py`, and
+`gcode_viewer_ui_test.py`. Supply `--lvgl-dir` and, when accepted, `--lvgl-lib` for
+host dependencies. Run `ppa_trial_test.py` for build-helper preservation, plus
+`public_tree_audit.sh` and `version_audit.sh`.
+
+Cleanup updater tests cover clean checkpoint install, exact after bytes, deleted
+file backups, idempotence, dry run, drift/symlink/branch refusal, simulated write
+failure rollback and guarded recovery of all old files. No firmware build or panel
+result is inferred from these host checks. Apply the target build helper and
+verify Dashboard, Printer toolhead, Network scan/profile management, Files rows
+and 3D gestures on hardware before committing the cleanup batch.
+
+
+### v7.1.31-dev decoded Files row cache
+
+`files_row_rgb_cache_test.py` runs production storage with ASan/UBSan. It checks
+endpoint/path/size/mtime identity, missing/invalid revisions, packed wide/portrait
+records, fixed-bucket collisions, forged size fields with valid checksums, corrupt
+header/payload, truncated/trailing bytes, read-capacity guards, short writes,
+close/install failures, FatFS EEXIST replacement and rollback of failed installs.
+
+`preview_cache_ownership_test.py` uses real LVGL/cJSON: matching decoded rows
+survive a new list generation with no HTTP/queue/allocation; changed revisions
+queue work; the actual worker loads an RGB disk entry without PNG/HTTP; credential
+and profile changes retire reuse; profile changes during HTTP suppress stale
+publication; all 64 catalogue rows can queue. Fullscreen and other preview fixtures
+remain. `files_load_worker_test.py`, `thumbnail_component_safety_test.py`,
+`thumbnail_storage_test.py` and `source_membership_test.py` also pass. Reuse these
+checks with `--lvgl-dir`, `--lvgl-lib` and `--cjson-dir` where supported.
+
+On target, allow an initial visit to populate the cache, then compare navigation,
+refresh and restart loads. Check changed uploads, profile switches, absent/full SD
+and high-resolution tapping. A first uncached PNG and the file-list HTTP request
+still incur their normal costs; no cold-load FPS/latency guarantee is inferred.
+
+
+### v7.1.32-dev owner/API cleanup
+
+`thumbnail_manager_test.py --lvgl-dir /path/to/lvgl` compiles the actual manager
+with ASan/UBSan and injected transport/RTOS/allocator failures. It verifies PNG
+replacement/freeing, RAW descriptor ownership, result transitions, duplicate task
+rejection, actual worker success/retries, forced-refresh reset and allocation/task
+failure cleanup. Live SD/download cache functions remain covered by existing
+storage and preview pipeline checks.
+
+Run `status_observers_test.py`, `dashboard_offline_test.py`,
+`dashboard_camera_safety_test.py`, `shared_popup_safety_test.py`,
+`lvgl95_modernization_test.py`, `telemetry_refresh_test.py`,
+`aspect_preview_pipeline_test.py`, `preview_cache_ownership_test.py` and
+`gcode_viewer_ui_test.py` with the existing LVGL/cJSON arguments. These exercise
+current owners after retiring the never-bound legacy Dashboard panel. The old
+synthetic telemetry block that manually populated its private state is removed;
+Printer idempotence, charts and telemetry history are still checked. Source
+membership reports 164 firmware sources; version/public-tree checks also run.
+The updater's exact-byte, refusal, rollback, deletion backup and guarded recovery
+checks apply to this incremental batch. Target firmware build/smoke checks remain.

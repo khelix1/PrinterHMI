@@ -4,13 +4,6 @@
 #include "moonraker.h"
 #include "ui_dashboard_layout_profile.h"
 
-lv_obj_t *ui_machine_status_create(
-    lv_obj_t *parent,
-    int x,
-    int y,
-    int w,
-    int h);
-
 lv_obj_t *ui_machine_status_create_profile(
     lv_obj_t *parent,
     const ui_dashboard_rect_t *rect,

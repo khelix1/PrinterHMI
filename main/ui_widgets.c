@@ -92,22 +92,6 @@ lv_obj_t *ui_create_label(lv_obj_t *parent, const char *text, lv_color_t color)
     return lbl;
 }
 
-lv_obj_t *ui_create_card_title(lv_obj_t *parent, const char *text)
-{
-    lv_obj_t *lbl = ui_create_label(parent, text, UI_TEXT_DIM);
-    ui_apply_custom_label_style(lbl, UI_FONT_BODY, UI_TEXT_DIM);
-    lv_label_set_long_mode(lbl, LV_LABEL_LONG_DOT);
-    return lbl;
-}
-
-lv_obj_t *ui_create_card_value(lv_obj_t *parent, const char *text)
-{
-    lv_obj_t *lbl = ui_create_label(parent, text, UI_TEXT);
-    ui_apply_custom_label_style(lbl, UI_FONT_VALUE, UI_TEXT);
-    lv_label_set_long_mode(lbl, LV_LABEL_LONG_DOT);
-    return lbl;
-}
-
 lv_obj_t *ui_create_card_subtitle(lv_obj_t *parent, const char *text)
 {
     lv_obj_t *lbl = ui_create_label(parent, text, UI_TEXT_DIM);
@@ -431,20 +415,6 @@ lv_obj_t *ui_create_operator_banner(
         0);
 
     return banner;
-}
-
-
-void ui_operator_banner_set_status(
-    lv_obj_t *banner,
-    ui_status_kind_t kind)
-{
-    if (!banner) {
-        return;
-    }
-
-    ui_apply_banner_status_style(
-        banner,
-        kind);
 }
 
 

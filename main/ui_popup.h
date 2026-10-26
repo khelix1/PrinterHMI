@@ -40,16 +40,6 @@ lv_obj_t *ui_popup_create(lv_obj_t *parent,
 lv_obj_t *ui_popup_create_on_screen(int32_t width, int32_t height,
                                     ui_popup_kind_t kind);
 
-lv_obj_t *ui_popup_add_title(lv_obj_t *popup,
-                             const char *text,
-                             bool danger,
-                             int32_t y_offset);
-
-lv_obj_t *ui_popup_add_message(lv_obj_t *popup,
-                               const char *text,
-                               bool muted,
-                               int32_t y_offset);
-
 /*
  * Shared Operator-popup structural primitives.
  *
@@ -90,54 +80,11 @@ lv_obj_t *ui_popup_add_body(lv_obj_t *popup,
                             int32_t y,
                             int32_t width);
 
-lv_obj_t *ui_popup_add_status_label(lv_obj_t *popup,
-                                    const char *text,
-                                    int32_t x,
-                                    int32_t y,
-                                    int32_t width);
-
 lv_obj_t *ui_popup_add_caption(lv_obj_t *popup,
                                const char *text,
                                int32_t x,
                                int32_t y,
                                int32_t width);
-
-lv_obj_t *ui_popup_add_progress_status(lv_obj_t *popup,
-                                       const char *text,
-                                       int32_t x,
-                                       int32_t y,
-                                       int32_t width);
-
-lv_obj_t *ui_popup_add_progress_value(lv_obj_t *popup,
-                                      const char *text,
-                                      int32_t x,
-                                      int32_t y,
-                                      int32_t width);
-
-lv_obj_t *ui_popup_add_progress_bar(lv_obj_t *popup,
-                                    int32_t x,
-                                    int32_t y,
-                                    int32_t width,
-                                    int32_t height,
-                                    int32_t minimum,
-                                    int32_t maximum,
-                                    int32_t value);
-
-lv_obj_t *ui_popup_add_progress_detail(lv_obj_t *popup,
-                                       const char *text,
-                                       int32_t x,
-                                       int32_t y,
-                                       int32_t width);
-
-lv_obj_t *ui_popup_add_close_button(lv_obj_t *popup,
-                                    int32_t width,
-                                    int32_t height,
-                                    lv_align_t align,
-                                    int32_t x_offset,
-                                    int32_t y_offset,
-                                    ui_button_kind_t kind,
-                                    lv_event_cb_t event_cb,
-                                    void *user_data);
 
 lv_obj_t *ui_popup_add_list(lv_obj_t *popup,
                             int32_t x,
@@ -232,9 +179,6 @@ lv_obj_t *ui_popup_add_button_aligned(lv_obj_t *popup,
                                       lv_obj_t **label_out);
 
 /* Two-column responsive form, up to 16 fields; each cell uses a Flex column. */
-lv_obj_t *ui_popup_add_form_grid(lv_obj_t *popup, int32_t x, int32_t y,
-    int32_t width, int32_t height);
-lv_obj_t *ui_popup_add_form_cell(lv_obj_t *form, unsigned index);
 
 /* Find the modal owner through layout containers. */
 lv_obj_t *ui_popup_find_owner(lv_obj_t *object);

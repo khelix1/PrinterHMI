@@ -44,7 +44,6 @@
 #include "bsp/display.h"
 #include "bsp_board_extra.h"
 #include "ui_dashboard.h"
-#include "ui_dashboard_status.h"
 #include "ui_command_bar.h"
 #include "ui_ota_popup.h"
 #include "ui_ota_release_browser.h"
@@ -158,7 +157,6 @@ static void sntp_wait_task(void *arg);
 #include "calibration_session_controller.h"
 #include "telemetry_history.h"
 #include "ui_printer.h"
-#include "ui_printer_motion.h"
 #include "ui_printer_toolhead.h"
 #include "ui_printer_popups.h"
 #include "ui_filament_recovery.h"
@@ -1441,50 +1439,13 @@ static void scan_moonraker_now(void)
     if(!moonraker_discovery_start(&s_ip))moonraker_discovery_set_status("Unable to start Moonraker discovery task.");
 }
 
-static void moon_port_popup_save_bridge(int port)
-{
-    if (!moonraker_config_select_port(port)) {
-        return;
-    }
-
-    moonraker_configuration_changed(
-        "Moonraker: port changed",
-        true);
-}
-
-static void ui_network_tools_open_port_edit_cb(lv_event_t *e)
-{
-    (void)e;
-    ui_network_port_popup_show(moonraker_config_port(),
-                           moon_port_popup_save_bridge);
-}
-
-static lv_obj_t *make_printer_info(
-    lv_obj_t *parent,
-    const char *title,
-    const char *value,
-    int x,
-    int y)
-{
-    return ui_info_card_create(
-        parent,
-        title,
-        value,
-        x,
-        y,
-        250,
-        98);
-}
-
 void ui_network_create(void)
 {
     ui_network_create_objects(
         network_banner_text(),
         moonraker_config_port(),
-        make_printer_info,
         ui_network_tools_open_wifi_scan_cb,
-        ui_network_tools_open_printer_profiles_cb,
-        ui_network_tools_open_port_edit_cb);
+        ui_network_tools_open_printer_profiles_cb);
 }
 
 static void ui_network_refresh_bridge(void)
@@ -2103,7 +2064,7 @@ static void printer_motion_send_gcode_bridge(const char *cmd)
 
 static void show_motion_popup(void)
 {
-    ui_printer_motion_show(&motion_step1_btn,
+    ui_printer_toolhead_show(&motion_step1_btn,
                            &motion_step10_btn,
                            &motion_step50_btn,
                            &printer_jog_step,

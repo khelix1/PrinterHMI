@@ -24,6 +24,3 @@ typedef struct {
 bool ui_printer_layout_create(
     lv_obj_t *page,
     ui_printer_layout_t *layout);
-
-void ui_printer_layout_clear_refs(
-    ui_printer_layout_t *layout);

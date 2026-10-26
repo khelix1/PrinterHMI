@@ -13,7 +13,6 @@ typedef void (*ui_files_search_cb_t)(const char *query);
 typedef void (*ui_files_action_cb_t)(void);
 typedef void (*ui_files_folder_cb_t)(const char *path);
 
-void ui_files_add_file_button(const char *path, int y);
 void ui_files_set_status(const char *text);
 lv_obj_t *ui_files_get_popup(void);
 void ui_files_set_callbacks(ui_files_refresh_cb_t refresh_cb,

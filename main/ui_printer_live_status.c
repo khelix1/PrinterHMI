@@ -4,7 +4,6 @@
 #include "printer_controller.h"
 #include "ui_theme.h"
 #include "ui_studio_layout.h"
-#include "ui_printer_motion.h"
 #include "ui_popup.h"
 #include "moonraker_config_controller.h"
 #include "printer_connection_policy.h"

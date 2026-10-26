@@ -14,9 +14,6 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
-#define THUMB_CACHE_DIR "/sdcard/cache"
-#define THUMB_MAX_FILE 160
-#define THUMB_MAX_PATH 240
 
 static const char *TAG = "thumbnail_manager";
 
@@ -75,16 +72,6 @@ void thumbnail_manager_mark_result(bool ok)
     s_thumb_failed = !ok;
 }
 
-bool thumbnail_manager_is_ready(void)
-{
-    return s_thumb_ready;
-}
-
-bool thumbnail_manager_has_failed(void)
-{
-    return s_thumb_failed;
-}
-
 bool thumbnail_manager_task_running(void)
 {
     return s_thumb_task_running;
@@ -124,145 +111,6 @@ void thumbnail_manager_set_force_refresh(bool force_refresh)
     s_thumb_force_refresh = force_refresh;
 }
 
-
-static thumbnail_state_t s_state = THUMBNAIL_STATE_IDLE;
-static char s_file[THUMB_MAX_FILE];
-static char s_cache_path[THUMB_MAX_PATH];
-static char s_status[96];
-
-static void thumb_set_status(const char *text)
-{
-    snprintf(s_status, sizeof(s_status), "%s", text ? text : "");
-}
-
-static void thumb_build_cache_path(const char *gcode_file)
-{
-    s_cache_path[0] = 0;
-
-    if (!gcode_file || !gcode_file[0]) {
-        return;
-    }
-
-    const char *base = strrchr(gcode_file, '/');
-    base = base ? base + 1 : gcode_file;
-
-    char safe[96];
-    size_t j = 0;
-
-    for (size_t i = 0; base[i] && j < sizeof(safe) - 1; i++) {
-        char c = base[i];
-
-        if ((c >= 'a' && c <= 'z') ||
-            (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9') ||
-            c == '_' || c == '-') {
-            safe[j++] = c;
-        } else if (c == '.') {
-            safe[j++] = '_';
-        } else {
-            safe[j++] = '_';
-        }
-    }
-
-    safe[j] = 0;
-
-    if (safe[0] == 0) {
-        snprintf(safe, sizeof(safe), "thumbnail");
-    }
-
-    snprintf(s_cache_path, sizeof(s_cache_path), "%s/%s.png", THUMB_CACHE_DIR, safe);
-}
-
-void thumbnail_manager_init(void)
-{
-    s_file[0] = 0;
-    s_cache_path[0] = 0;
-    s_state = THUMBNAIL_STATE_IDLE;
-    thumb_set_status("Thumbnail idle");
-}
-
-void thumbnail_manager_set_file(const char *gcode_file)
-{
-    if (!gcode_file || !gcode_file[0]) {
-        thumbnail_manager_clear();
-        s_state = THUMBNAIL_STATE_NO_FILE;
-        thumb_set_status("No file selected");
-        return;
-    }
-
-    snprintf(s_file, sizeof(s_file), "%s", gcode_file);
-    thumb_build_cache_path(s_file);
-
-    /*
-     * Phase 1 only:
-     * We are not downloading or checking SD yet.
-     * This proves the manager owns file/cache state safely.
-     */
-    s_state = THUMBNAIL_STATE_PENDING;
-    thumb_set_status("Thumbnail pending");
-}
-
-void thumbnail_manager_clear(void)
-{
-    s_file[0] = 0;
-    s_cache_path[0] = 0;
-    s_state = THUMBNAIL_STATE_IDLE;
-    thumb_set_status("Thumbnail idle");
-}
-
-void thumbnail_manager_set_ready_image(const char *cache_path)
-{
-    if (!cache_path || !cache_path[0]) {
-        s_state = THUMBNAIL_STATE_ERROR;
-        thumb_set_status("Thumbnail ready path missing");
-        return;
-    }
-
-    snprintf(s_cache_path, sizeof(s_cache_path), "%s", cache_path);
-    s_state = THUMBNAIL_STATE_READY;
-    thumb_set_status("Thumbnail ready");
-}
-
-void thumbnail_manager_set_error(const char *status_text)
-{
-    s_state = THUMBNAIL_STATE_ERROR;
-    thumb_set_status(status_text ? status_text : "Thumbnail error");
-}
-
-thumbnail_state_t thumbnail_manager_state(void)
-{
-    return s_state;
-}
-
-const char *thumbnail_manager_file(void)
-{
-    return s_file;
-}
-
-const char *thumbnail_manager_cache_path(void)
-{
-    return s_cache_path;
-}
-
-const char *thumbnail_manager_status_text(void)
-{
-    return s_status;
-}
-
-bool thumbnail_manager_has_ready_image(void)
-{
-    return s_state == THUMBNAIL_STATE_READY && s_cache_path[0] != 0;
-}
-
-bool thumbnail_manager_copy_cache_path(char *out, size_t out_len)
-{
-    if (!out || out_len == 0 || s_cache_path[0] == 0) {
-        return false;
-    }
-
-    snprintf(out, out_len, "%s", s_cache_path);
-    return true;
-}
 
 void thumbnail_manager_url_encode(const char *in, char *out, size_t out_sz)
 {
@@ -534,40 +382,14 @@ bool thumbnail_manager_has_png(void)
 
 void thumbnail_manager_clear_png(void)
 {
-    thumbnail_manager_free_png_buffer(&s_thumb_png, &s_thumb_png_len);
+    if(s_thumb_png)heap_caps_free(s_thumb_png);
+    s_thumb_png=NULL;s_thumb_png_len=0;
 }
 
 void thumbnail_manager_take_png(uint8_t *buf, size_t len)
 {
     thumbnail_manager_clear_png();
-    thumbnail_manager_set_png_buffer(&s_thumb_png, &s_thumb_png_len, buf, len);
-}
-
-void thumbnail_manager_free_png_buffer(uint8_t **buf, size_t *len)
-{
-    if (buf && *buf) {
-        heap_caps_free(*buf);
-        *buf = NULL;
-    }
-
-    if (len) {
-        *len = 0;
-    }
-}
-
-
-void thumbnail_manager_set_png_buffer(uint8_t **dst_buf,
-                                          size_t *dst_len,
-                                          uint8_t *src_buf,
-                                          size_t src_len)
-{
-    if (dst_buf) {
-        *dst_buf = src_buf;
-    }
-
-    if (dst_len) {
-        *dst_len = src_len;
-    }
+    s_thumb_png=buf;s_thumb_png_len=len;
 }
 
 typedef struct {

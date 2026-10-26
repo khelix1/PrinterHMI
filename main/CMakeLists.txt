@@ -39,7 +39,7 @@ idf_component_register(
         "ui_event_history_popup.c"
         "ui_about_popup.c"
         "console_controller.c"
-    "console_filter.c"
+        "console_filter.c"
         "macro_controller.c"
         "macro_parameter_utils.c"
         "endstop_status_controller.c"
@@ -95,7 +95,6 @@ idf_component_register(
         "ui_dashboard_layout_profile.c"
         "ui_page_layout_profile.c"
         "ui_dashboard_page.c"
-        "ui_dashboard_status.c"
         "ui_status_banner.c"
         "ui_active_print.c"
         "ui_machine_status.c"
@@ -104,7 +103,6 @@ idf_component_register(
         # Printer
         "ui_printer.c"
         "ui_printer_layout.c"
-        "ui_printer_motion.c"
         "ui_printer_toolhead.c"
         "ui_printer_live_status.c"
         "ui_printer_info_cards.c"
@@ -127,6 +125,7 @@ idf_component_register(
         "ui_files.c"
         "files_page_controller.c"
         "files_row_preview.c"
+        "files_row_rgb_cache.c"
         "file_detail_loader.c"
 
         # Thumbnails

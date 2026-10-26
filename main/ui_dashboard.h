@@ -2,15 +2,12 @@
 
 #include "lvgl.h"
 #include "moonraker.h"
-#include "ui_dashboard_status.h"
 
 /*
  * PrinterHMI Dashboard
- * Clean Theme A dashboard built beside the existing v3.1 UI.
+ * Theme-aware Dashboard API; page layout and live state have separate owners.
  */
 
-ui_dashboard_status_t ui_dashboard_create_status(
-    lv_obj_t *parent);
 void ui_dashboard_create(void);
 void ui_dashboard_update(void);
 /* Re-evaluate the live-camera toggle after Camera Setup changes. */
@@ -50,7 +47,6 @@ void ui_dashboard_set_banner(
 void ui_dashboard_status_popup_show(const char *title_text, const char *body);
 void ui_dashboard_status_popup_close(void);
 
-
 lv_obj_t *ui_dashboard_thumb_box(void);
 uint32_t ui_dashboard_thumb_generation(void);
 bool ui_dashboard_thumb_ready(void);
@@ -63,6 +59,5 @@ size_t ui_dashboard_thumb_canvas_file_size(void);
 bool ui_dashboard_thumb_canvas_matches(const char *file);
 bool ui_dashboard_thumb_ensure_canvas_buffer(size_t pixels);
 void ui_dashboard_thumb_delete_canvas(void);
-void ui_dashboard_thumb_forget_canvas_file(void);
 void ui_dashboard_thumb_show_canvas_from_buffer(int w, int h, const char *file);
 void ui_dashboard_thumb_apply_canvas_from_buffer(int w, int h, const char *file);

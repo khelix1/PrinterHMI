@@ -1,4 +1,6 @@
 #include "files_row_preview.h"
+#include "files_row_rgb_cache.h"
+#include "moonraker_config_controller.h"
 
 #include <stdint.h>
 #include <math.h>
@@ -31,6 +33,7 @@
 
 typedef enum {
     ROW_PREVIEW_EMPTY = 0,
+    ROW_PREVIEW_IDLE,
     ROW_PREVIEW_QUEUED,
     ROW_PREVIEW_LOADING,
     ROW_PREVIEW_READY,
@@ -42,6 +45,7 @@ typedef struct {
     uint16_t *pixels;
     lv_image_dsc_t image;
     uint32_t generation;
+    uint64_t revision;
     row_preview_state_t state;
 } row_preview_slot_t;
 
@@ -54,7 +58,7 @@ static row_preview_slot_t *s_slots;
 static QueueHandle_t s_queue;
 static SemaphoreHandle_t s_lock;
 static bool s_worker_started;
-static uint32_t s_generation;
+static uint32_t s_generation,s_profile_generation;
 static char s_host[128];
 static char s_api_key[128];
 static int s_port;
@@ -114,40 +118,16 @@ static bool row_thumbnail_path(const char *metadata,char *out,size_t size)
     if(best||fallback)snprintf(out,size,"%s",best?best:fallback);
     cJSON_Delete(root);return out[0]!=0;
 }
-static bool row_cache_path(const char *file,char *out,size_t size)
-{
-    char original[220];
-    if(!out||!size||!thumbnail_manager_cache_path_for_file(file,original,sizeof(original)))return false;
-    /* Separate namespace: a small row source must never replace a full preview. */
-    int n=snprintf(out,size,"%s.row.png",original);return n>0&&(size_t)n<size;
-}
-
 static bool fetch_preview_png(
     const char *host,
     int port,
     const char *api_key,
     const char *file,
-    bool sd_available,
     uint8_t **png_out,
     size_t *png_size_out)
 {
     *png_out = NULL;
     *png_size_out = 0;
-
-    char cache_path[240];
-    if(sd_available&&row_cache_path(file,cache_path,sizeof(cache_path))&&
-        thumbnail_manager_load_cache_file(cache_path,png_out,png_size_out))return true;
-    if (sd_available &&
-        thumbnail_manager_cache_path_for_file(
-            file,
-            cache_path,
-            sizeof(cache_path)) &&
-        thumbnail_manager_load_cache_file(
-            cache_path,
-            png_out,
-            png_size_out)) {
-        return true;
-    }
 
     char *metadata = heap_caps_calloc(
         1,
@@ -207,13 +187,6 @@ static bool fetch_preview_png(
         return false;
     }
 
-    if (sd_available && row_cache_path(file,cache_path,sizeof(cache_path))) {
-        (void)thumbnail_manager_store_cache_file(
-            cache_path,
-            *png_out,
-            *png_size_out);
-    }
-
     return true;
 }
 
@@ -227,7 +200,7 @@ static void publish_preview_result(const row_preview_job_t *job, const char *fil
     const lv_image_dsc_t *ready_image = NULL;
     files_row_preview_ready_cb_t ready_cb = NULL;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    bool current = job->slot >= 0 && job->slot < ROW_PREVIEW_SLOT_COUNT &&
+    bool current = s_profile_generation == moonraker_config_generation() && job->slot >= 0 && job->slot < ROW_PREVIEW_SLOT_COUNT &&
         job->generation == s_generation &&
         s_slots[job->slot].generation == job->generation &&
         strcmp(s_slots[job->slot].file, file) == 0;
@@ -260,6 +233,14 @@ static void publish_preview_result(const row_preview_job_t *job, const char *fil
     bsp_display_unlock();
 }
 
+static bool preview_job_current(const row_preview_job_t *job,const char *file){
+    xSemaphoreTake(s_lock,portMAX_DELAY);
+    bool current=job->slot>=0&&job->slot<ROW_PREVIEW_SLOT_COUNT&&job->generation==s_generation&&
+        s_slots[job->slot].generation==job->generation&&s_slots[job->slot].state==ROW_PREVIEW_LOADING&&
+        !strcmp(s_slots[job->slot].file,file)&&s_profile_generation==moonraker_config_generation();
+    xSemaphoreGive(s_lock);return current;
+}
+
 static void preview_worker(void *arg)
 {
     (void)arg;
@@ -274,7 +255,7 @@ static void preview_worker(void *arg)
         char api_key[sizeof(s_api_key)];
         char file[160];
         int port = 0;
-        bool sd_available = false;
+        bool sd_available = false;uint64_t revision=0;
 
         xSemaphoreTake(s_lock, portMAX_DELAY);
 
@@ -291,53 +272,35 @@ static void preview_worker(void *arg)
             strlcpy(api_key, s_api_key, sizeof(api_key));
             strlcpy(file, s_slots[job.slot].file, sizeof(file));
             port = s_port;
-            sd_available = s_sd_available;
+            sd_available = s_sd_available;revision=s_slots[job.slot].revision;
         }
 
         xSemaphoreGive(s_lock);
 
         if (!current) continue;
 
-        uint8_t *png = NULL;
-        size_t png_size = 0;
-        bool fetched = fetch_preview_png(
-            host,
-            port,
-            api_key,
-            file,
-            sd_available,
-            &png,
-            &png_size);
-
-        uint16_t *rendered = NULL;
-        bool rendered_ok = false;
-        int width = 0, height = 0;
-
-        if (fetched) {
-            rendered = heap_caps_malloc(
-                ROW_PREVIEW_WIDTH * ROW_PREVIEW_HEIGHT * sizeof(uint16_t),
-                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-            lv_image_dsc_t raw_png;
-            memset(&raw_png, 0, sizeof(raw_png));
+        uint16_t *rendered=heap_caps_malloc(ROW_PREVIEW_WIDTH*ROW_PREVIEW_HEIGHT*sizeof(uint16_t),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        bool rendered_ok=false;int width=0,height=0;
+        if(rendered&&preview_job_current(&job,file)&&sd_available&&revision)
+            rendered_ok=files_row_rgb_load(revision,rendered,ROW_PREVIEW_WIDTH*ROW_PREVIEW_HEIGHT,&width,&height);
+        uint8_t *png=NULL;size_t png_size=0;
+        bool fetched=!rendered_ok&&rendered&&preview_job_current(&job,file)&&
+            fetch_preview_png(host,port,api_key,file,&png,&png_size);
+        if(fetched&&preview_job_current(&job,file)){
+            lv_image_dsc_t raw_png;memset(&raw_png,0,sizeof(raw_png));
 #if defined(LV_IMAGE_HEADER_MAGIC)
-            raw_png.header.magic = LV_IMAGE_HEADER_MAGIC;
+            raw_png.header.magic=LV_IMAGE_HEADER_MAGIC;
 #endif
-            raw_png.header.cf = LV_COLOR_FORMAT_RAW;
-            raw_png.data = png;
-            raw_png.data_size = png_size;
-
-            if (rendered && bsp_display_lock(2500)) {
-                rendered_ok = thumbnail_render_to_rgb565_aspect(
-                    &raw_png,
-                    rendered,
-                    ROW_PREVIEW_WIDTH,
-                    ROW_PREVIEW_HEIGHT, &width, &height);
+            raw_png.header.cf=LV_COLOR_FORMAT_RAW;raw_png.data=png;raw_png.data_size=png_size;
+            if(bsp_display_lock(2500)){
+                if(preview_job_current(&job,file))rendered_ok=thumbnail_render_to_rgb565_aspect(&raw_png,rendered,ROW_PREVIEW_WIDTH,ROW_PREVIEW_HEIGHT,&width,&height);
                 bsp_display_unlock();
             }
+            if(rendered_ok&&sd_available&&revision&&preview_job_current(&job,file))
+                (void)files_row_rgb_store(revision,rendered,width,height);
         }
-
-        if (png) heap_caps_free(png);
+        heap_caps_free(png);
+        volatile char *key_bytes=api_key;for(size_t i=0;i<sizeof(api_key);i++)key_bytes[i]=0;
 
         publish_preview_result(&job, file, &rendered, rendered_ok, width, height);
         heap_caps_free(rendered);
@@ -350,6 +313,7 @@ void files_row_preview_begin(
     int port,
     const char *api_key,
     bool sd_available,
+    const printer_file_entry_t *entries, size_t count,
     files_row_preview_ready_cb_t ready_cb)
 {
     if (!ensure_runtime()) {
@@ -359,19 +323,29 @@ void files_row_preview_begin(
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
 
-    s_generation++;
-    if (s_generation == 0) s_generation = 1;
-
-    strlcpy(s_host, host ? host : "", sizeof(s_host));
-    strlcpy(s_api_key, api_key ? api_key : "", sizeof(s_api_key));
-    s_port = port;
-    s_sd_available = sd_available;
-    s_ready_cb = ready_cb;
-
-    for (int index = 0; index < ROW_PREVIEW_SLOT_COUNT; ++index) {
-        s_slots[index].file[0] = '\0';
-        s_slots[index].generation = s_generation;
-        s_slots[index].state = ROW_PREVIEW_EMPTY;
+    if(!entries)count=0;
+    if(count>ROW_PREVIEW_SLOT_COUNT)count=ROW_PREVIEW_SLOT_COUNT;
+    uint32_t profile=moonraker_config_generation();
+    bool same=profile==s_profile_generation&&port==s_port&&!strcmp(s_host,host?host:"")&&!strcmp(s_api_key,api_key?api_key:"");
+    uint64_t revisions[ROW_PREVIEW_SLOT_COUNT];
+    for(size_t i=0;i<count;i++)revisions[i]=files_row_rgb_key(host,port,entries[i].path,entries[i].size,entries[i].modified);
+    s_generation++;if(!s_generation)s_generation=1;s_profile_generation=profile;
+    strlcpy(s_host,host?host:"",sizeof(s_host));strlcpy(s_api_key,api_key?api_key:"",sizeof(s_api_key));
+    s_port=port;s_sd_available=sd_available;s_ready_cb=ready_cb;
+    for(int index=0;index<ROW_PREVIEW_SLOT_COUNT;index++){
+        row_preview_slot_t *slot=&s_slots[index];bool keep=false;
+        if(same&&slot->state==ROW_PREVIEW_READY&&slot->pixels&&slot->revision)
+            for(size_t i=0;i<count;i++)if(revisions[i]==slot->revision&&!strcmp(entries[i].path,slot->file)){keep=true;break;}
+        slot->generation=s_generation;
+        if(!keep){slot->file[0]=0;slot->revision=0;slot->state=ROW_PREVIEW_EMPTY;}
+    }
+    for(size_t i=0;i<count;i++){
+        bool found=false;
+        for(int index=0;index<ROW_PREVIEW_SLOT_COUNT;index++)if(s_slots[index].state!=ROW_PREVIEW_EMPTY&&!strcmp(s_slots[index].file,entries[i].path)){found=true;break;}
+        if(found)continue;
+        for(int index=0;index<ROW_PREVIEW_SLOT_COUNT;index++)if(s_slots[index].state==ROW_PREVIEW_EMPTY){
+            strlcpy(s_slots[index].file,entries[i].path,sizeof(s_slots[index].file));s_slots[index].revision=revisions[i];s_slots[index].state=ROW_PREVIEW_IDLE;break;
+        }
     }
 
     xQueueReset(s_queue);
@@ -408,6 +382,7 @@ void files_row_preview_request(const char *file)
     files_row_preview_ready_cb_t ready_cb = NULL;
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
+    if(s_profile_generation!=moonraker_config_generation()){xSemaphoreGive(s_lock);return;}
 
     for (int index = 0; index < ROW_PREVIEW_SLOT_COUNT; ++index) {
         if (s_slots[index].generation == s_generation &&
@@ -416,6 +391,9 @@ void files_row_preview_request(const char *file)
             if (s_slots[index].state == ROW_PREVIEW_READY) {
                 ready_image = &s_slots[index].image;
                 ready_cb = s_ready_cb;
+            }
+            if(s_slots[index].state==ROW_PREVIEW_IDLE){
+                s_slots[index].state=ROW_PREVIEW_QUEUED;job.slot=index;job.generation=s_generation;break;
             }
             xSemaphoreGive(s_lock);
 
@@ -426,11 +404,12 @@ void files_row_preview_request(const char *file)
         }
     }
 
-    for (int index = 0; index < ROW_PREVIEW_SLOT_COUNT; ++index) {
+    for (int index = 0; job.slot < 0 && index < ROW_PREVIEW_SLOT_COUNT; ++index) {
         if (s_slots[index].state == ROW_PREVIEW_EMPTY) {
             strlcpy(s_slots[index].file, file, sizeof(s_slots[index].file));
             s_slots[index].generation = s_generation;
             s_slots[index].state = ROW_PREVIEW_QUEUED;
+            s_slots[index].revision = 0;
             job.slot = index;
             job.generation = s_generation;
             break;

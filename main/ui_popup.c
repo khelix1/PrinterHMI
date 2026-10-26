@@ -156,48 +156,6 @@ lv_obj_t *ui_popup_create_on_screen(int32_t width, int32_t height,
     return popup_create_on_parent(lv_screen_active(), width, height, kind);
 }
 
-lv_obj_t *ui_popup_add_title(lv_obj_t *popup,
-                             const char *text,
-                             bool danger,
-                             int32_t y_offset)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *title = lv_label_create(popup);
-    lv_label_set_text(title, text ? text : ui_text(""));
-    ui_apply_text_popup_title(title);
-
-    if (danger) {
-        ui_apply_label_error(title);
-    } else {
-        ui_apply_label_primary(title);
-    }
-
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y_offset);
-    return title;
-}
-
-lv_obj_t *ui_popup_add_message(lv_obj_t *popup,
-                               const char *text,
-                               bool muted,
-                               int32_t y_offset)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *message = lv_label_create(popup);
-    lv_label_set_text(message, text ? text : ui_text(""));
-    ui_apply_text_body_large(message);
-
-    if (muted) {
-        ui_apply_label_muted(message);
-    } else {
-        ui_apply_label_primary(message);
-    }
-
-    lv_obj_align(message, LV_ALIGN_TOP_MID, 0, y_offset);
-    return message;
-}
-
 lv_obj_t *ui_popup_add_divider(lv_obj_t *popup,
                                int32_t x,
                                int32_t y,
@@ -313,51 +271,6 @@ lv_obj_t *ui_popup_add_body(lv_obj_t *popup,
 }
 
 
-lv_obj_t *ui_popup_add_status_label(lv_obj_t *popup,
-                                    const char *text,
-                                    int32_t x,
-                                    int32_t y,
-                                    int32_t width)
-{
-    if (!popup) {
-        return NULL;
-    }
-
-    lv_obj_t *status = lv_label_create(popup);
-
-    if (!status) {
-        return NULL;
-    }
-
-    lv_label_set_text(
-        status,
-        text ? text : ui_text(""));
-
-    lv_obj_set_width(
-        status,
-        width);
-
-    lv_label_set_long_mode(
-        status,
-        LV_LABEL_LONG_WRAP);
-
-    ui_apply_text_body_large(status);
-    ui_apply_label_muted(status);
-
-    lv_obj_set_style_text_align(
-        status,
-        LV_TEXT_ALIGN_LEFT,
-        0);
-
-    lv_obj_set_pos(
-        status,
-        x,
-        y);
-
-    return status;
-}
-
-
 lv_obj_t *ui_popup_add_caption(lv_obj_t *popup,
                                const char *text,
                                int32_t x,
@@ -376,130 +289,6 @@ lv_obj_t *ui_popup_add_caption(lv_obj_t *popup,
 
     return caption;
 }
-
-lv_obj_t *ui_popup_add_progress_status(lv_obj_t *popup,
-                                       const char *text,
-                                       int32_t x,
-                                       int32_t y,
-                                       int32_t width)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *label = lv_label_create(popup);
-    lv_label_set_text(label, text ? text : ui_text(""));
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(label, width);
-    lv_obj_set_pos(label, x, y);
-
-    ui_apply_custom_label_style(label, UI_FONT_BODY_LARGE, UI_TEXT);
-
-    lv_obj_set_style_text_align(
-        label,
-        LV_TEXT_ALIGN_CENTER,
-        0);
-
-    return label;
-}
-
-lv_obj_t *ui_popup_add_progress_value(lv_obj_t *popup,
-                                      const char *text,
-                                      int32_t x,
-                                      int32_t y,
-                                      int32_t width)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *label = lv_label_create(popup);
-    lv_label_set_text(label, text ? text : ui_text(""));
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(label, width);
-    lv_obj_set_pos(label, x, y);
-
-    ui_apply_custom_label_style(label, UI_FONT_PERCENT, UI_ACCENT_BRIGHT);
-
-    lv_obj_set_style_text_align(
-        label,
-        LV_TEXT_ALIGN_CENTER,
-        0);
-
-    return label;
-}
-
-lv_obj_t *ui_popup_add_progress_bar(lv_obj_t *popup,
-                                    int32_t x,
-                                    int32_t y,
-                                    int32_t width,
-                                    int32_t height,
-                                    int32_t minimum,
-                                    int32_t maximum,
-                                    int32_t value)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *bar = lv_bar_create(popup);
-    lv_obj_set_size(bar, width, height);
-    lv_obj_set_pos(bar, x, y);
-
-    lv_bar_set_range(bar, minimum, maximum);
-    lv_bar_set_value(bar, value, LV_ANIM_OFF);
-
-    /*
-     * Progress-bar appearance belongs entirely to the active popup theme.
-     */
-    ui_apply_progress_bar_style(bar);
-
-    return bar;
-}
-
-lv_obj_t *ui_popup_add_progress_detail(lv_obj_t *popup,
-                                       const char *text,
-                                       int32_t x,
-                                       int32_t y,
-                                       int32_t width)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *label = lv_label_create(popup);
-    lv_label_set_text(label, text ? text : ui_text(""));
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(label, width);
-    lv_obj_set_pos(label, x, y);
-
-    ui_apply_custom_label_style(label, UI_FONT_BODY, UI_TEXT_DIM);
-
-    lv_obj_set_style_text_align(
-        label,
-        LV_TEXT_ALIGN_CENTER,
-        0);
-
-    return label;
-}
-
-
-lv_obj_t *ui_popup_add_close_button(lv_obj_t *popup,
-                                    int32_t width,
-                                    int32_t height,
-                                    lv_align_t align,
-                                    int32_t x_offset,
-                                    int32_t y_offset,
-                                    ui_button_kind_t kind,
-                                    lv_event_cb_t event_cb,
-                                    void *user_data)
-{
-    return ui_popup_add_button_aligned(
-        popup,
-        LV_SYMBOL_CLOSE " CLOSE",
-        width,
-        height,
-        align,
-        x_offset,
-        y_offset,
-        kind,
-        event_cb,
-        user_data,
-        NULL);
-}
-
 
 lv_obj_t *ui_popup_add_list(lv_obj_t *popup,
                             int32_t x,
@@ -857,38 +646,6 @@ lv_obj_t *ui_popup_add_footer_action(lv_obj_t *popup,
     footer_layout(ctx);
     return button;
 }
-
-lv_obj_t *ui_popup_add_form_grid(lv_obj_t *popup, int32_t x, int32_t y,
-    int32_t width, int32_t height)
-{
-    lv_obj_t *form = ui_popup_add_list(popup, x, y, width, height);
-    if (!form) return NULL;
-    static const int32_t columns[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static const int32_t rows[] = {
-        LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT,
-        LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_CONTENT,
-        LV_GRID_TEMPLATE_LAST
-    };
-    lv_obj_set_style_pad_all(form, 12, 0);
-    lv_obj_set_style_pad_column(form, 16, 0);
-    lv_obj_set_style_pad_row(form, 16, 0);
-    lv_obj_set_grid_dsc_array(form, columns, rows);
-    return form;
-}
-lv_obj_t *ui_popup_add_form_cell(lv_obj_t *form, unsigned index)
-{
-    if (!form || index >= 16) return NULL;
-    lv_obj_t *cell = lv_obj_create(form);
-    lv_obj_remove_style_all(cell);
-    lv_obj_remove_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_height(cell, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(cell, 8, 0);
-    lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, (int32_t)(index % 2), 1,
-        LV_GRID_ALIGN_START, (int32_t)(index / 2), 1);
-    return cell;
-}
-
 
 lv_obj_t *ui_popup_add_action_at(lv_obj_t *popup,
                                  ui_popup_action_t action,

@@ -1,3 +1,4 @@
+#include "ui_printer_toolhead.h"
 /* Real LVGL layouts and page lifecycle; fixtures replace printer transport. */
 #include <assert.h>
 #include <stdio.h>
@@ -63,7 +64,7 @@ const lv_image_dsc_t *printer_preview_cache_image(int profile,const char **file,
 }
 static void send_motion(const char *c);
 static unsigned toolhead_opens;
-static void open_toolhead(lv_event_t *e){(void)e;toolhead_opens++;static lv_obj_t *a,*b,*c;static double step=10;ui_printer_motion_show(&a,&b,&c,&step,send_motion);}
+static void open_toolhead(lv_event_t *e){(void)e;toolhead_opens++;static lv_obj_t *a,*b,*c;static double step=10;ui_printer_toolhead_show(&a,&b,&c,&step,send_motion);}
 #include "ui_printer_layout.h"
 #include "ui_printer_info_cards.h"
 #include "ui_printer_actions.h"
@@ -76,7 +77,7 @@ static lv_obj_t *find_text(lv_obj_t *root, const char *text){
 static void check_toolhead_offset(void){
  for(int theme=0;theme<5;theme++) {
   ui_theme_set_active((ui_theme_id_t)theme);lv_obj_t *a=NULL,*b=NULL,*c=NULL;double step=10;state.z_offset=0;
-  ui_printer_motion_show(&a,&b,&c,&step,send_motion);
+  ui_printer_toolhead_show(&a,&b,&c,&step,send_motion);
   lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);
   lv_obj_t *tab=find_text(popup,"Z offset");assert(tab);lv_obj_send_event(lv_obj_get_parent(tab),LV_EVENT_CLICKED,NULL);
   lv_obj_t *caption=find_text(popup,"Runtime Z offset (mm)"),*value=find_text(popup,"+0.000 mm"),*adjust=find_text(popup,"-0.05");

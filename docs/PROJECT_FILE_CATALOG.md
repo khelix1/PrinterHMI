@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.1.29-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.1.32-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -35,7 +35,7 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_dashboard`, `ui_dashboard_page` | Dashboard page orchestration and layout |
-| `ui_dashboard_status`, `ui_status_banner` | Print state and status presentation |
+| `ui_status_banner` | Current print state, progress and status presentation |
 | `ui_active_print`, `ui_machine_status` | Active-print and machine cards |
 | `ui_command_bar` | Dashboard operator actions |
 
@@ -44,7 +44,7 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_printer`, `ui_printer_layout` | Printer page orchestration and geometry |
-| `ui_printer_motion`, `ui_printer_live_status` | Motion popup and live status |
+| `ui_printer_toolhead`, `ui_printer_live_status` | Motion popup and live status |
 | `ui_printer_info_cards`, `ui_printer_actions`, `ui_printer_banner` | Printer presentation components |
 | `ui_printer_popups` | Temperature, fan, cancel and exclude-object interactions |
 | `printer_controller`, `printer_ui_controller` | Printer policy and UI command routing |
@@ -161,7 +161,7 @@ are not architecture modules and must not be tracked as production source.
 
 | Files | Ownership |
 | --- | --- |
-| `thumbnail_render`, `printer_preview_cache`, `files_row_preview`, `ui_thumbnail` | Packed aspect-preserving RGB565 dimensions and descriptor rebinding within existing preview buffer budgets |
+| `thumbnail_render`, `printer_preview_cache`, `files_row_preview`, `files_row_rgb_cache`, `ui_thumbnail` | Packed aspect-preserving RGB565 dimensions and descriptor rebinding within existing preview buffer budgets |
 | `ui_camera`, `ui_dashboard`, `camera_stream_controller` | Detach/cache retirement before pixel free; nonblocking UI consumer retirement with worker-owned transport cleanup |
 | `moonraker_live_websocket` | Profile generation fencing on selection; runtime-owned WebSocket teardown/rebind |
 | `files_page_controller` | Background file-list HTTP, one coalesced latest job and LVGL-only current-result publication |
@@ -221,3 +221,38 @@ are not architecture modules and must not be tracked as production source.
 - `tools/gcode-viewer/`: standalone raster benchmark and sample G-code.
 
 - `tools/audit/bed_mesh_live_view_test.c`: real page coverage for print-time viewing, late mesh arrival, snapshot changes and action restrictions (run by the Bed Mesh profiles audit).
+
+
+## Source cleanup ownership
+
+The v7.1.30-dev cleanup batch is documented in [CODE_CLEANUP.md](CODE_CLEANUP.md).
+`ui_printer_toolhead` owns toolhead creation, initialization, commands and actions;
+its obsolete `ui_printer_motion` forwarding layer is retired. The unused
+`ui_preview` prototype and 59 completed one-time source migration scripts are
+retired. Historical engineering records remain under `docs/history/`; runtime
+configuration/backup migrations and current build patch tools remain in use.
+`tools/audit/source_membership_test.py` verifies all 164 firmware C sources and
+the two explicitly parked mesh-host modules with their test consumers.
+
+
+### Files row cache follow-up
+
+`files_page_controller` supplies the parsed path/size/modified catalogue to
+`files_row_preview`. Unchanged decoded rows survive list generations; profile,
+endpoint and credential changes retire RAM reuse. `files_row_rgb_cache` owns the
+bounded decoded SD format, endpoint/file revision fingerprint, checksums and
+atomic replacement. Missing/invalid cache data falls back to fresh metadata and
+PNG decoding. The existing full-resolution lightbox and other page caches keep
+their owners. `files_row_rgb_cache_test.py` and the native preview ownership worker
+fixtures cover the new fast paths and invalidation.
+
+
+### Second cleanup batch — v7.1.32-dev
+
+The unused `ui_dashboard_status` panel module is retired: its constructor had no
+production callers and every page left its handles empty. `ui_status_banner`,
+Active Print and machine-card owners continue to provide the visible Dashboard.
+`thumbnail_manager` retains its worker result state, real PNG owner and SD/download
+paths; its separate Phase-1 state/path prototype is retired. The narrowed popup,
+layout and thumbnail-session APIs exclude unconsumed helpers. See
+[CODE_CLEANUP.md](CODE_CLEANUP.md) for the reference evidence and validation.

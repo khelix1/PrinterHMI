@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v7.1.29-dev behavior unless they are
+Documents in this directory describe current v7.1.32-dev behavior unless they are
 under `history/`.
 
 | Document | Purpose |
@@ -22,6 +22,7 @@ under `history/`.
 | [Release checklist](RELEASE_CHECKLIST.md) | Release-quality gate |
 | [Git workflow](GIT_WORKFLOW.md) | Branches, known-good tags and nightly backup |
 | [Project file catalog](PROJECT_FILE_CATALOG.md) | Current source ownership map |
+| [Code cleanup](CODE_CLEANUP.md) | Verified removals, retained compatibility code and validation |
 | [Secure Moonraker transport](SECURE_MOONRAKER_TRANSPORT.md) | Per-profile HTTPS/WSS policy and trust boundaries |
 | [Secure Moonraker setup](SECURE_MOONRAKER_SETUP.md) | Public Nginx installer and panel setup |
 | [History](history/README.md) | Preserved v3.x engineering record |

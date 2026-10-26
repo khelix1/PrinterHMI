@@ -3,8 +3,7 @@
 Dashboard, Printer and Files previews preserve the complete source image. The
 shared RGB565 renderer packs the complete original into an aspect-aware canvas.
 Dashboard/Printer use a 286×215 capacity; Files row icons use 96×96. Neither adds
-synthetic letterbox pixels or
-cuts off model edges. A 900×520 source produces 286×165 pixels; a portrait
+synthetic letterbox pixels or cuts off model edges. A 900×520 source produces 286×165 pixels; a portrait
 520×900 source produces 124×215. Native LVGL `CONTAIN` fits that canvas into the page's
 preview frame with no extra inset. Different image/frame proportions leave
 unused space instead of cropping or stretching. This supersedes the earlier
@@ -111,6 +110,9 @@ borders remain. The full-resolution lightbox path is unchanged.
 
 ## v7.1.29-dev Files row loading
 
+The row PNG-cache policy in this historical section is superseded by v7.1.31-dev
+below. Row dimensions, source-size selection and fullscreen behavior remain.
+
 Row wells display at most 76 pixels, so full 286×215 intermediate canvases wasted
 sampling work and PSRAM. Rows now use a packed aspect-preserving 96×96 capacity:
 96×55 for a 900×520 image, or 55×96 for portrait. The per-slot pixel capacity falls
@@ -134,3 +136,44 @@ ESP-IDF/managed cJSON source is not discoverable. It uses real cJSON and LVGL fo
 source selection, invalid/missing metadata, portrait/large-only fallback, SD and
 no-SD fetches, separate writes, failure cleanup, descriptor replacement and stale
 publication. The fullscreen worker/tap/profile/lifetime checks also pass.
+
+
+## v7.1.31-dev decoded row reuse
+
+A successful list reload previously emptied every row slot, even when the same
+files were still present. It also loaded cached compressed PNGs and decoded each
+again. Rows now reuse ready RGB565 descriptors when the endpoint, active profile
+generation, credentials, path, size and modification time still match. Changed
+or removed files lose the ready state while their old storage remains safe until
+replacement. The catalogue has the existing 64-entry bound. Missing or invalid
+size/modified values disable decoded cache reuse for that file.
+
+With SD available, `files_row_rgb_cache` stores packed decoded pixels at
+`/sdcard/hmi/rows/00.rgb` through `ff.rgb`. The fixed 256 buckets bound live data
+to approximately 4.8 MB, with temporary/backup files used for replacement. Each
+record carries a complete endpoint/path/size/modified fingerprint, dimensions,
+exact length and header/pixel checksums. Bucket collisions, changed revisions,
+corrupt/truncated/oversized/trailing data all miss safely. No pruning scan or
+additional decode allocation is needed to read a hit. The worker fills its usual
+96×96 staging capacity, then publishes under the display/slot locks.
+
+On a miss the existing small-source selector downloads a fresh PNG, decodes it
+once and writes the decoded cache best-effort. Rows no longer consult or write
+the old unversioned row/full PNG caches: those cannot validate an overwritten
+file's size/time. Other page/fullscreen PNG caches are unchanged. Cancellation
+and profile checks occur before network work, after fetch, before decode/store
+and at publication. No cached row is delivered immediately after a profile switch.
+
+The first visit still pays for unseen PNGs and populates the cache. Subsequent
+visits avoid per-row fetch/decode; SD hits extend this across restarts. Without
+SD, unchanged rows still benefit from RAM reuse during the session. File-list
+HTTP latency itself is unchanged. Target loading times remain to measure.
+
+
+### Panel verification and subsequent cleanup
+
+The operator confirmed v7.1.31-dev Files loading looks good, including across
+reboots. The v7.1.32-dev cleanup leaves the row/RGB cache implementation unchanged.
+It retires a separate, unconsumed Phase-1 thumbnail state/path prototype; active
+worker results, PNG ownership, selected-cache storage and full-resolution previews
+remain and are covered by the production manager and native preview tests.

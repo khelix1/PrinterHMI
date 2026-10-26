@@ -11,7 +11,7 @@
 #include "ui_thumbnail.h"
 #include "ui_widgets.h"
 
-/* Temporary bridge while Printer page implementation still lives in main.c. */
+/* Application-owned page lifecycle; preview state remains in this module. */
 void ui_printer_create(void);
 void ui_printer_destroy(void);
 
@@ -23,10 +23,6 @@ void ui_printer_show(void)
 void ui_printer_hide(void)
 {
     ui_printer_destroy();
-}
-
-void ui_printer_refresh(void)
-{
 }
 
 /* =================================================================
@@ -320,11 +316,6 @@ void ui_printer_preview_destroy_refs(void)
 char *ui_printer_preview_canvas_file(void)
 {
     return s_preview_canvas_file;
-}
-
-size_t ui_printer_preview_canvas_file_size(void)
-{
-    return sizeof(s_preview_canvas_file);
 }
 
 lv_obj_t **ui_printer_preview_canvas_ref(void)

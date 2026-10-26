@@ -5,12 +5,22 @@ import argparse
 import concurrent.futures
 import subprocess
 import tempfile
+import os
 root=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--lvgl-dir",type=Path)
 parser.add_argument("--lvgl-lib",type=Path,help="Optional host LVGL archive built with these font/stdlib flags")
+parser.add_argument("--cjson-dir",type=Path,help="cJSON source directory for Files row thumbnail selection checks")
 parser.add_argument("--variant",action="append",choices=["PROFILE","ROWS","LIGHTBOX","SAFETY"],help="Run only selected fixture(s); default runs all")
 args=parser.parse_args()
+candidates=[args.cjson_dir] if args.cjson_dir else []
+candidates.append(Path(os.environ.get("PRINTERHMI_IDF6_PATH","~/esp/esp-idf-v6.0.2")).expanduser()/"components/json/cJSON")
+if os.environ.get("IDF_PATH"):candidates.append(Path(os.environ["IDF_PATH"])/"components/json/cJSON")
+for directory in [root/"managed_components",root/"components"]:
+    if directory.exists():candidates.extend(p.parent for p in directory.rglob("cJSON.c"))
+cjson=next((p.resolve() for p in candidates if p and (p/"cJSON.h").is_file() and (p/"cJSON.c").is_file()),None)
+if cjson is None:parser.error("cJSON sources required; supply --cjson-dir")
+
 candidates=[args.lvgl_dir] if args.lvgl_dir else list((root/"managed_components").glob("*lvgl*"))
 lvgl=next((p for p in candidates if p and (p/"src/core/lv_obj.c").is_file()),None)
 if lvgl is None:parser.error("LVGL sources not found; supply --lvgl-dir")
@@ -41,16 +51,17 @@ with tempfile.TemporaryDirectory(prefix="preview-ownership-") as directory:
             objects=list(pool.map(compile_source,(lvgl/"src").rglob("*.c")))
         library=tmp/"liblvgl.a"
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
-    sources=["thumbnail_render.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c"]
+    sources=["files_row_rgb_cache.c","thumbnail_render.c","ui_widgets.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c"]
     for variant in args.variant or ["PROFILE","ROWS","LIGHTBOX","SAFETY"]:
         executable=tmp/variant.lower()
         subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,"-DTEST_"+variant,
-                        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+                        '-DFILES_ROW_RGB_ROOT="'+str(tmp/"row-rgb")+'"',
+                        "-I",str(cjson),"-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
                         str(root/"tools/audit"/("lightbox_safety_test.c" if variant=="SAFETY" else "preview_cache_ownership_test.c")),*[str(root/"main"/p) for p in sources],
-                        str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
+                        str(cjson/"cJSON.c"),str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
         subprocess.run([str(executable)],check=True)
 
     subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror",*flags,
-        "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+        "-I",str(cjson),"-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
         "-c",str(root/"main/ui_preview_lightbox.c"),"-o",str(tmp/"lightbox_owner.o")],check=True)
     print("PASS: standalone fullscreen preview compilation with warnings treated as errors")

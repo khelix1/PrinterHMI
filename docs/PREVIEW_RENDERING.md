@@ -105,3 +105,26 @@ Files, including the ready-to-print popup and fullscreen fallback. Images should
 use more of the frame where old cache padding limited them, retain the whole
 model and stay stable across profile/page/theme switches. Source PNG black
 borders remain. The full-resolution lightbox path is unchanged.
+
+## Revision-aware Files row cache
+
+Files rows use a 96×96 RGB565 canvas and select the smallest adequate source
+thumbnail from Moonraker metadata, with the available larger source as fallback.
+A list reload preserves READY buffers only when profile generation, endpoint,
+credentials, file path, size and modification time match. The catalogue and queue
+retain their existing 64-entry bound. Missing/invalid revision metadata disables
+reuse. Profile changes are fenced before I/O, decode/store and publication.
+
+With SD mounted, decoded pixels are stored in 256 fixed buckets under
+`/sdcard/hmi/rows/00.rgb` through `ff.rgb` (about 4.8 MB of live records). Headers
+include the full endpoint/path/revision key, dimensions, exact byte length and
+header/pixel checksums. Collisions, invalid dimensions, corrupt/truncated/trailing
+records miss safely. Replacement is best-effort with bounded temporary/backup
+names; an SD failure falls back to network/decode. Credentials are not stored.
+Rows no longer use unversioned compressed PNG caches that cannot detect an
+overwritten file. Other page and fullscreen caches remain unchanged.
+
+Unseen files still pay the initial HTTP/decode cost. RAM hits avoid both during
+the session, and decoded SD hits retain the benefit across restarts. File-list
+HTTP latency is unchanged. The operator verified the source branch's Files
+behavior across reboots; the independently ported firmware needs a panel smoke test.

@@ -109,13 +109,3 @@ bool ui_printer_layout_create(
 
     return true;
 }
-
-void ui_printer_layout_clear_refs(
-    ui_printer_layout_t *layout)
-{
-    if (!layout) {
-        return;
-    }
-
-    memset(layout, 0, sizeof(*layout));
-}

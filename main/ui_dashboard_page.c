@@ -87,10 +87,6 @@ ui_dashboard_page_t ui_dashboard_page_create(
             &layout->machine_status,
             &layout->machine_content);
 
-    /* Print timing now lives in the Active Print card footer. */
-    page.print_status = (ui_dashboard_status_t){0};
-    page.print_status_host = NULL;
-
     page.command_host =
         ui_command_bar_create(
             page.root,

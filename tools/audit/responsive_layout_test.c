@@ -433,7 +433,7 @@ static void profiles_cb(lv_event_t *e){(void)e;profiles++;}
 static void selected_cb(lv_event_t *e){snprintf(picked,sizeof(picked),"%s",(char *)lv_event_get_user_data(e));}
 static void run(int width){
  if(width!=854 && width!=976)return; /* Legacy themes retain their fixed page geometry. */
- ui_network_create_objects("Network connected",7125,NULL,scan_cb,profiles_cb,NULL);
+ ui_network_create_objects("Network connected",7125,scan_cb,profiles_cb);
  ui_network_refresh_objects("Printer connected","A_very_long_network_name_12345678","192.168.100.123",true,"very-long-printer-hostname.example.local",200,"Ready to scan");
  ui_network_set_port(7130);assert(!strcmp(lv_label_get_text(s_network.moonraker_port),"7130"));
  lv_obj_update_layout(s_network.root);

@@ -1,5 +1,25 @@
 # Changelog
 
+## [7.1.33-dev] - 2026-10-26
+
+### Independent fixes and cleanup from main
+
+- Keep the experimental 3D G-code viewer on its existing branches; this branch
+  starts at main's bce8481 and carries no viewer source, actions, touch-port changes
+  or experimental tools.
+- Reuse revision-matched Files row RGB565 thumbnails in RAM and in bounded SD
+  buckets, choose smaller source images, and reject stale profile results.
+- Extend Studio's Dashboard filename above the percentage and keep long names
+  scrolling without overlapping large-text progress.
+- Display available Bed Mesh snapshots while printing or paused; retain idle-only
+  calibration and profile-changing controls.
+- Retire the obsolete source rewrite scripts, unused preview/motion/status modules,
+  thumbnail prototype and unconsumed UI factories. Preserve live data migrations,
+  recovery, themes and build helpers.
+- Add standalone source/boundary, cache corruption, thumbnail ownership/worker,
+  actual-page and live Bed Mesh regression checks.
+
+
 ## [7.0.0] - 2026-10-20
 
 ### Added and improved

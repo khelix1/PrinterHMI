@@ -603,11 +603,6 @@ void ui_files_add_file_entry(const char *path,
     }
 }
 
-void ui_files_add_file_button(const char *path, int y)
-{
-    ui_files_add_file_entry(path, 0.0, 0.0, y);
-}
-
 typedef struct {
     char *path;
     lv_obj_t *button;

@@ -108,28 +108,6 @@ static void machine_status_add_live_badge(
 }
 
 
-lv_obj_t *ui_machine_status_create(
-    lv_obj_t *parent,
-    int x,
-    int y,
-    int w,
-    int h)
-{
-    const ui_dashboard_rect_t rect = {x, y, w, h};
-    const ui_dashboard_machine_layout_t layout = {
-        .composition = UI_DASHBOARD_MACHINE_SINGLE_CARD,
-        .label_x = 20,
-        .value_x = 188,
-        .split_gap = 12,
-    };
-
-    return ui_machine_status_create_profile(
-        parent,
-        &rect,
-        &layout);
-}
-
-
 static lv_obj_t *studio_label(lv_obj_t *p,const char *t,int x,int y,int w,const lv_font_t *f,lv_color_t c)
 {
     lv_obj_t *o=lv_label_create(p); lv_label_set_text(o,t);

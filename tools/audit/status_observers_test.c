@@ -75,6 +75,22 @@ int main(void){
    lv_obj_delete(parent); /* deinit before child cleanup */
   }
  }
+ /* Real Studio Dashboard geometry: the file spans the percentage column
+  * without touching progress in either text size. */
+ for(unsigned large=0;large<2;large++){
+  ui_theme_set_active(UI_THEME_STUDIO_DARK);
+  ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
+  lv_obj_t *card=ui_status_banner_create(lv_screen_active(),0,0,720,338);
+  status_banner_ctx_t *ctx=lv_obj_get_user_data(card);assert(ctx->studio_dashboard);
+  ui_status_banner_set(card,"PRINTING","Very_long_print_filename_that_spans_the_percentage_column_0.20mm_PLA.gcode","12:34","37 %");
+  lv_obj_update_layout(card);
+  assert(lv_obj_get_width(ctx->file)==700&&lv_obj_get_x(ctx->file)==0);
+  assert(lv_label_get_long_mode(ctx->file)==LV_LABEL_LONG_SCROLL_CIRCULAR);
+  assert(lv_obj_get_y(ctx->file)+lv_obj_get_height(ctx->file)+8<=lv_obj_get_y(ctx->progress));
+  assert(lv_obj_get_y(ctx->progress)+lv_obj_get_height(ctx->progress)+8<=lv_obj_get_y(ctx->bar));
+  assert(lv_obj_get_x(ctx->file)+lv_obj_get_width(ctx->file)>=lv_obj_get_x(ctx->progress)+lv_obj_get_width(ctx->progress));
+  lv_obj_delete(card);
+ }
  /* Compare the guarded dispatcher against the unchanged concrete recipes,
   * including custom opacity, all themes, accessibility and status transitions.
   */

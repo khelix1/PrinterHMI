@@ -5,24 +5,14 @@
 #include "esp_wifi.h"
 #include "esp_wifi_types.h"
 
-typedef lv_obj_t *(*ui_network_make_info_cb_t)(
-    lv_obj_t *parent,
-    const char *title,
-    const char *value,
-    int x,
-    int y);
-
 void ui_network_show(void);
 void ui_network_hide(void);
-void ui_network_refresh(void);
 
 void ui_network_create_objects(
     const char *banner_text,
     int moonraker_port,
-    ui_network_make_info_cb_t make_info_cb,
     lv_event_cb_t wifi_clicked_cb,
-    lv_event_cb_t host_clicked_cb,
-    lv_event_cb_t port_clicked_cb);
+    lv_event_cb_t host_clicked_cb);
 
 void ui_network_refresh_objects(
     const char *banner_text,

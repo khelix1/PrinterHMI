@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.0.0 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.1.33-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -35,7 +35,7 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_dashboard`, `ui_dashboard_page` | Dashboard page orchestration and layout |
-| `ui_dashboard_status`, `ui_status_banner` | Print state and status presentation |
+| `ui_status_banner` | Print state and status presentation |
 | `ui_active_print`, `ui_machine_status` | Active-print and machine cards |
 | `ui_command_bar` | Dashboard operator actions |
 
@@ -44,7 +44,7 @@ when ownership or build membership changes.
 | Modules | Ownership |
 | --- | --- |
 | `ui_printer`, `ui_printer_layout` | Printer page orchestration and geometry |
-| `ui_printer_motion`, `ui_printer_live_status` | Motion popup and live status |
+| `ui_printer_toolhead`, `ui_printer_live_status` | Toolhead popup and live status |
 | `ui_printer_info_cards`, `ui_printer_actions`, `ui_printer_banner` | Printer presentation components |
 | `ui_printer_popups` | Temperature, fan, cancel and exclude-object interactions |
 | `printer_controller`, `printer_ui_controller` | Printer policy and UI command routing |
@@ -90,6 +90,7 @@ when ownership or build membership changes.
 | --- | --- |
 | `ui_files`, `files_page_controller` | Files page and behavior routing |
 | `files_row_preview`, `file_detail_loader` | Bounded PSRAM row previews with display-locked buffer transfer, and long-press detail work |
+| `files_row_rgb_cache` | Bounded revision-aware decoded Files row storage on SD |
 | `thumbnail_manager`, `thumbnail_cache_io`, `thumbnail_render` | Thumbnail download/cache state, serialized SD I/O with scoped retention, and RGB565 rendering |
 | `thumbnail_session`, `thumbnail_preview_coordinator` | Selected-file metadata, layer fallback and preview coordination |
 | `ui_thumbnail`, `ui_preview_lightbox` | Shared thumbnail UI and fullscreen-owned fallback/hires image lifetime |
@@ -204,3 +205,9 @@ are not architecture modules and must not be tracked as production source.
 - `tools/regenerate_studio_fonts.py`: optional font regeneration.
 - `tools/audit/studio_layout_test.py` / `.c`: native layout, pointer and lifecycle validation.
 - `docs/STUDIO_DARK_TRIAL.md`: theme composition and validation status.
+
+## Independent cleanup branch
+
+The firmware contains 157 C sources; all `main/*.c` files are classified in the
+firmware list. The standalone and G-code mesh experiments are absent. Retired
+source rewrite scripts and unused UI APIs are described in [Code cleanup](CODE_CLEANUP.md).

@@ -37,7 +37,7 @@ void ui_files_set_search_text(const char *s){(void)s;assert(!in_worker);}
 void ui_files_add_file_entry(const char *p,double size,double modified,int y){(void)size;(void)modified;(void)y;assert(!in_worker);rendered++;snprintf(last_path,sizeof(last_path),"%s",p);}
 void ui_files_add_folder_button(const char *n,const char *p,int y){(void)n;(void)p;(void)y;assert(!in_worker);}
 int32_t ui_theme_density_metric(int32_t a,int32_t b,int32_t c){(void)b;(void)c;return a;}
-void files_row_preview_begin(const char *h,int p,const char *k,bool sd,files_row_preview_ready_cb_t cb){(void)h;(void)p;(void)k;(void)sd;(void)cb;assert(!in_worker);preview_begin++;}
+void files_row_preview_begin(const char *h,int p,const char *k,bool sd,const printer_file_entry_t *entries,size_t count,files_row_preview_ready_cb_t cb){(void)h;(void)p;(void)k;(void)sd;(void)cb;assert(!in_worker&&entries&&count<=64);preview_begin++;}
 int printer_files_parse_entries(const char *body,printer_file_entry_t *entries,size_t capacity){assert(!in_worker && capacity);if(empty_list)return 0;snprintf(entries[0].path,sizeof(entries[0].path),"%s.gcode",body);return 1;}
 int printer_files_for_each_path(const char *body,void (*cb)(const char*,void*),void *arg){(void)body;(void)cb;(void)arg;return 0;}
 static void run_worker(void){assert(worker_arg);void *arg=worker_arg;worker_arg=NULL;in_worker=true;worker_fn(arg);in_worker=false;}

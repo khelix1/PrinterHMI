@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v7.0.0 behavior unless they are
+Documents in this directory describe current v7.1.33-dev behavior unless they are
 under `history/`.
 
 | Document | Purpose |
@@ -56,3 +56,5 @@ Settings and large-text source closeout: [validation and pending follow-ups](SET
 
 - [Console layouts, command feedback and pressed button frames](CONSOLE.md)
 - [Notification policy and remaining migration](NOTIFICATIONS.md)
+
+See [Code cleanup](CODE_CLEANUP.md) and [v7.1.33-dev](releases/v7.1.33-dev.md) for the independent branch scope.

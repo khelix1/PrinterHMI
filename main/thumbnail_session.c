@@ -247,17 +247,6 @@ void thumbnail_session_free_thumbnail(void)
     thumbnail_session_clear_png_buffer();
 }
 
-void thumbnail_session_install_png_buffer(
-    uint8_t *buffer,
-    size_t length)
-{
-    thumbnail_session_free_thumbnail();
-
-    thumbnail_manager_take_png(buffer, length);
-    thumbnail_manager_prepare_raw_image();
-    thumbnail_manager_mark_ready();
-}
-
 void thumbnail_session_save_last_selected_file(void)
 {
     if (!s_selected_file[0]) {
@@ -301,19 +290,6 @@ bool thumbnail_session_load_selected_cache(
 
     return thumbnail_manager_load_selected_cache(
         s_selected_file);
-}
-
-void thumbnail_session_store_selected_cache(
-    bool sd_card_available)
-{
-    if (!sd_card_available || !s_selected_file[0]) {
-        return;
-    }
-
-    if (!thumbnail_manager_store_selected_cache(
-            s_selected_file)) {
-        ESP_LOGW(TAG, "SD_THUMB cache write failed");
-    }
 }
 
 thumbnail_session_restore_result_t

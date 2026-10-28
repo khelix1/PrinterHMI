@@ -42,6 +42,14 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
 ui_printer_popups_set_control_sender(checked_send);
 for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
  viewport_width=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport_width,size==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();ui_printer_popups_show_hotends(send,&fixture);rows();if(!size&&density==1&&large)snapshot(theme,"hotends");
+ for(unsigned preset=0;preset<6;preset++){
+  click(s_hotend_temp_buttons[1]);assert(s_control_popup&&!s_hotend_list_popup);
+  lv_obj_t *choices=lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2);
+  click(lv_obj_get_child(choices,preset));
+  char expected[128];snprintf(expected,sizeof(expected),"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0001 TARGET=%d",(int[]){180,200,215,230,250,0}[preset]);
+  assert(!s_control_popup&&!strcmp(sent,expected));
+  ui_printer_popups_show_hotends(send,&fixture);
+ }
  lv_refr_now(d);invalidations=0;for(int repeat=0;repeat<100;repeat++)refresh_hotend_list(NULL);if(invalidations){fprintf(stderr,"invalidations=%u size=%d theme=%d density=%d large=%d\n",invalidations,size,theme,density,large);}assert(!invalidations);
  unsigned before=sends;click(s_hotend_activate_buttons[0]);assert(!s_hotend_activate_popup&&sends==before);click(s_hotend_activate_buttons[1]);assert(s_hotend_activate_popup);layout(s_hotend_activate_popup);if(!size&&density==1&&large)snapshot(theme,"activation");click(lv_obj_get_child(lv_obj_get_child(s_hotend_activate_popup,-1),0));assert(!s_hotend_activate_popup&&sends==before);click(s_hotend_activate_buttons[1]);click(s_hotend_confirm_button);assert(sends==before+1&&!strcmp(sent,"ACTIVATE_EXTRUDER EXTRUDER=extruder_long_name_0001"));
  strcpy(fixture.printer_state,"printing");refresh_hotend_list(NULL);assert(lv_obj_has_state(s_hotend_activate_buttons[1],LV_STATE_DISABLED));click(s_hotend_activate_buttons[1]);assert(!s_hotend_activate_popup);strcpy(fixture.printer_state,"paused");refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);assert(!s_hotend_activate_popup);strcpy(fixture.printer_state,"standby");refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);strcpy(fixture.printer_state,"printing");confirm_hotend_activate_cb(NULL);assert(sends==before+1&&s_hotend_activate_popup);close_hotend_activate_cb(NULL);strcpy(fixture.printer_state,"standby");refresh_hotend_list(NULL);

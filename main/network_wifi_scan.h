@@ -1,27 +1,11 @@
 #pragma once
 
-#include "esp_err.h"
 #include "esp_wifi.h"
 #include "lvgl.h"
 #include <stddef.h>
 
-/*
- * network_wifi_scan
- *
- * Owns WiFi scan workflow/state.
- *
- * Current phase:
- * - Boundary file only.
- *
- * Future ownership:
- * - Start WiFi scan
- * - Collect AP records
- * - Format scan status
- * - Provide scan results to UI
- */
-
-esp_err_t network_wifi_scan_init(void);
-
+/* Formats Wi-Fi scan status and hands results to the Network popup owner.
+ * Scan execution and AP collection remain in the application workflow. */
 
 void network_wifi_scan_format_found_status(char *buf,
                                            size_t buf_size,

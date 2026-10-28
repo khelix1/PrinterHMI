@@ -33,8 +33,8 @@ static bool send(const char *command){
  return accepted;
 }
 static void open_page(void){
- page=lv_obj_create(lv_screen_active());lv_obj_set_size(page,1024,600);lv_obj_t *file,*speed,*flow,*layer,*filament;
- ui_printer_live_status_create(page,&file,&speed,&flow,&layer,&filament,NULL,live.speed_factor,live.flow_factor,send);
+ page=lv_obj_create(lv_screen_active());lv_obj_set_size(page,1024,600);lv_obj_t *speed,*flow,*layer,*filament;
+ ui_printer_live_status_create(page,&speed,&flow,&layer,&filament,NULL,live.speed_factor,live.flow_factor,send);
  if(ui_theme_is_studio())studio_tuning_open(NULL);
 }
 static void refresh(void){
@@ -64,7 +64,7 @@ static void checks(void){
  reset();accepted=false;notice_mode=1;release(s_speed_factor_slider,120);assert(!page&&!s_tuning_owner);open_page();accepted=true;release(s_speed_factor_slider,120);live.speed_factor=100;lv_tick_inc(5000);notice_mode=1;refresh();assert(!page&&!s_tuning_owner);
  reset();release(s_speed_factor_slider,120);close_page();lv_tick_inc(5000);notice_mode=1;open_page();assert(!page&&!s_tuning_owner);
  reset();lv_obj_t*old=page;page=NULL;open_page();lv_obj_t*current=s_speed_factor_slider,*owner=s_tuning_owner;
- ui_printer_live_status_refresh(old,NULL,NULL,NULL,NULL,NULL,NULL,"printing","job",0,0,80,90,0,0,0,0,0,true,NULL);
+ ui_printer_live_status_refresh(old,NULL,NULL,NULL,NULL,0,0,80,90,0,0,true,NULL);
  assert(lv_slider_get_value(current)==100);
  lv_obj_delete(old);assert(s_speed_factor_slider==current&&s_tuning_owner==owner);before=sends;release(current,125);assert(sends==before+1);
  close_page();

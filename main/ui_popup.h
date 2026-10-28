@@ -86,12 +86,6 @@ lv_obj_t *ui_popup_add_caption(lv_obj_t *popup,
                                int32_t y,
                                int32_t width);
 
-lv_obj_t *ui_popup_add_list(lv_obj_t *popup,
-                            int32_t x,
-                            int32_t y,
-                            int32_t width,
-                            int32_t height);
-
 lv_obj_t *ui_popup_add_selectable_row(lv_obj_t *parent,
                                       const char *text,
                                       int32_t x,

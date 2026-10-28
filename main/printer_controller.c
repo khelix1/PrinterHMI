@@ -1,5 +1,4 @@
 #include "printer_controller.h"
-#include "ui_theme.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -38,16 +37,6 @@ bool printer_controller_is_live_state(const char *state)
 {
     return printer_controller_is_printing(state) ||
            printer_controller_is_paused(state);
-}
-
-bool printer_controller_has_active_job(const char *state, const char *file)
-{
-    bool live = printer_controller_is_printing(state) ||
-                printer_controller_is_paused(state);
-
-    bool has_file = file && file[0] && strcmp(file, "No file") != 0;
-
-    return live && has_file;
 }
 
 void printer_controller_format_status_symbol_text(char *out,
@@ -93,14 +82,6 @@ const char *printer_controller_machine_banner_text(const char *state, bool moonr
     return moonraker_ok ? "MACHINE CONNECTED" : "MACHINE OFFLINE";
 }
 
-
-lv_color_t printer_controller_state_text_color(const char *state)
-{
-    if (printer_controller_is_printing(state)) return UI_OK_BRIGHT;
-    if (printer_controller_is_paused(state)) return UI_WARN;
-    if (printer_controller_is_error(state)) return UI_DANGER_BRIGHT;
-    return UI_TEXT;
-}
 
 static bool state_is(const char *state, const char *want)
 {
@@ -184,40 +165,6 @@ void printer_controller_format_eta_clock(char *out,
         if (out[0] == '0') {
             memmove(out, out + 1, strlen(out));
         }
-    }
-}
-
-void printer_controller_format_topbar_eta(char *out,
-                                           size_t out_len,
-                                           double progress,
-                                           double print_duration_seconds,
-                                           const char *remaining_text,
-                                           bool moonraker_ok)
-{
-    if (!out || out_len == 0) return;
-
-    /*
-     * Compatibility parameter retained for existing callers. The top bar
-     * now uses the actual completion clock, not the remaining-duration text.
-     */
-    (void)remaining_text;
-
-    char eta_clock[32];
-
-    printer_controller_format_eta_clock(
-        eta_clock,
-        sizeof(eta_clock),
-        progress,
-        print_duration_seconds);
-
-    if (strcmp(eta_clock, "--:--") != 0 &&
-        progress > 0.01 &&
-        progress < 0.999) {
-        snprintf(out, out_len, "ETA %s", eta_clock);
-    } else if (moonraker_ok) {
-        snprintf(out, out_len, "IDLE");
-    } else {
-        snprintf(out, out_len, "OFFLINE");
     }
 }
 

@@ -16,5 +16,4 @@ void ui_printer_chooser_show(
     ui_printer_chooser_manage_cb_t manage_cb);
 
 void ui_printer_chooser_hide(void);
-bool ui_printer_chooser_is_visible(void);
 void ui_printer_chooser_refresh(void);

@@ -69,7 +69,6 @@
 static const char *TAG = "PrinterHMI";
 
 static lv_obj_t *wifi_label = NULL;
-static lv_obj_t *topbar_eta_label = NULL;
 
 
 void app_files_reload(void);
@@ -353,9 +352,6 @@ static volatile int printer_thumb_target = THUMB_TARGET_LIVE;
 static lv_timer_t *thumb_poll_timer = NULL;
 static bool s_popup_thumb_start_pending;
 
-static lv_obj_t *network_selected_ssid_label = NULL;
-static lv_obj_t *network_password_ta = NULL;
-static lv_obj_t *network_keyboard = NULL;
 /*
  * Drybox program selection is application state, not inferred from
  * heater activity or banner text.
@@ -368,12 +364,6 @@ static ui_drybox_program_t s_drybox_selected_program =
 
 static ui_drybox_program_t s_drybox_active_program =
     UI_DRYBOX_PROGRAM_NONE;
-static lv_obj_t *printer_state_label = NULL;
-static lv_obj_t *printer_file_label = NULL;
-static lv_obj_t *printer_active_file_box = NULL;
-static lv_obj_t *printer_active_file_label = NULL;
-static lv_obj_t *printer_progress_label = NULL;
-static lv_obj_t *printer_tuning_label = NULL;
 static lv_obj_t *printer_fan_label = NULL;
 static lv_obj_t *printer_speed_label = NULL;
 static lv_obj_t *printer_flow_label = NULL;
@@ -384,13 +374,7 @@ static double printer_jog_step = 10.0;
 static lv_obj_t *motion_step1_btn = NULL;
 static lv_obj_t *motion_step10_btn = NULL;
 static lv_obj_t *motion_step50_btn = NULL;
-static lv_obj_t *printer_nozzle_label = NULL;
-static lv_obj_t *printer_bed_label = NULL;
-static lv_obj_t *printer_part_fan_label = NULL;
-static lv_obj_t *printer_eta_label = NULL;
 static lv_obj_t *printer_banner_label = NULL;
-static lv_obj_t *printer_elapsed_label = NULL;
-static lv_obj_t *printer_remaining_label = NULL;
 static ui_printer_info_cards_t printer_info_cards = {0};
 static lv_obj_t *printer_home_btn = NULL;
 static lv_obj_t *printer_pause_btn = NULL;
@@ -402,14 +386,6 @@ static double printer_nozzle_temp = -999.0;
 static double printer_nozzle_target = -999.0;
 static double printer_bed_temp = -999.0;
 static double printer_bed_target = -999.0;
-static lv_obj_t *card_chamber_temp = NULL;
-static lv_obj_t *card_humidity = NULL;
-static lv_obj_t *card_target_rh = NULL;
-static lv_obj_t *card_heater = NULL;
-static lv_obj_t *card_fan = NULL;
-static lv_obj_t *card_moonraker = NULL;
-static lv_obj_t *dash_nozzle_label = NULL;
-static lv_obj_t *dash_bed_label = NULL;
 static lv_obj_t *dash_thumb_img = NULL;
 #define dash_thumb_canvas (*ui_dashboard_thumb_canvas_ref())
 #define dash_thumb_canvas_buf (*ui_dashboard_thumb_canvas_buf_ref())
@@ -430,9 +406,7 @@ static int dash_thumb_packed_height = DASH_THUMB_CANVAS_H;
 static int s_moonraker_code = 0;
 static bool s_moonraker_ok = false;
 /* P4 polling normalized against CYD v2.3.11 behavior */
-#define MOONRAKER_LIVE_POLL_INTERVAL_US 2500000LL
 #define MOONRAKER_OBJECTS_CAPACITY 4096
-static int64_t s_last_moonraker_ok_us = 0;
 static char *s_moonraker_objects = NULL;
 
 static double live_chamber_temp = -999.0;
@@ -517,7 +491,6 @@ static void reset_active_printer_runtime_state(void)
 
     s_moonraker_code = 0;
     s_moonraker_ok = false;
-    s_last_moonraker_ok_us = 0;
     s_live_data_ok = false;
 
     live_chamber_temp = -999.0;
@@ -1156,15 +1129,15 @@ static void moonraker_live_poll_tasklet(void)
         }
         websocket_was_authoritative = true;
         s_moonraker_code = 200;
-        s_moonraker_ok = true;
         moonraker_state_t ws_state;
         moonraker_state_snapshot(&ws_state);
+        s_moonraker_ok = ws_state.moonraker_ok;
         s_live_data_ok = ws_state.live_data_ok;
         return;
     }
 
     if (websocket_was_authoritative) {
-        ESP_LOGI(TAG, "LIVE_TRANSPORT HTTP bootstrap");
+        ESP_LOGI(TAG, "LIVE_TRANSPORT awaiting fresh status");
     }
     websocket_was_authoritative = false;
 
@@ -1175,13 +1148,15 @@ static void moonraker_live_poll_tasklet(void)
      * hold this task for the HTTP timeout every poll interval.
      */
     if (moonraker_live_websocket_running()) {
-        s_moonraker_ok = false;
-        s_live_data_ok = false;
-        moonraker_state_set_connection(false, false);
+        moonraker_state_expire_websocket(3000000LL);
+        moonraker_state_t ws_state;
+        moonraker_state_snapshot(&ws_state);
+        s_moonraker_ok = ws_state.moonraker_ok;
+        s_live_data_ok = ws_state.live_data_ok;
         safe_copy(
             moonraker_status,
             sizeof(moonraker_status),
-            "Moonraker: reconnecting...");
+            ws_state.moonraker_ok ? "Moonraker: linked" : "Moonraker: reconnecting...");
         return;
     }
 
@@ -1200,7 +1175,6 @@ static void moonraker_live_poll_tasklet(void)
     case MOONRAKER_POLL_OK:
         s_moonraker_code = 200;
         s_moonraker_ok = true;
-        s_last_moonraker_ok_us = esp_timer_get_time();
 
         safe_copy(
             moonraker_status,
@@ -1380,7 +1354,19 @@ static void printer_profiles_active_changed_bridge(void)
     moonraker_live_websocket_prepare_profile_change(
         moonraker_config_generation());
 
-    reset_preview_state_for_host_change();
+    char status[128];
+
+    snprintf(
+        status,
+        sizeof(status),
+        "Moonraker: switching to %s",
+        moonraker_config_active_profile_name());
+
+    /* Invalidate once before restoring the destination profile cache. */
+    moonraker_configuration_changed(
+        status,
+        false);
+
     reset_active_printer_runtime_state();
     dashboard_restore_active_profile_preview();
 
@@ -1395,18 +1381,6 @@ static void printer_profiles_active_changed_bridge(void)
     ui_printer_chooser_refresh();
     /* Re-evaluate the Dashboard Camera/Thumbnail toggle for the new printer. */
     ui_dashboard_refresh_camera();
-
-    char status[128];
-
-    snprintf(
-        status,
-        sizeof(status),
-        "Moonraker: switching to %s",
-        moonraker_config_active_profile_name());
-
-    moonraker_configuration_changed(
-        status,
-        false);
 }
 
 
@@ -1855,15 +1829,10 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     printer_ui_controller_refresh_ctx_t printer_refresh = {
         .printer_panel = printer_panel,
         .banner_label = printer_banner_label,
-        .state_label = printer_state_label,
-        .active_file_box = printer_active_file_box,
-        .active_file_label = printer_active_file_label,
         .speed_label = printer_fan_label,
         .flow_label = printer_speed_label,
         .layer_label = printer_flow_label,
         .filament_label = printer_filament_label,
-        .file_label = printer_file_label,
-        .topbar_eta_label = topbar_eta_label,
 
         .motion_button = printer_actions.motion,
         .home_button = printer_home_btn,
@@ -1887,8 +1856,6 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         .flow_factor = telemetry_state.flow_factor,
         .current_layer = resolved_layers.current,
         .total_layer = resolved_layers.total,
-        .metadata_object_height = printer_meta_object_height,
-        .metadata_layer_height = printer_meta_layer_height,
         .progress = telemetry_state.progress,
         .nozzle_temp = telemetry_state.nozzle_temp,
         .nozzle_target = telemetry_state.nozzle_target,
@@ -2100,18 +2067,8 @@ void ui_printer_destroy(void)
     printer_resume_btn = NULL;
     printer_object_btn = NULL;
     printer_cancel_btn = NULL;
-    printer_state_label = NULL;
-    printer_file_label = NULL;
-    printer_progress_label = NULL;
-    printer_tuning_label = NULL;
-    printer_active_file_label = NULL;
     ui_printer_preview_destroy_refs();
-    printer_nozzle_label = NULL;
-    printer_bed_label = NULL;
-    printer_eta_label = NULL;
     printer_banner_label = NULL;
-    printer_elapsed_label = NULL;
-    printer_remaining_label = NULL;
     printer_fan_label = NULL;
     printer_speed_label = NULL;
     printer_flow_label = NULL;
@@ -2469,10 +2426,7 @@ void ui_network_destroy(void)
     ui_printer_profiles_close_all();
     ui_network_tools_wifi_popup_destroy_all();
 
-    ui_network_destroy_objects(
-        &network_selected_ssid_label,
-        &network_password_ta,
-        &network_keyboard);
+    ui_network_destroy_objects();
 
     ui_shell_raise_topbar();
     ui_shell_raise_nav();
@@ -3190,7 +3144,6 @@ void ui_printer_create(void)
 
     ui_printer_live_status_create(
         printer_layout.active_panel,
-        &printer_active_file_label,
         &printer_fan_label,
         &printer_speed_label,
         &printer_flow_label,
@@ -3205,13 +3158,6 @@ void ui_printer_create(void)
                                  bed_card_event_cb,
                                  part_fan_card_event_cb);
 
-    printer_progress_label = printer_info_cards.progress;
-    printer_nozzle_label = printer_info_cards.nozzle;
-    printer_bed_label = printer_info_cards.bed;
-    printer_part_fan_label = printer_info_cards.part_fan;
-    printer_elapsed_label = printer_info_cards.elapsed;
-    printer_remaining_label = printer_info_cards.remaining;
-    printer_eta_label = printer_info_cards.eta;
 
     ui_printer_preview_create(printer_layout.active_panel);
 
@@ -3566,18 +3512,9 @@ static void hmi_runtime_task(void *arg)
 
             dashboard_runtime_controller_tick(
         &(dashboard_runtime_context_t) {
-            .current_z = printer_current_z,
             .meta_object_height = printer_meta_object_height,
             .meta_layer_height = printer_meta_layer_height,
 
-            .nozzle_label = dash_nozzle_label,
-            .bed_label = dash_bed_label,
-            .chamber_label = card_chamber_temp,
-            .humidity_label = card_humidity,
-            .target_rh_label = card_target_rh,
-            .heater_label = card_heater,
-            .fan_label = card_fan,
-            .moonraker_label = card_moonraker,
 
             .dashboard_canvas = &dash_thumb_canvas,
             .dashboard_image = &dash_thumb_img,

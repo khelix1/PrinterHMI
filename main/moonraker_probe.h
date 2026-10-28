@@ -56,10 +56,3 @@ typedef struct {
 size_t moonraker_probe_webcams_with_api_key(
     const char *host, int port, const char *api_key,
     moonraker_webcam_t *webcams, size_t webcam_capacity);
-
-/* Gets the first configured Moonraker webcam without changing any profile. */
-bool moonraker_probe_first_webcam_with_api_key(
-    const char *host,
-    int port,
-    const char *api_key,
-    moonraker_webcam_t *webcam);

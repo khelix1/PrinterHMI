@@ -818,32 +818,6 @@ bool device_catalog_controller_get(
 }
 
 
-bool device_catalog_controller_contains(
-    const char *object_name)
-{
-    if (!s_store || !object_name || !object_name[0]) {
-        return false;
-    }
-
-    bool found = false;
-    portENTER_CRITICAL(&s_lock);
-
-    for (size_t index = 0;
-         index < s_store->status.stored_count;
-         ++index) {
-        if (strcmp(
-                s_store->devices[index].object_name,
-                object_name) == 0) {
-            found = true;
-            break;
-        }
-    }
-
-    portEXIT_CRITICAL(&s_lock);
-    return found;
-}
-
-
 const char *device_catalog_kind_label(
     device_kind_t kind)
 {

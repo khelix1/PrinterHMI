@@ -13,6 +13,7 @@
 #include "ui_status_banner.h"
 #include "ui_page_geometry.h"
 #include "ui_studio_layout.h"
+#include "ui_value_update.h"
 
 /*
  * Temporary application bridges retained in main.c.
@@ -25,6 +26,7 @@ void ui_network_destroy(void);
 
 typedef struct {
     lv_obj_t *root;
+    bool studio;
 
     lv_obj_t *banner;
     lv_obj_t *banner_state;
@@ -43,13 +45,56 @@ typedef struct {
 
     lv_obj_t *networks_card;
     lv_obj_t *networks_status;
-    lv_obj_t *networks_hint;
     lv_obj_t *networks_list;
 
     lv_obj_t *actions_card;
 } network_page_ctx_t;
 
 static network_page_ctx_t s_network;
+static uint32_t s_network_epoch;
+static bool s_scan_rendering;
+
+static void network_root_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)!=s_network.root)return;
+    ++s_network_epoch;
+    s_network=(network_page_ctx_t){0};
+}
+
+static void network_field_deleted(lv_event_t *event)
+{
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    lv_obj_t **fields[]={&s_network.banner,&s_network.banner_state,&s_network.banner_message,
+        &s_network.wifi_card,&s_network.wifi_name,&s_network.wifi_state,&s_network.wifi_ip,
+        &s_network.moonraker_card,&s_network.moonraker_host,&s_network.moonraker_port,
+        &s_network.moonraker_state,&s_network.moonraker_http,&s_network.networks_card,
+        &s_network.networks_status,&s_network.networks_list,&s_network.actions_card};
+    for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(*fields[i]==target){
+        *fields[i]=NULL;++s_network_epoch;
+    }
+}
+
+static void network_watch_fields(void)
+{
+    lv_obj_t *fields[]={s_network.banner,s_network.banner_state,s_network.banner_message,
+        s_network.wifi_card,s_network.wifi_name,s_network.wifi_state,s_network.wifi_ip,
+        s_network.moonraker_card,s_network.moonraker_host,s_network.moonraker_port,
+        s_network.moonraker_state,s_network.moonraker_http,s_network.networks_card,
+        s_network.networks_status,s_network.networks_list,s_network.actions_card};
+    for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(fields[i])
+        lv_obj_add_event_cb(fields[i],network_field_deleted,LV_EVENT_DELETE,NULL);
+}
+
+static bool network_current(uint32_t epoch)
+{
+    return s_network.root && epoch==s_network_epoch;
+}
+
+static bool network_value(lv_obj_t *label,const char *text,uint32_t epoch)
+{
+    ui_value_set_text(label,text);
+    return network_current(epoch);
+}
 
 /* ------------------------------------------------------------------------- */
 /* Local shared-layout helpers                                                */
@@ -125,6 +170,7 @@ static lv_obj_t *network_make_row(
 
 static void network_scan_ssid_data_delete_cb(lv_event_t *e)
 {
+    if(lv_event_get_target_obj(e)!=lv_event_get_current_target_obj(e))return;
     char *ssid =
         (char *)lv_event_get_user_data(e);
 
@@ -160,6 +206,9 @@ static void network_studio_create(const char *banner_text, int port,
                                   lv_event_cb_t wifi_cb, lv_event_cb_t profiles_cb)
 {
     s_network.root = lv_obj_create(lv_screen_active());
+    if(!s_network.root)return;
+    ++s_network_epoch;s_network.studio=true;
+    lv_obj_add_event_cb(s_network.root,network_root_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_size(s_network.root, UI_PAGE_ROOT_WIDTH, UI_PAGE_ROOT_HEIGHT);
     ui_apply_root_style(s_network.root);
     studio_text(s_network.root, "Network", 0, 0, 530, UI_FONT_TITLE, UI_TEXT);
@@ -220,6 +269,7 @@ void ui_network_create_objects(
 
     if (ui_theme_is_studio()) {
         network_studio_create(banner_text, moonraker_port, wifi_clicked_cb, host_clicked_cb);
+        network_watch_fields();
         return;
     }
 
@@ -234,6 +284,8 @@ void ui_network_create_objects(
         return;
     }
 
+    ++s_network_epoch;
+    lv_obj_add_event_cb(s_network.root,network_root_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_size(s_network.root,
                     UI_PAGE_ROOT_WIDTH,
                     UI_PAGE_ROOT_HEIGHT);
@@ -287,7 +339,7 @@ void ui_network_create_objects(
             UI_STATUS_BAR_HEIGHT);
 
     if (!s_network.banner) {
-        ui_network_destroy_objects(NULL, NULL, NULL);
+        ui_network_destroy_objects();
         return;
     }
 
@@ -608,6 +660,7 @@ void ui_network_create_objects(
         }
     }
 
+    network_watch_fields();
 }
 
 void ui_network_refresh_objects(
@@ -619,111 +672,34 @@ void ui_network_refresh_objects(
     int http_code,
     const char *scan_status_text)
 {
-    if (!s_network.root) {
-        return;
+    if(!s_network.root)return;
+    uint32_t epoch=s_network_epoch;
+    const bool wifi_connected=ip_text && ip_text[0] && ip_text[0]!='-';
+    const char *connection=moonraker_connected?"Connected":wifi_connected?"Wi-Fi":"Offline";
+    if(s_network.studio) {
+        if(!network_value(s_network.banner_state,connection,epoch))return;
+        ui_value_set_color(s_network.banner_state,moonraker_connected?UI_OK_BRIGHT:UI_TEXT_DIM,0);
+        if(!network_current(epoch))return;
+        if(!network_value(s_network.banner_message,banner_text?banner_text:"Network offline",epoch))return;
+    } else if(s_network.banner) {
+        ui_status_banner_set_simple(s_network.banner,connection,banner_text?banner_text:"Network offline");
+        if(!network_current(epoch))return;
     }
-
-    const bool wifi_connected =
-        ip_text &&
-        ip_text[0] &&
-        ip_text[0] != '-';
-
-    if (s_network.banner_state) {
-        lv_label_set_text(s_network.banner_state, moonraker_connected
-            ? "Connected" : (wifi_connected ? "Wi-Fi" : "Offline"));
-        lv_obj_set_style_text_color(s_network.banner_state, moonraker_connected ? UI_OK_BRIGHT : UI_TEXT_DIM, 0);
-        lv_label_set_text(s_network.banner_message, banner_text ? banner_text : "Network offline");
-    } else if (s_network.banner) {
-        ui_status_banner_set_simple(
-            s_network.banner,
-            moonraker_connected
-                ? "Connected"
-                : (wifi_connected ? "Wi-Fi" : "Offline"),
-            banner_text ? banner_text : "Network offline");
-    }
-
-    if (s_network.wifi_name) {
-        lv_label_set_text(
-            s_network.wifi_name,
-            wifi_text ? wifi_text : ui_text("Offline"));
-    }
-
-    if (s_network.wifi_state) {
-        lv_label_set_text(
-            s_network.wifi_state,
-            wifi_connected
-                ? ui_text("Connected")
-                : ui_text("Offline"));
-
-        lv_obj_set_style_text_color(
-            s_network.wifi_state,
-            wifi_connected
-                ? UI_OK_BRIGHT
-                : UI_TEXT_DIM,
-            0);
-    }
-
-    if (s_network.wifi_ip) {
-        lv_label_set_text(
-            s_network.wifi_ip,
-            ip_text ? ip_text : ui_text("--"));
-    }
-
-    if (s_network.moonraker_host) {
-        lv_label_set_text(
-            s_network.moonraker_host,
-            host_text ? host_text : ui_text("--"));
-    }
-
-    if (s_network.moonraker_state) {
-        lv_label_set_text(
-            s_network.moonraker_state,
-            moonraker_connected
-                ? ui_text("Connected")
-                : ui_text("Disconnected"));
-
-        lv_obj_set_style_text_color(
-            s_network.moonraker_state,
-            moonraker_connected
-                ? UI_OK_BRIGHT
-                : UI_TEXT_DIM,
-            0);
-    }
-
-    if (s_network.moonraker_http) {
-        char http_buf[24];
-
-        if (http_code > 0) {
-            snprintf(
-                http_buf,
-                sizeof(http_buf),
-                "%d",
-                http_code);
-        } else {
-            snprintf(
-                http_buf,
-                sizeof(http_buf),
-                "--");
-        }
-
-        lv_label_set_text(
-            s_network.moonraker_http,
-            http_buf);
-    }
-
-    if (s_network.networks_status) {
-        if (scan_status_text && scan_status_text[0]) {
-            lv_label_set_text(
-                s_network.networks_status,
-                scan_status_text);
-        } else {
-            lv_label_set_text(
-                s_network.networks_status,
-                ui_text("Ready to scan"));
-        }
-    }
-
+    if(!network_value(s_network.wifi_name,wifi_text?wifi_text:ui_text("Offline"),epoch))return;
+    if(!network_value(s_network.wifi_state,wifi_connected?ui_text("Connected"):ui_text("Offline"),epoch))return;
+    ui_value_set_color(s_network.wifi_state,wifi_connected?UI_OK_BRIGHT:UI_TEXT_DIM,0);
+    if(!network_current(epoch))return;
+    if(!network_value(s_network.wifi_ip,ip_text?ip_text:ui_text("--"),epoch))return;
+    if(!network_value(s_network.moonraker_host,host_text?host_text:ui_text("--"),epoch))return;
+    if(!network_value(s_network.moonraker_state,moonraker_connected?ui_text("Connected"):ui_text("Disconnected"),epoch))return;
+    ui_value_set_color(s_network.moonraker_state,moonraker_connected?UI_OK_BRIGHT:UI_TEXT_DIM,0);
+    if(!network_current(epoch))return;
+    char http[24];
+    if(http_code>0)snprintf(http,sizeof(http),"%d",http_code);else snprintf(http,sizeof(http),"--");
+    if(!network_value(s_network.moonraker_http,http,epoch))return;
+    network_value(s_network.networks_status,scan_status_text&&scan_status_text[0]?scan_status_text:ui_text("Ready to scan"),epoch);
 }
+
 
 void ui_network_set_scan_status(
     const char *status_text)
@@ -732,7 +708,7 @@ void ui_network_set_scan_status(
         return;
     }
 
-    lv_label_set_text(
+    ui_value_set_text(
         s_network.networks_status,
         status_text && status_text[0]
             ? status_text
@@ -740,7 +716,7 @@ void ui_network_set_scan_status(
 }
 
 
-void ui_network_render_scan_results(
+static void network_render_scan_results_impl(
     const wifi_ap_record_t *aps,
     uint16_t count,
     unsigned total_count,
@@ -750,10 +726,13 @@ void ui_network_render_scan_results(
         return;
     }
 
+    uint32_t epoch=s_network_epoch;
     lv_obj_clean(s_network.networks_list);
+    if(!network_current(epoch) || !s_network.networks_list)return;
 
     if (!aps || count == 0 || !selected_cb) {
         ui_network_set_scan_status("No networks found");
+        if(!network_current(epoch) || !s_network.networks_list)return;
         lv_obj_t *hint=lv_label_create(s_network.networks_list);
         ui_apply_custom_label_style(hint,UI_FONT_BODY,UI_TEXT_DIM);
         lv_obj_set_width(hint,LV_PCT(100));lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);
@@ -780,12 +759,14 @@ void ui_network_render_scan_results(
     }
 
     ui_network_set_scan_status(status);
+    if(!network_current(epoch) || !s_network.networks_list)return;
 
     for (uint16_t i = 0; i < count; i++) {
-        const char *ssid =
-            aps[i].ssid[0]
-                ? (const char *)aps[i].ssid
-                : "(hidden network)";
+        char ssid[33];
+        size_t length=0;
+        while(length<32 && aps[i].ssid[length])length++;
+        if(length){memcpy(ssid,aps[i].ssid,length);ssid[length]='\0';}
+        else snprintf(ssid,sizeof(ssid),"(hidden network)");
 
         lv_obj_t *button =
             ui_button_create_empty(
@@ -829,6 +810,8 @@ void ui_network_render_scan_results(
                 network_scan_ssid_data_delete_cb,
                 LV_EVENT_DELETE,
                 ssid_copy);
+        } else {
+            lv_obj_add_state(button,LV_STATE_DISABLED);
         }
 
         lv_obj_t *name =
@@ -897,6 +880,15 @@ void ui_network_render_scan_results(
 }
 
 
+void ui_network_render_scan_results(const wifi_ap_record_t *aps,uint16_t count,
+    unsigned total_count,lv_event_cb_t selected_cb)
+{
+    if(s_scan_rendering)return;
+    s_scan_rendering=true;
+    network_render_scan_results_impl(aps,count,total_count,selected_cb);
+    s_scan_rendering=false;
+}
+
 void ui_network_set_port(int port)
 {
     if (!s_network.moonraker_port) {
@@ -911,31 +903,15 @@ void ui_network_set_port(int port)
         "%d",
         port);
 
-    lv_label_set_text(
+    ui_value_set_text(
         s_network.moonraker_port,
         port_buf);
 }
 
-void ui_network_destroy_objects(
-    lv_obj_t **network_selected_ssid_label,
-    lv_obj_t **network_password_ta,
-    lv_obj_t **network_keyboard)
+void ui_network_destroy_objects(void)
 {
-    if (s_network.root) {
-        lv_obj_delete(s_network.root);
-    }
-
-    s_network = (network_page_ctx_t){0};
-
-    if (network_selected_ssid_label) {
-        *network_selected_ssid_label = NULL;
-    }
-
-    if (network_password_ta) {
-        *network_password_ta = NULL;
-    }
-
-    if (network_keyboard) {
-        *network_keyboard = NULL;
-    }
+    lv_obj_t *root=s_network.root;
+    ++s_network_epoch;
+    s_network=(network_page_ctx_t){0};
+    if(root)lv_obj_delete(root);
 }

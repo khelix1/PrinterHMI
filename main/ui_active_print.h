@@ -34,9 +34,6 @@ void ui_active_print_thumb_delete_canvas(void);
 void ui_active_print_thumb_forget_canvas_file(void);
 void ui_active_print_thumb_show_canvas_from_buffer(lv_obj_t *card, int w, int h, const char *file);
 void ui_active_print_thumb_apply_canvas_from_buffer(lv_obj_t *card, int w, int h, const char *file);
-void ui_active_print_set_filename(lv_obj_t *panel,
-                                      const char *filename);
-
 void ui_active_print_set(lv_obj_t *panel,
                              const char *layer,
                              const char *elapsed,

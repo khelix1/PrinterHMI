@@ -185,9 +185,6 @@ void bed_mesh_controller_init(void)
     memset(&s, 0, sizeof(s));
     unlock();
 }
-void bed_mesh_controller_reset(void){
-    lock(); s.valid=false; s.rows=s.cols=0; s.profile_name[0]=0; unlock();
-}
 bool bed_mesh_controller_merge_status(cJSON *status)
 {
     if (!cJSON_IsObject(status)) {

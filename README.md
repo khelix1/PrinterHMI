@@ -1,7 +1,7 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v7.1.33-dev firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v7.1.45-dev firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
@@ -20,15 +20,15 @@ remain with khelix.
 Thanks to the open-source projects, font authors and tools that make PrinterHMI
 possible. See [Software credits](docs/SOFTWARE_CREDITS.md) and [NOTICE](NOTICE).
 
-The `chore/non-viewer-cleanup` branch carries independent Files caching,
-Dashboard filename, Bed Mesh viewing and stale-code cleanup changes from `main`.
+The `chore/stale-code-cleanup-main` branch continues stale-code cleanup from
+current `main`, retaining the independent Files, Dashboard and Bed Mesh fixes.
 The experimental G-code viewer remains on its separate branches.
 
 ## Status
 
-- Firmware version: `7.1.33-dev`
+- Firmware version: `7.1.45-dev`
 - Latest published stable: `7.0.0`
-- Validation: independent fixes ported from main; host results and target checks are documented in the development release notes
+- Validation: stale-code and repository cleanup checked on the host; target checks are documented in the development release notes
 - Target: `esp32p4`
 - Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`

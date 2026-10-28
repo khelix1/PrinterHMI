@@ -33,7 +33,7 @@ void ui_shell_update_status_icons(void);
 void ui_shell_set_wifi_signal(bool connected, int rssi);
 void ui_shell_refresh_clock(void);
 
-/* Implemented by main.c during Phase 1. */
+/* Application routing is implemented by the coordinator in main.c. */
 void ui_shell_page_action(ui_shell_page_t page);
 
 

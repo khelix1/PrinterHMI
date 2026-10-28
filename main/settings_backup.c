@@ -1031,20 +1031,6 @@ bool settings_backup_export_encrypted_with_progress(
     return true;
 }
 
-bool settings_backup_export_encrypted(
-    const char *passphrase,
-    char *status,
-    size_t status_size)
-{
-    return settings_backup_export_encrypted_with_progress(
-        passphrase,
-        NULL,
-        NULL,
-        status,
-        status_size);
-}
-
-
 static bool load_encrypted_backup_snapshot(
     const char *passphrase,
     settings_backup_snapshot_t *snapshot,

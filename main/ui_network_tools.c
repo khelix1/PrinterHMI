@@ -215,9 +215,9 @@ static void wifi_style_selected(lv_obj_t *row,bool selected)
     lv_obj_set_style_pad_all(row,12,0);
     lv_obj_set_style_pad_row(row,4,0);
 }
-void ui_network_tools_add_wifi_ssid_button(lv_obj_t *parent,const char *ssid,int rssi,int y,lv_event_cb_t selected_cb)
+void ui_network_tools_add_wifi_ssid_button(lv_obj_t *parent,const char *ssid,int rssi,lv_event_cb_t selected_cb)
 {
-    (void)y;if(!parent||!ssid||!ssid[0])return;
+    if(!parent||!ssid||!ssid[0])return;
     char *copy=strdup(ssid);if(!copy)return;
     lv_obj_t *button=ui_popup_add_selectable_row(parent,ssid,0,0,LV_PCT(100),64,selected_cb,copy);
     if(!button){free(copy);return;}
@@ -370,11 +370,9 @@ void ui_network_tools_populate_wifi_scan_buttons(lv_obj_t *list,
     lv_obj_t *parent = list ? list : fallback_parent;
     if (!parent) return;
 
-    int y = 0;
     for (uint16_t i = 0; i < count; i++) {
         const char *ssid = aps[i].ssid[0] ? (char *)aps[i].ssid : "(hidden)";
-        ui_network_tools_add_wifi_ssid_button(parent, ssid, aps[i].rssi, y, selected_cb);
-        y += 58;
+        ui_network_tools_add_wifi_ssid_button(parent, ssid, aps[i].rssi, selected_cb);
     }
 }
 

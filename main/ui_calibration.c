@@ -101,6 +101,32 @@ typedef struct {
 
 static const char TAG[] = "ui_calibration";
 static ui_calibration_state_t *s_calibration;
+static uint32_t s_calibration_epoch;
+static bool s_calibration_retiring, s_calibration_dispatching;
+
+static void calibration_page_deleted(lv_event_t *event)
+{
+    if (!s_calibration || lv_event_get_target_obj(event) != s_calibration->root) return;
+    /* LVGL owns deletion of this root. Retire its timer and detached dialogs. */
+    s_calibration->root = NULL;
+    ui_calibration_hide();
+}
+
+static void calibration_confirmation_deleted(lv_event_t *event)
+{
+    if (!s_calibration) return;
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    if (target == s_calibration->probe_popup) s_calibration->probe_popup = NULL;
+    else if (target == s_calibration->axis_twist_popup) s_calibration->axis_twist_popup = NULL;
+    else return;
+    ++s_calibration_epoch;
+}
+
+static bool calibration_confirmation_current(lv_obj_t *popup, uint32_t epoch, uint32_t owner)
+{
+    return s_calibration && s_calibration->root && !s_calibration_retiring &&
+        popup && epoch == s_calibration_epoch && owner == moonraker_config_generation();
+}
 
 
 static bool calibration_state_init(void)
@@ -634,6 +660,7 @@ static void close_probe_popup(void)
     if (s_calibration->probe_popup) {
         lv_obj_t *popup = s_calibration->probe_popup;
         s_calibration->probe_popup = NULL;
+        ++s_calibration_epoch;
         lv_obj_delete(popup);
     }
 }
@@ -752,7 +779,14 @@ static void show_probe_adjustment_popup(void)
 static void run_probe_calibration_cb(
     lv_event_t *event)
 {
-    (void)event;
+    if (!s_calibration || !s_calibration->root || s_calibration_retiring ||
+        s_calibration_dispatching) return;
+    lv_obj_t *popup = s_calibration->probe_popup;
+    if (!popup || (event && (lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        lv_event_get_target_obj(event) != lv_obj_get_child(lv_obj_get_child(popup, 2), 1)))) return;
+    uint32_t epoch = s_calibration_epoch;
+    uint32_t owner = (uint32_t)(uintptr_t)lv_obj_get_user_data(popup);
+    if (!calibration_confirmation_current(popup, epoch, owner)) return;
 
     if (!s_calibration ||
         !calibration_action_ready(
@@ -760,6 +794,17 @@ static void run_probe_calibration_cb(
         return;
     }
 
+    if (!calibration_confirmation_current(popup, epoch, owner)) return;
+    calibration_capabilities_t capabilities;
+    calibration_capability_controller_snapshot(&capabilities);
+    moonraker_state_t live;
+    moonraker_state_snapshot(&live);
+    if (!calibration_confirmation_current(popup, epoch, owner) || !capabilities.probe ||
+        printer_idle_reason(&live)[0]) return;
+    bool homed = strchr(live.homed_axes, 'x') && strchr(live.homed_axes, 'y') && strchr(live.homed_axes, 'z');
+    if (!homed && !s_calibration->probe_home_required) return;
+    ui_calibration_send_gcode_cb_t send = s_calibration->send_gcode;
+    s_calibration_dispatching = true;
     const char *command =
         s_calibration->probe_home_required
             ? "G28\nPROBE_CALIBRATE"
@@ -769,12 +814,23 @@ static void run_probe_calibration_cb(
     calibration_session_controller_begin(
         CALIBRATION_SESSION_PROBE_Z,
         start_sequence);
+    if (!calibration_confirmation_current(popup, epoch, owner)) {
+        s_calibration_dispatching = false;
+        return;
+    }
     console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
+    if (!calibration_confirmation_current(popup, epoch, owner)) {
+        s_calibration_dispatching = false;
+        return;
+    }
+    bool sent = send && send(command);
 
+    s_calibration_dispatching = false;
+    if (!calibration_confirmation_current(popup, epoch, owner)) return;
+    ++epoch; /* One retirement; a replacement must not be consumed. */
     close_probe_popup();
+    if (!calibration_confirmation_current(popup, epoch, owner) ||
+        s_calibration->probe_popup) return;
 
     if (!sent) {
         calibration_session_controller_mark_error(
@@ -794,6 +850,7 @@ static void probe_z_button_cb(
     lv_event_t *event)
 {
     (void)event;
+    if (s_calibration_retiring || s_calibration_dispatching || !s_calibration || !s_calibration->root) return;
 
     if (!s_calibration ||
         !calibration_action_ready(
@@ -823,6 +880,9 @@ static void probe_z_button_cb(
         return;
     }
 
+    ++s_calibration_epoch;
+    lv_obj_add_event_cb(s_calibration->probe_popup, calibration_confirmation_deleted, LV_EVENT_DELETE, NULL);
+
     ui_cal_dialog_title_divided(s_calibration->probe_popup, ui_text("Start probe / Z calibration?"));
 
 
@@ -848,6 +908,7 @@ static void close_axis_twist_popup(void)
         lv_obj_t *popup =
             s_calibration->axis_twist_popup;
         s_calibration->axis_twist_popup = NULL;
+        ++s_calibration_epoch;
         lv_obj_delete(popup);
     }
 }
@@ -965,7 +1026,14 @@ static void show_axis_twist_adjustment_popup(void)
 static void run_axis_twist_calibration_cb(
     lv_event_t *event)
 {
-    (void)event;
+    if (!s_calibration || !s_calibration->root || s_calibration_retiring ||
+        s_calibration_dispatching) return;
+    lv_obj_t *popup = s_calibration->axis_twist_popup;
+    if (!popup || (event && (lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        lv_event_get_target_obj(event) != lv_obj_get_child(lv_obj_get_child(popup, 2), 1)))) return;
+    uint32_t epoch = s_calibration_epoch;
+    uint32_t owner = (uint32_t)(uintptr_t)lv_obj_get_user_data(popup);
+    if (!calibration_confirmation_current(popup, epoch, owner)) return;
 
     if (!s_calibration ||
         !calibration_action_ready(
@@ -973,6 +1041,17 @@ static void run_axis_twist_calibration_cb(
         return;
     }
 
+    if (!calibration_confirmation_current(popup, epoch, owner)) return;
+    calibration_capabilities_t capabilities;
+    calibration_capability_controller_snapshot(&capabilities);
+    moonraker_state_t live;
+    moonraker_state_snapshot(&live);
+    if (!calibration_confirmation_current(popup, epoch, owner) || !capabilities.axis_twist ||
+        printer_idle_reason(&live)[0]) return;
+    bool homed = strchr(live.homed_axes, 'x') && strchr(live.homed_axes, 'y') && strchr(live.homed_axes, 'z');
+    if (!homed && !s_calibration->axis_twist_home_required) return;
+    ui_calibration_send_gcode_cb_t send = s_calibration->send_gcode;
+    s_calibration_dispatching = true;
     const char *command =
         s_calibration->axis_twist_home_required
             ? "G28\nAXIS_TWIST_COMPENSATION_CALIBRATE"
@@ -983,12 +1062,23 @@ static void run_axis_twist_calibration_cb(
     calibration_session_controller_begin(
         CALIBRATION_SESSION_AXIS_TWIST,
         start_sequence);
+    if (!calibration_confirmation_current(popup, epoch, owner)) {
+        s_calibration_dispatching = false;
+        return;
+    }
     console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
+    if (!calibration_confirmation_current(popup, epoch, owner)) {
+        s_calibration_dispatching = false;
+        return;
+    }
+    bool sent = send && send(command);
 
+    s_calibration_dispatching = false;
+    if (!calibration_confirmation_current(popup, epoch, owner)) return;
+    ++epoch; /* One retirement; a replacement must not be consumed. */
     close_axis_twist_popup();
+    if (!calibration_confirmation_current(popup, epoch, owner) ||
+        s_calibration->axis_twist_popup) return;
 
     if (!sent) {
         calibration_session_controller_mark_error(
@@ -1008,6 +1098,7 @@ static void axis_twist_button_cb(
     lv_event_t *event)
 {
     (void)event;
+    if (s_calibration_retiring || s_calibration_dispatching || !s_calibration || !s_calibration->root) return;
 
     if (!s_calibration ||
         !calibration_action_ready(
@@ -1036,6 +1127,9 @@ static void axis_twist_button_cb(
     if (!s_calibration->axis_twist_popup) {
         return;
     }
+
+    ++s_calibration_epoch;
+    lv_obj_add_event_cb(s_calibration->axis_twist_popup, calibration_confirmation_deleted, LV_EVENT_DELETE, NULL);
 
     ui_cal_dialog_title_divided(s_calibration->axis_twist_popup, ui_text("Start axis twist calibration?"));
 
@@ -1092,9 +1186,8 @@ static void refresh_axis_twist_session(void)
 static void calibration_refresh_timer_cb(
     lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (!s_calibration || !s_calibration->root) {
+    if (!s_calibration || !s_calibration->root || s_calibration_retiring ||
+        (timer && timer != s_calibration->refresh_timer)) {
         return;
     }
 
@@ -1150,7 +1243,7 @@ void ui_calibration_show(
     ui_calibration_open_bed_mesh_cb_t open_bed_mesh_cb,
     ui_calibration_send_gcode_cb_t send_gcode_cb)
 {
-    if (!calibration_state_init()) {
+    if (s_calibration_retiring || s_calibration_dispatching || !calibration_state_init()) {
         return;
     }
 
@@ -1220,8 +1313,9 @@ void ui_calibration_show(
         return;
     }
 
-    s_calibration->root = lv_obj_create(
-        lv_screen_active());
+    ++s_calibration_epoch;
+    s_calibration->root = lv_obj_create(lv_screen_active());
+    lv_obj_add_event_cb(s_calibration->root, calibration_page_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_size(
         s_calibration->root,
         UI_PAGE_ROOT_WIDTH,
@@ -1524,9 +1618,11 @@ void ui_calibration_show(
 
 void ui_calibration_hide(void)
 {
-    if (!s_calibration) {
-        return;
-    }
+    if (!s_calibration || s_calibration_retiring) return;
+    s_calibration_retiring = true;
+    ++s_calibration_epoch;
+    lv_obj_t *root = s_calibration->root;
+    s_calibration->root = NULL;
 
     if (s_calibration->refresh_timer) {
         lv_timer_delete(
@@ -1545,11 +1641,10 @@ void ui_calibration_hide(void)
     ui_calibration_manual_probe_hide();
     ui_calibration_results_close();
 
-    if (s_calibration->root) {
-        lv_obj_delete(s_calibration->root);
-    }
+    if (root) lv_obj_delete(root);
 
     s_calibration->root = NULL;
+    s_calibration->open_bed_mesh = NULL;
     s_calibration->banner_status = NULL;
     s_calibration->bed_mesh_button = NULL;
     s_calibration->screws_tilt_button = NULL;
@@ -1615,4 +1710,5 @@ void ui_calibration_hide(void)
         sizeof(s_calibration->probe));
     s_calibration->device_generation = 0;
     s_calibration->macro_generation = 0;
+    s_calibration_retiring = false;
 }

@@ -94,17 +94,17 @@ static void run(void){
  /* Reproduce the panel's Operator -> Studio navigation sequence. */
  for (int cycle=0; cycle<3; cycle++) for (int theme=UI_THEME_CLASSIC; theme<UI_THEME_STUDIO_DARK; theme++) {
   ui_theme_set_active((ui_theme_id_t)theme);
-  lv_obj_t *old=page_root();lv_obj_t *old_file,*old_speed,*old_flow,*old_layer,*old_filament;
-  ui_printer_live_status_create(old,&old_file,&old_speed,&old_flow,&old_layer,&old_filament,clicked,100,100,send_command);
+  lv_obj_t *old=page_root();lv_obj_t *old_speed,*old_flow,*old_layer,*old_filament;
+  ui_printer_live_status_create(old,&old_speed,&old_flow,&old_layer,&old_filament,clicked,100,100,send_command);
   assert(s_speed_factor_slider && s_flow_factor_slider && s_speed_factor_value && s_flow_factor_value);
   lv_obj_delete(old);
   assert(!s_tuning_owner && !s_speed_factor_slider && !s_flow_factor_slider && !s_speed_factor_value && !s_flow_factor_value);
-  ui_printer_live_status_refresh(NULL,NULL,NULL,NULL,NULL,NULL,NULL,"standby","",0,0,100,100,0,0,0,0,0,true,NULL);
+  ui_printer_live_status_refresh(NULL,NULL,NULL,NULL,NULL,0,0,100,100,0,0,true,NULL);
   ui_theme_set_active(UI_THEME_STUDIO_DARK);
   lv_obj_t *next=page_root();
-  ui_printer_live_status_create(next,&old_file,&old_speed,&old_flow,&old_layer,&old_filament,clicked,100,100,send_command);
+  ui_printer_live_status_create(next,&old_speed,&old_flow,&old_layer,&old_filament,clicked,100,100,send_command);
   assert(!s_speed_factor_slider && !s_flow_factor_slider);
-  ui_printer_live_status_refresh(next,NULL,old_file,old_speed,old_flow,old_layer,old_filament,"standby","",0,0,100,100,0,0,0,0,0,true,NULL);
+  ui_printer_live_status_refresh(next,old_speed,old_flow,old_layer,old_filament,0,0,100,100,0,0,true,NULL);
   studio_tuning_open(NULL);assert(s_speed_factor_slider && s_flow_factor_slider);
   lv_obj_delete(next);
   assert(!s_tuning_owner && !s_studio_position && !s_studio_tuning_popup && !s_speed_factor_slider && !s_flow_factor_slider);
@@ -112,15 +112,15 @@ static void run(void){
  }
  ui_theme_set_active(UI_THEME_STUDIO_DARK);
  lv_obj_t *r=page_root();ui_printer_layout_t l;assert(ui_printer_layout_create(r,&l));
- lv_obj_t *file,*speed,*flow,*layer,*filament;
- ui_printer_live_status_create(l.active_panel,&file,&speed,&flow,&layer,&filament,clicked,1,1,send_command);
+ lv_obj_t *speed,*flow,*layer,*filament;
+ ui_printer_live_status_create(l.active_panel,&speed,&flow,&layer,&filament,clicked,1,1,send_command);
  ui_printer_info_cards_t cards;ui_printer_info_cards_create(l.status_panel,&cards,clicked,clicked,clicked);
  ui_printer_actions_t actions;ui_printer_actions_create(l.action_panel,&actions,clicked,open_toolhead);
  ui_printer_preview_create(l.active_panel);
  lv_obj_update_layout(l.active_panel);
  assert(lv_obj_get_width(s_preview_box)==620 && lv_obj_get_height(s_preview_box)==240);
  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,true,NULL);
- ui_printer_live_status_refresh(r,NULL,file,speed,flow,layer,filament,"standby","job.gcode",120,8.2,1,1,215,336,0,0,.64,true,NULL);
+ ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,215,336,true,NULL);
  children_inside(r);assert(!lv_obj_has_flag(r,LV_OBJ_FLAG_SCROLLABLE));snapshot("printer-native");
  assert(lv_obj_get_y(s_studio_position)>lv_obj_get_height(s_preview_box));
  assert(!strcmp(lv_label_get_text(layer),"215 / 336"));
@@ -140,12 +140,12 @@ static void run(void){
  ui_theme_set_active(UI_THEME_OPERATOR);
  memset(&cards,0,sizeof(cards));
  r=page_root();assert(ui_printer_layout_create(r,&l));
- ui_printer_live_status_create(l.active_panel,&file,&speed,&flow,&layer,&filament,clicked,100,100,send_command);
+ ui_printer_live_status_create(l.active_panel,&speed,&flow,&layer,&filament,clicked,100,100,send_command);
  ui_printer_info_cards_create(l.status_panel,&cards,clicked,clicked,clicked);
  ui_printer_actions_create(l.action_panel,&actions,clicked,open_toolhead);
  ui_printer_preview_create(l.active_panel);
  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,true,NULL);
- ui_printer_live_status_refresh(r,NULL,file,speed,flow,layer,filament,"standby","job.gcode",120,8.2,100,100,215,336,0,0,.64,true,NULL);
+ ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,100,100,215,336,true,NULL);
  children_inside(r);
  snapshot("printer-operator-body-native");
  ui_printer_preview_destroy_refs();lv_obj_delete(r);

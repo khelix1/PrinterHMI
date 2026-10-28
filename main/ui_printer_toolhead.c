@@ -9,6 +9,7 @@
 #include "ui_popup.h"
 #include "ui_theme.h"
 #include "ui_form_dialog.h"
+#include "ui_value_update.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -32,7 +33,6 @@ static lv_obj_t *s_extrusion_buttons[5];
 static double s_extrusion_step = 10.0;
 
 static lv_obj_t *s_tab_panels[3], *s_tab_buttons[3];
-static unsigned s_active_tab;
 
 static lv_obj_t *s_position_label = NULL;
 static lv_obj_t *s_homed_label = NULL;
@@ -67,7 +67,6 @@ static void toolhead_deleted(lv_event_t *event)
     memset(s_extrusion_buttons, 0, sizeof(s_extrusion_buttons));
     memset(s_tab_panels, 0, sizeof(s_tab_panels));
     memset(s_tab_buttons, 0, sizeof(s_tab_buttons));
-    s_active_tab = 0;
     if (s_xy_step1_btn) *s_xy_step1_btn = NULL;
     if (s_xy_step10_btn) *s_xy_step10_btn = NULL;
     if (s_xy_step50_btn) *s_xy_step50_btn = NULL;
@@ -97,7 +96,7 @@ static void toolhead_send(const char *command)
     if (error[0]) {
         snprintf(s_toolhead_feedback, sizeof(s_toolhead_feedback), "Offline");
         s_toolhead_feedback_at = lv_tick_get();
-        lv_label_set_text(s_homed_label, "Offline");
+        ui_value_set_text(s_homed_label, "Offline");
         return;
     }
     lv_obj_t *popup = s_toolhead_popup;
@@ -118,11 +117,7 @@ static void toolhead_send(const char *command)
     snprintf(s_toolhead_feedback, sizeof(s_toolhead_feedback), "%s",
         accepted ? "Sent" : "Not sent");
     s_toolhead_feedback_at = lv_tick_get();
-    lv_label_set_text(s_homed_label, accepted ? "Sent" : "Not sent");
-}
-
-void ui_printer_toolhead_init(void)
-{
+    ui_value_set_text(s_homed_label, accepted ? "Sent" : "Not sent");
 }
 
 static lv_obj_t *toolhead_button(lv_obj_t *parent, ui_button_kind_t kind,
@@ -228,7 +223,6 @@ static void toolhead_tab_cb(lv_event_t *event)
     if (s_toolhead_owner != moonraker_config_generation()) { ui_printer_toolhead_close(); return; }
     unsigned tab = (unsigned)(uintptr_t)lv_event_get_user_data(event);
     if (tab >= 3) return;
-    s_active_tab = tab;
     for (unsigned i = 0; i < 3; ++i) {
         if (i == tab) lv_obj_remove_flag(s_tab_panels[i], LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s_tab_panels[i], LV_OBJ_FLAG_HIDDEN);
@@ -279,12 +273,6 @@ static bool format_extrusion_distance(const char *dir, double distance,
     return true;
 }
 
-bool ui_printer_toolhead_format_extrude_command(const char *dir,
-                                              char *cmd, size_t cmd_size)
-{
-    return format_extrusion_distance(dir, 10.0, cmd, cmd_size);
-}
-
 bool ui_printer_toolhead_format_z_offset_command(const char *adjustment,
                                                char *cmd,
                                                size_t cmd_size)
@@ -323,9 +311,9 @@ static void refresh_live_labels(void)
             char position[96];
             snprintf(position, sizeof(position), "X %.2f | Y %.2f | Z %.3f mm",
                 state.toolhead_x, state.toolhead_y, state.toolhead_z);
-            lv_label_set_text(s_position_label, position);
+            ui_value_set_text(s_position_label, position);
         } else {
-            lv_label_set_text(
+            ui_value_set_text(
                 s_position_label,
                 ui_text("X --.-- | Y --.-- | Z --.--- mm"));
         }
@@ -333,7 +321,7 @@ static void refresh_live_labels(void)
 
     if (s_homed_label && s_toolhead_feedback[0] &&
         lv_tick_elaps(s_toolhead_feedback_at) < 3000) {
-        lv_label_set_text(s_homed_label, s_toolhead_feedback);
+        ui_value_set_text(s_homed_label, s_toolhead_feedback);
     } else if (s_homed_label) {
         char axes[8] = "";
         size_t out = 0;
@@ -347,22 +335,21 @@ static void refresh_live_labels(void)
         }
         axes[out] = '\0';
 
-        lv_label_set_text_fmt(
-            s_homed_label,
-            "Homed: %s",
-            axes[0] ? axes : "--");
+        char homed[32];
+        snprintf(homed, sizeof(homed), "Homed: %s", axes[0] ? axes : "--");
+        ui_value_set_text(s_homed_label, homed);
     }
 
     if (s_offset_label) {
         char offset[32];
         snprintf(offset, sizeof(offset), "%+.3f mm", state.z_offset);
-        lv_label_set_text(s_offset_label, offset);
+        ui_value_set_text(s_offset_label, offset);
     }
 }
 
 static void refresh_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
+    if (timer && timer != s_refresh_timer) return;
     refresh_live_labels();
 }
 
@@ -489,7 +476,6 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
         s_tab_buttons[i] = toolhead_button(tabs, UI_BUTTON_OUTLINED, ui_text(tab_names[i]), NULL, NULL, i, 0);
         lv_obj_add_event_cb(s_tab_buttons[i], toolhead_tab_cb, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
     }
-    s_active_tab = 0;
     lv_obj_t *panels = toolhead_grid(body, toolhead_two);
     s_tab_panels[0] = panels;
     lv_obj_add_event_cb(panels, toolhead_panels_resize, LV_EVENT_SIZE_CHANGED, NULL);

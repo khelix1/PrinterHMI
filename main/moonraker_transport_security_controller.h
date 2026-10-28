@@ -8,7 +8,6 @@
 bool moonraker_transport_security_controller_init(void);
 bool moonraker_transport_security_import_ca_file_for_profile(int profile_index, const char *path);
 const char *moonraker_transport_security_ca_pem_for_profile(int profile_index);
-bool moonraker_transport_security_profile_secure(const moonraker_profile_t *profile);
 bool moonraker_transport_security_build_http_url(const moonraker_profile_t *profile, const char *path, char *out, size_t out_size);
 bool moonraker_transport_security_build_websocket_uri(const moonraker_profile_t *profile, char *out, size_t out_size);
 bool moonraker_transport_security_build_http_url_for_endpoint(const char *host, int port, const char *path, char *out, size_t out_size, const char **out_ca_pem);

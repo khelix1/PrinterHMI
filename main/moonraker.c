@@ -8,6 +8,7 @@
 #include <math.h>
 
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "cJSON.h"
 #include "bed_mesh_controller.h"
 #include "calibration_capability_controller.h"
@@ -19,6 +20,8 @@
 
 #include <limits.h>
 static moonraker_state_t g_moonraker_state;
+/* Published under the same lock as connection flags, including equal-value frames. */
+static int64_t s_websocket_status_us;
 /* Preserve source priority across partial WebSocket frames. */
 static bool s_virtual_sd_progress_known = false;
 /* Klipper readiness survives partial status frames until explicit recovery. */
@@ -102,13 +105,6 @@ static void klipper_readiness_apply(void)
     }
 }
 
-const moonraker_state_t *moonraker_state_get(void)
-{
-    /* Compatibility accessor. New asynchronous consumers use snapshots. */
-    return &g_moonraker_state;
-}
-
-
 void moonraker_state_snapshot(moonraker_state_t *out)
 {
     if (!out) return;
@@ -178,6 +174,7 @@ void moonraker_state_reset(void)
     motion_diagnostics_controller_reset();
     state_lock();
     memset(&g_moonraker_state, 0, sizeof(g_moonraker_state));
+    s_websocket_status_us = 0;
     klipper_readiness_set("--");
     if (g_moonraker_exclude_state) {
         memset(g_moonraker_exclude_state, 0,
@@ -251,6 +248,22 @@ void moonraker_state_set_connection(
     state_lock();
     g_moonraker_state.live_data_ok = live_data_ok;
     g_moonraker_state.moonraker_ok = moonraker_ok;
+    if (!moonraker_ok) s_websocket_status_us = 0;
+    state_unlock();
+}
+
+
+void moonraker_state_expire_websocket(int64_t maximum_age_us)
+{
+    /* A status callback can publish after the runtime's earlier freshness probe.
+     * Recheck its timestamp while holding the publication lock before expiring. */
+    state_lock();
+    int64_t now = esp_timer_get_time();
+    if (maximum_age_us <= 0 || s_websocket_status_us <= 0 ||
+        now < s_websocket_status_us || now - s_websocket_status_us > maximum_age_us) {
+        g_moonraker_state.live_data_ok = false;
+        g_moonraker_state.moonraker_ok = false;
+    }
     state_unlock();
 }
 
@@ -756,6 +769,8 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 
     if (lifecycle != MOONRAKER_WEBSOCKET_MESSAGE_IGNORED) {
         state_lock();
+        s_websocket_status_us = lifecycle == MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED
+            ? 0 : esp_timer_get_time();
 
         if (g_moonraker_exclude_state) {
             memset(g_moonraker_exclude_state, 0,
@@ -1181,6 +1196,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     }
 
     if (updates > 0) {
+        s_websocket_status_us = esp_timer_get_time();
         g_moonraker_state.live_data_ok = true;
         g_moonraker_state.moonraker_ok = true;
     }

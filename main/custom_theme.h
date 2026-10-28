@@ -36,8 +36,6 @@ void custom_theme_deactivate(void);
 bool custom_theme_is_active(void);
 const char *custom_theme_active_id(void);
 const char *custom_theme_active_name(void);
-ui_theme_id_t custom_theme_base(void);
-
 bool custom_theme_remove(size_t index);
 
 bool custom_theme_color_override(

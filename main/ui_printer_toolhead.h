@@ -16,7 +16,6 @@
  * Owns only Toolhead-specific layout, interaction state, and G-code formatting.
  */
 
-void ui_printer_toolhead_init(void);
 void ui_printer_toolhead_close(void);
 void ui_printer_toolhead_set_sender(bool (*send)(const char *command));
 
@@ -24,10 +23,6 @@ bool ui_printer_toolhead_format_jog_command(const char *axis,
                                             double jog_step,
                                             char *cmd,
                                             size_t cmd_size);
-
-bool ui_printer_toolhead_format_extrude_command(const char *dir,
-                                                char *cmd,
-                                                size_t cmd_size);
 
 bool ui_printer_toolhead_format_z_offset_command(const char *adjustment,
                                                  char *cmd,

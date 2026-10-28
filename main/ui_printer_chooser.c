@@ -705,8 +705,3 @@ void ui_printer_chooser_hide(void)
     if(root)lv_obj_delete(root);
     chooser_flush_show();
 }
-
-bool ui_printer_chooser_is_visible(void)
-{
-    return s_root != NULL;
-}

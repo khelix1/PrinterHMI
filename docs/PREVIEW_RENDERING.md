@@ -128,3 +128,17 @@ Unseen files still pay the initial HTTP/decode cost. RAM hits avoid both during
 the session, and decoded SD hits retain the benefit across restarts. File-list
 HTTP latency is unchanged. The operator verified the source branch's Files
 behavior across reboots; the independently ported firmware needs a panel smoke test.
+
+## Printer switch continuity (v7.1.36-dev)
+
+The profile callback clears old ownership once before restoring the new profile's
+endpoint-validated cached preview. It must not call another preview reset after
+that restoration. When live print status arrives, a matching RGB canvas stays
+visible while fresh metadata/PNG verification proceeds. The source PNG image
+objects are still retired before freeing PNG memory; RGB canvases own separate
+pixel storage. A different filename or invalidated profile name clears the old
+canvas. Profile switching clears canvas names before destination cache restore,
+so identical filenames from different printers cannot establish ownership alone.
+Fresh fetches and bounded retries are retained; a failed verification can leave
+the last validated cached image visible. This does not retain stale telemetry as
+live printer state or change fullscreen/source selection policy.

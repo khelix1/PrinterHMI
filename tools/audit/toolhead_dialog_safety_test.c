@@ -10,14 +10,15 @@ bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return 
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
 static moonraker_state_t fixture;
 static uint32_t generation=1;
-static unsigned sends;
+static unsigned sends, snapshot_reads, invalidations;
+static void invalidated(lv_event_t *e){(void)e;invalidations++;}
 static bool accept=true;
 static int during_send;
 static char sent[128];
 static lv_obj_t *steps[3];
 static double step=10;
 uint32_t moonraker_config_generation(void){return generation;}
-void moonraker_state_snapshot(moonraker_state_t *out){*out=fixture;}
+void moonraker_state_snapshot(moonraker_state_t *out){snapshot_reads++;*out=fixture;}
 void ui_filament_recovery_close(void){}
 void ui_dashboard_status_popup_close(void){}
 static bool send_checked(const char *command)
@@ -54,6 +55,37 @@ static void reset(void)
     ui_printer_popups_set_control_sender(send_checked);
 }
 static void motion_open(void){ui_printer_toolhead_show(&steps[0],&steps[1],&steps[2],&step,NULL);assert(s_toolhead_popup);}
+static void unrelated_poll(lv_timer_t *timer){(void)timer;}
+static void settle_quiet(lv_display_t *display)
+{
+ lv_refr_now(display);invalidations=0;
+ for(unsigned i=0;i<100;i++)refresh_timer_cb(s_refresh_timer);
+ assert(!invalidations);
+}
+static void quiet_refresh_checks(lv_display_t *display)
+{
+ fixture.toolhead_position_valid=true;fixture.toolhead_x=10;fixture.toolhead_y=20;fixture.toolhead_z=0.2;
+ fixture.z_offset=-0.125;strcpy(fixture.homed_axes,"xyz");s_toolhead_feedback[0]=0;
+ refresh_live_labels();settle_quiet(display);
+ assert(!strcmp(lv_label_get_text(s_position_label),"X 10.00 | Y 20.00 | Z 0.200 mm"));
+ fixture.toolhead_x=11;refresh_timer_cb(s_refresh_timer);assert(invalidations);
+ assert(!strcmp(lv_label_get_text(s_position_label),"X 11.00 | Y 20.00 | Z 0.200 mm"));settle_quiet(display);
+ strcpy(s_toolhead_feedback,"Sent");s_toolhead_feedback_at=lv_tick_get();refresh_live_labels();
+ assert(!strcmp(lv_label_get_text(s_homed_label),"Sent"));settle_quiet(display);
+ lv_tick_inc(3001);refresh_timer_cb(s_refresh_timer);assert(invalidations);
+ assert(!strcmp(lv_label_get_text(s_homed_label),"Homed: XYZ"));settle_quiet(display);
+ fixture.toolhead_position_valid=false;fixture.homed_axes[0]=0;fixture.z_offset=0.05;refresh_live_labels();
+ assert(!strcmp(lv_label_get_text(s_position_label),"X --.-- | Y --.-- | Z --.--- mm"));
+ assert(!strcmp(lv_label_get_text(s_homed_label),"Homed: --"));assert(!strcmp(lv_label_get_text(s_offset_label),"+0.050 mm"));settle_quiet(display);
+ /* Ignore an unrelated timer without querying state or touching the current UI. */
+ lv_timer_t *other=lv_timer_create(unrelated_poll,60000,NULL);unsigned reads=snapshot_reads;
+ fixture.z_offset=0.1;refresh_timer_cb(other);assert(snapshot_reads==reads&&!invalidations);
+ refresh_timer_cb(s_refresh_timer);assert(snapshot_reads==reads+1&&!strcmp(lv_label_get_text(s_offset_label),"+0.100 mm"));settle_quiet(display);
+ ui_printer_popups_show_hotends(NULL,&fixture);reads=snapshot_reads;
+ refresh_hotend_list(other);assert(snapshot_reads==reads);
+ refresh_hotend_list(s_hotend_refresh_timer);assert(snapshot_reads==reads+1);
+ close_hotend_list_cb(NULL);lv_timer_delete(other);
+}
 static void hotend_open(void){ui_printer_popups_show_hotends(NULL,&fixture);click(s_hotend_activate_buttons[1]);assert(s_hotend_activate_popup);}
 static lv_obj_t *find_label(lv_obj_t *object, const char *text)
 {
@@ -105,7 +137,7 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
     pressed=true;lv_indev_read(pointer);pressed=false;lv_indev_read(pointer);
    } else click(s_tab_buttons[tab]);
    lv_obj_update_layout(s_toolhead_popup);
-   assert(s_active_tab==tab&&sends==baseline_sends&&s_refresh_timer==baseline_timer);
+   assert(sends==baseline_sends&&s_refresh_timer==baseline_timer);
    assert(check_buttons(s_toolhead_popup)==((unsigned[]){22,11,15})[tab]);
    for(unsigned i=0;i<3;i++) {
     assert(lv_obj_has_flag(s_tab_panels[i],LV_OBJ_FLAG_HIDDEN)==(i!=tab));
@@ -168,19 +200,19 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
   click(s_extrusion_buttons[2]);
   lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"Extrude")));assert(!strcmp(sent,"M83\nG1 E10 F300"));
   click(s_tab_buttons[0]);assert(s_extrusion_step==10&&fabs(s_z_step-25.0)<0.0001);
-  motion_open();assert(s_active_tab==0&&s_refresh_timer==baseline_timer);
-  click(s_tab_buttons[2]);motion_open();assert(s_active_tab==2&&s_refresh_timer==baseline_timer);
+  motion_open();assert(!lv_obj_has_flag(s_tab_panels[0],LV_OBJ_FLAG_HIDDEN)&&lv_obj_has_state(s_tab_buttons[0],LV_STATE_CHECKED)&&s_refresh_timer==baseline_timer);
+  click(s_tab_buttons[2]);motion_open();assert(!lv_obj_has_flag(s_tab_panels[2],LV_OBJ_FLAG_HIDDEN)&&lv_obj_has_state(s_tab_buttons[2],LV_STATE_CHECKED)&&s_refresh_timer==baseline_timer);
   click(lv_obj_get_child(footer,0));assert(!s_toolhead_popup&&!s_refresh_timer&&!steps[0]&&!s_tab_panels[0]&&!s_tab_buttons[0]);
  }
 }
 int main(void)
 {
     lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buffer[1024*40*2];
-    lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
+    lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
     for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
         ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();unsigned baseline=timers();
         motion_open();lv_obj_t *popup=s_toolhead_popup;lv_timer_t*timer=s_refresh_timer;
-        motion_open();assert(s_toolhead_popup==popup&&s_refresh_timer==timer);
+        motion_open();assert(s_toolhead_popup==popup&&s_refresh_timer==timer);quiet_refresh_checks(d);
         unsigned before=sends;during_send=1;toolhead_send("G28");assert(sends==before+1);
         toolhead_send("G28");assert(sends==before+1);lv_tick_inc(350);toolhead_send("G28");assert(sends==before+2);
         lv_tick_inc(350);accept=false;toolhead_send("G28");assert(sends==before+3);accept=true;toolhead_send("G28");assert(sends==before+4);
@@ -206,5 +238,5 @@ int main(void)
         for(int i=0;i<10;i++){motion_open();ui_printer_popups_show_hotends(NULL,&fixture);lv_obj_delete(s_toolhead_popup);lv_obj_delete(s_hotend_list_popup);assert(timers()==baseline&&!s_xy_step&&!s_hotend_refresh_timer);}
     }
     lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);native_layout_checks(d,pointer);
-    puts("PASS: Tabbed Toolhead: all controls fit without scrolling at 1024x600, button fit/centering, pinned Close and smaller-view touch fallback; Toolhead/hotend lifecycle, duplicate suppression, rejected-send retries, telemetry/timeout, printer switching, reentrant cleanup, all five themes/densities/text sizes");return 0;
+    puts("PASS: Tabbed Toolhead: all controls fit without scrolling at 1024x600, button fit/centering, pinned Close and smaller-view touch fallback; unchanged Toolhead redraw silence, live/feedback transitions, owned timers, Toolhead/hotend lifecycle, duplicate suppression, rejected-send retries, telemetry/timeout, printer switching, reentrant cleanup, all five themes/densities/text sizes");return 0;
 }

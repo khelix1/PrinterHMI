@@ -200,36 +200,6 @@ void printer_ui_controller_update_action_buttons(
     }
 }
 
-void printer_ui_controller_update_topbar_eta(
-    lv_obj_t *eta_label,
-    double progress,
-    double print_duration,
-    bool moonraker_ok)
-{
-    if (!eta_label) {
-        return;
-    }
-
-    char remaining[32];
-    char text[40];
-
-    printer_controller_format_remaining(
-        remaining,
-        sizeof(remaining),
-        progress,
-        print_duration);
-
-    printer_controller_format_topbar_eta(
-        text,
-        sizeof(text),
-        progress,
-        print_duration,
-        remaining,
-        moonraker_ok);
-
-    lv_label_set_text(eta_label, text);
-}
-
 void printer_ui_controller_refresh(
     const printer_ui_controller_refresh_ctx_t *ctx)
 {
@@ -248,30 +218,22 @@ void printer_ui_controller_refresh(
     ui_printer_banner_refresh(
         ctx->printer_panel,
         ctx->banner_label,
-        ctx->state_label,
         reason[0]?reason:ctx->banner_text,
         !ctx->moonraker_ok?"offline":(!ctx->live_data_ok?"not ready":ctx->printer_state),
         ctx->printer_file);
 
     ui_printer_live_status_refresh(
         ctx->printer_panel,
-        ctx->active_file_box,
-        ctx->active_file_label,
         ctx->speed_label,
         ctx->flow_label,
         ctx->layer_label,
         ctx->filament_label,
-        ctx->printer_state,
-        ctx->printer_file,
         ctx->live_velocity,
         ctx->live_flow,
         ctx->speed_factor,
         ctx->flow_factor,
         ctx->current_layer,
         ctx->total_layer,
-        ctx->metadata_object_height,
-        ctx->metadata_layer_height,
-        ctx->progress,
         ctx->moonraker_ok && ctx->live_data_ok,
         ctx->filament_state);
 
@@ -294,16 +256,6 @@ void printer_ui_controller_refresh(
         ctx->print_duration,
         ctx->moonraker_ok && ctx->live_data_ok,
         ctx->capabilities);
-
-    if (ctx->printer_panel && ctx->file_label) {
-        lv_label_set_text(ctx->file_label, ctx->printer_file);
-    }
-
-    printer_ui_controller_update_topbar_eta(
-        ctx->topbar_eta_label,
-        ctx->progress,
-        ctx->print_duration,
-        ctx->moonraker_ok);
 
     printer_ui_controller_update_action_buttons(
         ctx->home_button,

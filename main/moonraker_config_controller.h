@@ -100,10 +100,3 @@ bool moonraker_config_set_transport_security(int profile_index, bool secure);
 
 const char *moonraker_config_camera_stream_url(int profile_index);
 bool moonraker_config_set_camera_stream_url(int profile_index, const char *url);
-
-bool moonraker_config_select_host(
-    const char *host,
-    int port);
-
-bool moonraker_config_select_port(
-    int port);

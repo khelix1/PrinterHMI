@@ -291,12 +291,10 @@ static bool extract_json_string(
 
 static bool normalize_webcam_url(
     const char *host,
-    int port,
     const char *source,
     char *destination,
     size_t destination_size)
 {
-    (void)port;
     if (!host || !host[0] || !source || !source[0] ||
         !destination || destination_size == 0) {
         return false;
@@ -345,7 +343,7 @@ size_t moonraker_probe_webcams_with_api_key(
             cJSON *stream = cJSON_GetObjectItemCaseSensitive(entry, "stream_url");
             if (!cJSON_IsObject(entry) || (enabled && !cJSON_IsTrue(enabled)) ||
                 !cJSON_IsString(stream) || !stream->valuestring ||
-                !normalize_webcam_url(host, port, stream->valuestring,
+                !normalize_webcam_url(host, stream->valuestring,
                     webcams[count].stream_url, sizeof(webcams[count].stream_url))) continue;
             cJSON *name = cJSON_GetObjectItemCaseSensitive(entry, "name");
             strlcpy(webcams[count].name,
@@ -353,7 +351,7 @@ size_t moonraker_probe_webcams_with_api_key(
                 sizeof(webcams[count].name));
             cJSON *snapshot = cJSON_GetObjectItemCaseSensitive(entry, "snapshot_url");
             if (cJSON_IsString(snapshot) && snapshot->valuestring)
-                (void)normalize_webcam_url(host, port, snapshot->valuestring,
+                (void)normalize_webcam_url(host, snapshot->valuestring,
                     webcams[count].snapshot_url, sizeof(webcams[count].snapshot_url));
             ++count;
         }
@@ -361,94 +359,6 @@ size_t moonraker_probe_webcams_with_api_key(
     }
     free(body);
     return count;
-}
-
-
-bool moonraker_probe_first_webcam_with_api_key(
-    const char *host,
-    int port,
-    const char *api_key,
-    moonraker_webcam_t *webcam)
-{
-    if (!host || !host[0] || port <= 0 || port >= 65536 || !webcam) {
-        return false;
-    }
-
-    char *body = heap_caps_malloc(
-        4096,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!body) {
-        body = heap_caps_malloc(4096, MALLOC_CAP_8BIT);
-    }
-    if (!body) {
-        return false;
-    }
-
-    bool found = false;
-    moonraker_webcam_t result = {0};
-    if (!probe_get(
-            host,
-            port,
-            "/server/webcams/list",
-            api_key,
-            body,
-            4096)) {
-        free(body);
-        return false;
-    }
-
-    cJSON *root = cJSON_Parse(body);
-    cJSON *api_result = root ? cJSON_GetObjectItemCaseSensitive(root, "result") : NULL;
-    cJSON *webcams = api_result
-        ? cJSON_GetObjectItemCaseSensitive(api_result, "webcams")
-        : (root ? cJSON_GetObjectItemCaseSensitive(root, "webcams") : NULL);
-
-    if (cJSON_IsArray(webcams)) {
-        cJSON *entry = NULL;
-        cJSON_ArrayForEach(entry, webcams) {
-            cJSON *enabled = cJSON_GetObjectItemCaseSensitive(entry, "enabled");
-            cJSON *stream = cJSON_GetObjectItemCaseSensitive(entry, "stream_url");
-            if (!cJSON_IsObject(entry) ||
-                (enabled && !cJSON_IsTrue(enabled)) ||
-                !cJSON_IsString(stream) || !stream->valuestring ||
-                !stream->valuestring[0] ||
-                !normalize_webcam_url(
-                    host,
-                    port,
-                    stream->valuestring,
-                    result.stream_url,
-                    sizeof(result.stream_url))) {
-                continue;
-            }
-
-            cJSON *name = cJSON_GetObjectItemCaseSensitive(entry, "name");
-            cJSON *snapshot = cJSON_GetObjectItemCaseSensitive(entry, "snapshot_url");
-            strlcpy(
-                result.name,
-                cJSON_IsString(name) && name->valuestring && name->valuestring[0]
-                    ? name->valuestring
-                    : "Moonraker camera",
-                sizeof(result.name));
-            if (cJSON_IsString(snapshot) && snapshot->valuestring &&
-                snapshot->valuestring[0]) {
-                (void)normalize_webcam_url(
-                    host,
-                    port,
-                    snapshot->valuestring,
-                    result.snapshot_url,
-                    sizeof(result.snapshot_url));
-            }
-            found = true;
-            break;
-        }
-    }
-
-    cJSON_Delete(root);
-    free(body);
-    if (found) {
-        *webcam = result;
-    }
-    return found;
 }
 
 

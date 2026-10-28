@@ -16,7 +16,6 @@ typedef struct {
 } camera_catalog_entry_t;
 
 /* Camera 0 mirrors the existing per-profile stream URL for compatibility. */
-size_t camera_catalog_count(int profile_index);
 bool camera_catalog_get(int profile_index, size_t camera_index,
                         camera_catalog_entry_t *entry);
 bool camera_catalog_set(int profile_index, size_t camera_index,

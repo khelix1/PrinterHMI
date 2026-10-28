@@ -203,8 +203,9 @@ typedef struct {
 
 void moonraker_module_init(void);
 
-const moonraker_state_t *moonraker_state_get(void);
 void moonraker_state_snapshot(moonraker_state_t *out);
+/* Expire stale WebSocket state atomically against status publication. */
+void moonraker_state_expire_websocket(int64_t maximum_age_us);
 void moonraker_filament_state_snapshot(
     moonraker_filament_state_t *out);
 void moonraker_exclude_state_snapshot(moonraker_exclude_state_t *out);

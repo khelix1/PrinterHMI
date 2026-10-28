@@ -68,11 +68,6 @@ const char *moonraker_transport_security_ca_pem_for_profile(int profile_index)
     return moonraker_tls_trust_store_pem_for_profile(profile_index);
 }
 
-bool moonraker_transport_security_profile_secure(const moonraker_profile_t *profile)
-{
-    return profile && profile->secure_transport;
-}
-
 bool moonraker_transport_security_build_http_url(const moonraker_profile_t *profile,
                                                   const char *path, char *out, size_t out_size)
 {

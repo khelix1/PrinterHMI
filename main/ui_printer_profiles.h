@@ -37,11 +37,8 @@ void ui_printer_profiles_set_discovered_endpoint(
     const char *identity);
 
 /* Opens Camera setup directly for the saved profile; closes prior profile
- * dialogs. Cancel/Use camera returns to the caller without an editor stack.
- * Callback parameters are retained for source compatibility. */
+ * dialogs. Cancel/Use camera returns to the caller without an editor stack. */
 void ui_printer_profiles_open_camera_setup(
-    int profile_index,
-    ui_printer_profiles_active_changed_cb_t active_changed_cb,
-    ui_printer_profiles_discover_cb_t discover_cb);
+    int profile_index);
 
 void ui_printer_profiles_close_all(void);

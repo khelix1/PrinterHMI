@@ -21,7 +21,6 @@ typedef struct {
     const float *values;
 } bed_mesh_snapshot_t;
 void bed_mesh_controller_init(void);
-void bed_mesh_controller_reset(void);
 bool bed_mesh_controller_merge_status(cJSON *status);
 bool bed_mesh_controller_snapshot(
     bed_mesh_snapshot_t *out,

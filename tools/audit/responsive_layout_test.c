@@ -422,15 +422,81 @@ static void run(int width){
  browser_safety_checks();
 }
 #elif defined(TEST_NETWORK)
+static unsigned ssid_allocations,ssid_frees,network_invalidations;
+static bool fail_ssid_allocation;
+static void *network_test_malloc(size_t size){if(fail_ssid_allocation){fail_ssid_allocation=false;return NULL;}void *p=malloc(size);if(p)ssid_allocations++;return p;}
+static void network_test_free(void *p){if(p)ssid_frees++;free(p);}
+#define malloc network_test_malloc
+#define free network_test_free
 #include "ui_network.c"
+#undef malloc
+#undef free
+static void network_invalidated(lv_event_t *e){(void)e;network_invalidations++;}
 void ui_network_create(void){}
-void ui_network_destroy(void){ui_network_destroy_objects(NULL,NULL,NULL);}
+void ui_network_destroy(void){ui_network_destroy_objects();}
 static unsigned scans,profiles;
 static bool network_empty_capture;
 static char picked[40];
 static void scan_cb(lv_event_t *e){(void)e;scans++;}
 static void profiles_cb(lv_event_t *e){(void)e;profiles++;}
 static void selected_cb(lv_event_t *e){snprintf(picked,sizeof(picked),"%s",(char *)lv_event_get_user_data(e));}
+static void network_reopen(lv_event_t *event)
+{
+ (void)event;ui_network_create_objects("Replacement",7131,scan_cb,profiles_cb);
+}
+static void network_nested_scan(lv_event_t *event)
+{
+ (void)event;ui_network_render_scan_results(NULL,0,0,selected_cb);
+}
+static void network_values(void)
+{
+ ui_network_refresh_objects("Connected","Workshop","192.168.1.2",true,"printer.local",200,"Ready to scan");
+ ui_network_set_port(7125);ui_network_set_scan_status("Ready to scan");
+}
+static unsigned network_object_count(lv_obj_t *root)
+{
+ unsigned count=1;for(unsigned i=0;i<lv_obj_get_child_count(root);i++)count+=network_object_count(lv_obj_get_child(root,i));return count;
+}
+static void network_lifecycle(void)
+{
+ unsigned allocated=ssid_allocations,freed=ssid_frees;
+ unsigned objects=network_object_count(lv_screen_active())+network_object_count(lv_layer_top());
+ ui_network_create_objects("Owner",7125,scan_cb,profiles_cb);
+ network_values();lv_refr_now(NULL);network_invalidations=0;
+ for(unsigned i=0;i<100;i++)network_values();
+ assert(!network_invalidations);
+ ui_network_refresh_objects("Offline","Workshop","--",false,"printer.local",0,"Ready to scan");
+ assert(network_invalidations&&!strcmp(lv_label_get_text(s_network.wifi_state),"Offline"));
+ lv_obj_delete(s_network.root);assert(!s_network.root&&!s_network.wifi_name&&!s_network.networks_list);
+ ui_network_refresh_objects(NULL,NULL,NULL,false,NULL,0,NULL);ui_network_set_port(7126);ui_network_set_scan_status("late");
+ ui_network_render_scan_results(NULL,0,0,selected_cb);
+ ui_network_create_objects("Reopened",7125,scan_cb,profiles_cb);assert(s_network.root&&s_network.wifi_name);
+ lv_obj_delete(s_network.wifi_card);assert(!s_network.wifi_card&&!s_network.wifi_name&&!s_network.wifi_state&&!s_network.wifi_ip);
+ if(s_network.studio){lv_obj_delete(s_network.banner_state);lv_obj_delete(s_network.banner_message);assert(!s_network.banner_state&&!s_network.banner_message);}
+ network_values();assert(!strcmp(lv_label_get_text(s_network.moonraker_host),"printer.local"));
+ wifi_ap_record_t aps[2]={0};memset(aps[0].ssid,'X',sizeof(aps[0].ssid));aps[0].rssi=-45;
+ ui_network_render_scan_results(aps,2,2,selected_cb);
+ lv_obj_t *row=lv_obj_get_child(s_network.networks_list,0);
+ lv_obj_send_event(row,LV_EVENT_CLICKED,NULL);assert(strlen(picked)==32);
+ for(unsigned i=0;i<32;i++)assert(picked[i]=='X');
+ lv_obj_send_event(lv_obj_get_child(s_network.networks_list,1),LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,"(hidden network)"));
+ lv_obj_add_event_cb(row,network_nested_scan,LV_EVENT_DELETE,NULL);
+ ui_network_render_scan_results(aps,2,2,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==2);
+ fail_ssid_allocation=true;ui_network_render_scan_results(aps,1,1,selected_cb);
+ row=lv_obj_get_child(s_network.networks_list,0);assert(lv_obj_has_state(row,LV_STATE_DISABLED));
+ snprintf(picked,sizeof(picked),"unchanged");lv_obj_send_event(row,LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,"unchanged"));
+ lv_obj_delete(s_network.networks_list);assert(!s_network.networks_list);ui_network_render_scan_results(aps,1,1,selected_cb);
+ ui_network_hide();assert(ssid_allocations-allocated==ssid_frees-freed);
+ /* DELETE callbacks may reopen a replacement; old teardown must leave it owned. */
+ for(unsigned i=0;i<3;i++){
+  ui_network_create_objects("Old",7125,scan_cb,profiles_cb);
+  lv_obj_add_event_cb(s_network.root,network_reopen,LV_EVENT_DELETE,NULL);
+  if(i==0)lv_obj_delete(s_network.root);else ui_network_hide();
+  assert(s_network.root&&s_network.networks_list&&!strcmp(lv_label_get_text(s_network.moonraker_port),"7131"));
+  network_values();ui_network_hide();assert(!s_network.root);
+ }
+ assert(network_object_count(lv_screen_active())+network_object_count(lv_layer_top())==objects);
+}
 static void run(int width){
  if(width!=854 && width!=976)return; /* Legacy themes retain their fixed page geometry. */
  ui_network_create_objects("Network connected",7125,scan_cb,profiles_cb);
@@ -468,7 +534,7 @@ static void run(int width){
  assert(lv_obj_check_type(lv_obj_get_child(s_network.networks_list,0),&lv_label_class));assert(lv_obj_get_scrollbar_mode(s_network.networks_list)==LV_SCROLLBAR_MODE_OFF);
  ui_network_refresh_objects(NULL,NULL,NULL,false,NULL,0,"No networks found");assert(!strcmp(lv_label_get_text(s_network.wifi_state),"Offline")&&!strcmp(lv_label_get_text(s_network.moonraker_state),"Disconnected"));
  network_empty_capture=true;snapshot(s_network.root);network_empty_capture=false;
- ui_network_hide();assert(!s_network.root && !s_network.networks_list);
+ ui_network_hide();assert(!s_network.root && !s_network.networks_list);network_lifecycle();
 }
 
 #else
@@ -623,6 +689,9 @@ static void snapshot(lv_obj_t *root){
  snprintf(path,sizeof(path),"%s/%s-theme%u.ppm",folder,page,theme_case);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",a.x2-a.x1+1,a.y2-a.y1+1);for(int y=a.y1;y<=a.y2;y++)for(int x=a.x1;x<=a.x2;x++){uint16_t v=raster[y*1024+x];unsigned char c[3]={(unsigned char)(((v>>11)&31)*255/31),(unsigned char)(((v>>5)&63)*255/63),(unsigned char)((v&31)*255/31)};fwrite(c,1,3,f);}fclose(f);
 }
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
+#if defined(TEST_NETWORK)
+ lv_display_add_event_cb(d,network_invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
+#endif
 #if defined(TEST_FILES)
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});

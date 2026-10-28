@@ -12,18 +12,9 @@ typedef void (*dashboard_runtime_metadata_cb_t)(
     size_t out_size);
 
 typedef struct {
-    double current_z;
     double meta_object_height;
     double meta_layer_height;
 
-    lv_obj_t *nozzle_label;
-    lv_obj_t *bed_label;
-    lv_obj_t *chamber_label;
-    lv_obj_t *humidity_label;
-    lv_obj_t *target_rh_label;
-    lv_obj_t *heater_label;
-    lv_obj_t *fan_label;
-    lv_obj_t *moonraker_label;
 
     lv_obj_t **dashboard_canvas;
     lv_obj_t **dashboard_image;

@@ -33,7 +33,7 @@ bool camera_catalog_get(int p,size_t i,camera_catalog_entry_t *e){(void)p;run_ho
 size_t camera_catalog_default(int p){(void)p;run_hook(&default_hook);return default_camera;}
 bool camera_catalog_set_default(int p,size_t i){(void)p;default_saves++;if(save_hook)save_hook();if(!save_ok)return false;default_camera=i;return true;}
 bool camera_catalog_set_view(int p,size_t i,unsigned rot,bool h,bool v){(void)p;(void)i;view_saves++;if(save_hook)save_hook();if(!save_ok)return false;entry.rotation=rot;entry.mirror_horizontal=h;entry.mirror_vertical=v;return true;}
-void ui_printer_profiles_open_camera_setup(int p,ui_printer_profiles_active_changed_cb_t a,ui_printer_profiles_discover_cb_t b){(void)p;(void)a;(void)b;assert(!s_view_popup && !s_camera_picker_popup);configurations++;run_hook(&configure_hook);}
+void ui_printer_profiles_open_camera_setup(int p){(void)p;assert(!s_view_popup && !s_camera_picker_popup);configurations++;run_hook(&configure_hook);}
 static bool pending,busy=true,start_ok=true;
 static unsigned stream_starts,stream_stops;
 static uint8_t *next_pixels;static int next_width,next_height;static size_t next_size;static bool next_ok;

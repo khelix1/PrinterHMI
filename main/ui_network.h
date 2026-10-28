@@ -23,10 +23,7 @@ void ui_network_refresh_objects(
     int http_code,
     const char *scan_status_text);
 
-void ui_network_destroy_objects(
-    lv_obj_t **network_selected_ssid_label,
-    lv_obj_t **network_password_ta,
-    lv_obj_t **network_keyboard);
+void ui_network_destroy_objects(void);
 
 void ui_network_set_port(int port);
 

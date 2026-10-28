@@ -306,11 +306,6 @@ static void calibrate_cb(lv_event_t *e)
     ui_form_finish(s.calibrate_confirm);
 }
 
-bool ui_bed_mesh_is_open(void)
-{
-    return s.popup != NULL;
-}
-
 void ui_bed_mesh_close(void)
 {
     /*

@@ -1,5 +1,181 @@
 # Changelog
 
+## [7.1.45-dev] - 2026-10-27
+
+### Network page ownership and refresh cleanup
+
+- Retire Network root/field references on direct deletion and preserve replacement
+  pages created by DELETE callbacks during normal teardown.
+- Avoid unchanged Network text/color writes and stop a retired owner's refresh.
+- Guard nested scan rendering, bound SSID display/copy to 32 bytes and disable a
+  scan row if its callback data cannot be allocated. Retain row-owned cleanup.
+- Remove three permanently-null application editor handles, their destroy-helper
+  arguments and the unused Network hint field. Current popup editors remain owned
+  by Network Tools and Setup Center.
+- Extend native Network tests for teardown/reopen, retired fields, replacement
+  callbacks, refresh silence, bounded SSIDs, allocation failure and balanced row data.
+
+
+## [7.1.44-dev] - 2026-10-27
+
+### Timed control refresh cleanup
+
+- Avoid rewriting unchanged Toolhead position, homed/feedback and Z-offset labels
+  on every 500 ms refresh; preserve live changes and feedback expiry.
+- Reject callbacks from unrelated timers in Toolhead, Hotend and Filament Sensor
+  owners; retain current timer cadence and explicit immediate refresh calls.
+- Remove the write-only Toolhead tab variable and duplicate hotend target array.
+  Keep actual visible/selected tab state and all six exact preset commands.
+- Extend native control tests for redraw silence, live transitions, timer ownership,
+  displayed tab state, preset values and existing dispatch/lifecycle behavior.
+
+
+## [7.1.43-dev] - 2026-10-27
+
+### Setup completion check marks
+
+- Replace hard-coded incomplete Time zone and Display navigation states with
+  saved completion flags. Mark successful preference saves or Continue accepting
+  the current values, and retain progress across reopen and reboot.
+- Mark Welcome after Continue and Review after successful Finish. Previously
+  completed setups satisfy the informational/preference steps automatically.
+- Keep Network, Printer and optional Camera checks tied to their current state;
+  skipping an unconfigured camera never marks it complete.
+- Keep failed/canceled saves unchecked; completion-marker failures remain
+  retryable without discarding a successful appearance save or its UI rebuild.
+
+
+## [7.1.42-dev] - 2026-10-27
+
+### Setup deferred callback cleanup
+
+- Cancel queued theme/text changes when Setup Center or its owned fields are
+  deleted, releasing the busy latch so reopened Setup remains navigable.
+- Match deferred callbacks to their pending epoch; a stale callback cannot
+  consume or unlock a replacement owner's pending appearance change.
+- Retire the permanently-null step-window handle, its unreachable cleanup helper
+  and nine old patch-marker comments. Retain current stage and poll cleanup.
+- Extend the real Setup audit with cancellation/reopen, no-save-on-cancel,
+  bounded timers, duplicate clicks and callback-driven owner replacement cases.
+
+
+## [7.1.41-dev] - 2026-10-27
+
+### Calibration timer and callback ownership
+
+- Retire the Calibration refresh timer and detached workflow dialogs when LVGL
+  deletes the page directly, as well as through normal navigation.
+- Clear Probe/Z and Axis Twist confirmation handles on direct deletion. Prevent
+  rebuilding the page inside teardown and reject callbacks from retired timers.
+- Guard calibration starts against duplicate transport reentry and stop old UI
+  transitions when the command callback closes the page or switches printers.
+  Recheck capabilities, idle state and reviewed homing before dispatch.
+- Extend the real LVGL Calibration audit with teardown/reopen, printer-switch,
+  command-reentry and rejected-start cases. Keep Quiet connection-loss warnings.
+
+
+## [7.1.40-dev] - 2026-10-26
+
+### Unbound telemetry and label plumbing
+
+- Retire eight permanently-null legacy Dashboard metric slots and their no-op
+  runtime branches; current live Dashboard writers retain metric ownership.
+- Remove unused Printer/top-bar label aliases and context fields, two ETA wrappers
+  reached only through the null top-bar slot, and a write-only HTTP success timestamp.
+- Remove ignored Printer banner/Wi-Fi row/webcam-normalization arguments and the
+  obsolete Wi-Fi absolute-row-offset accumulator. Keep current rendering and URL policy.
+- Add actual Dashboard runtime pipeline coverage for timing/layers, offline/reconnect,
+  preview routing and completion cleanup. Retain recent connection/notification fixes.
+
+
+## [7.1.39-dev] - 2026-10-26
+
+### Retire compatibility plumbing
+
+- Remove the no-op Dashboard filename setter and its no-op completion call;
+  the shared status banner retains filename ownership.
+- Retire empty Printer filename handles and controller fields, plus ignored
+  metadata/filename/state/progress arguments from the live-status interface.
+- Remove the ignored Camera setup callbacks and Drybox button fill parameter,
+  updating all current production and host-fixture callers.
+- Delete the unused application polling-interval macro; actual polling and
+  WebSocket freshness scheduling remain unchanged.
+- Preserve connection, notification, preview and Files fixes from v36-v38.
+
+
+## [7.1.38-dev] - 2026-10-26
+
+### Quiet-mode connection recovery
+
+- Keep confirmed connection-loss warnings in Quiet. On recovery, clear the old
+  offline warning without showing a reconnected/online card in Quiet.
+- Record both loss and recovery in Event History. Standard/Detailed retain both
+  cards; switching to Quiet removes queued recovery cards but keeps loss warnings.
+- Classify connection notices explicitly, preserving printer faults, paused-print
+  warnings, generic warnings and essential recovery instructions at every level.
+- Update notification preference descriptions and real-owner regressions for
+  active and inactive printers. Transport state/timing and backup settings remain unchanged.
+
+
+## [7.1.37-dev] - 2026-10-26
+
+### Connection-state publication race
+
+- Publish verified WebSocket status time under the same lock as connection flags.
+  Recheck that timestamp under the lock before the runtime expires stale status.
+- Prevent an earlier stale probe from overwriting a newer online update during
+  switching/subscription. Derive runtime flags from the synchronized snapshot,
+  including the fresh fast path, so a real disconnect wins immediately.
+- Retain the three-second freshness bound, profile reset, Klipper readiness,
+  disconnect events and WebSocket-owned reconnect without competing HTTP polling.
+- Add real JSON/status/runtime interleaving regressions; the v36 runtime fails
+  the reproducer. v36's preview continuity remains in place.
+
+
+## [7.1.36-dev] - 2026-10-26
+
+### Printer-switch preview continuity
+
+- Reset preview state once before restoring the destination profile's cached
+  image, instead of clearing it a second time after restoration.
+- Keep a matching RGB canvas visible when live printing/paused status starts
+  fresh thumbnail verification; retire PNG-backed image objects before freeing
+  their source and still clear mismatched or profile-invalidated canvases.
+- Retain fresh metadata/thumbnail requests, failed-download retry bounds and
+  profile/endpoint validation. Add actual switch-bridge and coordinator regressions.
+
+
+## [7.1.35-dev] - 2026-10-26
+
+### Internal and repository cleanup
+
+- Retire five unused helper APIs, including the thumbnail wrappers left uncalled
+  after the old global restore path was removed; remove their three private
+  copy/icon lookup helpers as well.
+- Remove the uncalled title-based Printer icon decorator. Current cards keep their
+  existing icon and color construction; no visible UI change is intended.
+- Delete the completed July root-archive script and seven empty tracked root files
+  with no build/configuration consumers. Active recovery and build scripts remain.
+- Correct outdated Phase-1 comments in WebSocket and shell interfaces to describe
+  current snapshot publication and application routing ownership.
+
+
+## [7.1.34-dev] - 2026-10-26
+
+### Stale API cleanup from current main
+
+- Retire 19 uncalled helper definitions and their declarations, plus an
+  unimplemented Active Print filename declaration and the obsolete global
+  thumbnail-restore result enum.
+- Remove the unused direct Moonraker state accessor; active asynchronous consumers
+  continue using snapshots. Retain active profile save, security, webcam list,
+  per-profile preview, encrypted worker and variable-distance toolhead paths.
+- Remove unused reset/getter/configuration shims and empty toolhead/Wi-Fi init
+  stubs. Correct the Wi-Fi scan module's outdated ownership comment.
+- Keep Files caching, Dashboard filename behavior, Bed Mesh viewing and the
+  non-viewer boundary from main unchanged. No firmware speed or size gain is claimed.
+
+
 ## [7.1.33-dev] - 2026-10-26
 
 ### Independent fixes and cleanup from main

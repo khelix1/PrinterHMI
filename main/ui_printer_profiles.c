@@ -2143,11 +2143,8 @@ void ui_printer_profiles_show_for_slot(
 
 
 void ui_printer_profiles_open_camera_setup(
-    int profile_index,
-    ui_printer_profiles_active_changed_cb_t active_changed_cb,
-    ui_printer_profiles_discover_cb_t discover_cb)
+    int profile_index)
 {
-    (void)active_changed_cb;(void)discover_cb;
     if(s_camera_setup_opening || s_profile_dispatching || s_profile_discovery_dispatching ||
         profile_index<0 || profile_index>=MOONRAKER_CONFIG_MAX_PROFILES)return;
     s_camera_setup_opening=true;

@@ -396,63 +396,6 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
             i == 0 ? UI_FONT_HEADING : UI_FONT_VALUE_SMALL);
 }
 
-static const char *card_icon_for_title(const char *title)
-{
-    if (!title) return LV_SYMBOL_OK;
-
-    if (strstr(title, "WIFI") || strstr(title, "NETWORK")) return LV_SYMBOL_WIFI;
-    if (strstr(title, "FILE") || strstr(title, "FILES")) return LV_SYMBOL_FILE;
-    if (strstr(title, "TEMP") || strstr(title, "Temp") || strstr(title, "temp") ||
-        strstr(title, "NOZZLE") || strstr(title, "Nozzle") || strstr(title, "nozzle") ||
-        strstr(title, "BED") || strstr(title, "Bed") || strstr(title, "bed") ||
-        strstr(title, "HEATER") || strstr(title, "Heater") || strstr(title, "heater")) return LV_SYMBOL_WARNING;
-    if (strstr(title, "FAN")) return LV_SYMBOL_SETTINGS;
-    if (strstr(title, "PROGRESS") || strstr(title, "REMAINING") || strstr(title, "ELAPSED") || strstr(title, "TIME")) return LV_SYMBOL_REFRESH;
-    if (strstr(title, "MOONRAKER") || strstr(title, "STATE") || strstr(title, "STATUS") || strstr(title, "TARGET")) return LV_SYMBOL_OK;
-    if (strstr(title, "DRY") || strstr(title, "HUMID") || strstr(title, "RH") || strstr(title, "CHAMBER")) return LV_SYMBOL_SETTINGS;
-    if (strstr(title, "OTA") || strstr(title, "SYSTEM") || strstr(title, "SETTINGS")) return LV_SYMBOL_SETTINGS;
-
-    return LV_SYMBOL_OK;
-}
-
-static lv_color_t card_color_for_title(const char *title)
-{
-    if (!title) return UI_ACCENT_INFO;
-
-    if (strstr(title, "NOZZLE") || strstr(title, "Nozzle") || strstr(title, "nozzle") ||
-        strstr(title, "HOTEND") || strstr(title, "Hotend") || strstr(title, "hotend") ||
-        strstr(title, "HEATER") || strstr(title, "Heater") || strstr(title, "heater")) return UI_DANGER_BRIGHT;
-
-    if (strstr(title, "BED") || strstr(title, "Bed") || strstr(title, "bed") ||
-        strstr(title, "REMAINING") || strstr(title, "Remaining") || strstr(title, "remaining") ||
-        strstr(title, "TARGET") || strstr(title, "Target") || strstr(title, "target")) return UI_WARN;
-    if (strstr(title, "AIR") || strstr(title, "CENTER") || strstr(title, "CHAMBER") || strstr(title, "TEMP")) return UI_ACCENT_ORANGE;
-    if (strstr(title, "HUMID") || strstr(title, "RH")) return UI_ACCENT_SKY;
-    if (strstr(title, "FAN")) return UI_BORDER_BRIGHT;
-    if (strstr(title, "PROGRESS")) return UI_ACCENT_PURPLE;
-    if (strstr(title, "ELAPSED") || strstr(title, "TIME")) return UI_ACCENT_INFO;
-    if (strstr(title, "WIFI") || strstr(title, "NETWORK") || strstr(title, "MOONRAKER") || strstr(title, "STATE") || strstr(title, "STATUS")) return UI_OK_BRIGHT;
-    if (strstr(title, "FILE") || strstr(title, "FILES")) return UI_ACCENT_INFO;
-    if (strstr(title, "DRY")) return UI_ACCENT_SKY;
-    if (strstr(title, "OTA") || strstr(title, "SYSTEM") || strstr(title, "SETTINGS")) return UI_ACCENT_PURPLE;
-
-    return UI_ACCENT_INFO;
-}
-
-void ui_printer_info_cards_add_vivid_icon(lv_obj_t *value_label, const char *title)
-{
-    if (!value_label || !title) return;
-
-    lv_obj_t *box = lv_obj_get_parent(value_label);
-    if (!box) return;
-
-    lv_obj_t *ico = lv_label_create(box);
-    lv_label_set_text(ico, card_icon_for_title(title));
-    lv_obj_set_style_text_font(ico, ui_font_with_fallback(UI_FONT_TITLE), 0);
-    lv_obj_set_style_text_color(ico, card_color_for_title(title), 0);
-    lv_obj_align(ico, LV_ALIGN_TOP_RIGHT, -10, 8);
-}
-
 static void apply_card_online_state(
     lv_obj_t *value_label,
     bool online)

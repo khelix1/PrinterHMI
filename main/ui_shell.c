@@ -270,7 +270,7 @@ void ui_shell_raise_topbar(void)
     }
 }
 
-/* ui_shell_raise() is still implemented in main.c during Phase 1. */
+/* The application coordinator implements ui_shell_raise(). */
 
 void ui_shell_set_active_nav(int idx)
 {

@@ -47,6 +47,12 @@ with tempfile.TemporaryDirectory(prefix="telemetry-refresh-") as directory:
                     str(root/"tools/audit/telemetry_refresh_test.c"),*[str(root/"main"/p) for p in sources],
                     str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
+    runtime=tmp/"dashboard_runtime"
+    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
+                    "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
+                    str(root/"tools/audit/dashboard_runtime_test.c"),str(root/"main/printer_controller.c"),str(root/"main/printer_layer_resolver.c"),
+                    str(library),"-Wl,--gc-sections","-lm","-o",str(runtime)],check=True)
+    subprocess.run([str(runtime)],check=True)
     # Compile all modified consumers, including their untouched code, with
     # firmware warning settings. Network/RTOS functions remain host stubs.
     for name in ["dashboard_runtime_controller.c","ui_printer_info_cards.c"]:

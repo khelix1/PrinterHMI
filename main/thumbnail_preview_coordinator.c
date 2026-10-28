@@ -36,9 +36,10 @@ static void copy_text(char *destination,
 }
 
 /* Capture all old targets before any DELETE callback can install replacements. */
-static void retire_preview_objects(thumbnail_preview_coordinator_context_t *context)
+static void retire_preview_objects(thumbnail_preview_coordinator_context_t *context,
+                                   bool keep_dashboard, bool keep_printer)
 {
-    lv_obj_t **slots[]={context->dashboard_canvas,context->dashboard_image,context->printer_canvas,context->printer_image};
+    lv_obj_t **slots[]={keep_dashboard?NULL:context->dashboard_canvas,context->dashboard_image,keep_printer?NULL:context->printer_canvas,context->printer_image};
     lv_obj_t *old[4]={0};
     for(unsigned i=0;i<4;i++)if(slots[i]){old[i]=*slots[i];*slots[i]=NULL;}
     for(unsigned i=0;i<4;i++)if(old[i]){
@@ -66,7 +67,7 @@ void thumbnail_preview_coordinator_update(
     /*
      * Dashboard / printer preview policy:
      * - Printing/paused: show live print_stats.filename for current host:port.
-     * - Switching host/port while printing forces reload.
+     * - Switching host/port while printing forces fresh verification.
      * - File-confirm popup uses a separate temporary preview.
      */
     bool live_printing =
@@ -131,17 +132,27 @@ void thumbnail_preview_coordinator_update(
         context->selected_thumbnail_path[0] = '\0';
     }
 
-    if (context->dashboard_canvas_file) {
+    /* Profile switches invalidate these names before restoring an endpoint-
+     * validated RGB canvas. Keep that canvas visible during fresh metadata/PNG
+     * verification; RAW image objects still retire before PNG memory is freed. */
+    bool keep_dashboard = context->dashboard_canvas && *context->dashboard_canvas &&
+        context->dashboard_canvas_file &&
+        strcmp(context->dashboard_canvas_file, context->printer_file) == 0;
+    bool keep_printer = context->printer_canvas && *context->printer_canvas &&
+        context->printer_canvas_file &&
+        strcmp(context->printer_canvas_file, context->printer_file) == 0;
+
+    if (context->dashboard_canvas_file && !keep_dashboard) {
         context->dashboard_canvas_file[0] = '\0';
     }
 
-    if (context->printer_canvas_file) {
+    if (context->printer_canvas_file && !keep_printer) {
         context->printer_canvas_file[0] = '\0';
     }
 
     thumbnail_manager_set_force_refresh(true);
 
-    retire_preview_objects(context);
+    retire_preview_objects(context, keep_dashboard, keep_printer);
 
     if (context->free_thumbnail) {
         context->free_thumbnail();

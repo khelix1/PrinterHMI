@@ -473,7 +473,6 @@ static void studio_motion_create(lv_obj_t *card,lv_obj_t **speed,lv_obj_t **flow
 
 void ui_printer_live_status_create(
     lv_obj_t *parent,
-    lv_obj_t **active_file_label,
     lv_obj_t **speed_label,
     lv_obj_t **flow_label,
     lv_obj_t **layer_label,
@@ -503,7 +502,6 @@ void ui_printer_live_status_create(
     s_tuning_owner = parent;
     lv_obj_add_event_cb(parent, tuning_owner_deleted, LV_EVENT_DELETE, NULL);
     if(ui_theme_is_studio()) {
-        if(active_file_label)*active_file_label=NULL;
         studio_motion_create(parent,speed_label,flow_label,layer_label,filament_label,filament_event_cb);
         return;
     }
@@ -532,15 +530,6 @@ void ui_printer_live_status_create(
     ui_apply_label_dim(title);
 
     lv_obj_set_pos(title, detail_x, 12);
-
-    /*
-     * The shared status banner already owns the active filename.
-     * Keep the compatibility output clear, but do not create a duplicate
-     * filename inside the Printer Active Print card.
-     */
-    if (active_file_label) {
-        *active_file_label = NULL;
-    }
 
     ui_create_divider(card,compact_operator_shell?196:310,48,1,156);
 
@@ -781,23 +770,16 @@ void ui_printer_live_status_create(
 
 void ui_printer_live_status_refresh(
     lv_obj_t *printer_panel,
-    lv_obj_t *active_file_box,
-    lv_obj_t *active_file_label,
     lv_obj_t *speed_label,
     lv_obj_t *flow_label,
     lv_obj_t *layer_label,
     lv_obj_t *filament_label,
-    const char *printer_state,
-    const char *printer_file,
     double printer_live_velocity,
     double printer_live_flow,
     double printer_speed_factor,
     double printer_flow_factor,
     int printer_current_layer,
     int printer_total_layer,
-    double printer_meta_object_height,
-    double printer_meta_layer_height,
-    double printer_progress,
     bool moonraker_online,
     const moonraker_filament_state_t *filament_state)
 {
@@ -812,13 +794,6 @@ void ui_printer_live_status_refresh(
         if (owner == printer_panel) { owns_page = true; break; }
     if (!owns_page) return;
     studio_motion_refresh();
-    (void)active_file_box;
-    (void)active_file_label;
-    (void)printer_state;
-    (void)printer_file;
-    (void)printer_meta_object_height;
-    (void)printer_meta_layer_height;
-    (void)printer_progress;
 
     if (printer_panel && speed_label) {
         char text[48];

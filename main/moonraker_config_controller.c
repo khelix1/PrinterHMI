@@ -1059,30 +1059,3 @@ bool moonraker_config_set_camera_stream_url(int profile_index, const char *url)
     if (profile_index == s_active_profile) advance_configuration_generation();
     return true;
 }
-
-bool moonraker_config_select_host(
-    const char *host,
-    int port)
-{
-    return moonraker_config_save_profile(
-        s_active_profile,
-        moonraker_config_active_profile_name(),
-        host,
-        port,
-        s_profiles[s_active_profile].api_key);
-}
-
-
-bool moonraker_config_select_port(int port)
-{
-    if (!valid_port(port)) {
-        return false;
-    }
-
-    return moonraker_config_save_profile(
-        s_active_profile,
-        moonraker_config_active_profile_name(),
-        moonraker_config_host(),
-        port,
-        s_profiles[s_active_profile].api_key);
-}

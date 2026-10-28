@@ -366,16 +366,6 @@ void ui_dashboard_create(void)
     ui_dashboard_refresh_camera();
 }
 
-void ui_dashboard_set_active_print_file(const char *filename)
-{
-    /*
-     * The active filename now belongs exclusively to the Dashboard
-     * status banner. Preserve this compatibility API as a no-op so
-     * older call sites do not require immediate removal.
-     */
-    (void)filename;
-}
-
 void ui_dashboard_set_active_print(const char *layer,
                                        const char *elapsed,
                                        const char *remaining)

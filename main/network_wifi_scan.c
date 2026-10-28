@@ -2,12 +2,6 @@
 #include "ui_network_tools.h"
 #include <stdio.h>
 
-esp_err_t network_wifi_scan_init(void)
-{
-    return ESP_OK;
-}
-
-
 void network_wifi_scan_format_found_status(char *buf,
                                            size_t buf_size,
                                            unsigned ap_count)

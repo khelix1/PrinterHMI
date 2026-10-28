@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.1.33-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.1.45-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator

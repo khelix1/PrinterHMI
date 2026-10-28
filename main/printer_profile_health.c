@@ -94,22 +94,6 @@ void printer_profile_health_reconcile(void)
     s_generation = moonraker_config_generation();
 }
 
-void printer_profile_health_reset(void)
-{
-    memset((void *)s_known, 0, sizeof(s_known));
-    memset((void *)s_online, 0, sizeof(s_online));
-    memset((void *)s_failures, 0, sizeof(s_failures));
-    memset(s_endpoint_configured, 0, sizeof(s_endpoint_configured));
-    memset(s_endpoint_host, 0, sizeof(s_endpoint_host));
-    memset(s_endpoint_port, 0, sizeof(s_endpoint_port));
-    memset(s_printer_state, 0, sizeof(s_printer_state));
-    memset(
-        s_last_live_success_us, 0, sizeof(s_last_live_success_us));
-    s_next_profile = 0;
-    printer_profile_health_reconcile();
-}
-
-
 bool printer_profile_health_get(
     int profile_index,
     bool *known_out)

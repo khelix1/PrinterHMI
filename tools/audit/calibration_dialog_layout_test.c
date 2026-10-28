@@ -104,6 +104,68 @@ static void page_bounds(lv_obj_t *p){
   page_bounds(c);
  }
 }
+static void page_reenter(void)
+{
+ run_probe_calibration_cb(NULL);run_axis_twist_calibration_cb(NULL);
+}
+static void page_close_during_send(void){ui_calibration_hide();}
+static void page_switch_during_send(void){++owner;}
+static void page_reopen_during_delete(lv_event_t *event)
+{
+ (void)event;ui_calibration_show(NULL,send_command);
+}
+static void page_lifetime(void)
+{
+ unsigned before=sends;
+ ui_calibration_show(NULL,send_command);
+ unsigned timers=diagnostic_timers();
+ lv_obj_t *root=s_calibration->root;
+ ui_calibration_show(NULL,send_command);
+ assert(s_calibration->root==root&&diagnostic_timers()==timers);
+ /* Direct deletion of detached confirmations must retire their stored handle. */
+ probe_z_button_cb(NULL);assert(s_calibration->probe_popup);
+ lv_obj_delete(s_calibration->probe_popup);assert(!s_calibration->probe_popup);
+ run_probe_calibration_cb(NULL);assert(sends==before);
+ axis_twist_button_cb(NULL);assert(s_calibration->axis_twist_popup);
+ lv_obj_delete(s_calibration->axis_twist_popup);assert(!s_calibration->axis_twist_popup);
+ run_axis_twist_calibration_cb(NULL);assert(sends==before);
+ /* A stale callback cannot dispatch against the newly selected endpoint. */
+ probe_z_button_cb(NULL);++owner;run_probe_calibration_cb(NULL);assert(sends==before);close_probe_popup();
+ /* Homing/capabilities can change after the confirmation was opened. */
+ probe_z_button_cb(NULL);strcpy(state.homed_axes,"");run_probe_calibration_cb(NULL);assert(sends==before);close_probe_popup();strcpy(state.homed_axes,"xyz");
+ axis_twist_button_cb(NULL);page_caps.axis_twist=false;run_axis_twist_calibration_cb(NULL);assert(sends==before);page_caps.axis_twist=true;close_axis_twist_popup();
+ /* Transport reentry sends once; closing/switching cannot resurrect old UI. */
+ probe_z_button_cb(NULL);send_hook=page_reenter;run_probe_calibration_cb(NULL);send_hook=NULL;
+ assert(sends==before+1&&ui_calibration_manual_probe_is_visible());ui_calibration_manual_probe_hide();
+ axis_twist_button_cb(NULL);send_hook=page_reenter;run_axis_twist_calibration_cb(NULL);send_hook=NULL;
+ assert(sends==before+2&&ui_calibration_manual_probe_is_visible());ui_calibration_manual_probe_hide();
+ axis_twist_button_cb(NULL);send_hook=page_switch_during_send;run_axis_twist_calibration_cb(NULL);send_hook=NULL;
+ assert(sends==before+3&&!ui_calibration_manual_probe_is_visible());close_axis_twist_popup();
+ probe_z_button_cb(NULL);send_hook=page_close_during_send;run_probe_calibration_cb(NULL);send_hook=NULL;
+ assert(sends==before+4&&!s_calibration->root&&!s_calibration->refresh_timer&&!lv_obj_get_child_count(lv_layer_top()));
+ /* Rejected starts retain the existing results path and can be reopened. */
+ ui_calibration_show(NULL,send_command);probe_z_button_cb(NULL);send_accept=false;
+ run_probe_calibration_cb(NULL);send_accept=true;
+ assert(sends==before+5&&!s_calibration->probe_popup&&s_calibration->calibration_results_popup);
+ ui_calibration_results_close();ui_calibration_hide();
+ /* Root teardown owns its timer and dialogs even outside the normal Hide path. */
+ for(unsigned i=0;i<3;i++){
+  unsigned idle_timers=diagnostic_timers();ui_calibration_show(NULL,send_command);
+  probe_z_button_cb(NULL);axis_twist_button_cb(NULL);
+  assert(s_calibration->probe_popup&&s_calibration->axis_twist_popup);
+  lv_obj_delete(s_calibration->root);
+  assert(!s_calibration->root&&!s_calibration->refresh_timer&&!s_calibration->probe_popup&&!s_calibration->axis_twist_popup);
+  assert(!s_calibration->send_gcode&&!s_calibration->open_bed_mesh&&!lv_obj_get_child_count(lv_layer_top()));
+  lv_tick_inc(600);lv_timer_handler();assert(diagnostic_timers()==idle_timers);
+  calibration_refresh_timer_cb(NULL);ui_calibration_hide();
+ }
+ /* Child DELETE callbacks cannot rebuild the page mid-retirement. */
+ ui_calibration_show(NULL,send_command);
+ lv_obj_add_event_cb(s_calibration->banner_status,page_reopen_during_delete,LV_EVENT_DELETE,NULL);
+ ui_calibration_hide();assert(!s_calibration->root&&!s_calibration->refresh_timer);
+ ui_calibration_show(NULL,send_command);assert(s_calibration->root&&s_calibration->refresh_timer);ui_calibration_hide();
+ sends=before;
+}
 static void run(void){
  for(unsigned mode=0;mode<3;mode++){
   page_caps=(calibration_capabilities_t){.discovered=mode!=0,.bed_mesh=mode==2,.screws_tilt=true,.z_tilt=true,.quad_gantry_level=true,.axis_twist=mode==2,.input_shaper=mode==2,.accelerometer=mode==2,.hotend_pid=mode==2,.bed_pid=mode==2,.generic_heater_pid=mode==2,.pressure_advance=mode==2,.probe_accuracy=mode==2,.probe=mode==2,.bltouch=mode==2,.calibration_macro_count=mode==2?16:0,.tool_count=mode==2?12:0};
@@ -153,6 +215,7 @@ static void run(void){
    lv_display_set_resolution(display,1024,600);strcpy(state.homed_axes,"xyz");
   }
   ui_calibration_hide();assert(!lv_obj_get_child_count(lv_layer_top()));
+  if(mode==2)page_lifetime();
  }
 }
 #elif defined(TEST_FEEDBACK)
@@ -647,7 +710,7 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
  lv_display_set_resolution(d,(int[]){1024,640,480}[narrow],narrow==2?400:600);ui_theme_set_active(t);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});memset(&state,0,sizeof(state));state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"ready");strcpy(state.homed_axes,"xyz");strcpy(state.active_hotend,"extruder");owner++;render_frame=0;sends=steps=queries=0;send_accept=true;send_hook=NULL;result_views=session_resets=0;fixture_screws=fixture_z_tilt=fixture_qgl=true;memset(&session,0,sizeof(session));run();assert(!lv_obj_get_child_count(lv_layer_top()));}
  lv_display_delete(d);lv_deinit();
 #ifdef TEST_PAGE
- puts("PASS: actual Calibration page, Studio Dark/Operator, all densities/text sizes, discovery/capability states, bounds, label/button separation, 44px actions and flat Studio sections");
+ puts("PASS: actual Calibration page, Studio Dark/Operator, all densities/text sizes, discovery/capability states, bounds, label/button separation, 44px actions, flat Studio sections, timer/dialog teardown and guarded command callbacks");
 #else
  puts("PASS: real calibration owner, five themes/densities/text sizes/viewports, pinned actions, scroll reach and command flow");
 #endif

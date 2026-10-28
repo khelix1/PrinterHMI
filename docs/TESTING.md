@@ -2554,3 +2554,253 @@ Target gate: build only with `./tools/build_idf6_hosted3.sh`; check Files after
 reboots and file replacement, large-text Dashboard filename/progress, Bed Mesh
 while printing, toolhead controls, themes and absence of viewer buttons in Tools
 and file details. Commit/push/merge remain operator actions after device verification.
+
+## Stale APIs, v7.1.34-dev
+
+Use the existing source membership, non-viewer boundary and version/public-tree
+checks. Run `toolhead_dialog_safety_test.py`, `bed_mesh_profiles_layout_test.py`,
+`chooser_refresh_test.py`, `theme_dialog_layout_test.py`,
+`active_preview_safety_test.py`, `aspect_preview_pipeline_test.py`,
+`camera_pipeline_test.py`, `network_backup_dialog_test.py`,
+`setup_center_layout_test.py`, `dashboard_offline_test.py` and
+`preview_cache_ownership_test.py` with the LVGL/cJSON arguments documented above.
+Run `security_boundaries_test.py`, `notification_backup_test.py`,
+`deep_failure_paths_test.py`, `klipper_readiness_test.py` and
+`profile_discovery_bridge_test.py` without LVGL arguments.
+`tools_features_test.py --cjson-dir /path/to/cJSON --require-cjson` checks actual
+JSON controller behavior, including Devices. Sanitizer/fault-injection limitations
+remain as stated in each audit; host passing does not replace the firmware build.
+
+Target checks: startup, switching printers, Files cache across a reboot, camera,
+Bed Mesh during a print, toolhead jog/extrusion and settings/backup dialogs.
+Build only with `./tools/build_idf6_hosted3.sh`. No intended visual or behavioral
+change should be observed from this batch.
+
+## Internal/repository cleanup, v7.1.35-dev
+
+Run the existing `shared_popup_safety_test.py`, `lvgl95_modernization_test.py`,
+`telemetry_refresh_test.py`, `aspect_preview_pipeline_test.py`,
+`active_preview_safety_test.py`, `dashboard_offline_test.py`,
+`studio_pages_test.py`, `thumbnail_component_safety_test.py` and
+`preview_cache_ownership_test.py` with the LVGL/cJSON arguments documented above.
+These exercise current owners after removal of the unused popup/icon/session
+helpers. Run source membership, viewer boundary, version/public-tree and the
+development-version checks. Current C source membership remains 157.
+
+The incremental updater's tests include the eight root deletions, empty-file and
+executable-mode backup preservation, source/branch/symlink refusal, a failure
+injected at the final version write, full rollback, repeat application and guarded
+recovery to v34. Target build and checks remain required; test popups, Printer
+cards, Files and previews after `./tools/build_idf6_hosted3.sh`.
+
+## Printer-switch preview continuity, v7.1.36-dev
+
+Run `python3 tools/audit/printer_switch_refresh_test.py` for the actual extracted
+bridges with SDK mocks and ASan/UBSan. LeakSanitizer is disabled for this host.
+`--main-source /path/to/v35/main.c` allows the ordering regression to be reproduced
+against the previous source; it is expected to fail there.
+
+The real LVGL `active_preview_safety_test.py` also drives the actual coordinator:
+matching Dashboard canvas survives fresh verification and failed retries in
+printing/paused states, a READY result suppresses repeat work, a mismatched
+Printer canvas and PNG-backed images retire, and new filenames or profile-cleared
+names remove the old canvas. Existing nested-update/deletion tests remain.
+Run aspect-preview, preview-cache ownership, Dashboard offline/camera, chooser
+refresh and profile-discovery bridge tests too.
+
+On target, switch repeatedly between printing, paused, idle and offline printers,
+with cached and uncached previews and identical filenames across profiles. Check
+that no old-printer image leaks through and fresh thumbnail content still arrives.
+Some waiting for new live data is expected; cached previews do not replace fresh
+telemetry. Build only with `./tools/build_idf6_hosted3.sh`.
+
+## Connection publication race, v7.1.37-dev
+
+```bash
+python3 tools/audit/connection_refresh_race_test.py --cjson-dir /path/to/cJSON
+python3 tools/audit/offline_navigation_test.py
+python3 tools/audit/klipper_readiness_test.py
+python3 tools/audit/printer_switch_refresh_test.py
+python3 tools/audit/security_boundaries_test.py
+```
+
+Run the Dashboard offline/camera, Active Print and chooser LVGL checks with the
+usual LVGL arguments. The new race check compiles real status merge/reset/expiry
+and runtime bodies with real cJSON and ASan/UBSan; peripheral/SDK calls are mocked
+and LeakSanitizer is disabled. It injects valid JSON publication both after a
+stale probe and just before expiry acquires the lock. Equal frames renew the
+sample; stale samples, actual disconnect and profile reset remain offline.
+`--main-source /path/to/v36/main.c` reproduces the old runtime overwrite and is
+expected to fail. Existing rebind tests retain old-client/profile fencing.
+
+Target: repeatedly select printing/paused and idle printers, check an offline
+printer, and ensure no false online state survives a real disconnect. If status
+still alternates, capture WS_CONNECTED/WS_DISCONNECTED/WS_CLOSED/WS_REBIND and
+LIVE_TRANSPORT logs to distinguish actual reconnects from UI publication changes.
+Build only with `./tools/build_idf6_hosted3.sh`.
+
+## Quiet recovery notifications, v7.1.38-dev
+
+Run the existing `notifications_test.py`, `display_settings_safety_test.py` and
+`settings_safety_batch_test.py` with the usual LVGL arguments, then
+`notification_backup_test.py` and
+`connection_refresh_race_test.py --cjson-dir /path/to/cJSON`.
+
+The real notification owner now checks that Quiet shows confirmed loss, silently
+clears its warning on recovery and records both events, while Standard/Detailed
+show recovery cards. It exercises repeated cycles, active/inactive printers,
+raising the level without replay, switching to Quiet with a queued offline or
+recovery card, faults, paused-print warnings and other essential recovery.
+Settings text/persistence, layouts, priority, owner-safe actions and teardown remain
+covered. No network state is changed by the notification policy.
+
+Target: with Quiet selected, confirm connection-loss warning and absence of a new
+online card after recovery. Repeat at Standard to see both. Keep existing fault,
+paused-print, profile switching and Settings Save/reopen checks.
+
+## Compatibility plumbing cleanup, v7.1.39-dev
+
+Run the real LVGL `studio_pages_test.py`, `printer_tuning_safety_test.py`,
+`printer_direct_action_safety_test.py`, `profiles_layout_test.py`,
+`camera_pipeline_test.py`, `command_surfaces_safety_test.py`,
+`live_widget_refresh_test.py`, `dashboard_offline_test.py` and
+`notifications_test.py` with the usual LVGL arguments. Run
+`printer_switch_refresh_test.py` and
+`connection_refresh_race_test.py --cjson-dir /path/to/cJSON` too.
+
+Current headers, implementations and fixtures use the trimmed interfaces. Existing
+callback, rejection/retry, duplicate guard, owner-generation, telemetry acknowledgement,
+timeout, layout and teardown assertions remain. Actual filename presentation stays
+in the banner; no synthetic empty Active Print filename handle is passed around.
+
+On target, verify Printer filename/layers/tuning, Camera Configure and return,
+Drybox program controls and printer switching. Confirm Quiet still displays loss
+warnings and silently clears them on recovery. Build only with
+`./tools/build_idf6_hosted3.sh`; no full firmware build was possible here.
+
+## Unbound metric plumbing, v7.1.40-dev
+
+`telemetry_refresh_test.py` now runs `dashboard_runtime_test.c` in addition to
+its existing real Printer/telemetry checks. The new fixture executes the actual
+runtime controller, real layer/timing helpers and LVGL object deletion, with
+snapshot/preview/SDK boundaries mocked. It checks reported and metadata-fallback
+layers, elapsed/remaining time, paused/offline/reconnect truth, preview routing
+behind network readiness, completion cleanup and no duplicate cleanup.
+
+Run Dashboard offline, Printer direct-action safety, Network/backup dialog, status
+observers, Studio pages and notifications LVGL checks; also run switch refresh,
+profile discovery, security boundaries and the JSON connection-race test. The
+optional v36 `--main-source` race reproducer still fails its original assertion.
+No old legacy-label owner is reconstructed merely to keep dead code in tests.
+
+On panel, check current Dashboard metrics/timing, Printer filename/status/layers,
+Wi-Fi rows/selection, Camera preview/setup and switching printers. Quiet must
+retain connection-loss warnings and silently clear them on recovery. Build only
+with `./tools/build_idf6_hosted3.sh`; no full firmware build was possible here.
+
+### v7.1.41-dev Calibration lifecycle batch
+
+Run `calibration_dialog_layout_test.py` with the existing host LVGL arguments.
+The PAGE variant now checks direct root/confirmation deletion, detached dialog
+cleanup, one timer on repeated Show, no timer growth over close/reopen, safe
+child DELETE reentry, and rejection of callbacks after teardown. It also checks
+Probe/Z and Axis Twist starts with changed endpoints/capabilities/homing,
+reentrant sends, closing/switching inside the transport callback, and the
+existing rejected-start results path. The updated fixture fails on unchanged
+v40 at its stale confirmation handle assertion. The full suite retains its
+all-theme/text-size/density/viewport dialog and independent compilation checks.
+
+Run the surrounding Tools live/action, notification, Camera pipeline, chooser,
+Files worker, printer-switch and WebSocket race audits. Source membership,
+non-viewer boundary, version/public-tree and updater rollback/recovery checks
+remain required. Host tests do not substitute for the firmware build or panel.
+
+Panel: enter/leave Calibration repeatedly; open/back out of Probe/Z and Axis
+Twist confirmations; switch printers and return. Confirm the current printer's
+capabilities and normal dialogs still work. Avoid starting calibration on a
+printing printer. Check Camera/Files/chooser navigation and confirm Quiet still
+shows a real connection-loss warning, clearing it silently on recovery.
+
+### v7.1.42-dev Setup deferred callback ownership
+
+`setup_center_layout_test.py` adds queued appearance cancellation through normal
+close, direct center deletion and direct stage deletion. Each cancellation must
+release the busy latch immediately and make no preference write or rebuild.
+Reopened navigation and the next accepted save must work, with balanced timers
+and duplicate clicks suppressed. Inject a stale callback while a replacement's
+choice is queued; also replace Setup from inside the persistence callback and
+queue a new choice. Repeat replacement from a normal brightness save. Old
+callbacks must not consume or unlock that new work.
+The new cancellation fixture fails against unchanged v41's busy latch.
+
+Run the existing Setup layout/keyboard/save-failure/camera/Wi-Fi matrix and
+surrounding appearance, Settings, display, network/backup, notification, profile,
+Camera and Calibration audits. Validate source inventory, non-viewer boundary,
+version/public tree and guarded updater rollback/recovery. Host checks do not
+replace the ESP-IDF build or panel testing.
+
+Panel: Setup Center Display theme/text changes and back/close/reopen; Network,
+Printer and Camera step navigation; Settings appearance and backup dialogs;
+printer switching and Quiet connection loss/recovery. Changes are deferred as
+before; closing before the queued choice executes discards that unsaved choice.
+
+### v7.1.43-dev Setup completion marks
+
+Run `onboarding_progress_test.py` for the actual persistence owner under ASan/UBSan
+with transactional NVS fixtures: missing/corrupt keys, partial progress across
+simulated reboots, old completed installations, invalid steps, duplicate-write
+avoidance and open/set/commit faults. Run `setup_center_layout_test.py` with the
+usual host LVGL arguments for successful/failed preference marks across all five
+themes, densities, text sizes and viewports. Additional cases cover accepting
+unchanged defaults, close/reopen, canceled queued appearance, marker-write failure,
+UI rebuild after a successful appearance save but failed marker, optional/skipped
+camera and Review only after Finish. Retain v42 callback-replacement coverage.
+
+Panel: check a previously finished setup shows Time zone/Display and Review marks.
+For incomplete setup, Continue from Welcome and save/Continue through Time zone
+and Display. Close/reopen and reboot to check persistence. Configure Camera to
+check its mark; a skipped unconfigured camera stays optional and unchecked.
+Network checks remain connection-based and Printer/Camera follow active profile.
+
+### v7.1.44-dev Timed control refresh batch
+
+`toolhead_dialog_safety_test.py` now checks zero invalidations over 100 unchanged
+Toolhead polls, changed position, invalid position/missing homing text, signed
+Z offset, temporary feedback and expiry. The new silence assertion fails on
+unchanged v43. Toolhead and Hotend callbacks reject unrelated timers without
+snapshot reads, while the current timer updates values. Tab-reopen checks now
+assert real panel visibility/button selection after the unused tab mirror was
+removed. Existing native pointer/layout/commands/lifecycle tests remain.
+
+`filament_sensor_safety_test.py` similarly checks foreign/current timer snapshot
+counts while retaining command, acknowledgement, retry and profile tests.
+`hotend_layout_test.py` verifies all six generated named-heater preset commands,
+including Off, in its five-theme/density/text/viewport matrix. Retain surrounding
+control-popup, recovery, tuning, telemetry, notification and Setup audits. Source,
+version, public-tree, boundary and guarded updater recovery checks also run.
+
+Panel: Toolhead tabs, current position/homing/Z offset and temporary send feedback;
+Hotend presets/selection; Filament Sensor state/toggles; close/reopen and printer
+switches. The host redraw result is not a hardware FPS or whole-app speed claim.
+
+### v7.1.45-dev Network ownership batch
+
+Run `responsive_layout_test.py --variant NETWORK` with the usual host LVGL flags.
+It now checks direct root deletion, no-op late refresh/status/port/scan calls,
+reopen, independently retired fields and Studio banner labels, normal/external
+DELETE callbacks reopening replacements, balanced SSID allocations/frees and no
+leftover UI objects. The first new lifecycle assertion fails on unchanged v44.
+Check 100 identical refreshes without invalidation and a changed offline state.
+Exercise a 33-byte unterminated SDK SSID (copy only 32), hidden SSID, nested scan
+from a row DELETE callback, and failed row-data allocation (disabled, no action).
+The Network matrix retains all five themes, density/text sizes and custom metrics;
+legacy page geometry remains fixed as before. Also run the full responsive suite.
+
+Run surrounding network/backup, Wi-Fi dispatch, Settings, status-observer,
+notification, Setup, printer-switch and WebSocket race checks. Retain source,
+version/public-tree, non-viewer and updater rollback/recovery validation. Host
+checks do not substitute for the ESP-IDF build or panel validation.
+
+Panel: Network open/close/reopen, connected/offline values, port/host updates,
+repeated scans and selecting a network/password workflow; Settings and Setup
+network dialogs; printer switches and genuine Quiet loss/recovery warnings.

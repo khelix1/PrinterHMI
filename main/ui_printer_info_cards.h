@@ -33,9 +33,6 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
                                    const char *printer_eta_text,
                                    bool moonraker_ok);
 
-void ui_printer_info_cards_add_vivid_icon(lv_obj_t *value_label,
-                                             const char *title);
-
 void ui_printer_info_cards_refresh_live(
     lv_obj_t *printer_panel,
     ui_printer_info_cards_t *cards,

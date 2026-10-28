@@ -36,6 +36,35 @@ static void read_pointer(lv_indev_t *input,lv_indev_data_t *data){(void)input;da
 static void tap(lv_indev_t *input,lv_obj_t *object){lv_obj_update_layout(panel);lv_area_t area;lv_obj_get_coords(object,&area);touch=(lv_point_t){(area.x1+area.x2)/2,(area.y1+area.y2)/2};down=true;lv_indev_read(input);down=false;lv_indev_read(input);}
 static lv_obj_t *retired_slots[4];
 static void replace_slots(lv_event_t *event){(void)event;for(unsigned i=0;i<4;i++)retired_slots[i]=lv_obj_create(lv_screen_active());}
+static int64_t preview_now;
+static bool preview_running;
+static thumbnail_manager_result_t preview_result;
+static unsigned metadata_calls, start_calls, free_calls;
+int64_t esp_timer_get_time(void){return preview_now;}
+bool thumbnail_manager_task_running(void){return preview_running;}
+thumbnail_manager_result_t thumbnail_manager_result(void){return preview_result;}
+void thumbnail_manager_set_force_refresh(bool force){assert(force);}
+bool printer_controller_is_live_state(const char *state){return !strcmp(state,"printing")||!strcmp(state,"paused");}
+static void refresh_metadata(const char *file,char *out,size_t size){assert(!strcmp(file,"same.gcode")||!strcmp(file,"next.gcode"));snprintf(out,size,"metadata");metadata_calls++;}
+static void start_preview(void){start_calls++;}
+static void free_preview(void){free_calls++;}
+static void cached_live_preview_checks(void){
+ char selected[160]="",path[160]="old.png",dashboard_file[160]="same.gcode",printer_file[160]="other.gcode",metadata[160]="";
+ lv_obj_t *dashboard=lv_canvas_create(lv_screen_active()),*printer=lv_canvas_create(lv_screen_active());
+ uint16_t pixels[4]={0x1234,0x5678,0x9abc,0xdef0};lv_canvas_set_buffer(dashboard,pixels,2,2,LV_COLOR_FORMAT_RGB565);
+ lv_obj_t *dashboard_image=lv_image_create(lv_screen_active()),*printer_image=lv_image_create(lv_screen_active()),*kept=dashboard;
+ thumbnail_preview_coordinator_context_t context={.printer_state="printing",.printer_file="same.gcode",.moonraker_host="printer.local",.moonraker_port=7125,.selected_print_file=selected,.selected_print_file_size=sizeof(selected),.selected_thumbnail_path=path,.dashboard_canvas_file=dashboard_file,.printer_canvas_file=printer_file,.dashboard_canvas=&dashboard,.dashboard_image=&dashboard_image,.printer_canvas=&printer,.printer_image=&printer_image,.metadata_info=metadata,.metadata_info_size=sizeof(metadata),.build_metadata=refresh_metadata,.start_delayed=start_preview,.free_thumbnail=free_preview};
+ thumbnail_preview_coordinator_reset();preview_result=THUMBNAIL_MANAGER_RESULT_FAILED;preview_now=0;
+ thumbnail_preview_coordinator_update(&context);
+ assert(dashboard==kept&&!printer&&!dashboard_image&&!printer_image&&!strcmp(dashboard_file,"same.gcode")&&!printer_file[0]&&pixels[0]==0x1234&&metadata_calls==1&&start_calls==1&&free_calls==1);
+ thumbnail_preview_coordinator_update(&context);assert(start_calls==1&&dashboard==kept);
+ context.printer_state="paused";preview_now=5000001;thumbnail_preview_coordinator_update(&context);assert(start_calls==2&&dashboard==kept);
+ preview_result=THUMBNAIL_MANAGER_RESULT_READY;preview_now=10000002;thumbnail_preview_coordinator_update(&context);assert(start_calls==2&&dashboard==kept);
+ context.printer_file="next.gcode";thumbnail_preview_coordinator_update(&context);assert(!dashboard&&!dashboard_file[0]&&start_calls==3&&!strcmp(selected,"next.gcode"));
+ /* A changed profile invalidates the name even for identical filenames. */
+ dashboard=lv_canvas_create(lv_screen_active());dashboard_file[0]=0;context.printer_file="same.gcode";thumbnail_preview_coordinator_reset();thumbnail_preview_coordinator_update(&context);assert(!dashboard&&!dashboard_file[0]&&start_calls==4);
+ thumbnail_preview_coordinator_reset();
+}
 int main(void)
 {
  lv_init();lv_display_t *display=lv_display_create(1024,600);lv_indev_t *input=lv_indev_create();lv_indev_set_type(input,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(input,read_pointer);
@@ -54,8 +83,9 @@ int main(void)
   create();ctx=lv_obj_get_user_data(panel);if(ctx->remaining){lv_obj_delete(ctx->remaining);assert(!ctx->remaining);}lv_obj_delete(ctx->footer);assert(!ctx->footer);ui_active_print_set(panel,"2/10","00:01","REM 00:04");lv_obj_delete(ctx->preview_label);assert(!ctx->preview_label);ui_active_print_thumb_set_placeholder(panel,"gone");ui_active_print_thumb_apply_canvas_from_buffer(panel,4,2,"leaf.gcode");lv_obj_delete(ctx->preview_box);assert(!ctx->preview_box&&!ctx->canvas&&!s_active_print_thumb_canvas);ui_active_print_thumb_apply_canvas_from_buffer(panel,4,2,"no box");destroy();
   create();lv_obj_t *old=panel;create();lv_obj_t *replacement=panel;ui_active_print_thumb_apply_canvas_from_buffer(panel,4,2,"new.gcode");lv_obj_delete(old);assert(s_active_print_panel==replacement&&s_active_print_thumb_canvas);destroy();
  }
+ cached_live_preview_checks();
  for(unsigned i=0;i<4;i++)retired_slots[i]=lv_obj_create(lv_screen_active());
  lv_obj_add_event_cb(retired_slots[0],replace_slots,LV_EVENT_DELETE,NULL);
- thumbnail_preview_coordinator_context_t context={.dashboard_canvas=&retired_slots[0],.dashboard_image=&retired_slots[1],.printer_canvas=&retired_slots[2],.printer_image=&retired_slots[3]};retire_preview_objects(&context);for(unsigned i=0;i<4;i++){assert(retired_slots[i]);lv_obj_delete(retired_slots[i]);}
+ thumbnail_preview_coordinator_context_t context={.dashboard_canvas=&retired_slots[0],.dashboard_image=&retired_slots[1],.printer_canvas=&retired_slots[2],.printer_image=&retired_slots[3]};retire_preview_objects(&context,false,false);for(unsigned i=0;i<4;i++){assert(retired_slots[i]);lv_obj_delete(retired_slots[i]);}
  heap_caps_free(s_active_print_thumb_canvas_buf);s_active_print_thumb_canvas_buf=NULL;assert(!bytes);lv_indev_delete(input);lv_display_delete(display);lv_deinit();puts("PASS: actual Active Print native routing, child/root ownership, interrupted/nested updates, bounded persistent buffer, replaced panels and coordinator replacement-slot preservation across all themes/densities/text sizes");
 }

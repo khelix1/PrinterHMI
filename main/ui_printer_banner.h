@@ -11,7 +11,6 @@ void ui_printer_banner_create(lv_obj_t *parent,
 
 void ui_printer_banner_refresh(lv_obj_t *parent,
                                lv_obj_t *banner_label,
-                               lv_obj_t *state_label,
                                const char *banner_text,
                                const char *printer_state,
                                const char *printer_file);

@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.1.33-dev is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.1.45-dev is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -107,6 +107,10 @@ flat values. These helpers do not own timers, transport or detached value caches
   authoritative `virtual_sdcard` print progress, and merges updates into
   synchronized Moonraker state. It owns non-blocking recovery while a
   WebSocket is reconnecting.
+  Verified status time and connection flags publish under one state lock. Runtime
+  stale expiry rechecks that timestamp under the same lock, so an old freshness
+  decision cannot overwrite a newer online publication. Actual disconnects and
+  profile reset clear the status timestamp; the three-second bound remains.
 - `moonraker_poll` and `moonraker_live_transport` provide scheduled HTTP state
   refresh and fallback behavior without competing with reconnect ownership.
 - `moonraker_probe` and `moonraker_discovery` test and discover endpoints on

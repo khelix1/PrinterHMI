@@ -673,12 +673,6 @@ const char *custom_theme_active_name(void)
     return entry ? entry->summary.name : "";
 }
 
-ui_theme_id_t custom_theme_base(void)
-{
-    custom_theme_entry_t *entry = active_theme();
-    return entry ? entry->summary.base_theme : UI_THEME_OPERATOR;
-}
-
 bool custom_theme_remove(size_t index)
 {
     if (!s_themes || index >= s_theme_count) return false;

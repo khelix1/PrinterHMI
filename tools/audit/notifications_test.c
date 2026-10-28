@@ -47,7 +47,7 @@ static void preference_layout(void){
  assert(lv_obj_get_scrollbar_mode(body)==LV_SCROLLBAR_MODE_OFF&&lv_obj_get_scroll_dir(body)==LV_DIR_VER);
  lv_area_t title_area,body_area,footer_area;lv_obj_get_coords(title,&title_area);lv_obj_get_coords(body,&body_area);lv_obj_get_coords(footer,&footer_area);
  assert(title_area.y2<body_area.y1&&body_area.y2<footer_area.y1);
- const char *descriptions[]={"Connection loss/recovery, paused prints, warnings and errors.","Everything in Quiet, plus routine print events.","Everything in Standard, plus routine confirmations."};
+ const char *descriptions[]={"Connection loss, paused prints, warnings and errors. Recovery goes to Event History.","Everything in Quiet, plus connection recovery and routine print events.","Everything in Standard, plus routine confirmations."};
  unsigned selected=s_pending_level;
  for(unsigned level=0;level<3;level++){
   lv_obj_send_event(s_level_buttons[level],LV_EVENT_CLICKED,NULL);assert((unsigned)s_pending_level==level);
@@ -82,12 +82,15 @@ static void attention_checks(void) {
   state.live_data_ok=false;observe_wait(&state,2999);assert(!s_notice_count);
   state.live_data_ok=true;ui_toast_observe_printer(&state);assert(!s_notice_count);
   for(unsigned cycle=0;cycle<3;cycle++) {
+   unsigned transitions_logged=log_count;
    state.live_data_ok=false;strcpy(state.printer_state,"--");observe_wait(&state,3000);
    assert(s_notice_count==1 && s_notices[0].kind==UI_STATUS_WARNING && !strcmp(s_notices[0].title,"PRINTER OFFLINE") && !s_timer);
    bounds(s_toast);ui_toast_observe_printer(&state);assert(s_notice_count==1);
    state.live_data_ok=true;strcpy(state.printer_state,"printing");observe_wait(&state,3000);
-   assert(s_notice_count==1 && s_notices[0].essential && !strcmp(s_notices[0].title,"PRINTER RECONNECTED") && !s_timer);
-   lv_obj_t *body=lv_obj_get_child(s_toast,0);assert(!strcmp(lv_label_get_text(lv_obj_get_child(body,1)),"PRINTER RECONNECTED"));bounds(s_toast);
+   if(!level){assert(!s_notice_count&&!s_toast);}
+   else {assert(s_notice_count==1 && s_notices[0].essential && !strcmp(s_notices[0].title,"PRINTER RECONNECTED") && !s_timer);
+   lv_obj_t *body=lv_obj_get_child(s_toast,0);assert(!strcmp(lv_label_get_text(lv_obj_get_child(body,1)),"PRINTER RECONNECTED"));bounds(s_toast);}
+   assert(log_count==transitions_logged+2);
   }
   ui_toast_close();strcpy(state.printer_state,"paused");ui_toast_observe_printer(&state);
   assert(s_notice_count==1 && s_notices[0].kind==UI_STATUS_WARNING && !strcmp(s_notices[0].title,"PRINT PAUSED"));ui_toast_close();
@@ -115,7 +118,7 @@ static void attention_checks(void) {
 }
 
 static void inactive_profile_checks(void){
- ui_toast_close();assert(ui_toast_set_level(UI_NOTIFY_QUIET));
+ ui_toast_close();assert(ui_toast_set_level(UI_NOTIFY_STANDARD));
  static unsigned run;run++;
  memset(profiles,0,sizeof(profiles));memset(health_known,0,sizeof(health_known));memset(health_online,0,sizeof(health_online));memset(health_fresh,0,sizeof(health_fresh));
  active_profile=0;
@@ -148,6 +151,17 @@ static void inactive_profile_checks(void){
  profiles[1].port++;health_online[1]=false;ui_toast_observe_profiles(&state);assert(!s_notice_count);
  health_online[1]=true;ui_toast_observe_profiles(&state);assert(!s_notice_count);
  health_online[1]=false;ui_toast_observe_profiles(&state);assert(s_notice_count==1);
+ /* Quiet keeps offline warnings, silently clears them on recovery,
+  * records both transitions and does not replay suppressed recovery later. */
+ assert(s_notice_count==1&&s_notices[0].connection);
+ assert(ui_toast_set_level(UI_NOTIFY_QUIET));assert(s_notice_count==1&&s_notices[0].kind==UI_STATUS_WARNING);
+ unsigned quiet_logged=log_count;
+ health_online[1]=true;ui_toast_observe_profiles(&state);assert(!s_notice_count&&!s_toast&&log_count==quiet_logged+1);
+ health_online[1]=false;ui_toast_observe_profiles(&state);assert(s_notice_count==1&&s_notices[0].kind==UI_STATUS_WARNING&&log_count==quiet_logged+2);
+ health_online[1]=true;ui_toast_observe_profiles(&state);assert(!s_notice_count&&!s_toast&&log_count==quiet_logged+3);
+ assert(ui_toast_set_level(UI_NOTIFY_STANDARD));ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ health_online[1]=false;ui_toast_observe_profiles(&state);health_online[1]=true;ui_toast_observe_profiles(&state);assert(s_notice_count==1&&s_notices[0].connection);
+ assert(ui_toast_set_level(UI_NOTIFY_QUIET));assert(!s_notice_count&&!s_toast);
  ui_toast_close();profiles[1].configured=false;ui_toast_observe_profiles(&state);assert(!s_notice_count);
 }
 

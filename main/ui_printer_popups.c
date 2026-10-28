@@ -1392,8 +1392,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
 }
 static void refresh_hotend_list(lv_timer_t *timer)
 {
-    (void)timer;
-    if (!s_hotend_list_popup) return;
+    if (!s_hotend_list_popup || (timer && timer != s_hotend_refresh_timer)) return;
     if (s_hotend_owner != moonraker_config_generation()) {
         close_hotend_list_cb(NULL);
         return;
@@ -1508,15 +1507,6 @@ static void hotend_temperature_event_cb(lv_event_t *event)
         0,
     };
 
-    const int targets[] = {
-        180,
-        200,
-        215,
-        230,
-        250,
-        0,
-    };
-
     snprintf(
         s_hotend_title,
         sizeof(s_hotend_title),
@@ -1535,7 +1525,7 @@ static void hotend_temperature_event_cb(lv_event_t *event)
             sizeof(s_hotend_commands[i]),
             "SET_HEATER_TEMPERATURE HEATER=%s TARGET=%d",
             hotend.object_name,
-            targets[i]);
+            (int)values[i]);
 
         s_hotend_command_ptrs[i] =
             s_hotend_commands[i];
@@ -1870,8 +1860,7 @@ static int filament_request(const char *name, uint32_t owner)
 
 static void refresh_filament_list(lv_timer_t *timer)
 {
-    (void)timer;
-    if (!s_filament_list_popup) return;
+    if (!s_filament_list_popup || (timer && timer != s_filament_refresh_timer)) return;
     moonraker_filament_state_snapshot(&s_filament_list_state);
     moonraker_state_t state;
     moonraker_state_snapshot(&state);

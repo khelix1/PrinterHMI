@@ -82,19 +82,6 @@ static void load_view(int profile_index, size_t camera_index,
     nvs_close(handle);
 }
 
-size_t camera_catalog_count(int profile_index)
-{
-    size_t count = 0;
-    camera_catalog_entry_t entry;
-    for (size_t index = 0; index < CAMERA_CATALOG_MAX_CAMERAS; ++index) {
-        if (camera_catalog_get(profile_index, index, &entry) &&
-            entry.configured) {
-            ++count;
-        }
-    }
-    return count;
-}
-
 bool camera_catalog_get(int profile_index, size_t camera_index,
                         camera_catalog_entry_t *entry)
 {

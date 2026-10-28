@@ -1,6 +1,4 @@
-#include "ui_value_update.h"
 #include "dashboard_runtime_controller.h"
-#include "ui_text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -15,23 +13,8 @@
 #include "thumbnail_session.h"
 #include "ui_dashboard.h"
 #include "ui_printer.h"
-#include "ui_theme.h"
 
 static const char *TAG = "dashboard_runtime";
-
-static lv_color_t temp_value_color(double temp, double target)
-{
-    if (temp < -100.0) return UI_TEXT;
-    if (target <= 0.0) return UI_TEXT;
-
-    double diff = target - temp;
-
-    if (diff > 10.0) return UI_DANGER_BRIGHT;
-    if (diff > 2.0) return UI_WARN;
-    if (diff < -5.0) return UI_DANGER_BRIGHT;
-
-    return UI_OK_BRIGHT;
-}
 
 static const char *dashboard_print_state_text(
     const moonraker_state_t *state)
@@ -53,56 +36,13 @@ static const char *dashboard_print_state_text(
     return state->moonraker_ok ? "CONNECTED" : "OFFLINE";
 }
 
-static void update_status_cards(
+static void update_active_print(
     const moonraker_state_t *state,
     const dashboard_runtime_context_t *context)
 {
-    char buffer[64];
     char layer[32];
     char elapsed[32];
     char remaining[32];
-
-    if (context->nozzle_label) {
-        if (state->nozzle_temp > -100.0) {
-            snprintf(
-                buffer,
-                sizeof(buffer),
-                "%.1f / %.1f C",
-                state->nozzle_temp,
-                state->nozzle_target);
-        } else {
-            snprintf(buffer, sizeof(buffer), "-- / -- C");
-        }
-
-        ui_value_set_text(context->nozzle_label, buffer);
-        ui_value_set_color(
-            context->nozzle_label,
-            temp_value_color(
-                state->nozzle_temp,
-                state->nozzle_target),
-            0);
-    }
-
-    if (context->bed_label) {
-        if (state->bed_temp > -100.0) {
-            snprintf(
-                buffer,
-                sizeof(buffer),
-                "%.1f / %.1f C",
-                state->bed_temp,
-                state->bed_target);
-        } else {
-            snprintf(buffer, sizeof(buffer), "-- / -- C");
-        }
-
-        ui_value_set_text(context->bed_label, buffer);
-        ui_value_set_color(
-            context->bed_label,
-            temp_value_color(
-                state->bed_temp,
-                state->bed_target),
-            0);
-    }
 
     printer_layer_result_t display_layers =
         printer_layer_resolver_resolve(
@@ -202,9 +142,6 @@ static void update_print_complete_cleanup(
           strcmp(context->last_print_state, "PAUSED") == 0) &&
          (strcmp(now_state, "READY") == 0 ||
           strcmp(now_state, "CONNECTED") == 0))) {
-        ui_dashboard_set_active_print_file(
-            "No active file");
-
         if (context->dashboard_image &&
             *context->dashboard_image) {
             lv_obj_delete(*context->dashboard_image);
@@ -234,73 +171,6 @@ static void update_print_complete_cleanup(
     }
 }
 
-static void update_environment_cards(
-    const moonraker_state_t *state,
-    const dashboard_runtime_context_t *context)
-{
-    char buffer[64];
-
-    if (!state->moonraker_ok || !state->live_data_ok) {
-        if (context->chamber_label) ui_value_set_text(context->chamber_label, "-- C");
-        if (context->humidity_label) ui_value_set_text(context->humidity_label, "-- %RH");
-        if (context->target_rh_label) ui_value_set_text(context->target_rh_label, "Heat -- C");
-        if (context->heater_label) ui_value_set_text(context->heater_label, "--");
-        if (context->fan_label) ui_value_set_text(context->fan_label, "-- %");
-        if (context->moonraker_label) ui_value_set_text(context->moonraker_label, ui_text("not linked"));
-        return;
-    }
-
-    if (context->chamber_label) {
-        snprintf(
-            buffer,
-            sizeof(buffer),
-            "%.1f C",
-            state->air_temp);
-        ui_value_set_text(context->chamber_label, buffer);
-    }
-
-    if (context->humidity_label) {
-        snprintf(
-            buffer,
-            sizeof(buffer),
-            "%.1f %%RH",
-            state->humidity);
-        ui_value_set_text(context->humidity_label, buffer);
-    }
-
-    if (context->target_rh_label) {
-        snprintf(
-            buffer,
-            sizeof(buffer),
-            "Heat %.0f C",
-            state->heater_target);
-        ui_value_set_text(context->target_rh_label, buffer);
-    }
-
-    if (context->heater_label) {
-        ui_value_set_text(
-            context->heater_label,
-            state->heater_on ? ui_text("ON") : ui_text("OFF"));
-    }
-
-    if (context->fan_label) {
-        snprintf(
-            buffer,
-            sizeof(buffer),
-            "%.0f %%",
-            state->drybox_fan_speed);
-        ui_value_set_text(context->fan_label, buffer);
-    }
-
-    if (context->moonraker_label) {
-        ui_value_set_text(
-            context->moonraker_label,
-            state->live_data_ok
-                ? ui_text("linked")
-                : ui_text("not linked"));
-    }
-}
-
 void dashboard_runtime_controller_tick(
     const dashboard_runtime_context_t *context)
 {
@@ -311,14 +181,11 @@ void dashboard_runtime_controller_tick(
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
     if (!state.moonraker_ok || !state.live_data_ok) {
-        state.nozzle_temp = state.nozzle_target = -999.0;
-        state.bed_temp = state.bed_target = -999.0;
         state.progress = state.current_gcode_z = state.print_duration = -1.0;
         state.current_layer = state.total_layer = -1;
     }
 
-    update_status_cards(&state, context);
+    update_active_print(&state, context);
     update_live_preview(&state, context);
     update_print_complete_cleanup(&state, context);
-    update_environment_cards(&state, context);
 }

@@ -10,8 +10,9 @@ extern "C" {
 /*
  * Active-profile Moonraker WebSocket lifecycle.
  *
- * Phase 1 observes and logs a real subscription while HTTP polling remains
- * authoritative. Call only from the existing application runtime task.
+ * Publishes subscribed status into shared state snapshots. The application
+ * coordinator owns freshness and HTTP bootstrap policy. Call the tasklet only
+ * from the existing application runtime task.
  */
 void moonraker_live_websocket_tasklet(
     bool wifi_ready,

@@ -41,6 +41,8 @@ uint8_t ui_settings_sleep_timeout_minutes(void){return sleep_minutes;}
 bool ui_settings_restore_display_preferences(int b,uint8_t sleep){assert(b>=10&&b<=100);preference_writes++;if(preference_hook)preference_hook();if(preference_ok){brightness=b;sleep_minutes=sleep;}return preference_ok;}
 static void appearance_rebuilt(void){appearance_rebuilds++;}
 static bool wifi_ready,configured,camera_ready,storage_ok=true;
+static bool setup_complete,progress_ok=true;
+static unsigned completed_steps;
 static bool camera_result,discovery_result;
 static unsigned editor_opened,connections,completions;
 static int active_slot,editor_slot;
@@ -60,7 +62,10 @@ const moonraker_profile_t *moonraker_config_profile(int i){(void)i;profile.confi
 int moonraker_config_active_profile_index(void){return active_slot;}
 const char *moonraker_config_camera_stream_url(int i){(void)i;return camera_ready?(custom_camera_url?"http://user:PRIVATE-SECRET@camera.local/stream":"http://camera.local/stream"):"";}
 bool moonraker_config_set_camera_stream_url(int i,const char*u){(void)i;assert(u[0]);url_saves++;if(url_hook)url_hook();if(url_ok)camera_ready=true;return url_ok;}
-bool onboarding_controller_mark_complete(void){if(completion_hook)completion_hook();if(storage_ok)completions++;return storage_ok;}
+bool onboarding_controller_should_show(void){return !setup_complete;}
+bool onboarding_controller_step_complete(onboarding_step_t step){return (unsigned)step<ONBOARDING_STEP_COUNT&&(setup_complete||(completed_steps&(1U<<step)));}
+bool onboarding_controller_mark_step_complete(onboarding_step_t step){if((unsigned)step>=ONBOARDING_STEP_COUNT||!progress_ok)return false;completed_steps|=1U<<step;return true;}
+bool onboarding_controller_mark_complete(void){if(completion_hook)completion_hook();if(storage_ok){completions++;setup_complete=true;}return storage_ok;}
 void ui_printer_profiles_show_for_slot(int slot,void(*changed)(void),void(*discover)(void)){assert(slot==active_slot&&changed&&discover);editor_slot=slot;editor_opened++;}
 static uint32_t setup_request=41,setup_shown_request,setup_applied_request,setup_closed_request;
 static moonraker_discovery_select_request_cb_t setup_select_request;
@@ -176,6 +181,108 @@ static void safety_checks(void)
  wifi_save_cb(NULL);camera_save_cb(NULL);finish_cb(NULL);wifi_scan_open();camera_open();
  assert(!s_center&&!s_poll&&!lv_obj_get_child_count(lv_layer_top()));
 }
+static unsigned setup_timer_count(void)
+{
+ unsigned count=0;for(lv_timer_t *timer=lv_timer_get_next(NULL);timer;timer=lv_timer_get_next(timer))++count;return count;
+}
+static void replace_during_appearance_save(void)
+{
+ preference_hook=NULL;ui_setup_wizard_close();
+ ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);setup_select_display_cb(NULL);
+ lv_obj_t *row=lv_obj_get_child(lv_obj_get_child(s_stage,1),1);click(lv_obj_get_child(row,0));
+}
+static void appearance_cancel_checks(void)
+{
+ unsigned rebuilds=appearance_rebuilds;
+ for(unsigned mode=0;mode<3;mode++){
+  ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);
+  setup_select_display_cb(NULL);assert(s_setup_step==SETUP_STEP_DISPLAY);
+  unsigned writes=preference_writes;
+  lv_obj_t *row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);
+  click(lv_obj_get_child(row,0));click(lv_obj_get_child(row,1));
+  assert(s_setup_dispatching);
+  if(mode==0)ui_setup_wizard_close();
+  else if(mode==1)lv_obj_delete(s_center);
+  else lv_obj_delete(s_stage);
+  /* Cancelling an unsaved deferred choice must immediately release the UI. */
+  assert(!s_setup_dispatching);
+  lv_tick_inc(50);lv_timer_handler();
+  assert(preference_writes==writes&&appearance_rebuilds==rebuilds);
+  if(mode==2){setup_select_wifi_cb(NULL);assert(s_stage&&s_setup_step==SETUP_STEP_WIFI);ui_setup_wizard_close();}
+  ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);
+  setup_select_timezone_cb(NULL);assert(s_setup_step==SETUP_STEP_TIMEZONE);
+  setup_select_display_cb(NULL);row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);
+  unsigned timers=setup_timer_count();
+  click(lv_obj_get_child(row,1));lv_tick_inc(50);lv_timer_handler();
+  assert(preference_writes==writes+1&&appearance_rebuilds==++rebuilds);
+  assert(s_center&&s_setup_step==SETUP_STEP_DISPLAY&&!s_setup_dispatching&&setup_timer_count()==timers);
+  ui_setup_wizard_close();
+ }
+ /* A stale callback must not consume a newer owner's queued choice. */
+ ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);setup_select_display_cb(NULL);
+ uint32_t old_epoch=s_setup_epoch;lv_obj_t *row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);click(lv_obj_get_child(row,0));
+ ui_setup_wizard_close();ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);setup_select_display_cb(NULL);
+ row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);unsigned writes=preference_writes;click(lv_obj_get_child(row,1));
+ setup_appearance_async((void*)(uintptr_t)old_epoch);
+ assert(s_setup_dispatching&&preference_writes==writes);
+ lv_tick_inc(50);lv_timer_handler();assert(preference_writes==writes+1&&appearance_rebuilds==rebuilds+1&&!s_setup_dispatching);
+ ui_setup_wizard_close();
+ /* Returning persistence must not unlock a replacement's pending rebuild. */
+ ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);setup_select_display_cb(NULL);
+ row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);writes=preference_writes;rebuilds=appearance_rebuilds;
+ click(lv_obj_get_child(row,0));old_epoch=s_setup_epoch;preference_hook=replace_during_appearance_save;
+ setup_appearance_async((void*)(uintptr_t)old_epoch);
+ assert(preference_writes==writes+1&&s_setup_dispatching&&s_setup_step==SETUP_STEP_DISPLAY);
+ setup_select_wifi_cb(NULL);assert(s_setup_step==SETUP_STEP_DISPLAY);
+ lv_tick_inc(50);lv_timer_handler();assert(preference_writes==writes+2&&appearance_rebuilds==rebuilds+1&&!s_setup_dispatching);
+ ui_setup_wizard_close();
+ /* The same ownership holds when an ordinary brightness save replaces Setup. */
+ ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);setup_select_display_cb(NULL);
+ writes=preference_writes;rebuilds=appearance_rebuilds;preference_hook=replace_during_appearance_save;
+ lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);
+ assert(preference_writes==writes+1&&s_setup_dispatching&&s_setup_step==SETUP_STEP_DISPLAY);
+ setup_select_wifi_cb(NULL);assert(s_setup_step==SETUP_STEP_DISPLAY);
+ lv_tick_inc(50);lv_timer_handler();assert(preference_writes==writes+2&&appearance_rebuilds==rebuilds+1&&!s_setup_dispatching);
+ ui_setup_wizard_close();
+}
+static bool nav_complete(int step)
+{
+ return strstr(lv_label_get_text(lv_obj_get_child(s_nav[step],0)),LV_SYMBOL_OK)!=NULL;
+}
+static void completion_mark_checks(void)
+{
+ setup_complete=false;completed_steps=0;progress_ok=preference_ok=true;
+ wifi_ready=configured=camera_ready=false;
+ ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);
+ for(int i=0;i<SETUP_STEP_COUNT;i++)assert(!nav_complete(i));
+ setup_next_cb(NULL);assert(s_setup_step==SETUP_STEP_WIFI&&nav_complete(SETUP_STEP_WELCOME));
+ setup_select_timezone_cb(NULL);preference_ok=false;click(lv_obj_get_child(s_options_list,0));assert(!nav_complete(SETUP_STEP_TIMEZONE));
+ preference_ok=true;click(lv_obj_get_child(s_options_list,0));assert(nav_complete(SETUP_STEP_TIMEZONE));
+ ui_setup_wizard_close();ui_setup_wizard_show(connect_wifi);assert(nav_complete(SETUP_STEP_TIMEZONE)&&nav_complete(SETUP_STEP_WELCOME));
+ setup_select_timezone_cb(NULL);setup_next_cb(NULL);assert(s_setup_step==SETUP_STEP_DISPLAY&&nav_complete(SETUP_STEP_TIMEZONE));
+ preference_ok=false;lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);assert(!nav_complete(SETUP_STEP_DISPLAY));
+ setup_next_cb(NULL);assert(s_setup_step==SETUP_STEP_DISPLAY&&!nav_complete(SETUP_STEP_DISPLAY));
+ preference_ok=true;progress_ok=false;setup_next_cb(NULL);assert(s_setup_step==SETUP_STEP_DISPLAY&&!nav_complete(SETUP_STEP_DISPLAY));
+ assert(contains_text(s_status,"completion"));progress_ok=true;
+ setup_next_cb(NULL);assert(s_setup_step==SETUP_STEP_PRINTER&&nav_complete(SETUP_STEP_DISPLAY));
+ setup_select_camera_cb(NULL);setup_skip_cb(NULL);assert(!nav_complete(SETUP_STEP_CAMERA)&&!nav_complete(SETUP_STEP_COMPLETE));
+ camera_ready=true;setup_select_camera_cb(NULL);assert(nav_complete(SETUP_STEP_CAMERA));
+ camera_ready=false;setup_select_complete_cb(NULL);assert(!nav_complete(SETUP_STEP_CAMERA));
+ /* A canceled appearance choice cannot manufacture a completed Display step. */
+ completed_steps&=~(1U<<ONBOARDING_STEP_DISPLAY);setup_select_display_cb(NULL);
+ lv_obj_t *row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);click(lv_obj_get_child(row,1));ui_setup_wizard_close();lv_tick_inc(50);lv_timer_handler();
+ ui_setup_wizard_show_with_appearance_callback(connect_wifi,appearance_rebuilt);assert(!nav_complete(SETUP_STEP_DISPLAY));
+ setup_select_display_cb(NULL);row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);progress_ok=false;
+ unsigned rebuilds=appearance_rebuilds;click(lv_obj_get_child(row,1));lv_tick_inc(50);lv_timer_handler();
+ assert(s_center&&!nav_complete(SETUP_STEP_DISPLAY)&&appearance_rebuilds==rebuilds+1&&contains_text(s_status,"Appearance saved"));
+ progress_ok=true;row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);click(lv_obj_get_child(row,1));lv_tick_inc(50);lv_timer_handler();assert(nav_complete(SETUP_STEP_DISPLAY));
+ wifi_ready=configured=true;setup_select_complete_cb(NULL);assert(!nav_complete(SETUP_STEP_COMPLETE));
+ storage_ok=false;finish_cb(NULL);assert(s_center&&!nav_complete(SETUP_STEP_COMPLETE));storage_ok=true;
+ finish_cb(NULL);assert(!s_center&&s_complete_popup);setup_completion_done_cb(NULL);
+ ui_setup_wizard_show(connect_wifi);assert(nav_complete(SETUP_STEP_COMPLETE)&&nav_complete(SETUP_STEP_WELCOME)&&nav_complete(SETUP_STEP_TIMEZONE)&&nav_complete(SETUP_STEP_DISPLAY));
+ assert(nav_complete(SETUP_STEP_WIFI)&&nav_complete(SETUP_STEP_PRINTER)&&!nav_complete(SETUP_STEP_CAMERA));
+ ui_setup_wizard_close();
+}
 static void inside(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(!(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2)){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void completion_layout_checks(void)
 {
@@ -210,7 +317,7 @@ static void setup_profile_discovery_request_safety(void)
 }
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
  for(unsigned t=0;t<5;t++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned w=0;w<3;w++){
- width=(unsigned[]){1024,640,480}[w];lv_display_set_resolution(d,width,600);ui_theme_set_active(t);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});wifi_ready=configured=camera_ready=false;
+ width=(unsigned[]){1024,640,480}[w];lv_display_set_resolution(d,width,600);ui_theme_set_active(t);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});wifi_ready=configured=camera_ready=false;setup_complete=false;completed_steps=0;
  active_slot=0;address_ready=true;ui_setup_wizard_show(connect_wifi);setup_profile_discovery_request_safety();check();assert(contains_text(s_stage,"Choose a network")||width<800);if(width==1024)for(unsigned group=0;group<lv_obj_get_child_count(s_stage);group++)inside(lv_obj_get_child(s_stage,group),s_stage);lv_obj_t*owner=s_center;ui_setup_wizard_show(connect_wifi);assert(owner==s_center);if(density==1&&large)snapshot(t,"welcome");
  for(int i=1;i<SETUP_STEP_COUNT;i++){lv_obj_send_event(s_nav[i],LV_EVENT_CLICKED,NULL);assert(s_setup_step==i);check();for(int nav=0;nav<SETUP_STEP_COUNT;nav++)assert(lv_obj_has_state(s_nav[nav],LV_STATE_CHECKED)==(nav==i));}
  setup_select_wifi_cb(NULL);check();assert(contains_text(s_stage,"No network connected")&&contains_text(s_stage,"Not connected"));
@@ -227,14 +334,14 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  profile.api_key[0]=0;profile.secure_transport=false;setup_select_printer_cb(NULL);assert(contains_text(s_stage,"http://printer.local:7125")&&contains_text(s_stage,"No API key saved"));
  active_slot=0;configured=false;
  setup_select_timezone_cb(NULL);check();assert(lv_obj_get_child_count(s_options_list)==15);
- preference_ok=false;size_t old_zone=selected_zone;click(lv_obj_get_child(s_options_list,1));assert(selected_zone==old_zone&&strstr(lv_label_get_text(s_status),"Could not save"));
- preference_ok=true;click(lv_obj_get_child(s_options_list,1));assert(selected_zone==2&&lv_obj_has_state(lv_obj_get_child(s_options_list,1),LV_STATE_CHECKED));
+ preference_ok=false;size_t old_zone=selected_zone;click(lv_obj_get_child(s_options_list,1));assert(selected_zone==old_zone&&strstr(lv_label_get_text(s_status),"Could not save")&&!nav_complete(SETUP_STEP_TIMEZONE));
+ preference_ok=true;click(lv_obj_get_child(s_options_list,1));assert(selected_zone==2&&lv_obj_has_state(lv_obj_get_child(s_options_list,1),LV_STATE_CHECKED)&&nav_complete(SETUP_STEP_TIMEZONE));
  if(density==1&&large)snapshot(t,"timezone");
  setup_select_display_cb(NULL);check();
  if(width==1024)for(unsigned group=0;group<lv_obj_get_child_count(s_stage);group++)inside(lv_obj_get_child(s_stage,group),s_stage);
  lv_slider_set_value(s_brightness_slider,60,LV_ANIM_OFF);lv_obj_send_event(s_brightness_slider,LV_EVENT_VALUE_CHANGED,NULL);assert(strstr(lv_label_get_text(s_brightness_value),"60%"));
- preference_ok=false;lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);assert(lv_slider_get_value(s_brightness_slider)==brightness);
- preference_ok=true;lv_slider_set_value(s_brightness_slider,70,LV_ANIM_OFF);lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);assert(brightness==70);
+ preference_ok=false;lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);assert(lv_slider_get_value(s_brightness_slider)==brightness&&!nav_complete(SETUP_STEP_DISPLAY));
+ preference_ok=true;lv_slider_set_value(s_brightness_slider,70,LV_ANIM_OFF);lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);assert(brightness==70&&nav_complete(SETUP_STEP_DISPLAY));
  lv_obj_t *sleep_row=lv_obj_get_child(lv_obj_get_child(s_stage,3),1);uint8_t old_sleep=sleep_minutes;
  preference_ok=false;click(lv_obj_get_child(sleep_row,2));assert(sleep_minutes==old_sleep&&strstr(lv_label_get_text(s_status),"Could not save"));
  preference_ok=true;click(lv_obj_get_child(sleep_row,2));assert(sleep_minutes==15);check();
@@ -260,7 +367,7 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  if(density==1&&large)snapshot(t,"camera-empty");
  lv_obj_send_event(lv_obj_get_child(s_actions,1),LV_EVENT_CLICKED,NULL);assert(s_setup_step==SETUP_STEP_COMPLETE&&!camera_ready);check();
  before=completions;finish_cb(NULL);assert(!s_center&&s_complete_popup&&completions==before+1);setup_completion_done_cb(NULL);
- ui_setup_wizard_show(connect_wifi);setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=true;camera_discovery_poll(NULL);check();assert(lv_obj_get_child_count(s_camera_list)==4);if(density==1&&large)snapshot(t,"cameras");lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=false;camera_test_poll(NULL);assert(s_center&&!lv_obj_has_state(s_camera_scan_action,LV_STATE_DISABLED));if(density==1&&large)snapshot(t,"camera-test-failed");lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=true;camera_test_poll(NULL);check();if(density==1&&large)snapshot(t,"camera-verified");camera_save_cb(NULL);assert(camera_ready);check();
+ ui_setup_wizard_show(connect_wifi);setup_select_camera_cb(NULL);center_camera_cb(NULL);discovery_result=true;camera_discovery_poll(NULL);check();assert(lv_obj_get_child_count(s_camera_list)==4);if(density==1&&large)snapshot(t,"cameras");lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=false;camera_test_poll(NULL);assert(s_center&&!lv_obj_has_state(s_camera_scan_action,LV_STATE_DISABLED));if(density==1&&large)snapshot(t,"camera-test-failed");lv_obj_send_event(lv_obj_get_child(s_camera_list,0),LV_EVENT_CLICKED,NULL);camera_result=true;camera_test_poll(NULL);check();if(density==1&&large)snapshot(t,"camera-verified");camera_save_cb(NULL);assert(camera_ready&&nav_complete(SETUP_STEP_CAMERA));check();
  assert(contains_text(s_stage,"Saved camera")&&contains_text(s_stage,"Workshop camera 0")&&lv_obj_get_child_count(s_actions)==1);
  if(width==1024)for(unsigned group=0;group<lv_obj_get_child_count(s_stage);group++)inside(lv_obj_get_child(s_stage,group),s_stage);
  if(density==1&&large)snapshot(t,"camera-saved");
@@ -288,10 +395,11 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  setup_select_timezone_cb(NULL);preference_hook=reopen_setup;click(lv_obj_get_child(s_options_list,0));preference_hook=NULL;assert(s_setup_step==SETUP_STEP_WELCOME);
  setup_select_display_cb(NULL);preference_hook=reopen_setup;lv_obj_send_event(s_brightness_slider,LV_EVENT_RELEASED,NULL);preference_hook=NULL;assert(s_setup_step==SETUP_STEP_WELCOME);
  setup_select_display_cb(NULL);theme_row=lv_obj_get_child(lv_obj_get_child(s_stage,0),1);unsigned writes_before=preference_writes;click(lv_obj_get_child(theme_row,0));ui_setup_wizard_close();lv_tick_inc(50);lv_timer_handler();assert(!s_center&&appearance_rebuilds==2&&preference_writes==writes_before);
+ appearance_cancel_checks();completion_mark_checks();
  width=480;lv_display_set_resolution(d,480,280);
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   show_setup_completion();completion_layout_checks();assert(lv_obj_get_height(s_complete_popup)<=248);
   lv_obj_t *done=lv_obj_get_child(lv_obj_get_child(s_complete_popup,-1),0);click(done);assert(!s_complete_popup);
  }
- lv_display_delete(d);lv_deinit();puts("PASS: configured network/printer review values, compact display summary, completion bounds and review-read owner replacement; saved/custom camera summaries and URL redaction, optional/no-printer/empty/failure/retry states, busy scan deduplication and no additional camera save on Continue; active-profile printer editing, SSID/IP/waiting-address summaries, saved-vs-live status and API-key redaction; seven-step Setup layout, sparse timezone catalog/persistence failure, brightness/sleep save failure/retry, deferred theme/text rebuild and closed-owner cancellation across five themes/densities/text/viewports; Wi-Fi nested dispatch/retry/captured credentials, camera verification ownership/save failures, retired fields/actions/timers, completion and replacement teardown");return 0;}
+ lv_display_delete(d);lv_deinit();puts("PASS: persistent completion check marks, failed/canceled writes, accepted defaults, optional camera and Review completion; configured network/printer review values, compact display summary, completion bounds and review-read owner replacement; saved/custom camera summaries and URL redaction, optional/no-printer/empty/failure/retry states, busy scan deduplication and no additional camera save on Continue; active-profile printer editing, SSID/IP/waiting-address summaries, saved-vs-live status and API-key redaction; seven-step Setup layout, sparse timezone catalog/persistence failure, brightness/sleep save failure/retry, deferred theme/text rebuild, direct-delete cancellation, replacement callback ownership and closed-owner cancellation across five themes/densities/text/viewports; Wi-Fi nested dispatch/retry/captured credentials, camera verification ownership/save failures, retired fields/actions/timers, completion and replacement teardown");return 0;}

@@ -57,7 +57,6 @@ void ui_network_tools_clear_wifi_popup_network_buttons(lv_obj_t *list, lv_obj_t 
 void ui_network_tools_add_wifi_ssid_button(lv_obj_t *parent,
                                            const char *ssid,
                                            int rssi,
-                                           int y,
                                            lv_event_cb_t selected_cb);
 
 /* WiFi scan popup */

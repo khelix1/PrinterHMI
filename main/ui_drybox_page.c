@@ -380,15 +380,8 @@ static lv_obj_t *make_program_button(
     const char *command,
     int x,
     int width,
-    lv_color_t accent,
-    lv_color_t fill)
+    lv_color_t accent)
 {
-    /*
-     * The fill argument remains for call-site compatibility.
-     * Button surface styling is owned by UI_BUTTON_OUTLINED.
-     */
-    (void)fill;
-
     lv_obj_t *button =
         ui_button_create_icon(
             parent,
@@ -714,8 +707,7 @@ static void build_program_panel(
         "DRY_PLA",
         18,
         140,
-        UI_ACCENT_CYAN,
-        UI_BG_DEEP);
+        UI_ACCENT_CYAN);
 
     s_program_buttons[DRYBOX_PROGRAM_PETG] =
         make_program_button(
@@ -725,8 +717,7 @@ static void build_program_panel(
         "DRY_PETG",
         174,
         140,
-        UI_ACCENT_INFO,
-        UI_BG_DEEP);
+        UI_ACCENT_INFO);
 
     s_program_buttons[DRYBOX_PROGRAM_HOLD] =
         make_program_button(
@@ -736,8 +727,7 @@ static void build_program_panel(
         "DRY_HOLD",
         330,
         140,
-        UI_WARN,
-        UI_BG_DEEP);
+        UI_WARN);
 
     s_program_buttons[DRYBOX_PROGRAM_RESUME] =
         make_program_button(
@@ -747,8 +737,7 @@ static void build_program_panel(
         "DRY_RESUME",
         486,
         140,
-        UI_OK_BRIGHT,
-        UI_BG_DEEP);
+        UI_OK_BRIGHT);
 
     s_program_buttons[DRYBOX_PROGRAM_STOP] =
         make_program_button(
@@ -758,8 +747,7 @@ static void build_program_panel(
         "DRY_STOP",
         642,
         140,
-        UI_DANGER_BRIGHT,
-        UI_BG_DANGER_POPUP);
+        UI_DANGER_BRIGHT);
 }
 
 static void studio_drybox_create(ui_drybox_page_t *page)

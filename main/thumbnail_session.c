@@ -48,20 +48,6 @@ static bool ensure_metadata_body(void)
 }
 
 
-static void copy_text(char *destination,
-                      size_t destination_size,
-                      const char *source)
-{
-    if (!destination || destination_size == 0) {
-        return;
-    }
-
-    snprintf(destination,
-             destination_size,
-             "%s",
-             source ? source : "");
-}
-
 static void url_encode_filename(const char *input,
                                 char *output,
                                 size_t output_size)
@@ -126,13 +112,6 @@ char *thumbnail_session_metadata_info(void)
 size_t thumbnail_session_metadata_info_size(void)
 {
     return sizeof(s_metadata_info);
-}
-
-void thumbnail_session_set_selected_file(const char *file)
-{
-    copy_text(s_selected_file,
-              sizeof(s_selected_file),
-              file);
 }
 
 void thumbnail_session_clear_selected_file(void)
@@ -279,65 +258,4 @@ void thumbnail_session_save_last_selected_file(void)
                  "NVS last_file save failed: %s",
                  esp_err_to_name(error));
     }
-}
-
-bool thumbnail_session_load_selected_cache(
-    bool sd_card_available)
-{
-    if (!sd_card_available || !s_selected_file[0]) {
-        return false;
-    }
-
-    return thumbnail_manager_load_selected_cache(
-        s_selected_file);
-}
-
-thumbnail_session_restore_result_t
-thumbnail_session_restore_last_selected_file(
-    bool sd_card_available)
-{
-    if (!sd_card_available) {
-        return THUMBNAIL_SESSION_RESTORE_NONE;
-    }
-
-    nvs_handle_t handle;
-    esp_err_t error =
-        nvs_open("hmi", NVS_READONLY, &handle);
-
-    if (error != ESP_OK) {
-        ESP_LOGI(TAG, "NVS last_file: none");
-        return THUMBNAIL_SESSION_RESTORE_NONE;
-    }
-
-    char last_file[160] = "";
-    size_t length = sizeof(last_file);
-
-    error = nvs_get_str(handle,
-                        "last_file",
-                        last_file,
-                        &length);
-
-    nvs_close(handle);
-
-    if (error != ESP_OK || !last_file[0]) {
-        ESP_LOGI(TAG, "NVS last_file: none");
-        return THUMBNAIL_SESSION_RESTORE_NONE;
-    }
-
-    thumbnail_session_set_selected_file(last_file);
-
-    if (thumbnail_session_load_selected_cache(
-            sd_card_available)) {
-        ESP_LOGI(TAG,
-                 "Restored last selected file from SD cache: %s",
-                 s_selected_file);
-
-        return THUMBNAIL_SESSION_RESTORE_CACHE_READY;
-    }
-
-    ESP_LOGI(TAG,
-             "Last selected file has no SD thumbnail cache yet: %s",
-             s_selected_file);
-
-    return THUMBNAIL_SESSION_RESTORE_NO_CACHE;
 }

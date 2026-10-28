@@ -15,15 +15,10 @@ typedef void (*printer_ui_controller_action_cb_t)(void);
 typedef struct {
     lv_obj_t *printer_panel;
     lv_obj_t *banner_label;
-    lv_obj_t *state_label;
-    lv_obj_t *active_file_box;
-    lv_obj_t *active_file_label;
     lv_obj_t *speed_label;
     lv_obj_t *flow_label;
     lv_obj_t *layer_label;
     lv_obj_t *filament_label;
-    lv_obj_t *file_label;
-    lv_obj_t *topbar_eta_label;
 
     lv_obj_t *motion_button;
     lv_obj_t *home_button;
@@ -45,8 +40,6 @@ typedef struct {
     double flow_factor;
     int current_layer;
     int total_layer;
-    double metadata_object_height;
-    double metadata_layer_height;
     double progress;
     double nozzle_temp;
     double nozzle_target;
@@ -86,9 +79,3 @@ void printer_ui_controller_update_action_buttons(
     lv_obj_t *cancel_button,
     bool object_available,
     const char *printer_state);
-
-void printer_ui_controller_update_topbar_eta(
-    lv_obj_t *eta_label,
-    double progress,
-    double print_duration,
-    bool moonraker_ok);

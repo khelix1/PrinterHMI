@@ -529,7 +529,7 @@ static void camera_configure_cb(lv_event_t *event)
     camera_ui_context_t context = camera_ui_context();
     camera_close_popups();
     if (camera_ui_current(&context))
-        ui_printer_profiles_open_camera_setup(context.profile, NULL, NULL);
+        ui_printer_profiles_open_camera_setup(context.profile);
     s_camera_dialog_dispatching = false;
 }
 

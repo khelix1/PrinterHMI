@@ -290,30 +290,6 @@ lv_obj_t *ui_popup_add_caption(lv_obj_t *popup,
     return caption;
 }
 
-lv_obj_t *ui_popup_add_list(lv_obj_t *popup,
-                            int32_t x,
-                            int32_t y,
-                            int32_t width,
-                            int32_t height)
-{
-    if (!popup) return NULL;
-
-    lv_obj_t *list = lv_obj_create(popup);
-    lv_obj_set_size(list, width, height);
-    lv_obj_set_pos(list, x, y);
-
-    lv_obj_set_scroll_dir(list, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
-
-    /*
-     * Popup list appearance belongs to the shared popup theme.
-     * Callers only choose geometry and populate the list.
-     */
-    ui_apply_surface_role(list, UI_SURFACE_POPUP_LIST);
-
-    return list;
-}
-
 lv_obj_t *ui_popup_add_selectable_row(lv_obj_t *parent,
                                       const char *text,
                                       int32_t x,

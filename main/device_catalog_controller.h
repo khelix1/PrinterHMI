@@ -88,8 +88,5 @@ bool device_catalog_controller_get(
     size_t index,
     device_descriptor_t *output);
 
-bool device_catalog_controller_contains(
-    const char *object_name);
-
 const char *device_catalog_kind_label(
     device_kind_t kind);

@@ -835,7 +835,7 @@ static void profile_modal_layers(void)
  lv_indev_delete(input);lv_obj_delete(underlay);
 }
 static void direct_camera_generation_changed(void){++config_generation;}
-static void direct_camera_nested_open(void){ui_printer_profiles_open_camera_setup(1,NULL,NULL);}
+static void direct_camera_nested_open(void){ui_printer_profiles_open_camera_setup(1);}
 static void direct_camera_setup_checks(int theme,bool render)
 {
  ui_printer_profiles_close_all();reset();
@@ -845,7 +845,7 @@ static void direct_camera_setup_checks(int theme,bool render)
  unsigned writes=catalog_writes;int profile_saves=saves;
  ui_printer_profiles_show(active_changed,discover);manager_edit_cb(NULL);editor_camera_open_cb(NULL);
  click(s_editor_camera_name);assert(s_editor_keyboard_popup);
- ui_printer_profiles_open_camera_setup(0,active_changed,discover);
+ ui_printer_profiles_open_camera_setup(0);
  assert(s_camera_standalone && s_editor_camera_popup && camera_setup);
  assert(!s_manager_popup && !s_editor_popup && !s_editor_keyboard_popup && !s_editor_host && !s_editor_port);
  assert(lv_obj_get_child_count(lv_screen_active())==screen_children+2);
@@ -866,7 +866,7 @@ static void direct_camera_setup_checks(int theme,bool render)
  assert(!s_editor_camera_discovery_timer && !s_editor_api_key[0] && !s_camera_setup_host[0]);
  assert(catalog_writes==writes && saves==profile_saves);
  assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
- ui_printer_profiles_open_camera_setup(1,NULL,NULL);assert(s_camera_standalone && s_editor_profile==1);
+ ui_printer_profiles_open_camera_setup(1);assert(s_camera_standalone && s_editor_profile==1);
  lv_textarea_set_text(s_editor_camera_name,"Saved direct camera");lv_textarea_set_text(s_editor_camera_stream,"http://saved-direct.local/stream");
  fail_write_stage=3;editor_camera_save_cb(NULL);fail_write_stage=0;
  assert(s_editor_camera_popup && s_camera_standalone && strstr(lv_label_get_text(s_editor_camera_status),"Unable to apply"));
@@ -875,12 +875,12 @@ static void direct_camera_setup_checks(int theme,bool render)
  assert(!s_editor_camera_popup && !s_editor_popup && !s_manager_popup && !s_camera_standalone && !camera_setup);
  assert(saves==profile_saves && !s_editor_api_key[0]);
  assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
- ui_printer_profiles_open_camera_setup(0,NULL,NULL);click(s_editor_camera_name);assert(s_editor_keyboard_popup);
+ ui_printer_profiles_open_camera_setup(0);click(s_editor_camera_name);assert(s_editor_keyboard_popup);
  lv_obj_delete(s_editor_camera_popup);assert(!s_editor_keyboard_popup && !s_camera_standalone && !camera_setup && !s_editor_api_key[0]);
  assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);
- profile_read_hook=direct_camera_generation_changed;ui_printer_profiles_open_camera_setup(0,NULL,NULL);
+ profile_read_hook=direct_camera_generation_changed;ui_printer_profiles_open_camera_setup(0);
  assert(!s_camera_standalone && !s_editor_camera_popup && !s_editor_api_key[0]);
- camera_get_hook=direct_camera_nested_open;ui_printer_profiles_open_camera_setup(0,NULL,NULL);
+ camera_get_hook=direct_camera_nested_open;ui_printer_profiles_open_camera_setup(0);
  assert(s_camera_standalone && s_editor_profile==0 && !s_manager_popup && !s_editor_popup);
  ui_printer_profiles_close_all();
  assert(lv_obj_get_child_count(lv_screen_active())==screen_children && lv_obj_get_child_count(lv_layer_top())==top_children);

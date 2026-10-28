@@ -8,7 +8,7 @@ A toast is optional confirmation of a completed, noncritical action. Missing it 
 | Result is already visible | Update the control; no toast | Theme changed, favorite toggled, filter applied, target edited |
 | Input is invalid or an action is unavailable | Inline feedback near the field/action; retain input | Empty command, invalid macro parameter, home axes first |
 | Transport rejects a command | Persistent inline result or page notice, with retry context | Print not started, command not sent, calibration rejected |
-| Established printer connection is lost | Persistent warning plus page status at every level | Printer offline; later recovery replaces the connection notice |
+| Established printer connection is lost | Persistent warning plus page status at every level | Printer offline; recovery clears it silently in Quiet or replaces it at Standard/Detailed |
 | Operation is ongoing | Persistent page status | Reconnecting, PID running, OTA progress |
 | Operator decision is required | Explicit dialog before acting | Start print, save configuration/restart, destructive action |
 | Safety or recovery needs attention | Persistent prominent fault/recovery dialog | Runout, stop not confirmed, restart failed, heater fault |
@@ -23,13 +23,13 @@ Settings → Display → Notifications selects one appliance-wide level:
 
 | Level | Notifications shown |
 | --- | --- |
-| Quiet (default) | Connection loss/recovery, paused prints, warnings, reported printer errors and recovery instructions |
-| Standard | Quiet plus reported print start/resume/completion/cancellation |
+| Quiet (default) | Connection loss, paused prints, warnings, reported printer errors and recovery instructions; connection recovery goes to Event History |
+| Standard | Quiet plus connection recovery and reported print start/resume/completion/cancellation |
 | Detailed | Standard plus routine success confirmations |
 
 Three direct choices are available; Save persists the selection in NVS and configuration backups. Local validation, recovery instructions and page progress remain visible at every level. The former OFF preference migrates to Quiet; ON migrates to Detailed. Older boolean backups follow the same mapping; backups without a setting default to Quiet. The new numeric level takes precedence when present, and malformed or out-of-range values are rejected. All five built-in themes remain valid backup values.
 
-The shared notification component enforces this policy for existing callers. Successful/neutral confirmations appear briefly only in Detailed. Routine informational event cards require Standard or Detailed; connection recovery is essential and remains visible in Quiet. Quiet still records reported informational events in Event History. Lowering the level removes pending routine informational cards while retaining warnings, errors and essential recovery. Warnings and errors appear in a scrollable, persistent notice with a compact Dismiss action. They have no dismissal timer and cannot be disabled by the preference. Dismiss acknowledges the message; it does not clear a printer fault. Each notice captures the selected printer name at creation, so changing printers cannot relabel an old failure.
+The shared notification component enforces this policy for existing callers. Successful/neutral confirmations appear briefly only in Detailed. Routine informational event cards and connection-recovery cards require Standard or Detailed. Quiet records recovery in Event History and clears the preceding offline warning without opening an online card. Lowering the level removes queued connection-recovery and routine informational cards while retaining connection-loss warnings, errors and other essential recovery instructions. Warnings and errors appear in a scrollable, persistent notice with a compact Dismiss action. They have no dismissal timer and cannot be disabled by the preference. Dismiss acknowledges the message; it does not clear a printer fault. Each notice captures the selected printer name at creation, so changing printers cannot relabel an old failure.
 
 Pending notices are bounded to four, exact duplicates are coalesced, danger notices take priority over warnings, warnings take priority over information, and overflow important notices are recorded in the existing bounded Event History ring. Optional success confirmations never displace an important notice. A queue-overflow message directs the operator to Event History. Event History is bounded to its existing 40 entries and its existing message length; this is not a durable fault archive.
 
@@ -67,19 +67,19 @@ Host validation covers all five themes, densities, large text and narrow viewpor
 
 ## Event ownership
 
-Printer connection and print-state events come from observed telemetry transitions for the active configuration generation. Opening the application or selecting a printer establishes a baseline, without generating a fabricated print start. The initial connection must remain live for three seconds before connection monitoring arms; chooser activation and bootstrap gaps produce neither Offline nor Reconnected notices. Later connection changes must persist for three seconds, filtering brief transport freshness gaps. Repeated telemetry polls do not emit repeated notices. A disconnect preserves the last reported job state; reconnecting alone does not invent a print transition. Offline is a persistent warning at every level; recovery replaces this owner’s old connection card and remains visible in Quiet. Paused transitions require attention at every level. After connection monitoring is armed, reported error/shutdown states produce a persistent fault with Open Console, including when Moonraker remains reachable but live Klipper telemetry is unavailable. Ordinary job events remain governed by the notification level and are recorded in Event History even when Quiet hides their cards. Notices use the existing bounded queue and explicit Open Printer or Open Console action. Monitoring covers the active configuration; it does not add background connections to every configured printer. Live progress remains in its owning page/dialog, including firmware downloads.
+Printer connection and print-state events come from observed telemetry transitions for the active configuration generation. Opening the application or selecting a printer establishes a baseline, without generating a fabricated print start. The initial connection must remain live for three seconds before connection monitoring arms; chooser activation and bootstrap gaps produce neither Offline nor Reconnected notices. Later connection changes must persist for three seconds, filtering brief transport freshness gaps. Repeated telemetry polls do not emit repeated notices. A disconnect preserves the last reported job state; reconnecting alone does not invent a print transition. Offline is a persistent warning at every level. Recovery clears this owner’s old connection card; Standard/Detailed show its recovery notice, while Quiet records recovery in history without a new card. Paused transitions require attention at every level. After connection monitoring is armed, reported error/shutdown states produce a persistent fault with Open Console, including when Moonraker remains reachable but live Klipper telemetry is unavailable. Ordinary job events remain governed by the notification level and are recorded in Event History even when Quiet hides their cards. Notices use the existing bounded queue and explicit Open Printer or Open Console action. Monitoring covers the active configuration; it does not add background connections to every configured printer. Live progress remains in its owning page/dialog, including firmware downloads.
 
 ## Attention regression checks
 
-The real-owner suite exercises Offline/Recovery at all three levels, the full three-second debounce, repeated unacknowledged loss/recovery cycles, paused/error/shutdown attention, duplicate suppression after dismissal, full informational queues receiving warnings, fault priority, routine-card filtering on a switch to Quiet, and bootstrap fencing. These run across all five themes, densities, both text sizes and the existing viewport matrix. Existing NVS/backup preference behavior and navigation ownership remain covered. Host checks pass; firmware/panel connection-loss and physical recovery tests remain pending.
+The real-owner suite exercises Offline at all three levels, silent recovery in Quiet and recovery cards at Standard/Detailed, the full three-second debounce, repeated unacknowledged loss/recovery cycles, paused/error/shutdown attention, duplicate suppression after dismissal, full informational queues receiving warnings, fault priority, routine-card filtering on a switch to Quiet, and bootstrap fencing. These run across all five themes, densities, both text sizes and the existing viewport matrix. Existing NVS/backup preference behavior and navigation ownership remain covered. Host checks pass; firmware/panel connection-loss and physical recovery tests remain pending.
 
 ## Inactive printer connection alerts
 
 The UI also observes confirmed health transitions for configured inactive
 printers. An established printer becoming unavailable generates a named,
 persistent warning at every notification level, including Quiet. Recovery
-replaces that printer's connection card with an essential recovery notice and
-records both events in Event History. Unknown/verifying health, stale online
+clears that printer's offline card. Standard/Detailed show a recovery card; Quiet
+shows no recovery card. Both events are recorded in Event History. Unknown/verifying health, stale online
 snapshots and initially offline profiles do not manufacture transition alerts.
 Existing inactive-worker health confirmation and retry timing apply; no extra
 network polling is introduced.
@@ -90,3 +90,16 @@ active printer changes. Active-printer command/page notices retain their existin
 configuration-owner checks. Connection cards are tracked by profile slot so equal
 display names do not merge alerts from different printers. Endpoint edits establish
 a fresh observation baseline.
+
+## Quiet recovery classification (v7.1.38-dev)
+
+Connection-loss and recovery notices carry an explicit internal category rather
+than relying on their display titles. Quiet keeps connection-loss warnings but
+suppresses recovery cards, even though recovery remains important history.
+Changing to Quiet also clears any queued recovery card; it retains an offline
+warning. Suppressed events are not replayed when raising the notification level.
+This applies to both active-printer telemetry and inactive-profile health.
+Other essential recovery instructions, paused-print warnings and printer faults
+are unchanged. The preference value, persistence and backup format are unchanged.
+This is notification policy only: actual page status, connection expiry,
+reconnect behavior and action availability still report the real connection.

@@ -11,12 +11,12 @@ bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
 static moonraker_state_t state;
 static moonraker_filament_state_t sensors;
 static uint32_t generation=1;
-static unsigned sends,mode;
+static unsigned sends,mode,state_reads,sensor_reads;
 static bool accepted=true;
 static char sent[128];
 uint32_t moonraker_config_generation(void){return generation;}
-void moonraker_state_snapshot(moonraker_state_t *out){*out=state;}
-void moonraker_filament_state_snapshot(moonraker_filament_state_t *out){*out=sensors;}
+void moonraker_state_snapshot(moonraker_state_t *out){state_reads++;*out=state;}
+void moonraker_filament_state_snapshot(moonraker_filament_state_t *out){sensor_reads++;*out=sensors;}
 static void legacy_send(const char *command){++sends;snprintf(sent,sizeof(sent),"%s",command);}
 static void click(lv_obj_t *o){assert(o);lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
 static void open(void){ui_printer_popups_show_filament_sensors(NULL,&sensors);assert(s_filament_list_popup);}
@@ -42,8 +42,14 @@ static unsigned timers(void){unsigned n=0;for(lv_timer_t*t=lv_timer_get_next(NUL
 static uint16_t raster[1024*600];static int width=1024;
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*width+x]=*v++;lv_display_flush_ready(d);}
 static void snapshot(int theme,const char *name){const char *folder=getenv("SENSOR_STATUS_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s-theme%d.ppm",folder,name,theme);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
+static void unrelated_poll(lv_timer_t *timer){(void)timer;}
 static void safety(void){
  reset();unsigned base=timers();open();assert(timers()==base+1);unsigned before=sends;
+ lv_timer_t *other=lv_timer_create(unrelated_poll,60000,NULL);
+ unsigned state_before=state_reads,sensors_before=sensor_reads;
+ refresh_filament_list(other);assert(state_reads==state_before&&sensor_reads==sensors_before);
+ refresh_filament_list(s_filament_refresh_timer);assert(state_reads==state_before+1&&sensor_reads==sensors_before+1);
+ lv_timer_delete(other);
  accepted=false;click(s_filament_toggle_buttons[0]);assert(sends==before+1&&filament_request(sensors.sensors[0].object_name,generation)<0);
  assert(strstr(lv_label_get_text(s_filament_status_labels[0]),"Send failed"));assert(!lv_obj_has_state(s_filament_toggle_buttons[0],LV_STATE_DISABLED));
  refresh_filament_list(NULL);assert(strstr(lv_label_get_text(s_filament_status_labels[0]),"Send failed"));

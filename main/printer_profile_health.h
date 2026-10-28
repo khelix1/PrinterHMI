@@ -11,8 +11,6 @@
  * FreeRTOS task, timer, mutex, or scheduler allocation is introduced.
  */
 void printer_profile_health_poll_one(void);
-void printer_profile_health_reset(void);
-
 /* Preserve unchanged endpoints; clear health only where config changed. */
 void printer_profile_health_reconcile(void);
 

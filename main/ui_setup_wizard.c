@@ -1,13 +1,4 @@
 #include "ui_setup_wizard.h"
-/* STEP259_FULL_PRINTER_OPTIONS */
-/* STEP258_CAMERA_POLISH */
-/* STEP257_PRINTER_DISCOVERY */
-/* STEP256_DEDICATED_NAV */
-/* STEP254_SETUP_CARD_SAFE */
-/* STEP252_SETUP_REPAIRED */
-/* STEP251_SETUP_CARD */
-/* STEP249_STABLE_SETUP_SCAN */
-/* STEP248_SETUP_SCAN */
 #include "ui_text.h"
 #include "timezone_config.h"
 #include "theme_manager.h"
@@ -45,7 +36,6 @@ typedef struct {
 
 static lv_obj_t *s_center;
 static lv_obj_t *s_complete_popup;
-static lv_obj_t *s_step;
 static lv_obj_t *s_status;
 static lv_obj_t *s_name;
 static lv_obj_t *s_password;
@@ -86,6 +76,20 @@ static unsigned s_appearance_choice;
 static volatile bool s_wifi_scan_busy;
 static uint32_t s_setup_epoch;
 static bool s_setup_dispatching, s_camera_verified;
+static bool s_appearance_pending;
+static uint32_t s_appearance_pending_epoch;
+static void setup_appearance_async(void *data);
+
+static void setup_cancel_appearance(void)
+{
+    if (!s_appearance_pending) return;
+    lv_async_call_cancel(setup_appearance_async, (void *)(uintptr_t)s_appearance_pending_epoch);
+    s_appearance_pending = false;
+    s_appearance_pending_epoch = 0;
+    /* Only a queued appearance change owns this latch here. A synchronous
+     * transport/persistence callback retains its own dispatch protection. */
+    s_setup_dispatching = false;
+}
 static lv_obj_t *s_wifi_connect_action, *s_camera_use_action, *s_camera_scan_action, *s_finish_action;
 static lv_obj_t *s_wifi_rows[SETUP_MAX_WIFI], *s_camera_rows[CAMERA_CATALOG_MAX_CAMERAS];
 static void delete_poll(void);
@@ -108,7 +112,7 @@ static void setup_field_deleted(lv_event_t *event)
 {
     lv_obj_t *object=lv_event_get_target_obj(event);
     if(object==s_setup_content || object==s_stage || object==s_wifi_list || object==s_camera_list)delete_poll();
-    lv_obj_t **fields[]={&s_step,&s_status,&s_name,&s_password,&s_keyboard,&s_wifi_list,
+    lv_obj_t **fields[]={&s_status,&s_name,&s_password,&s_keyboard,&s_wifi_list,
         &s_camera_list,&s_options_list,&s_brightness_slider,&s_brightness_value,&s_back_action,&s_setup_content,&s_stage,&s_actions,&s_summary,
         &s_wifi_connect_action,&s_camera_use_action,&s_camera_scan_action,&s_finish_action};
     bool retired=false;
@@ -117,7 +121,7 @@ static void setup_field_deleted(lv_event_t *event)
     for (unsigned i=0;i<SETUP_STEP_COUNT;++i)if(s_nav[i]==object){s_nav[i]=NULL;retired=true;}
     for (unsigned i=0;i<SETUP_MAX_WIFI;++i)if(s_wifi_rows[i]==object){s_wifi_rows[i]=NULL;retired=true;}
     for (unsigned i=0;i<CAMERA_CATALOG_MAX_CAMERAS;++i)if(s_camera_rows[i]==object){s_camera_rows[i]=NULL;retired=true;}
-    if(retired)++s_setup_epoch;
+    if(retired){setup_cancel_appearance();++s_setup_epoch;}
 }
 static void setup_watch(lv_obj_t *object)
 {
@@ -158,15 +162,28 @@ static void set_status(const char *text)
     }
 }
 static void setup_refresh_completion_state(void);
+static bool setup_record_step(onboarding_step_t step, uint32_t epoch);
+static bool setup_save_display(int brightness, uint8_t sleep);
 
 
 static void setup_next_cb(lv_event_t *event)
 {
     (void)event;
     if(!s_center || !s_setup_content || s_setup_dispatching)return;
-    if (s_setup_step < SETUP_STEP_COMPLETE) {
-        setup_render_step(s_setup_step+1);
+    uint32_t epoch=s_setup_epoch;
+    if(s_setup_step==SETUP_STEP_WELCOME && !setup_record_step(ONBOARDING_STEP_WELCOME,epoch))return;
+    if(s_setup_step==SETUP_STEP_TIMEZONE) {
+        s_setup_dispatching=true;
+        bool saved=timezone_config_select(timezone_config_selected_index());
+        s_setup_dispatching=s_appearance_pending;
+        if(!setup_current(epoch))return;
+        if(!saved){set_status("Could not save the time zone. Try again.");return;}
+        if(!setup_record_step(ONBOARDING_STEP_TIMEZONE,epoch))return;
     }
+    if(s_setup_step==SETUP_STEP_DISPLAY &&
+        !setup_save_display(ui_settings_brightness_percent(),ui_settings_sleep_timeout_minutes()))return;
+    if(setup_current(epoch) && s_setup_step < SETUP_STEP_COMPLETE)
+        setup_render_step(s_setup_step+1);
 }
 
 static void setup_skip_cb(lv_event_t *event)
@@ -282,7 +299,10 @@ static lv_obj_t *setup_action(lv_obj_t *parent,const char *text,ui_popup_action_
 static void setup_update_nav(int step)
 {
     const char *names[]={"Welcome","Network","Time zone","Display","Printer","Camera","Review"};
-    bool ready[]={false,s_wifi_done,false,false,s_printer_done,s_camera_done,false};
+    bool ready[]={onboarding_controller_step_complete(ONBOARDING_STEP_WELCOME),s_wifi_done,
+        onboarding_controller_step_complete(ONBOARDING_STEP_TIMEZONE),
+        onboarding_controller_step_complete(ONBOARDING_STEP_DISPLAY),s_printer_done,s_camera_done,
+        !onboarding_controller_should_show()};
     if(s_back_action) { if(step==0)lv_obj_add_state(s_back_action,LV_STATE_DISABLED);else lv_obj_remove_state(s_back_action,LV_STATE_DISABLED); }
     for(int i=0;i<SETUP_STEP_COUNT;i++) {
         if(!s_nav[i])continue;
@@ -297,6 +317,17 @@ static void setup_update_nav(int step)
     }
     char summary[80];snprintf(summary,sizeof(summary),"%d of 2 essentials ready\nCamera is optional",(int)s_wifi_done+(int)s_printer_done);
     if(s_summary)lv_label_set_text(s_summary,summary);
+}
+
+static bool setup_record_step(onboarding_step_t step, uint32_t epoch)
+{
+    s_setup_dispatching=true;
+    bool saved=onboarding_controller_mark_step_complete(step);
+    s_setup_dispatching=s_appearance_pending;
+    if(!setup_current(epoch))return false;
+    if(!saved){set_status("Could not save step completion. Tap Continue to retry.");return false;}
+    setup_update_nav(s_setup_step);
+    return true;
 }
 
 static bool setup_begin_content(const char *title,const char *detail)
@@ -360,7 +391,7 @@ static void setup_timezone_pick(lv_event_t *event)
     if(lv_event_get_target_obj(event)!=button || lv_obj_get_parent(button)!=s_options_list)return;
     size_t index=(size_t)(uintptr_t)lv_event_get_user_data(event);
     uint32_t epoch=s_setup_epoch;s_setup_dispatching=true;
-    bool saved=timezone_config_select(index);s_setup_dispatching=false;
+    bool saved=timezone_config_select(index);s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return;
     if(!saved){set_status("Could not save the time zone. Try again.");return;}
     for(unsigned i=0;i<lv_obj_get_child_count(s_options_list);++i) {
@@ -368,6 +399,7 @@ static void setup_timezone_pick(lv_event_t *event)
         /* Catalog indexes are stored on the row; missing entries never shift them. */
         ui_button_set_filter_active(row,(size_t)(uintptr_t)lv_obj_get_user_data(row)==index);
     }
+    if(!setup_record_step(ONBOARDING_STEP_TIMEZONE,epoch))return;
     set_status(timezone_config_selected_label());
 }
 static void setup_timezone_content(void)
@@ -385,7 +417,9 @@ static void setup_timezone_content(void)
 static void setup_appearance_async(void *data)
 {
     uint32_t epoch=(uint32_t)(uintptr_t)data;
-    if(!setup_current(epoch))return;
+    if(!s_appearance_pending || epoch!=s_appearance_pending_epoch)return;
+    s_appearance_pending=false;s_appearance_pending_epoch=0;
+    if(!setup_current(epoch)){s_setup_dispatching=s_appearance_pending;return;}
     ui_setup_wizard_wifi_connect_cb_t wifi=s_wifi_connect;
     void (*changed)(void)=s_appearance_changed;
     unsigned choice=s_appearance_choice;
@@ -395,15 +429,22 @@ static void setup_appearance_async(void *data)
         ui_accessibility_t options=theme_manager_accessibility();options.large_text=(choice==3);
         saved=theme_manager_set_accessibility(options);
     }
-    s_setup_dispatching=false;
+    /* Persistence may replace Setup and queue a new owner's choice. Keep
+     * that newer pending operation busy when this callback returns. */
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return;
     if(!saved){set_status("Could not save appearance. Try again.");return;}
+    bool recorded=setup_record_step(ONBOARDING_STEP_DISPLAY,epoch);
+    if(!setup_current(epoch))return;
     ui_setup_wizard_close();
     if(s_center)return;
     if(changed)changed();
     if(s_center)return;
     ui_setup_wizard_show_with_appearance_callback(wifi,changed);
-    if(s_center)setup_render_step(SETUP_STEP_DISPLAY);
+    if(s_center){
+        setup_render_step(SETUP_STEP_DISPLAY);
+        if(!recorded)set_status("Appearance saved. Could not save step completion. Tap Continue to retry.");
+    }
 }
 static void setup_appearance_pick(lv_event_t *event)
 {
@@ -416,15 +457,18 @@ static void setup_appearance_pick(lv_event_t *event)
     if(lv_async_call(setup_appearance_async,(void*)(uintptr_t)s_setup_epoch)!=LV_RESULT_OK) {
         set_status("Could not refresh appearance. Try again.");return;
     }
+    s_appearance_pending=true;s_appearance_pending_epoch=s_setup_epoch;
     s_setup_dispatching=true;
 }
 static bool setup_save_display(int brightness,uint8_t sleep)
 {
     uint32_t epoch=s_setup_epoch;s_setup_dispatching=true;
-    bool saved=ui_settings_restore_display_preferences(brightness,sleep);s_setup_dispatching=false;
+    bool saved=ui_settings_restore_display_preferences(brightness,sleep);s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return false;
-    set_status(saved?"Display preferences saved.":"Could not save display preferences. Try again.");
-    return saved;
+    if(!saved){set_status("Could not save display preferences. Try again.");return false;}
+    if(!setup_record_step(ONBOARDING_STEP_DISPLAY,epoch))return false;
+    set_status("Display preferences saved.");
+    return true;
 }
 static void setup_brightness_cb(lv_event_t *event)
 {
@@ -532,7 +576,7 @@ static bool setup_network_content(void)
     bool connected=esp_wifi_sta_get_ap_info(&ap)==ESP_OK;
     esp_netif_t *netif=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     bool has_ip=connected && netif && esp_netif_get_ip_info(netif,&ip)==ESP_OK && ip.ip.addr!=0;
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return false;
     char address[32];
     if(has_ip)snprintf(address,sizeof(address),IPSTR,IP2STR(&ip.ip));
@@ -583,7 +627,7 @@ static bool setup_camera_content(void)
         s_setup_dispatching=true;
         size_t selected=camera_catalog_default(index);
         bool found=selected<CAMERA_CATALOG_MAX_CAMERAS && camera_catalog_get(index,selected,&camera);
-        s_setup_dispatching=false;
+        s_setup_dispatching=s_appearance_pending;
         if(!setup_current(epoch) || generation!=moonraker_config_generation() || index!=moonraker_config_active_profile_index())return false;
         const char *url=moonraker_config_camera_stream_url(index);
         /* Custom URLs need not match a catalog slot. Never expose a URL that
@@ -608,7 +652,7 @@ static bool setup_review_content(bool final)
     wifi_ap_record_t network={0};
     s_setup_dispatching=true;
     bool connected=esp_wifi_sta_get_ap_info(&network)==ESP_OK;
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || generation!=moonraker_config_generation() || index!=moonraker_config_active_profile_index())return false;
     const moonraker_profile_t *printer=moonraker_config_profile(index);
     bool configured=printer && printer->configured;
@@ -667,13 +711,14 @@ static void setup_render_step(int step)
 static void center_deleted(lv_event_t *event)
 {
     if(lv_event_get_target_obj(event)!=s_center)return;
+    setup_cancel_appearance();
     ++s_setup_epoch;delete_poll();
     s_center=s_setup_content=s_stage=s_actions=s_status=s_name=s_password=s_keyboard=NULL;
     s_wifi_list=s_camera_list=s_summary=s_options_list=s_brightness_slider=s_brightness_value=s_back_action=NULL;
     memset(s_nav,0,sizeof(s_nav));
     memset(s_wifi_rows,0,sizeof(s_wifi_rows));memset(s_camera_rows,0,sizeof(s_camera_rows));
     s_wifi_connect_action=s_camera_use_action=s_camera_scan_action=s_finish_action=NULL;
-    s_wifi_connect=NULL;s_camera_verified=false;
+    s_wifi_connect=NULL;s_appearance_changed=NULL;s_camera_verified=false;
 }
 
 static void show_center(void)
@@ -726,17 +771,10 @@ static void show_center(void)
 
 static void delete_poll(void) { if (s_poll) lv_timer_delete(s_poll); s_poll = NULL; }
 
-static void destroy_step(void)
-{
-    delete_poll();
-    lv_obj_t *step=s_step;
-    s_step = s_status = s_name = s_password = s_keyboard = NULL;
-    if(step)lv_obj_delete(step);
-}
-
 void ui_setup_wizard_close(void)
 {
-    s_setup_dispatching=false;
+    setup_cancel_appearance();
+    s_setup_dispatching=s_appearance_pending;
     lv_obj_t *center=s_center;
     /* Retire all old ownership before any child DELETE callback can reopen. */
     if(center) {
@@ -746,9 +784,9 @@ void ui_setup_wizard_close(void)
         s_wifi_connect_action=s_camera_use_action=s_camera_scan_action=s_finish_action=NULL;
         memset(s_nav,0,sizeof(s_nav));memset(s_wifi_rows,0,sizeof(s_wifi_rows));
         memset(s_camera_rows,0,sizeof(s_camera_rows));
-        s_wifi_connect=NULL;s_camera_verified=false;
+        s_wifi_connect=NULL;s_appearance_changed=NULL;s_camera_verified=false;
     }
-    destroy_step();
+    delete_poll();
     if(center)lv_obj_delete(center);
 }
 
@@ -928,7 +966,7 @@ static void wifi_save_cb(lv_event_t *event)
     s_setup_dispatching=true;
     bool accepted=connect(ssid,password);
     volatile char *secret=password;for(size_t i=0;i<sizeof(password);++i)secret[i]=0;
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return;
     if (!accepted) { set_status("Could not start the connection. Check the password and try again."); return; }
     set_status("Connecting and verifying Wi-Fi...");
@@ -1009,20 +1047,20 @@ static void camera_save_cb(lv_event_t *event)
     s_setup_dispatching=true;
     bool available=selected>=0 && camera_catalog_get(profile,selected,&entry);
     if(!setup_current(epoch) || owner!=moonraker_config_generation() ||
-        profile!=moonraker_config_active_profile_index()) {s_setup_dispatching=false;return;}
+        profile!=moonraker_config_active_profile_index()) {s_setup_dispatching=s_appearance_pending;return;}
     if (!available || !entry.configured) {
-        s_setup_dispatching=false;
+        s_setup_dispatching=s_appearance_pending;
         set_status("Select a discovered camera first.");
         return;
     }
     bool saved=camera_catalog_set_default(profile,selected);
     if(!setup_current(epoch) || owner!=moonraker_config_generation() ||
-        profile!=moonraker_config_active_profile_index()) {s_setup_dispatching=false;return;}
+        profile!=moonraker_config_active_profile_index()) {s_setup_dispatching=s_appearance_pending;return;}
     if(!saved) {
-        s_setup_dispatching=false;set_status("Could not save the default camera. Tap Use camera to retry.");return;
+        s_setup_dispatching=s_appearance_pending;set_status("Could not save the default camera. Tap Use camera to retry.");return;
     }
     saved=moonraker_config_set_camera_stream_url(profile,entry.stream_url);
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || profile!=moonraker_config_active_profile_index())return;
     if(!saved) {set_status("Default camera saved, but its stream URL could not be saved. Tap Use camera to retry.");return;}
     s_camera_owner=moonraker_config_generation();
@@ -1068,7 +1106,7 @@ static void camera_test_poll(lv_timer_t *timer)
     size_t bytes = 0;
     s_setup_dispatching=true;
     bool received=camera_test_take_result(&ok, &width, &height, &bytes);
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || owner!=moonraker_config_generation() || !received)return;
     delete_poll();
     if (!ok) {
@@ -1096,7 +1134,7 @@ static void camera_selected_cb(lv_event_t *event)
     camera_catalog_entry_t entry;
     s_setup_dispatching=true;
     bool available=camera_catalog_get(profile,s_selected_camera,&entry);
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || owner!=moonraker_config_generation() || !available || !entry.configured)return;
     for(unsigned i=0;i<CAMERA_CATALOG_MAX_CAMERAS;i++)
         if(s_camera_rows[i])ui_button_set_filter_active(s_camera_rows[i],(int)i==s_selected_camera);
@@ -1106,7 +1144,7 @@ static void camera_selected_cb(lv_event_t *event)
     epoch=s_setup_epoch;
     s_setup_dispatching=true;
     bool started=camera_test_start(entry.stream_url);
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || owner!=moonraker_config_generation())return;
     if (!started) { set_status("Could not start the camera test. Wait and select the camera again."); return; }
     delete_poll();
@@ -1126,7 +1164,7 @@ static void camera_discovery_poll(lv_timer_t *timer)
     moonraker_webcam_t ignored;
     s_setup_dispatching=true;
     bool received=camera_discovery_take_result(&ignored, &found, &count);
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || original_profile!=moonraker_config_active_profile_index() || !received)return;
     /* Importing camera slot 1 advances our own active configuration. */
     s_camera_owner = moonraker_config_generation();
@@ -1173,7 +1211,7 @@ static void camera_open(void)
     uint32_t epoch=s_setup_epoch,owner=s_camera_owner;
     s_setup_dispatching=true;
     bool started=camera_discovery_start(selected.host,selected.port,selected.api_key);
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || owner!=moonraker_config_generation())return;
     if (!started) {
         set_status("Could not start camera discovery. Wait and tap Scan again.");
@@ -1261,7 +1299,7 @@ static void finish_cb(lv_event_t *event)
     }
     s_setup_dispatching=true;
     bool saved=onboarding_controller_mark_complete();
-    s_setup_dispatching=false;
+    s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return;
     if (!saved) {
         set_status("Could not save setup completion. Try again.");

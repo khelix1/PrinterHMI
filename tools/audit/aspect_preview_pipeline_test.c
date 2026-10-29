@@ -52,9 +52,9 @@ void ui_dashboard_thumb_delete_canvas(void){ui_active_print_thumb_delete_canvas(
 void ui_dashboard_thumb_set_placeholder(const char *t){ui_active_print_thumb_set_placeholder(card,t);}
 bool ui_dashboard_thumb_ensure_canvas_buffer(size_t n){return ui_active_print_thumb_ensure_canvas_buffer(n);}
 void ui_dashboard_thumb_show_canvas_from_buffer(int w,int h,const char *f){ui_active_print_thumb_show_canvas_from_buffer(card,w,h,f);}
-void ui_dashboard_thumb_clear_placeholder(void){ui_active_print_thumb_clear_placeholder(card);}
+
 char *ui_dashboard_thumb_canvas_file(void){return ui_active_print_thumb_canvas_file();}
-size_t ui_dashboard_thumb_canvas_file_size(void){return ui_active_print_thumb_canvas_file_size();}
+
 int moonraker_config_active_profile_index(void){return 0;}
 const lv_image_dsc_t *printer_preview_cache_image(int profile,const char **file,uint32_t *revision){(void)profile;if(file)*file="packed.gcode";if(revision)*revision=1;return &cached;}
 static void safe_copy(char *d,size_t n,const char *s){snprintf(d,n,"%s",s);}
@@ -66,7 +66,7 @@ static bool checked_render(const lv_image_dsc_t *source,uint16_t *out,int w,int 
 #undef thumbnail_render_to_rgb565_aspect
 static void change_profile(void){config_generation++;}
 static void change_file(void){strcpy(selected_file,"other.gcode");}
-static void replace_panel(void){lv_obj_delete(card);card=ui_active_print_create(lv_screen_active(),0,0,600,350);}
+static void replace_panel(void){lv_obj_delete(card);card=ui_active_print_create_profile(lv_screen_active(),&(ui_dashboard_rect_t){0,0,600,350},&ui_dashboard_layout_profile_for_theme(ui_theme_get_active())->active_content);}
 
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){(void)a;(void)p;lv_display_flush_ready(d);}
 int main(void){
@@ -74,7 +74,7 @@ int main(void){
  static uint16_t source[286*215];source[0]=0x4321;
  for(unsigned theme=0;theme<5;theme++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
-  card=ui_active_print_create(lv_screen_active(),0,0,600,350);active_print_ctx_t *ctx=lv_obj_get_user_data(card);lv_obj_set_size(ctx->preview_box,420,180);
+  card=ui_active_print_create_profile(lv_screen_active(),&(ui_dashboard_rect_t){0,0,600,350},&ui_dashboard_layout_profile_for_theme(ui_theme_get_active())->active_content);active_print_ctx_t *ctx=lv_obj_get_user_data(card);lv_obj_set_size(ctx->preview_box,420,180);
   const int sizes[][2]={{286,165},{124,215},{215,215},{286,165}};
   for(unsigned i=0;i<4;i++){
    int w=sizes[i][0],h=sizes[i][1];cached=(lv_image_dsc_t){.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,.w=w,.h=h,.stride=w*2},.data_size=w*h*2,.data=(uint8_t*)source};

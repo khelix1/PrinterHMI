@@ -6,12 +6,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-lv_obj_t *ui_active_print_create(
-    lv_obj_t *parent,
-    int x,
-    int y,
-    int w,
-    int h);
 
 lv_obj_t *ui_active_print_create_profile(
     lv_obj_t *parent,
@@ -24,10 +18,8 @@ lv_obj_t *ui_active_print_thumb_box(lv_obj_t *card);
 lv_obj_t **ui_active_print_thumb_canvas_ref(void);
 uint16_t **ui_active_print_thumb_canvas_buf_ref(void);
 char *ui_active_print_thumb_canvas_file(void);
-size_t ui_active_print_thumb_canvas_file_size(void);
 
 void ui_active_print_thumb_set_placeholder(lv_obj_t *card, const char *text);
-void ui_active_print_thumb_clear_placeholder(lv_obj_t *card);
 bool ui_active_print_thumb_canvas_matches(const char *file);
 bool ui_active_print_thumb_ensure_canvas_buffer(size_t pixels);
 void ui_active_print_thumb_delete_canvas(void);

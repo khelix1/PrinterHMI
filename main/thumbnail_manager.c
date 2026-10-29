@@ -54,11 +54,7 @@ void thumbnail_manager_mark_pending(void)
     s_thumb_failed = false;
 }
 
-void thumbnail_manager_mark_ready(void)
-{
-    s_thumb_ready = true;
-    s_thumb_failed = false;
-}
+
 
 void thumbnail_manager_mark_failed(void)
 {

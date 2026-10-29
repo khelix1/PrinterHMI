@@ -26,12 +26,12 @@ static void (*host_hook)(void),(*key_hook)(void),(*port_hook)(void),(*queue_hook
 static uint16_t source_pixels[4]={0x1234,0x1234,0x1234,0x1234};
 static lv_image_dsc_t source={.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,.w=2,.h=2,.stride=4},.data_size=8,.data=(uint8_t*)source_pixels};
 static void hook(void (**slot)(void)){if(*slot){void(*callback)(void)=*slot;*slot=NULL;callback();}}
-static void reopen(void){ui_preview_lightbox_close();ui_preview_lightbox_show(&source);}
+static void reopen(void){ui_preview_lightbox_close();preview_lightbox_show_image(&source);}
 static void test_set_src(lv_obj_t *image,const void *source){lv_image_set_src(image,source);if(source_boundary&&!--source_boundary)reopen();}
 static void changed(void){generation++;}
 static void delete_image(void){lv_obj_delete(s_preview_image);}
 static void delete_hint(void){lv_obj_delete(s_preview_hint);}
-static void reopened(lv_event_t *event){(void)event;ui_preview_lightbox_show(&source);}
+static void reopened(lv_event_t *event){(void)event;preview_lightbox_show_image(&source);}
 uint32_t moonraker_config_generation(void){return generation;}
 const char *moonraker_config_host(void){hook(&host_hook);return "printer.local";}
 const char *moonraker_config_api_key(void){hook(&key_hook);return "test-key";}
@@ -65,22 +65,22 @@ static void closed(void){ui_preview_lightbox_close();assert(!s_preview_lightbox&
 static void checks(lv_indev_t *input)
 {
  lv_obj_t *image=lv_image_create(lv_screen_active());lv_image_set_src(image,&source);
- lv_obj_t *canvas=lv_canvas_create(lv_screen_active());static uint8_t canvas_pixels[8];lv_canvas_set_buffer(canvas,canvas_pixels,2,2,LV_COLOR_FORMAT_RGB565);ui_preview_lightbox_show_object(canvas);assert(s_preview_lightbox&&s_fallback_pixels);closed();lv_obj_delete(canvas);
- for(int action=0;action<3;action++){ui_preview_lightbox_show(&source);if(action==0)tap(input,s_preview_image);else if(action==1)tap(input,s_preview_hint);else {lv_obj_update_layout(s_preview_lightbox);point=(lv_point_t){2,2};pressed=true;lv_indev_read(input);pressed=false;lv_indev_read(input);}assert(!ui_preview_lightbox_is_open()&&!owned_bytes);}
- ui_preview_lightbox_show(&source);lv_obj_t *root=s_preview_lightbox;
+ lv_obj_t *canvas=lv_canvas_create(lv_screen_active());static uint8_t canvas_pixels[8];lv_canvas_set_buffer(canvas,canvas_pixels,2,2,LV_COLOR_FORMAT_RGB565);preview_lightbox_show_image_object(canvas);assert(s_preview_lightbox&&s_fallback_pixels);closed();lv_obj_delete(canvas);
+ for(int action=0;action<3;action++){preview_lightbox_show_image(&source);if(action==0)tap(input,s_preview_image);else if(action==1)tap(input,s_preview_hint);else {lv_obj_update_layout(s_preview_lightbox);point=(lv_point_t){2,2};pressed=true;lv_indev_read(input);pressed=false;lv_indev_read(input);}assert(!s_preview_lightbox&&!owned_bytes);}
+ preview_lightbox_show_image(&source);lv_obj_t *root=s_preview_lightbox;
  lv_obj_add_state(s_preview_image,LV_STATE_DISABLED);lv_obj_send_event(s_preview_image,LV_EVENT_CLICKED,NULL);assert(s_preview_lightbox==root);lv_obj_remove_state(s_preview_image,LV_STATE_DISABLED);
  lv_obj_t *fake=lv_button_create(root);lv_obj_add_event_cb(fake,preview_lightbox_close_cb,LV_EVENT_CLICKED,NULL);lv_obj_add_flag(fake,LV_OBJ_FLAG_EVENT_BUBBLE);lv_obj_send_event(fake,LV_EVENT_CLICKED,NULL);assert(s_preview_lightbox==root);lv_obj_delete(fake);
  unsigned before=queued;uint32_t request=s_request_id;
  ui_preview_lightbox_show_file_object(NULL,"part.gcode");ui_preview_lightbox_show_file_object(root,"part.gcode");assert(s_preview_lightbox==root&&request==s_request_id&&queued==before);
  lv_obj_t *symbol=lv_image_create(lv_screen_active());lv_image_set_src(symbol,LV_SYMBOL_OK);ui_preview_lightbox_show_file_object(symbol,"part.gcode");assert(s_preview_lightbox==root&&queued==before);lv_obj_delete(symbol);
  /* Aliased descriptors and object sources must be copied before old cleanup. */
- ui_preview_lightbox_show(&s_fallback_image);assert(s_fallback_pixels&&s_fallback_pixels[0]==0x1234&&owned_bytes==8);
- ui_preview_lightbox_show_object(s_preview_image);assert(s_fallback_pixels&&s_fallback_pixels[0]==0x1234&&owned_bytes==8);
- root=s_preview_lightbox;lv_obj_add_event_cb(root,reopened,LV_EVENT_DELETE,NULL);ui_preview_lightbox_show(&source);assert(s_preview_lightbox&&s_fallback_pixels&&owned_bytes==8);closed();
- ui_preview_lightbox_show(&source);lv_obj_add_event_cb(s_preview_lightbox,reopened,LV_EVENT_DELETE,NULL);ui_preview_lightbox_close();assert(s_preview_lightbox&&owned_bytes==8);closed();
- ui_preview_lightbox_show(&source);lv_obj_add_event_cb(s_preview_lightbox,reopened,LV_EVENT_DELETE,NULL);lv_obj_delete(s_preview_lightbox);assert(s_preview_lightbox&&owned_bytes==8);closed();
- ui_preview_lightbox_show(&source);lv_obj_delete(s_preview_hint);assert(!s_preview_hint);lv_obj_delete(s_preview_image);assert(!s_preview_image);lv_obj_delete(s_preview_lightbox);assert(!s_preview_lightbox&&!owned_bytes);
- render_hook=reopen;ui_preview_lightbox_show(&source);assert(s_preview_lightbox&&owned_bytes==8);closed();
+ preview_lightbox_show_image(&s_fallback_image);assert(s_fallback_pixels&&s_fallback_pixels[0]==0x1234&&owned_bytes==8);
+ preview_lightbox_show_image_object(s_preview_image);assert(s_fallback_pixels&&s_fallback_pixels[0]==0x1234&&owned_bytes==8);
+ root=s_preview_lightbox;lv_obj_add_event_cb(root,reopened,LV_EVENT_DELETE,NULL);preview_lightbox_show_image(&source);assert(s_preview_lightbox&&s_fallback_pixels&&owned_bytes==8);closed();
+ preview_lightbox_show_image(&source);lv_obj_add_event_cb(s_preview_lightbox,reopened,LV_EVENT_DELETE,NULL);ui_preview_lightbox_close();assert(s_preview_lightbox&&owned_bytes==8);closed();
+ preview_lightbox_show_image(&source);lv_obj_add_event_cb(s_preview_lightbox,reopened,LV_EVENT_DELETE,NULL);lv_obj_delete(s_preview_lightbox);assert(s_preview_lightbox&&owned_bytes==8);closed();
+ preview_lightbox_show_image(&source);lv_obj_delete(s_preview_hint);assert(!s_preview_hint);lv_obj_delete(s_preview_image);assert(!s_preview_image);lv_obj_delete(s_preview_lightbox);assert(!s_preview_lightbox&&!owned_bytes);
+ render_hook=reopen;preview_lightbox_show_image(&source);assert(s_preview_lightbox&&owned_bytes==8);closed();
  for(unsigned stage=0;stage<5;stage++){
   before=queued;s_preview_queue=stage<3?(void*)1:NULL;s_preview_worker_started=stage!=4;
   if(stage==0)host_hook=reopen;
@@ -93,12 +93,12 @@ static void checks(lv_indev_t *input)
  s_preview_queue=NULL;fail_queue=true;before=queued;ui_preview_lightbox_show_file_object(image,"part.gcode");assert(queued==before&&s_preview_lightbox);closed();fail_queue=false;
  s_preview_worker_started=false;fail_task=true;ui_preview_lightbox_show_file_object(image,"part.gcode");assert(queued==before&&s_preview_lightbox);closed();fail_task=false;
  host_hook=changed;ui_preview_lightbox_show_file_object(image,"part.gcode");assert(queued==before&&s_preview_lightbox);closed();
- ui_preview_lightbox_show(&source);lv_label_set_text(s_preview_hint,"part.gcode");const char *aliased_file=lv_label_get_text(s_preview_hint);before=queued;ui_preview_lightbox_show_file_object(s_preview_image,aliased_file);assert(queued==before+1&&!strcmp(queued_job.file,"part.gcode"));closed();
+ preview_lightbox_show_image(&source);lv_label_set_text(s_preview_hint,"part.gcode");const char *aliased_file=lv_label_get_text(s_preview_hint);before=queued;ui_preview_lightbox_show_file_object(s_preview_image,aliased_file);assert(queued==before+1&&!strcmp(queued_job.file,"part.gcode"));closed();
  launch(image);uint16_t *fallback=s_fallback_pixels;run_worker();assert(s_fullscreen_pixels&&s_fullscreen_pixels[0]==0xabcd&&!s_fallback_pixels&&owned_bytes==(size_t)900*520*2);assert(lv_image_get_src(s_preview_image)==&s_fullscreen_image);closed();
  launch(image);fallback=s_fallback_pixels;fail_fetch=true;unsigned reads=fetches;run_worker();assert(fetches==reads+3&&s_fallback_pixels==fallback&&!s_fullscreen_pixels&&strstr(lv_label_get_text(s_preview_hint),"ORIGINAL"));fail_fetch=false;closed();
  launch(image);fail_lock=true;reads=fetches;run_worker();assert(fetches==reads&&s_fallback_pixels);fail_lock=false;closed();
  launch(image);changed();reads=fetches;run_worker();assert(fetches==reads&&!s_fullscreen_pixels);closed();
- launch(image);ui_preview_lightbox_close();ui_preview_lightbox_show(&source);request=s_request_id;reads=fetches;run_worker();assert(fetches==reads&&s_request_id==request&&owned_bytes==8);closed();
+ launch(image);ui_preview_lightbox_close();preview_lightbox_show_image(&source);request=s_request_id;reads=fetches;run_worker();assert(fetches==reads&&s_request_id==request&&owned_bytes==8);closed();
  launch(image);fetch_hook=reopen;run_worker();assert(s_preview_lightbox&&owned_bytes==8&&!s_fullscreen_pixels);closed();
  launch(image);render_hook=reopen;run_worker();assert(s_preview_lightbox&&owned_bytes==8&&!s_fullscreen_pixels);closed();
  launch(image);render_hook=delete_image;run_worker();assert(s_preview_lightbox&&!s_preview_image&&!s_fullscreen_pixels&&owned_bytes==8);closed();
@@ -110,7 +110,7 @@ static void checks(lv_indev_t *input)
  }
  /* Direct transfer must leave stale jobs' buffers with their caller. */
  launch(image);uint16_t *pixels=heap_caps_malloc(900*520*2,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);changed();assert(!fullscreen_publish(&queued_job,&pixels)&&pixels);heap_caps_free(pixels);closed();
- fail_memory=true;ui_preview_lightbox_show(&source);assert(s_preview_lightbox&&!s_fallback_pixels);closed();fail_memory=false;
+ fail_memory=true;preview_lightbox_show_image(&source);assert(s_preview_lightbox&&!s_fallback_pixels);closed();fail_memory=false;
  lv_obj_delete(image);
 }
 int main(void)

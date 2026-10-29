@@ -12,11 +12,8 @@ void ui_toast_refresh_appearance(void);
 typedef enum { UI_NOTIFY_QUIET=0, UI_NOTIFY_STANDARD=1, UI_NOTIFY_DETAILED=2 } ui_notification_level_t;
 ui_notification_level_t ui_toast_level(void);
 bool ui_toast_set_level(ui_notification_level_t level);
-/* Compatibility with older callers/backups: OFF=Quiet, ON=Detailed. */
 /* One appliance-wide preference; warnings/errors cannot be disabled. */
 void ui_toast_init(void);
-bool ui_toast_confirmations_enabled(void);
-bool ui_toast_set_confirmations(bool enabled);
 const char *ui_toast_preference_label(void);
 void ui_toast_preferences_show(void (*changed)(void));
 void ui_toast_preferences_close(void);

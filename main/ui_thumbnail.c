@@ -135,32 +135,6 @@ ui_thumbnail_t *ui_thumbnail_create(lv_obj_t *parent, int x, int y, int w, int h
 }
 
 
-ui_thumbnail_t *ui_thumbnail_wrap(lv_obj_t *box)
-{
-    if (!box) return NULL;
-
-    ui_thumbnail_t *thumb = lv_calloc(1, sizeof(ui_thumbnail_t));
-    if (!thumb) return NULL;
-
-    thumb->box = box;
-    thumb->label = NULL;
-    thumb->canvas = NULL;
-    thumb->canvas_buf = NULL;
-    memset(&thumb->canvas_image, 0, sizeof(thumb->canvas_image));
-    thumb->loaded_file[0] = 0;
-
-    lv_obj_clear_flag(thumb->box, LV_OBJ_FLAG_SCROLLABLE);
-
-    thumb->label = ui_create_card_subtitle(thumb->box, "THUMBNAIL");
-    lv_obj_center(thumb->label);
-    lv_obj_add_event_cb(thumb->label, thumbnail_field_deleted, LV_EVENT_DELETE, thumb);
-    thumbnail_enable_lightbox(thumb);
-
-    return thumb;
-}
-
-
-
 lv_obj_t *ui_thumbnail_box(ui_thumbnail_t *thumb)
 {
     return thumb ? thumb->box : NULL;
@@ -187,43 +161,6 @@ static void thumbnail_fit_unwatch(thumbnail_fit_guard_t *guard)
     if (guard->object) lv_obj_remove_event_cb_with_user_data(guard->object, thumbnail_fit_deleted, guard);
     if (guard->box && guard->box != guard->object)
         lv_obj_remove_event_cb_with_user_data(guard->box, thumbnail_fit_deleted, guard);
-}
-
-int ui_thumbnail_fit_scale(
-    lv_obj_t *box,
-    int source_width,
-    int source_height,
-    int inset)
-{
-    if (!box || source_width <= 0 || source_height <= 0) {
-        return 256;
-    }
-
-    /*
-     * Printer creates and binds its cached image in the same LVGL pass.
-     * Resolve the new preview well before reading its dimensions; otherwise
-     * LVGL can still report zero and clamp the image to scale 1 (1/256x).
-     */
-    thumbnail_fit_guard_t guard;
-    thumbnail_fit_watch(&guard, box, box);
-    lv_obj_update_layout(box);
-    bool alive = guard.box != NULL;
-    thumbnail_fit_unwatch(&guard);
-    if (!alive) return 256;
-
-    int available_width = lv_obj_get_width(box) - (inset * 2);
-    int available_height = lv_obj_get_height(box) - (inset * 2);
-
-    if (available_width < 1) available_width = 1;
-    if (available_height < 1) available_height = 1;
-
-    int scale_x = (available_width * 256) / source_width;
-    int scale_y = (available_height * 256) / source_height;
-    int scale = scale_x < scale_y ? scale_x : scale_y;
-
-    if (scale < 1) scale = 1;
-    if (scale > 768) scale = 768;
-    return scale;
 }
 
 void ui_thumbnail_fit_object(
@@ -260,39 +197,6 @@ void ui_thumbnail_fit_object(
 finished:
     thumbnail_fit_unwatch(&guard);
 }
-
-void ui_thumbnail_fill_object(lv_obj_t *object, lv_obj_t *box,
-    int source_width, int source_height)
-{
-    if (!object || !box) return;
-    if (source_width <= 0 || source_height <= 0) {
-        source_width = lv_image_get_src_width(object);
-        source_height = lv_image_get_src_height(object);
-    }
-    if (source_width <= 0 || source_height <= 0) return;
-    thumbnail_fit_guard_t guard;
-    thumbnail_fit_watch(&guard, object, box);
-    lv_obj_update_layout(box);
-    if (!guard.object || !guard.box) goto finished;
-    int width = lv_obj_get_content_width(box);
-    int height = lv_obj_get_content_height(box);
-    if (width <= 0 || height <= 0) goto finished;
-    /* 9.5 COVER quantizes scale downward to 1/256 steps. A source-sized
-     * rounding guard keeps that quantization from exposing a one-pixel band. */
-    lv_obj_set_size(object, width + (source_width + 255) / 256,
-        height + (source_height + 255) / 256);
-    if (!guard.object || !guard.box) goto finished;
-    lv_obj_remove_flag(box, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-    if (!guard.object || !guard.box) goto finished;
-    lv_obj_set_style_clip_corner(box, true, 0);
-    if (!guard.object || !guard.box) goto finished;
-    lv_image_set_inner_align(object, LV_IMAGE_ALIGN_COVER);
-    if (!guard.object || !guard.box) goto finished;
-    lv_obj_center(object);
-finished:
-    thumbnail_fit_unwatch(&guard);
-}
-
 
 void ui_thumbnail_show_file_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc,
     int scale, const char *file)
@@ -350,12 +254,6 @@ finished:
     thumbnail_end(thumb);
 }
 
-void ui_thumbnail_show_image(ui_thumbnail_t *thumb, const lv_image_dsc_t *dsc, int scale)
-{
-    /* Unscoped sources may open a fallback, but cannot fetch another file. */
-    ui_thumbnail_show_file_image(thumb, dsc, scale, NULL);
-}
-
 void ui_thumbnail_set_placeholder(ui_thumbnail_t *thumb, const char *text)
 {
     if (!thumbnail_begin(thumb)) return;
@@ -379,9 +277,4 @@ void ui_thumbnail_set_placeholder(ui_thumbnail_t *thumb, const char *text)
     lv_obj_center(thumb->label);
 finished:
     thumbnail_end(thumb);
-}
-
-void ui_thumbnail_clear(ui_thumbnail_t *thumb)
-{
-    ui_thumbnail_set_placeholder(thumb, "THUMBNAIL");
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-/* Owns Network scan/password, port and result dialogs. Application credential
+/* Owns Network scan/password and result dialogs. Application credential
  * buffers, ESP connection dispatch and scan workers remain external owners. */
 
 #include "lvgl.h"
@@ -12,9 +12,6 @@
  * The module owns all scan/password popup LVGL object references.
  * Application credential buffers and connection logic remain external.
  */
-void ui_network_tools_wifi_scan_show_owned(
-    const char *status_text,
-    lv_event_cb_t close_cb);
 
 void ui_network_tools_wifi_scan_close_owned(void);
 
@@ -41,14 +38,6 @@ void ui_network_tools_wifi_select_owned(
 void ui_network_tools_wifi_scan_set_status(
     const char *status_text);
 
-void ui_network_tools_wifi_scan_render_owned(
-    char *status_buf,
-    size_t status_buf_size,
-    const wifi_ap_record_t *aps,
-    uint16_t count,
-    unsigned total_count,
-    lv_event_cb_t close_cb,
-    lv_event_cb_t selected_cb);
 
 void ui_network_tools_wifi_popup_destroy_all(void);
 
@@ -105,11 +94,5 @@ void ui_network_tools_populate_wifi_scan_buttons(lv_obj_t *list,
                                                 const wifi_ap_record_t *aps,
                                                 uint16_t count,
                                                 lv_event_cb_t selected_cb);
-
-typedef void (*ui_network_port_save_cb_t)(int port);
-
-void ui_network_port_popup_show(int current_port,
-                                ui_network_port_save_cb_t save_cb);
-void ui_network_port_popup_close(void);
 
 void ui_network_tools_show_test_moonraker_popup(const char *title_txt, const char *body_txt, bool ok);

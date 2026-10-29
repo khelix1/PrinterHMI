@@ -1271,11 +1271,3 @@ bool settings_backup_restore_with_progress(
 
     return true;
 }
-
-/* Compatibility entry points keep existing callers and storage semantics. */
-bool settings_backup_export(char *status,size_t status_size)
-{return settings_backup_export_with_progress(NULL,NULL,status,status_size);}
-bool settings_backup_restore(char *status,size_t status_size)
-{return settings_backup_restore_with_progress(NULL,NULL,status,status_size);}
-bool settings_backup_restore_encrypted(const char *passphrase,char *status,size_t status_size)
-{return settings_backup_restore_encrypted_with_progress(passphrase,NULL,NULL,status,status_size);}

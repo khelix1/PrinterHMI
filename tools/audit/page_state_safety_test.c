@@ -82,8 +82,8 @@ static void check(void)
     update_hook=retire;ui_page_state_show(owner,UI_PAGE_STATE_ERROR,"Old","Discard");
     assert(!owner&&!metadata_live);
     create();lv_obj_delete(parent);assert(!owner&&!metadata_live);
-    /* Existing unowned API remains valid while its object tree lives. */
-    parent=lv_obj_create(lv_screen_active());old=ui_page_state_create(parent,0,0,400,300);
+    /* Optional owner slots remain valid while the object tree lives. */
+    parent=lv_obj_create(lv_screen_active());old=ui_page_state_create_owned(parent,0,0,400,300,NULL);
     ui_page_state_show(old,UI_PAGE_STATE_EMPTY,"Legacy","Alive");lv_obj_delete(parent);assert(!metadata_live);
 }
 int main(void)

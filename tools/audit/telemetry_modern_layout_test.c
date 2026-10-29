@@ -24,7 +24,7 @@ static bool memory_zero;
 static void(*info_read_hook)(void);
 static void info_read(void){info_reads++;if(info_read_hook){void(*hook)(void)=info_read_hook;info_read_hook=NULL;hook();}}
 static lv_obj_t *replacement_info_label,*replacement_info_parent;
-static void rebind_info(void){replacement_info_label=lv_label_create(replacement_info_parent);lv_label_set_text(replacement_info_label,"REPLACEMENT");settings_system_info_bind_heap_label(replacement_info_label);}
+static void rebind_info(void){replacement_info_label=lv_label_create(replacement_info_parent);lv_label_set_text(replacement_info_label,"REPLACEMENT");settings_system_info_bind_heap_metrics(replacement_info_label,NULL,NULL);}
 const char *esp_get_idf_version(void){info_read();return "host-test";}
 size_t heap_caps_get_free_size(unsigned caps){info_read();return memory_zero?0:caps==MALLOC_CAP_SPIRAM?32U*1024*1024:100000;}
 size_t heap_caps_get_minimum_free_size(unsigned caps){info_read();return memory_zero?0:caps==MALLOC_CAP_SPIRAM?31U*1024*1024:90000;}
@@ -124,7 +124,7 @@ for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)
  unsigned object_baseline=objects(lv_screen_active())+objects(lv_layer_top()),timer_baseline=timers();
  for(unsigned repeat=0;repeat<4;repeat++){ui_telemetry_show();ui_telemetry_hide();assert(objects(lv_screen_active())+objects(lv_layer_top())==object_baseline && timers()==timer_baseline);}
  lv_obj_t *info=lv_obj_create(lv_screen_active()),*labels[4];for(unsigned j=0;j<4;j++)labels[j]=lv_label_create(info);
- settings_system_info_bind_idf_label(labels[0]);settings_system_info_bind_heap_label(labels[1]);settings_system_info_bind_psram_label(labels[2]);settings_system_info_bind_uptime_label(labels[3]);
+ settings_system_info_bind_idf_label(labels[0]);settings_system_info_bind_heap_metrics(labels[1],NULL,NULL);settings_system_info_bind_psram_metrics(labels[2],NULL);settings_system_info_bind_uptime_label(labels[3]);
  settings_system_info_refresh();lv_refr_now(d);invalidations=0;settings_system_info_refresh();assert(invalidations==0);
  unsigned reads_before=info_reads;info_read_hook=settings_system_info_refresh;settings_system_info_refresh();assert(info_reads==reads_before+7);
  replacement_info_parent=info;info_read_hook=rebind_info;settings_system_info_refresh();assert(!strcmp(lv_label_get_text(replacement_info_label),"REPLACEMENT"));

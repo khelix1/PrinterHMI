@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build real LVGL host checks for preview fill. Supply --lvgl-dir if unmanaged."""
+"""Build real LVGL host checks for aspect-packed and full-image-fit previews. Supply --lvgl-dir if unmanaged."""
 from pathlib import Path
 import argparse
 import concurrent.futures

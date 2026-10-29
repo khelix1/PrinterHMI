@@ -1,5 +1,95 @@
 # Changelog
 
+## [7.1.55-dev] - 2026-10-28
+
+### Remove unreachable Printer status formatter
+
+- Remove an unused status-summary API; retain shared status dialogs.
+- Keep long-file layout and lifecycle coverage on the active popup implementation.
+
+## [7.1.54-dev] - 2026-10-28
+
+### Remove obsolete preview crop renderer
+
+- Remove unused center-crop sampling and its public entry point.
+- Drop the redundant renderer mode flag; retain active packing and full-image fit.
+- Keep active pixel, padding, dimensions and buffer-bound coverage.
+
+## [7.1.53-dev] - 2026-10-28
+
+### Remove unused lightbox and Wi-Fi wrappers
+
+- Remove three lightbox and two scan wrappers with no firmware callers.
+- Keep file-pinned fullscreen loading and shared scan/password implementations.
+- Retarget existing ownership, worker and dialog tests to retained paths.
+
+## [7.1.52-dev] - 2026-10-28
+
+### Remove unused component constructors
+
+- Remove generic Active Print, unowned page-state and wrapped-thumbnail constructors.
+- Retarget fixtures to active profile/owned/standard creation APIs.
+- Retain active layouts, buffer ownership and lifecycle checks.
+
+## [7.1.51-dev] - 2026-10-28
+
+### Remove obsolete button constructors
+
+- Remove an unused custom-color constructor and five wrappers.
+- Retain active semantic buttons and their pressed-state/layout coverage.
+- Remove obsolete API names from the button-label inventory scanner.
+
+## [7.1.50-dev] - 2026-10-28
+
+### Remove stale notification and preview interfaces
+
+- Remove two boolean notification APIs; retain stored preference migration.
+- Remove unused Active Print filename-size and placeholder-hide helpers.
+- Exercise current notification levels directly in existing host fixtures.
+
+## [7.1.49-dev] - 2026-10-28
+
+### Remove unused preview helpers
+
+- Remove legacy scale/fill helpers and two unused convenience wrappers.
+- Retarget safety fixtures to active file-image, placeholder and containment APIs.
+- Retain decoder, cache, lightbox and worker behavior.
+
+## [7.1.48-dev] - 2026-10-28
+
+### Remove obsolete combined memory labels
+
+- Remove two unused label-binding APIs, their cached state and formatter.
+- Retain active metric-cell formatting and retarget lifecycle tests to those APIs.
+
+## [7.1.47-dev] - 2026-10-27
+
+### Remove unused entry points and state
+
+- Remove the unreachable standalone Moonraker port popup; port editing remains in
+  the printer-profile editor, including range validation and save retry.
+- Remove three unused backup compatibility wrappers, two Dashboard thumbnail
+  forwarding helpers, the duplicate thumbnail-ready setter and the unused Files
+  destroy wrapper. Keep the active progress, preview and teardown paths.
+- Remove the permanently-null Files popup label and never-written HTTP-busy flag;
+  pass its existing false value explicitly without changing poll scheduling.
+- Retarget host fixtures to active APIs and retain NULL-progress callback coverage.
+
+## [7.1.46-dev] - 2026-10-27
+
+### Shared shell ownership and refresh cleanup
+
+- Retire top-bar/navigation handles on direct deletion and stop the clock timer
+  when its top bar or clock label is retired. Preserve replacement shells opened
+  by DELETE callbacks during teardown.
+- Guard early/late calls and bind navigation/printer-switch actions to current
+  controls. Retain all eight routes, E-stop behavior and printer-switch callback.
+- Avoid identical clock, printer-name and Wi-Fi indicator writes; preserve clock
+  formatting, timezone updates and RSSI hysteresis.
+- Remove the unbound shell ETA field and an identical-font conditional.
+- Add real shell lifecycle/clock/status tests on the pushed v45 checkpoint.
+
+
 ## [7.1.45-dev] - 2026-10-27
 
 ### Network page ownership and refresh cleanup

@@ -103,11 +103,6 @@ char *ui_active_print_thumb_canvas_file(void)
     return s_active_print_thumb_canvas_file;
 }
 
-size_t ui_active_print_thumb_canvas_file_size(void)
-{
-    return sizeof(s_active_print_thumb_canvas_file);
-}
-
 void ui_active_print_thumb_set_placeholder(lv_obj_t *card,const char *text)
 {
     active_print_ctx_t *ctx=active_begin(card);if(!ctx)return;
@@ -122,13 +117,6 @@ void ui_active_print_thumb_set_placeholder(lv_obj_t *card,const char *text)
     }
 finished:active_end(ctx);
 }
-void ui_active_print_thumb_clear_placeholder(lv_obj_t *card)
-{
-    active_print_ctx_t *ctx=active_begin(card);if(!ctx)return;
-    if(ctx->preview_label)lv_obj_add_flag(ctx->preview_label,LV_OBJ_FLAG_HIDDEN);
-    active_end(ctx);
-}
-
 bool ui_active_print_thumb_canvas_matches(const char *file)
 {
     return s_active_print_thumb_canvas &&
@@ -183,34 +171,6 @@ finished:active_end(ctx);
 }
 void ui_active_print_thumb_show_canvas_from_buffer(lv_obj_t *card,int w,int h,const char *file){active_apply(card,w,h,file,true);}
 void ui_active_print_thumb_apply_canvas_from_buffer(lv_obj_t *card,int w,int h,const char *file){active_apply(card,w,h,file,false);}
-
-
-lv_obj_t *ui_active_print_create(
-    lv_obj_t *parent,
-    int x,
-    int y,
-    int w,
-    int h)
-{
-    const ui_dashboard_rect_t rect = {x, y, w, h};
-    const ui_dashboard_active_print_layout_t layout = {
-        .heading_x = 18,
-        .heading_y = 12,
-        .filename_x = 140,
-        .filename_y = 14,
-        .preview_x = 20,
-        .preview_y = 42,
-        .preview_width = 0,
-        .preview_height = 0,
-        .footer_x = 18,
-        .footer_bottom = 31,
-    };
-
-    return ui_active_print_create_profile(
-        parent,
-        &rect,
-        &layout);
-}
 
 
 lv_obj_t *ui_active_print_create_profile(

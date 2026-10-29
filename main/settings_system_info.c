@@ -8,8 +8,6 @@
 #include <stdio.h>
 
 static lv_obj_t *s_idf_label = NULL;
-static lv_obj_t *s_heap_label = NULL;
-static lv_obj_t *s_psram_label = NULL;
 static lv_obj_t *s_uptime_label = NULL;
 static lv_obj_t *s_heap_metrics[3], *s_psram_metrics[2];
 static uint32_t s_info_epoch;
@@ -53,27 +51,6 @@ static void format_bytes(
             buf_size,
             "%u B",
             (unsigned)bytes);
-    }
-}
-
-static void format_memory_health(
-    char *buf,
-    size_t buf_size,
-    size_t current,
-    size_t minimum,
-    size_t largest)
-{
-    char current_buf[16];
-    char minimum_buf[16];
-    char largest_buf[16];
-
-    format_bytes(current_buf, sizeof(current_buf), current);
-    format_bytes(minimum_buf, sizeof(minimum_buf), minimum);
-    if (largest > 0) {
-        format_bytes(largest_buf, sizeof(largest_buf), largest);
-        snprintf(buf, buf_size, "%s / %s / %s", current_buf, minimum_buf, largest_buf);
-    } else {
-        snprintf(buf, buf_size, "%s / %s", current_buf, minimum_buf);
     }
 }
 
@@ -127,16 +104,6 @@ void settings_system_info_bind_idf_label(lv_obj_t *label)
     info_bind(&s_idf_label,label);
 }
 
-void settings_system_info_bind_heap_label(lv_obj_t *label)
-{
-    info_bind(&s_heap_label,label);
-}
-
-void settings_system_info_bind_psram_label(lv_obj_t *label)
-{
-    info_bind(&s_psram_label,label);
-}
-
 void settings_system_info_bind_uptime_label(lv_obj_t *label)
 {
     info_bind(&s_uptime_label,label);
@@ -154,12 +121,12 @@ void settings_system_info_bind_psram_metrics(lv_obj_t *current,lv_obj_t *minimum
 
 void settings_system_info_refresh(void)
 {
-    bool heap_bound=s_heap_label || s_heap_metrics[0] || s_heap_metrics[1] || s_heap_metrics[2];
-    bool psram_bound=s_psram_label || s_psram_metrics[0] || s_psram_metrics[1];
+    bool heap_bound=s_heap_metrics[0] || s_heap_metrics[1] || s_heap_metrics[2];
+    bool psram_bound=s_psram_metrics[0] || s_psram_metrics[1];
     if(s_info_refreshing || (!s_idf_label && !heap_bound && !psram_bound && !s_uptime_label))return;
     s_info_refreshing=true;
     uint32_t epoch=s_info_epoch;
-    char heap_buf[64],psram_buf[64],uptime_buf[48];
+    char uptime_buf[48];
     char heap_values[3][16],psram_values[2][16];
     const char *idf_version=NULL;
     if(heap_bound){
@@ -169,7 +136,6 @@ void settings_system_info_refresh(void)
         if(epoch!=s_info_epoch)goto done;
         size_t largest=heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         if(epoch!=s_info_epoch)goto done;
-        format_memory_health(heap_buf,sizeof(heap_buf),current,minimum,largest);
         format_bytes(heap_values[0],sizeof(heap_values[0]),current);
         format_bytes(heap_values[1],sizeof(heap_values[1]),minimum);
         format_bytes(heap_values[2],sizeof(heap_values[2]),largest);
@@ -179,7 +145,6 @@ void settings_system_info_refresh(void)
         if(epoch!=s_info_epoch)goto done;
         size_t minimum=heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
         if(epoch!=s_info_epoch)goto done;
-        format_memory_health(psram_buf,sizeof(psram_buf),current,minimum,0);
         format_bytes(psram_values[0],sizeof(psram_values[0]),current);
         format_bytes(psram_values[1],sizeof(psram_values[1]),minimum);
     }
@@ -194,10 +159,6 @@ void settings_system_info_refresh(void)
 
     }
     if(s_idf_label)ui_value_set_text(s_idf_label,idf_version?idf_version:"--");
-    if(epoch!=s_info_epoch)goto done;
-    if(s_heap_label)ui_value_set_text(s_heap_label,heap_buf);
-    if(epoch!=s_info_epoch)goto done;
-    if(s_psram_label)ui_value_set_text(s_psram_label,psram_buf);
     if(epoch!=s_info_epoch)goto done;
     if(s_uptime_label)ui_value_set_text(s_uptime_label,uptime_buf);
     if(epoch!=s_info_epoch)goto done;
@@ -217,8 +178,6 @@ void settings_system_info_unbind(void)
 {
     ++s_info_epoch;
     s_idf_label = NULL;
-    s_heap_label = NULL;
-    s_psram_label = NULL;
     s_uptime_label = NULL;
     for(unsigned i=0;i<3;i++)s_heap_metrics[i]=NULL;
     for(unsigned i=0;i<2;i++)s_psram_metrics[i]=NULL;

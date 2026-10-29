@@ -43,10 +43,7 @@ char *ui_dashboard_thumb_canvas_file(void)
     return ui_active_print_thumb_canvas_file();
 }
 
-size_t ui_dashboard_thumb_canvas_file_size(void)
-{
-    return ui_active_print_thumb_canvas_file_size();
-}
+
 
 static lv_obj_t *dash32_banner = NULL;
 static lv_obj_t *dash32_machine = NULL;
@@ -596,10 +593,4 @@ void ui_dashboard_thumb_show_canvas_from_buffer(int w, int h, const char *file)
 void ui_dashboard_thumb_apply_canvas_from_buffer(int w, int h, const char *file)
 {
     ui_active_print_thumb_apply_canvas_from_buffer(dash32_active_print, w, h, file);
-}
-
-
-void ui_dashboard_thumb_clear_placeholder(void)
-{
-    ui_active_print_thumb_clear_placeholder(dash32_active_print);
 }

@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix="camera-pipeline-") as directory:
     executable=tmp/"camera_pipeline"
     subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
                     "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
-                    str(root/"tools/audit/active_preview_safety_test.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/p) for p in sources],
+                    str(root/"tools/audit/active_preview_safety_test.c"),str(root/"main/ui_dashboard_layout_profile.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/p) for p in sources],
                     str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
 

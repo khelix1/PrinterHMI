@@ -14,7 +14,6 @@ typedef enum {
 } thumbnail_manager_result_t;
 
 void thumbnail_manager_mark_pending(void);
-void thumbnail_manager_mark_ready(void);
 void thumbnail_manager_mark_failed(void);
 void thumbnail_manager_mark_result(bool ok);
 

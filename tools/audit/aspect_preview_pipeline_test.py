@@ -52,6 +52,6 @@ with tempfile.TemporaryDirectory(prefix="aspect-preview-pipeline-") as directory
     executable=tmp/"aspect_preview_pipeline"
     subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
                     "-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
-                    str(root/"tools/audit/aspect_preview_pipeline_test.c"),*[str(root/"main"/p) for p in sources],
+                    str(root/"tools/audit/aspect_preview_pipeline_test.c"),str(root/"main/ui_dashboard_layout_profile.c"),*[str(root/"main"/p) for p in sources],
                     str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)

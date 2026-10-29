@@ -26,7 +26,6 @@
 #include <time.h>
 
 static lv_obj_t *s_printer_file_popup = NULL;
-static lv_obj_t *s_printer_file_popup_label = NULL;
 static lv_obj_t *s_printer_file_list = NULL;
 static ui_page_state_t *s_files_state = NULL;
 
@@ -1106,7 +1105,7 @@ void ui_files_hide(void)
     lv_timer_t *timer = s_files_refresh_timer;
     s_files_refresh_timer = NULL;
     s_files_refresh_pending = false;
-    s_printer_file_popup = s_printer_file_popup_label = s_printer_file_list = NULL;
+    s_printer_file_popup = s_printer_file_list = NULL;
     s_files_state = NULL;
     s_breadcrumb_label = s_sort_label = s_search_label = s_studio_file_hint = s_up_button = NULL;
     s_search_button=s_sort_button=s_refresh_button=NULL;

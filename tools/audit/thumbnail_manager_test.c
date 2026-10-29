@@ -29,7 +29,7 @@ int main(void){
  assert(thumbnail_manager_result()==THUMBNAIL_MANAGER_RESULT_IDLE&&!thumbnail_manager_has_png());
  uint8_t *first=heap_caps_malloc(16,MALLOC_CAP_SPIRAM);thumbnail_manager_take_png(first,16);thumbnail_manager_prepare_raw_image();
  assert(thumbnail_manager_png_data()==first&&thumbnail_manager_png_size()==16&&thumbnail_manager_image_dsc()->data==first&&thumbnail_manager_image_dsc()->data_size==16);
- thumbnail_manager_mark_ready();assert(thumbnail_manager_result()==THUMBNAIL_MANAGER_RESULT_READY);
+ thumbnail_manager_mark_result(true);assert(thumbnail_manager_result()==THUMBNAIL_MANAGER_RESULT_READY);
  uint8_t *second=heap_caps_malloc(8,MALLOC_CAP_SPIRAM);thumbnail_manager_take_png(second,8);thumbnail_manager_prepare_raw_image();assert(live_bytes==8&&thumbnail_manager_image_dsc()->data==second);
  thumbnail_manager_mark_pending();assert(thumbnail_manager_result()==THUMBNAIL_MANAGER_RESULT_IDLE);
  thumbnail_manager_mark_failed();assert(thumbnail_manager_result()==THUMBNAIL_MANAGER_RESULT_FAILED);

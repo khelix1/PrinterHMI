@@ -17,12 +17,6 @@ lv_obj_t *ui_create_panel(lv_obj_t *parent);
 lv_obj_t *ui_create_card(lv_obj_t *parent);
 lv_obj_t *ui_create_label(lv_obj_t *parent, const char *text, lv_color_t color);
 lv_obj_t *ui_create_card_subtitle(lv_obj_t *parent, const char *text);
-lv_obj_t *ui_create_button(lv_obj_t *parent, const char *text, lv_color_t bg);
-lv_obj_t *ui_create_button_primary(lv_obj_t *parent, const char *text);
-lv_obj_t *ui_create_button_secondary(lv_obj_t *parent, const char *text);
-lv_obj_t *ui_create_button_success(lv_obj_t *parent, const char *text);
-lv_obj_t *ui_create_button_warning(lv_obj_t *parent, const char *text);
-lv_obj_t *ui_create_button_danger(lv_obj_t *parent, const char *text);
 
 /*
  * Shared Operator center-card language.

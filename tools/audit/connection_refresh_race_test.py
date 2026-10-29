@@ -59,7 +59,7 @@ start = state.index('static cJSON *json_status_object(')
 end = state.index('\n\nconst char *json_find_string(', start)
 code += state[start:end]
 code += r'''
-static bool s_got_ip=true,s_moonraker_ok,s_live_data_ok,s_moonraker_http_busy;
+static bool s_got_ip=true,s_moonraker_ok,s_live_data_ok;
 static int s_moonraker_code;
 static char moonraker_status[128];
 static bool running=true,fresh_probe,inject_probe;
@@ -72,6 +72,8 @@ static bool moonraker_live_websocket_running(void){return running;}
 static bool moonraker_get_live_objects(void){return true;}
 moonraker_poll_result_t moonraker_poll_run(int64_t now,bool wifi,bool busy,moonraker_poll_fetch_cb_t fn){(void)now;(void)wifi;(void)busy;(void)fn;polls++;return MOONRAKER_POLL_BUSY;}
 '''
+if 's_moonraker_http_busy' in main:
+    code += 'static bool s_moonraker_http_busy;\n'
 if 's_last_moonraker_ok_us' in main:
     code += 'static int64_t s_last_moonraker_ok_us;\n'
 code += function(main, 'moonraker_live_poll_tasklet')

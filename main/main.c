@@ -427,7 +427,6 @@ static double printer_meta_layer_height = 0.0;
 
 static bool live_heater_power = false;
 static bool s_live_data_ok = false;
-static volatile bool s_moonraker_http_busy = false;
 
 
 static EventGroupHandle_t s_wifi_event_group = NULL;
@@ -1164,7 +1163,7 @@ static void moonraker_live_poll_tasklet(void)
         moonraker_poll_run(
             esp_timer_get_time(),
             s_got_ip,
-            s_moonraker_http_busy,
+            false,
             moonraker_get_live_objects);
 
     switch (result) {
@@ -1450,7 +1449,6 @@ static void ui_network_refresh_bridge(void)
         ui_network_tools_network_scan_status);
 }
 
-void ui_files_destroy(void);
 static void dashboard_dry_status_event_cb(lv_event_t *e);
 
 static void printer_popup_send_gcode_bridge(const char *cmd)
@@ -1779,12 +1777,7 @@ static void printer_thumb_cleanup_for_popup_close(void)
     printer_thumb_view = NULL;
 }
 
-static void close_printer_file_detail_popup(void);
-void ui_files_destroy(void)
-{
-    close_printer_file_detail_popup();
 
-}
 
 
 static void ota_ui_timer_cb(lv_timer_t *timer)

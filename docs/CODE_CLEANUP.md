@@ -327,3 +327,273 @@ Remove three application globals that were always NULL (`network_selected_ssid_l
 output arguments, plus the unbound `networks_hint` context field. Actual password/
 keyboard ownership remains in Network Tools and Setup; their behavior is retained.
 No module or persisted format changes; 157 firmware sources remain. Apply over v44.
+
+## Batch 11 — v7.1.46-dev
+
+This batch starts from the pushed v45 cleanup checkpoint
+`b180ec7cf752b396985956d09b698f4ad3c14743`. Its committed tree matches the accepted
+v45 files. Future updater preflight uses this checkpoint instead of the original
+main revision; no earlier updater needs to be replayed after that commit.
+
+The shared shell lacked direct top-bar/navigation/field DELETE cleanup. Its
+clock timer also survived normal shell teardown. Direct deletion left cached
+pointers for later clock, Wi-Fi or navigation calls. Register owner/field cleanup,
+retire both old roots before normal deletion callbacks, and stop the clock timer
+when its top bar or clock label disappears. Preserve cached Wi-Fi state and the
+application's printer-switch callback across rebuilds. Calls before initialization
+or after retirement are safe; navigation can initialize its own shell context.
+A replacement created by a DELETE callback remains owned after old teardown ends.
+
+Clock, printer-name and Wi-Fi indicator setters now use widget-based comparison
+helpers. One-second clock polling stays unchanged, but identical displayed minutes
+and signal indicators do not redraw. Wall-clock formatting, unknown-time text,
+timezone handling, signal thresholds and three-dB downward hysteresis remain.
+Navigation and printer-switch callbacks verify the current control target. The
+active-printer name still reaches E-stop when the shell's title label is absent.
+E-stop dispatch/recovery behavior is otherwise unchanged.
+
+Remove the permanently-null shell ETA field, macro and two clearing assignments.
+Simplify a font conditional whose two branches both selected Montserrat 14.
+No visible font/geometry, public interface, source count (157), persisted data,
+connection policy or parked-feature changes.
+
+The real shell fixture reproduces stale top-bar handles on unchanged v45. It
+covers direct/normal/field teardown, callback-created replacements, stable timer/
+object counts, 100 unchanged refreshes without invalidation, controlled wall time,
+unknown/minute rollover, Wi-Fi hysteresis/disconnect, owned routes, fake targets,
+E-stop dispatch, partial fields and early/late calls across themes/density/text.
+Apply incrementally over committed v45; build and panel-check before integration.
+
+## Batch 12 — v7.1.47-dev
+
+This removal-focused batch deletes nine unused public functions: the standalone
+Moonraker port popup show/close pair, three backup compatibility wrappers, two
+Dashboard thumbnail forwarding helpers, the duplicate thumbnail-ready setter and
+the unused application Files destroy wrapper. Their declarations and private popup
+callbacks/state are removed too. The active printer-profile port editor remains;
+its tests reject both zero and 65536 and retain storage-failure/retry coverage.
+
+Remove the permanently-null Files popup label and the never-written HTTP-busy
+flag. The poll call receives the same false value explicitly. Active transport
+ownership, page teardown, thumbnail workers, backup schema/progress/rollback and
+Quiet connection-loss warnings keep their existing behavior. Specialized test
+hooks and generated theme dispatch remain. No module is deleted; the firmware
+source inventory remains 157. No binary-size or performance improvement is claimed.
+
+Backup tests now exercise actual progress-enabled APIs with NULL callbacks as
+well as progress callbacks, including plain/encrypted restore validation and
+rollback. Thumbnail tests use the existing result setter. Remove obsolete popup
+fixtures; retain Wi-Fi/password/backup lifecycle checks and active-profile editor
+coverage. The old connection-race negative fixture still reaches its original
+runtime assertion rather than failing to compile.
+
+Host validation: Network/backup dialogs (also ASan/UBSan), profiles, notification
+backup, thumbnail manager, aspect preview, all responsive variants, Camera,
+printer switching, connection refresh races and security boundaries pass. Source
+membership, version/public-tree and non-viewer checks accompany guarded updater
+rollback/recovery verification. Host fixtures do not validate the ESP-IDF build or
+the physical panel.
+
+Apply over effective v7.1.46-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752b396985956d09b698f4ad3c14743. The updater preserves sdkconfig and performs
+no Git mutation, build, flash or printer action. Build with
+`./tools/build_idf6_hosted3.sh`. Panel-check profile port editing, Wi-Fi/password
+popups, backup export/restore, Files thumbnails and Dashboard preview.
+
+## Batch 13 — v7.1.48-dev
+
+Remove the unused combined Internal RAM and PSRAM label bindings, their two
+cached label pointers, and the combined memory-health formatter. Production uses
+separate Free now / Lowest / Largest block metric cells; their formatting and SDK
+readings remain unchanged. IDF version and uptime bindings remain active.
+
+Retarget the host lifecycle/rebinding fixture to the metric API. Keep checks for
+nested refresh, rebinding during SDK reads, deletion of old/replacement fields,
+no reads after retirement, unchanged refresh silence and individual cell values.
+No scheduling, layout, transport, backup, persisted format or Quiet notification
+policy changes. Firmware source membership remains 157.
+
+Apply over effective v7.1.47-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`; host tests cannot validate
+the target firmware or panel. Panel-check Settings System Information values,
+page close/reopen and theme changes. No Git mutation, build or flash is performed
+by the updater.
+
+## Batch 14 — v7.1.49-dev
+
+Remove four preview helpers with no firmware callers: ui_thumbnail_fit_scale,
+ui_thumbnail_fill_object, ui_thumbnail_show_image and ui_thumbnail_clear. Remove
+their declarations. Keep the active file-pinned image entry point, placeholder
+setter and containment helper, including temporary lifetime guards during layout.
+No pixel decoder, cache, worker, lightbox ownership or scheduling change is made.
+
+Retarget wrapper-based safety checks to show_file_image with a NULL filename and
+the existing placeholder setter. Keep allocation failure, nested updates, callback
+retirement, native routing, temporary-event-hook balance and layout-interruption
+coverage for the active fit helper. Drop tests specific to the deleted scale/fill
+utilities; test containment after resizing instead. Retain decoder pixel sampling,
+aspect fit/packed dimensions, padding, crop, bounds and degenerate-image tests.
+
+Apply over effective v7.1.48-dev on chore/stale-code-cleanup-main, checkpoint
+b180ec7cf752. Source membership remains 157. Build with
+`./tools/build_idf6_hosted3.sh`; target build and panel validation are not available
+here. Panel-check Files row previews, Dashboard/Printer thumbnails, image taps and
+fullscreen fit, including page/theme changes. The updater performs no commit,
+push, build, flash or printer action.
+
+## Batch 15 — v7.1.50-dev
+
+Remove the unused boolean notification getter/setter. Active callers already use
+Quiet / Standard / Detailed through ui_toast_level and ui_toast_set_level. Host
+preference tests now use those APIs too. Retain the stored boolean migration in
+ui_toast_init and backup parsing: older preferences and backups remain readable.
+No notice filtering, warning delivery or Quiet connection-loss policy changes.
+
+Remove the unused Active Print canvas filename-size accessor and placeholder-hide
+helper. Keep the active image application, placeholder setter, buffer ownership,
+file matching and preview generation paths. These removals have no production
+callers. No modules or persisted formats change; source membership remains 157.
+
+Run notifications, notification_backup, active_preview_safety and
+aspect_preview_pipeline host suites, plus inventory, version, public-tree,
+non-viewer and guarded updater recovery checks. Existing notification fixtures
+retain persistence failures/retry, legacy migration, warning/connection policy and
+all theme/density/text-size layouts. Host tests cannot validate target firmware.
+
+Apply over effective v7.1.49-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check notification
+level selection/persistence, genuine Quiet connection-loss/recovery and Dashboard/
+Printer previews. The updater performs no Git mutation, build, flash or printer
+command.
+
+## Batch 16 — v7.1.51-dev
+
+Remove the unused ui_create_button custom-color constructor and its primary,
+secondary, success, warning and danger wrappers from ui_widgets.c/.h. No firmware
+caller uses this family. Active controls use ui_button_create and the shared
+semantic styling/touch-target paths; these remain unchanged.
+
+Remove the obsolete custom-color sample from the Console pressed-frame catalog.
+Retain every semantic button kind, status style, navigation, Studio action, theme
+preview and surface-role checks. Drop the removed API names from the button-label
+inventory scanner; continue scanning active button constructors and popup actions.
+No layout, action routing, persisted format, transport or Quiet notice policy
+changes. Firmware source membership remains 157.
+
+Validate Console layout/pressed frames, button text-fit inventory and LVGL95
+modernization suites, plus source membership, version/public-tree/non-viewer and
+guarded updater rollback/recovery checks. Host tests cannot validate the target
+firmware or physical panel.
+
+Apply over effective v7.1.50-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check Console actions
+and dialogs, button pressed states and theme changes. The updater performs no
+Git mutation, build, flash or printer action.
+
+## Batch 17 — v7.1.52-dev
+
+Remove three test-only constructors: ui_active_print_create, ui_page_state_create
+and ui_thumbnail_wrap. Production uses ui_active_print_create_profile,
+ui_page_state_create_owned and ui_thumbnail_create. Remove the old declarations,
+fixed Active Print layout preset and alternate thumbnail-box initialization.
+No active page layout or thumbnail ownership behavior changes.
+
+Active Print fixtures now use the current Dashboard layout profile with explicit
+test rectangles. Keep canvas replacement, generation, buffer bounds, nested and
+interrupted update tests. Page-state tests exercise an optional NULL owner slot
+through create_owned, preserving the lifetime check. Remove the obsolete wrapped-
+box scenario from thumbnail safety tests; standard creation, owner binding,
+replacement slots, layout interruption, native routing and allocations remain.
+
+Run aspect_preview_pipeline, active_preview_safety, page_state_safety and
+thumbnail_component_safety host suites with usual LVGL flags. Retain source,
+version/public-tree/non-viewer and updater rollback/recovery checks. Source
+membership remains 157. No persisted formats, connection policy or Quiet warnings
+change. Host checks do not validate firmware or the physical panel.
+
+Apply over effective v7.1.51-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check Dashboard and
+Printer previews, Files image taps/fullscreen, and loading/offline/empty page
+states. The updater performs no Git mutation, build, flash or printer command.
+
+## Batch 18 — v7.1.53-dev
+
+Remove five public entry points with no firmware callers: the lightbox descriptor
+show, image-object show and is-open wrappers, and the owned Wi-Fi scan show/render
+wrappers. Keep the underlying lightbox snapshot/image-object implementation and
+file-pinned asynchronous fullscreen entry point. Keep the Wi-Fi scan rendering,
+password workflow, owned close and status APIs. Fix the Network Tools header's
+stale port-dialog ownership comment.
+
+Retarget tests that include the real implementation to the underlying functions
+and current popup state. Keep assertions for immutable snapshots, source aliasing,
+worker queue/retry/stale publication, native close taps, allocation failure and
+buffer cleanup. Retain Wi-Fi row selection, status-field deletion/reopen, keyboard
+and popup ownership, inline validation, backups and replacement callbacks. No
+user-facing route, cache algorithm, persisted format, scheduling or Quiet warning
+policy changes. Firmware source membership remains 157.
+
+Run the full preview_cache_ownership suite (with cJSON and LVGL host paths) and
+network_backup_dialog suite. Retain source, version/public-tree/non-viewer and
+updater rollback/recovery checks. Host checks do not validate the ESP-IDF build
+or physical panel.
+
+Apply over effective v7.1.52-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check Files and
+Dashboard/Printer image taps, fullscreen close/reopen and Wi-Fi scan/password
+flows. The updater performs no Git mutation, build, flash or printer command.
+
+## Batch 19 — v7.1.54-dev
+
+Remove the unused thumbnail_render_to_rgb565 center-crop entry point and its
+sampling branch. Remove the shared renderer's fill flag: all active callers use
+either tightly packed aspect-preserving previews or complete-image letterbox fit.
+Keep those algorithms, decoded pixel-format conversion, no-cache decoder lifetime,
+stride handling and descriptor ownership unchanged.
+
+Remove crop-only pixel assertions. Retain full-image exact sampling/padding,
+packed width/height, untouched buffer tails, guard pixels, degenerate sources,
+NULL rejection and containment/resizing coverage. The preview_fill test filename
+stays stable for existing commands, with its description updated to active modes.
+No user-facing crop option is removed: firmware had no caller of this path.
+
+Run preview_fill, aspect_preview_pipeline and full preview_cache_ownership host
+suites, plus source/version/public-tree/non-viewer and updater recovery checks.
+Firmware source membership remains 157. No cache format, worker scheduling,
+persisted setting, transport behavior or Quiet warning policy changes. No target
+binary-size or performance claim is made.
+
+Apply over effective v7.1.53-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`; host tests cannot validate
+target firmware or the panel. Panel-check wide/portrait previews in Files,
+Dashboard/Printer and fullscreen, including close/reopen. The updater performs no
+Git mutation, build, flash or printer command.
+
+## Batch 20 — v7.1.55-dev
+
+Remove ui_printer_popups_show_printer_status, an unreachable status-summary
+formatter with no firmware caller, and its public declaration. Retain the shared
+ui_dashboard_status_popup_show/close implementation used by active workflows,
+including error/status messages and Drybox live status.
+
+Retarget the sensor/status fixture's long-file presentation case to the shared
+popup with fixture-supplied text. Keep full 255-character filename visibility,
+wrapping, scroll/footer bounds, native close and external deletion/reopen checks.
+Keep filament sensor toggles, acknowledgement/timeout, reorder/removal, stale
+profile and unsafe-name tests. Active Printer controls and status routes do not
+change. No scheduling, schema, cache or Quiet warning policy changes.
+
+Run sensor_status_layout, hotend_layout and motion_layout host suites, plus source,
+version/public-tree/non-viewer and guarded updater recovery checks. Firmware source
+membership remains 157. Host tests cannot validate the ESP-IDF build or panel.
+
+Apply over effective v7.1.54-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check filament
+sensors, active Printer controls and shared status dialogs. No commit, push,
+build, flash or printer command is performed by the updater.
+
+Checkpoint recommendation: the straightforward unused-interface removal pass is
+ready for integration review after panel validation. Remaining low-reference
+interfaces include intentional test/reset hooks, generated theme dispatch and
+legacy/request ownership code that needs separate design review. Reference counts
+alone are not sufficient evidence to remove them.

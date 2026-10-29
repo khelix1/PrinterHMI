@@ -142,13 +142,13 @@ static void run(void){
  uint16_t *source=malloc(286*215*2);for(int i=0;i<286*215;i++)source[i]=0x1234;
  lv_image_dsc_t image={.header={.magic=LV_IMAGE_HEADER_MAGIC,.cf=LV_COLOR_FORMAT_RGB565,.w=286,.h=215,.stride=572},.data_size=286*215*2,.data=(uint8_t*)source};
  for(int i=0;i<12;i++){
-  ui_preview_lightbox_show(&image);assert(s_preview_lightbox && s_preview_image && s_fallback_pixels);
+  preview_lightbox_show_image(&image);assert(s_preview_lightbox && s_preview_image && s_fallback_pixels);
   const lv_image_dsc_t *snapshot=lv_image_get_src(s_preview_image);assert(snapshot!=&image && snapshot->data!=(uint8_t*)source);assert(((const uint16_t*)snapshot->data)[0]==0x1234);
   source[0]=0xabcd;assert(((const uint16_t*)snapshot->data)[0]==0x1234);source[0]=0x1234;
   assert(owned_bytes==286*215*2);ui_preview_lightbox_close();assert(!s_fallback_pixels && !s_fullscreen_pixels && !owned_bytes);
  }
- fail_psram=true;ui_preview_lightbox_show(&image);assert(s_preview_lightbox && !s_fallback_pixels);assert(!lv_image_get_src(s_preview_image));ui_preview_lightbox_close();fail_psram=false;free(source);
- uint16_t *large=calloc(900*520,2);image.header.w=900;image.header.h=520;image.header.stride=1800;image.data_size=900*520*2;image.data=(uint8_t*)large;ui_preview_lightbox_show(&image);assert(owned_bytes<=286*215*2);free(large);assert(s_fallback_image.data);ui_preview_lightbox_close();assert(!owned_bytes);
+ fail_psram=true;preview_lightbox_show_image(&image);assert(s_preview_lightbox && !s_fallback_pixels);assert(!lv_image_get_src(s_preview_image));ui_preview_lightbox_close();fail_psram=false;free(source);
+ uint16_t *large=calloc(900*520,2);image.header.w=900;image.header.h=520;image.header.stride=1800;image.data_size=900*520*2;image.data=(uint8_t*)large;preview_lightbox_show_image(&image);assert(owned_bytes<=286*215*2);free(large);assert(s_fallback_image.data);ui_preview_lightbox_close();assert(!owned_bytes);
  puts("PASS: fullscreen owned fallback, immutable snapshot, bounded large-source fit, allocation failure and repeated close cleanup");
 }
 #endif

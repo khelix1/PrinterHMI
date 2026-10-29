@@ -43,12 +43,6 @@ static void page_state_delete_cb(lv_event_t *event)
     if(!state->active_calls)lv_free(state);
 }
 
-ui_page_state_t *ui_page_state_create(
-    lv_obj_t *parent, int x, int y, int width, int height)
-{
-    return ui_page_state_create_owned(parent,x,y,width,height,NULL);
-}
-
 ui_page_state_t *ui_page_state_create_owned(
     lv_obj_t *parent, int x, int y, int width, int height, ui_page_state_t **owner_slot)
 {

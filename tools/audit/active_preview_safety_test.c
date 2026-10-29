@@ -27,7 +27,7 @@ bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(v
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t*b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t*a){(void)a;return false;}
-static void create(void){panel=ui_active_print_create(lv_screen_active(),0,0,650,350);assert(panel);}
+static void create(void){panel=ui_active_print_create_profile(lv_screen_active(),&(ui_dashboard_rect_t){0,0,650,350},&ui_dashboard_layout_profile_for_theme(ui_theme_get_active())->active_content);assert(panel);}
 static void destroy(void){lv_obj_delete(panel);panel=NULL;}
 static void replace(void){destroy();create();}
 static void nested(void){ui_active_print_set(panel,"nested","00:01","REM 00:01");ui_active_print_thumb_apply_canvas_from_buffer(panel,4,2,"nested.gcode");}

@@ -38,7 +38,7 @@ def size(x):return bool(re.fullmatch(r'[0-9\s,+*/()-]+|ui_theme_density_metric\(
 cases=[]; inventory=[]
 for p in sorted((root/'main').glob('*.c')):
  s=re.sub(r'/\*[\s\S]*?\*/|//[^\n]*',lambda m: ''.join('\n' if c=='\n' else ' ' for c in m.group()),p.read_text())
- for name in ('studio_action','ui_button_create','ui_button_create_icon','ui_popup_add_action_at','ui_create_button','ui_create_button_primary','ui_create_button_secondary','ui_create_button_success','ui_create_button_warning','ui_create_button_danger','lv_button_create','ui_button_create_empty','ui_popup_add_footer_action','ui_popup_add_action_aligned','ui_popup_add_selectable_row','ui_create_operator_nav_button'):
+ for name in ('studio_action','ui_button_create','ui_button_create_icon','ui_popup_add_action_at','lv_button_create','ui_button_create_empty','ui_popup_add_footer_action','ui_popup_add_action_aligned','ui_popup_add_selectable_row','ui_create_operator_nav_button'):
   for start,end,a in calls(s,name):
    if s[end:].lstrip().startswith('{'):continue
    line=s.count('\n',0,start)+1; entry={'file':p.name,'line':line,'api':name,'args':a};inventory.append(entry)

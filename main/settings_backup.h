@@ -8,9 +8,6 @@
 #define SETTINGS_BACKUP_ENCRYPTED_PATH \
     "/sdcard/PrinterHMI/config_backup.phmb"
 
-bool settings_backup_export(
-    char *status,
-    size_t status_size);
 
 typedef enum {
     SETTINGS_BACKUP_ENCRYPTED_PREPARING = 0,
@@ -27,9 +24,6 @@ bool settings_backup_preflight(
     char *status,
     size_t status_size);
 
-bool settings_backup_restore(
-    char *status,
-    size_t status_size);
 
 /* Portable passphrase-encrypted backup. Includes configured API keys. */
 bool settings_backup_export_encrypted_with_progress(
@@ -44,10 +38,6 @@ bool settings_backup_encrypted_preflight(
     char *status,
     size_t status_size);
 
-bool settings_backup_restore_encrypted(
-    const char *passphrase,
-    char *status,
-    size_t status_size);
 
 /* Removes only backup artifacts from the SD card, never live settings. */
 bool settings_backup_remove_all(
@@ -55,7 +45,7 @@ bool settings_backup_remove_all(
     size_t status_size);
 
 /* Synchronous stage callbacks run on the caller's thread, before costly work.
- * They report stages, not byte percentages; existing APIs remain available. */
+ * They report stages, not byte percentages; NULL callbacks omit progress. */
 typedef enum {
     SETTINGS_BACKUP_STAGE_PREPARING,
     SETTINGS_BACKUP_STAGE_READING,

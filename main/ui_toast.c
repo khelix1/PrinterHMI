@@ -92,7 +92,6 @@ void ui_toast_init(void)
     }
 }
 ui_notification_level_t ui_toast_level(void){return s_level;}
-bool ui_toast_confirmations_enabled(void){return s_level==UI_NOTIFY_DETAILED;}
 const char *ui_toast_preference_label(void){return (const char *[]){"Quiet","Standard","Detailed"}[s_level];}
 bool ui_toast_set_level(ui_notification_level_t level)
 {
@@ -116,10 +115,6 @@ bool ui_toast_set_level(ui_notification_level_t level)
         render_notice();
     } else if(level!=UI_NOTIFY_DETAILED && !s_notice_count)close_surface();
     return true;
-}
-bool ui_toast_set_confirmations(bool enabled)
-{
-    return ui_toast_set_level(enabled ? UI_NOTIFY_DETAILED : UI_NOTIFY_QUIET);
 }
 static lv_obj_t *column(lv_obj_t *parent)
 {

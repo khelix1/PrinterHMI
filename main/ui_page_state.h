@@ -11,8 +11,6 @@ typedef enum {
 
 typedef struct ui_page_state ui_page_state_t;
 
-ui_page_state_t *ui_page_state_create(
-    lv_obj_t *parent, int x, int y, int width, int height);
 /* owner_slot storage must outlive the panel. Deletion clears it only while it
  * still refers to this panel, preserving a replacement bound to the same slot. */
 ui_page_state_t *ui_page_state_create_owned(

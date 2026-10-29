@@ -84,18 +84,6 @@ void ui_network_tools_wifi_password_set_status(const char *status)
 static void wifi_row_deleted(lv_event_t *event){if(lv_event_get_target_obj(event)==s_wifi_selected_btn)s_wifi_selected_btn=NULL;free(lv_event_get_user_data(event));}
 
 
-void ui_network_tools_wifi_scan_show_owned(
-    const char *status_text,
-    lv_event_cb_t close_cb)
-{
-    ui_network_tools_show_wifi_scan_popup(
-        &s_wifi_scan_popup,
-        &s_wifi_scan_status_label,
-        &s_wifi_scan_list,
-        status_text,
-        close_cb);
-}
-
 void ui_network_tools_wifi_scan_close_owned(void)
 {
     ui_network_tools_close_wifi_scan_popup(
@@ -166,29 +154,6 @@ void ui_network_tools_wifi_scan_set_status(
             s_wifi_scan_status_label,
             status_text ? status_text : ui_text(""));
     }
-}
-
-void ui_network_tools_wifi_scan_render_owned(
-    char *status_buf,
-    size_t status_buf_size,
-    const wifi_ap_record_t *aps,
-    uint16_t count,
-    unsigned total_count,
-    lv_event_cb_t close_cb,
-    lv_event_cb_t selected_cb)
-{
-    network_wifi_scan_render_results(
-        &s_wifi_scan_popup,
-        &s_wifi_scan_status_label,
-        &s_wifi_scan_list,
-        &s_wifi_selected_btn,
-        status_buf,
-        status_buf_size,
-        aps,
-        count,
-        total_count,
-        close_cb,
-        selected_cb);
 }
 
 void ui_network_tools_wifi_popup_destroy_all(void)
@@ -374,89 +339,6 @@ void ui_network_tools_populate_wifi_scan_buttons(lv_obj_t *list,
         const char *ssid = aps[i].ssid[0] ? (char *)aps[i].ssid : "(hidden)";
         ui_network_tools_add_wifi_ssid_button(parent, ssid, aps[i].rssi, selected_cb);
     }
-}
-
-/* Moonraker port edit popup */
-static lv_obj_t *s_moon_port_popup = NULL;
-static lv_obj_t *s_moon_port_ta = NULL;
-static ui_network_port_save_cb_t s_save_cb = NULL;
-static lv_obj_t *s_port_status, *s_port_keyboard;
-static bool s_port_dispatching;
-static uint32_t s_port_epoch;
-static const char s_port_guidance[]="Use the Moonraker port configured on this printer.";
-
-static void port_value_changed(lv_event_t *event)
-{
-    if(!event||s_port_dispatching||!s_moon_port_popup||!s_moon_port_ta||!s_port_status||
-       lv_event_get_code(event)!=LV_EVENT_VALUE_CHANGED||
-       lv_event_get_target_obj(event)!=s_moon_port_ta||
-       lv_event_get_current_target_obj(event)!=s_moon_port_ta)return;
-    ui_value_set_text(s_port_status,s_port_guidance);
-}
-
-static void port_field_deleted(lv_event_t *event)
-{
-    lv_obj_t *target=lv_event_get_target_obj(event);
-    if(target==s_moon_port_ta){s_moon_port_ta=NULL;if(s_port_keyboard)lv_keyboard_set_textarea(s_port_keyboard,NULL);}
-    else if(target==s_port_keyboard)s_port_keyboard=NULL;
-    else if(target==s_port_status)s_port_status=NULL;
-}
-static void port_deleted(lv_event_t *event)
-{
-    if(lv_event_get_target_obj(event)!=s_moon_port_popup)return;
-    ++s_port_epoch;s_moon_port_popup=NULL;s_moon_port_ta=NULL;s_save_cb=NULL;s_port_status=NULL;s_port_keyboard=NULL;
-}
-
-void ui_network_port_popup_close(void)
-{
-    lv_obj_t *popup=s_moon_port_popup;
-    ++s_port_epoch;
-    s_moon_port_popup=s_moon_port_ta=s_port_status=s_port_keyboard=NULL;s_save_cb=NULL;
-    if(popup)lv_obj_delete(popup);
-}
-
-static void close_cb(lv_event_t *e)
-{
-    (void)e;
-    ui_network_port_popup_close();
-}
-
-static void save_cb(lv_event_t *e)
-{
-    (void)e;if(!s_moon_port_popup||!s_moon_port_ta||s_port_dispatching)return;
-    const char *text=lv_textarea_get_text(s_moon_port_ta);char *end=NULL;
-    long port=strtol(text?text:"",&end,10);
-    if(!text||!text[0]||!end||*end||port<1||port>65535) {
-        ui_value_set_text(s_port_status,"Enter a port from 1 to 65535.");return;
-    }
-    ui_network_port_save_cb_t saved=s_save_cb;
-    uint32_t epoch=s_port_epoch;
-    s_port_dispatching=true;
-    ui_network_port_popup_close();if(s_port_epoch==epoch+1 && saved)saved((int)port);
-    s_port_dispatching=false;
-}
-
-void ui_network_port_popup_show(int current_port,ui_network_port_save_cb_t saved)
-{
-    if(s_moon_port_popup){lv_obj_move_foreground(s_moon_port_popup);return;}
-    s_moon_port_popup=ui_form_dialog("Moonraker port",680,540,UI_POPUP_STANDARD);
-    if(!s_moon_port_popup)return;
-    ui_form_divide_title(s_moon_port_popup);
-    lv_obj_set_style_pad_row(s_moon_port_popup,8,0);
-    ++s_port_epoch;s_save_cb=saved;lv_obj_add_event_cb(s_moon_port_popup,port_deleted,LV_EVENT_DELETE,NULL);
-    lv_obj_t *body=ui_form_body(s_moon_port_popup);char value[16];snprintf(value,sizeof(value),"%d",current_port);
-    s_moon_port_ta=ui_form_input(body,"Port 1 to 65535",value,false,5);
-    lv_textarea_set_accepted_chars(s_moon_port_ta,"0123456789");
-    s_port_status=ui_form_text(body,s_port_guidance,UI_FONT_CAPTION,UI_TEXT_DIM);
-    lv_obj_t *keyboard=ui_form_keyboard(s_moon_port_popup,s_moon_port_ta,LV_KEYBOARD_MODE_NUMBER);
-    s_port_keyboard=keyboard;
-    lv_obj_t *fields[]={s_moon_port_ta,s_port_status,s_port_keyboard};
-    for(size_t i=0;i<3;i++)lv_obj_add_event_cb(fields[i],port_field_deleted,LV_EVENT_DELETE,NULL);
-    lv_obj_add_event_cb(s_moon_port_ta,port_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
-    ui_popup_keyboard_actions(keyboard,save_cb,close_cb);
-    ui_form_action(s_moon_port_popup,UI_BUTTON_CANCEL,"Cancel",close_cb,NULL);
-    ui_form_action(s_moon_port_popup,UI_BUTTON_PRIMARY,"Save",save_cb,NULL);ui_form_finish(s_moon_port_popup);
-    lv_obj_scroll_to_view(s_moon_port_ta,LV_ANIM_OFF);
 }
 
 /* Moonraker test result popup */

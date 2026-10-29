@@ -100,62 +100,6 @@ lv_obj_t *ui_create_card_subtitle(lv_obj_t *parent, const char *text)
     return lbl;
 }
 
-lv_obj_t *ui_create_button(
-    lv_obj_t *parent,
-    const char *text,
-    lv_color_t bg)
-{
-    lv_obj_t *btn = lv_button_create(parent);
-
-    ui_button_expand_touch_target(btn);
-
-    ui_apply_button_style(btn);
-
-    lv_obj_set_style_bg_color(btn, bg, 0);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(btn, UI_BORDER_SOFT, 0);
-    lv_obj_set_style_border_width(btn, UI_BORDER_THIN, 0);
-    lv_obj_set_style_radius(btn, UI_RADIUS_ACTION, 0);
-    lv_obj_set_style_shadow_width(btn, 0, 0);
-
-    lv_obj_set_style_bg_color(
-        btn,
-        UI_CONTROL,
-        LV_STATE_PRESSED);
-
-    lv_obj_set_style_pad_hor(btn, 6, 0);
-    lv_obj_set_style_pad_ver(btn, 3, 0);
-    ui_button_create_label(btn, text);
-
-    return btn;
-}
-
-lv_obj_t *ui_create_button_primary(lv_obj_t *parent, const char *text)
-{
-    return ui_create_button(parent, text, UI_ACCENT_2);
-}
-
-lv_obj_t *ui_create_button_secondary(lv_obj_t *parent, const char *text)
-{
-    return ui_create_button(parent, text, UI_NAV);
-}
-
-lv_obj_t *ui_create_button_success(lv_obj_t *parent, const char *text)
-{
-    return ui_create_button(parent, text, UI_OK);
-}
-
-lv_obj_t *ui_create_button_warning(lv_obj_t *parent, const char *text)
-{
-    return ui_create_button(parent, text, UI_WARN_DARK);
-}
-
-lv_obj_t *ui_create_button_danger(lv_obj_t *parent, const char *text)
-{
-    return ui_create_button(parent, text, UI_DANGER_DARK);
-}
-
-
 /*
  * Shared Operator center-card shell.
  *

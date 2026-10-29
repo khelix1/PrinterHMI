@@ -6,6 +6,7 @@
 #include "ui_font_fallback.h"
 #include "ui_studio_icons.h"
 #include "ui_text_fit.h"
+#include "ui_value_update.h"
 #include "ui_global_estop.h"
 
 #include "esp_log.h"
@@ -28,7 +29,6 @@ typedef struct {
     bool wifi_signal_connected;
     int wifi_signal_rssi;
     int wifi_signal_bars;
-    lv_obj_t *eta_label;
     lv_obj_t *nav_rail;
     lv_obj_t *nav_buttons[UI_SHELL_PAGE_COUNT];
     lv_timer_t *clock_timer;
@@ -47,11 +47,53 @@ static ui_shell_state_t *s_shell = NULL;
 #define s_printer_switch_callback (s_shell->printer_switch_callback)
 #define shell_clock_label         (s_shell->clock_label)
 #define shell_topbar_wifi_bars    (s_shell->wifi_bars)
-#define shell_topbar_eta_label    (s_shell->eta_label)
 #define shell_nav_rail            (s_shell->nav_rail)
 #define shell_nav_buttons         (s_shell->nav_buttons)
 #define s_clock_timer             (s_shell->clock_timer)
 
+
+static void shell_retire_topbar(void)
+{
+    lv_timer_t *timer=s_clock_timer;
+    s_clock_timer=NULL;
+    shell_top_bar=s_shell_printer_button=s_shell_title_label=shell_clock_label=NULL;
+    memset(shell_topbar_wifi_bars,0,sizeof(shell_topbar_wifi_bars));
+    if(timer)lv_timer_delete(timer);
+}
+
+static void shell_retire_nav(void)
+{
+    shell_nav_rail=NULL;
+    memset(shell_nav_buttons,0,sizeof(shell_nav_buttons));
+}
+
+static void shell_root_deleted(lv_event_t *event)
+{
+    if(!s_shell)return;
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==shell_top_bar)shell_retire_topbar();
+    else if(target==shell_nav_rail)shell_retire_nav();
+}
+
+static void shell_field_deleted(lv_event_t *event)
+{
+    if(!s_shell)return;
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_shell_printer_button)s_shell_printer_button=NULL;
+    if(target==s_shell_title_label)s_shell_title_label=NULL;
+    if(target==shell_clock_label){
+        shell_clock_label=NULL;
+        lv_timer_t *timer=s_clock_timer;s_clock_timer=NULL;
+        if(timer)lv_timer_delete(timer);
+    }
+    for(unsigned i=0;i<4;i++)if(target==shell_topbar_wifi_bars[i])shell_topbar_wifi_bars[i]=NULL;
+    for(unsigned i=0;i<UI_SHELL_PAGE_COUNT;i++)if(target==shell_nav_buttons[i])shell_nav_buttons[i]=NULL;
+}
+
+static void shell_watch(lv_obj_t *object)
+{
+    if(object)lv_obj_add_event_cb(object,shell_field_deleted,LV_EVENT_DELETE,NULL);
+}
 
 static bool shell_state_init(void)
 {
@@ -88,7 +130,8 @@ static bool shell_state_init(void)
 
 static void shell_printer_switch_event_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if (!s_shell || !event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        lv_event_get_target_obj(event) != s_shell_printer_button) return;
 
     if (s_printer_switch_callback) {
         s_printer_switch_callback();
@@ -98,9 +141,7 @@ static void shell_printer_switch_event_cb(lv_event_t *event)
 
 static void shell_clock_timer_cb(lv_timer_t *timer)
 {
-    (void)timer;
-
-    if (!shell_clock_label) return;
+    if (!s_shell || !shell_clock_label || (timer && timer!=s_clock_timer)) return;
 
     time_t now = 0;
     struct tm timeinfo = {0};
@@ -119,7 +160,7 @@ static void shell_clock_timer_cb(lv_timer_t *timer)
         }
     }
 
-    lv_label_set_text(shell_clock_label, buf);
+    ui_value_set_text(shell_clock_label, buf);
 }
 
 void ui_shell_refresh_clock(void)
@@ -141,6 +182,7 @@ void ui_shell_create(void)
     lv_obj_t *scr = lv_screen_active();
 
     shell_top_bar = lv_obj_create(scr);
+    lv_obj_add_event_cb(shell_top_bar,shell_root_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_size(shell_top_bar, 1024, 72);
     lv_obj_set_pos(shell_top_bar, 0, 0);
     ui_apply_surface_role(shell_top_bar, UI_SURFACE_SHELL_TOPBAR);
@@ -222,7 +264,6 @@ void ui_shell_create(void)
             lv_obj_set_pos(shell_topbar_wifi_bars[i],670+i*8,42-i*4);
         }
     }
-    shell_topbar_eta_label = NULL;
 
     if (!s_clock_timer) {
         s_clock_timer = lv_timer_create(
@@ -231,40 +272,24 @@ void ui_shell_create(void)
             NULL);
     }
 
+    shell_watch(s_shell_printer_button);shell_watch(s_shell_title_label);shell_watch(shell_clock_label);
+    for(unsigned i=0;i<4;i++)shell_watch(shell_topbar_wifi_bars[i]);
     shell_clock_timer_cb(NULL);
 }
 
 void ui_shell_destroy(void)
 {
-    if (shell_top_bar) {
-        lv_obj_delete(shell_top_bar);
-    }
-
-    if (shell_nav_rail) {
-        lv_obj_delete(shell_nav_rail);
-    }
-
-    shell_top_bar = NULL;
-    s_shell_printer_button = NULL;
-    s_shell_title_label = NULL;
-    shell_clock_label = NULL;
-    shell_topbar_eta_label = NULL;
-    shell_nav_rail = NULL;
-
-    for (int index = 0;
-         index < UI_SHELL_PAGE_COUNT;
-         ++index) {
-        shell_nav_buttons[index] = NULL;
-    }
-
-    for (int index = 0; index < 4; ++index) {
-        shell_topbar_wifi_bars[index] = NULL;
-    }
-
+    if(!s_shell)return;
+    lv_obj_t *topbar=shell_top_bar,*nav=shell_nav_rail;
+    /* Retire both old owners before DELETE callbacks can open replacements. */
+    shell_retire_topbar();shell_retire_nav();
+    if(topbar)lv_obj_delete(topbar);
+    if(nav)lv_obj_delete(nav);
 }
 
 void ui_shell_raise_topbar(void)
 {
+    if (!s_shell) return;
     if (shell_top_bar) {
         lv_obj_move_foreground(shell_top_bar);
     }
@@ -274,6 +299,7 @@ void ui_shell_raise_topbar(void)
 
 void ui_shell_set_active_nav(int idx)
 {
+    if (!s_shell) return;
     for (int i = 0; i < UI_SHELL_PAGE_COUNT; i++) {
         if (!shell_nav_buttons[i]) {
             continue;
@@ -322,15 +348,13 @@ void ui_shell_update_status_icons(void)
             else color = UI_DANGER_BRIGHT;
         }
 
-        lv_obj_set_style_bg_color(
+        ui_value_set_bg_color(
             shell_topbar_wifi_bars[i],
             color,
             0);
 
-        lv_obj_set_style_opa(
-            shell_topbar_wifi_bars[i],
-            i < bars ? LV_OPA_COVER : LV_OPA_20,
-            0);
+        ui_value_set_style_num(shell_topbar_wifi_bars[i],LV_STYLE_OPA,
+            i < bars ? LV_OPA_COVER : LV_OPA_20,0);
     }
 
     if (s_shell->wifi_signal_bars != bars) {
@@ -358,9 +382,11 @@ void ui_shell_set_wifi_signal(bool connected, int rssi)
 
 static void shell_nav_btn_event_cb(lv_event_t *e)
 {
+    if(!s_shell || !e || lv_event_get_code(e)!=LV_EVENT_CLICKED)return;
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
 
-    if (idx < UI_SHELL_PAGE_DASHBOARD || idx >= UI_SHELL_PAGE_COUNT) {
+    if (idx < UI_SHELL_PAGE_DASHBOARD || idx >= UI_SHELL_PAGE_COUNT ||
+        !shell_nav_buttons[idx] || lv_event_get_target_obj(e)!=shell_nav_buttons[idx]) {
         return;
     }
 
@@ -370,6 +396,7 @@ static void shell_nav_btn_event_cb(lv_event_t *e)
 
 void ui_shell_create_nav(void)
 {
+    if(!shell_state_init())return;
     if (shell_nav_rail) {
         ui_shell_raise_nav();
         return;
@@ -378,6 +405,7 @@ void ui_shell_create_nav(void)
     lv_obj_t *scr = lv_screen_active();
 
     shell_nav_rail = lv_obj_create(scr);
+    lv_obj_add_event_cb(shell_nav_rail,shell_root_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_size(shell_nav_rail, 170, 528);
     lv_obj_set_pos(shell_nav_rail, 0, 72);
     ui_apply_surface_role(shell_nav_rail, UI_SURFACE_SHELL_NAV);
@@ -447,8 +475,8 @@ void ui_shell_create_nav(void)
             continue;
         }
 
-        shell_nav_buttons[nav[i].page] =
-            button;
+        shell_nav_buttons[nav[i].page] = button;
+        shell_watch(button);
 
         /*
          * Center against the rail's actual content area rather than
@@ -466,8 +494,7 @@ void ui_shell_create_nav(void)
             lv_obj_align(icon,LV_ALIGN_TOP_MID,0,2);
             lv_obj_set_width(label,110);
             lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
-            ui_text_fit_single_line(label,ui_theme_get_accessibility().large_text ?
-                &lv_font_montserrat_14 : &lv_font_montserrat_14);
+            ui_text_fit_single_line(label,&lv_font_montserrat_14);
             lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,-2);
         } else lv_obj_align(button,LV_ALIGN_TOP_LEFT,8,8+i*58);
 
@@ -483,6 +510,7 @@ void ui_shell_create_nav(void)
 
 void ui_shell_raise_nav(void)
 {
+    if (!s_shell) return;
     if (shell_nav_rail) {
         lv_obj_move_foreground(shell_nav_rail);
     }
@@ -492,6 +520,8 @@ void ui_shell_raise_nav(void)
 
 void ui_shell_set_active_printer_name(const char *printer_name)
 {
+    if (!s_shell) return;
+    ui_global_estop_set_printer_name(printer_name);
     if (!s_shell_title_label) return;
 
     char title[96];
@@ -513,9 +543,8 @@ void ui_shell_set_active_printer_name(const char *printer_name)
 
     if (ui_theme_is_studio()) lv_snprintf(title,sizeof(title),"%s %s",
         printer_name && printer_name[0] ? printer_name : "Select printer", LV_SYMBOL_DOWN);
-    lv_label_set_text(s_shell_title_label, title);
+    ui_value_set_text(s_shell_title_label, title);
     if (ui_theme_is_studio()) ui_text_fit_single_line(s_shell_title_label,UI_FONT_BODY_LARGE);
-    ui_global_estop_set_printer_name(printer_name);
 }
 
 
@@ -523,5 +552,6 @@ void ui_shell_set_active_printer_name(const char *printer_name)
 void ui_shell_set_printer_switch_callback(
     ui_shell_printer_switch_cb_t callback)
 {
+    if(!shell_state_init())return;
     s_printer_switch_callback = callback;
 }

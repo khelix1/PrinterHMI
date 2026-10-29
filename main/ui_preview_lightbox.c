@@ -83,11 +83,6 @@ static void preview_lightbox_close_cb(lv_event_t *event)
         !lv_obj_has_state(target, LV_STATE_DISABLED)) ui_preview_lightbox_close();
 }
 
-bool ui_preview_lightbox_is_open(void)
-{
-    return s_preview_lightbox != NULL;
-}
-
 void ui_preview_lightbox_close(void)
 {
     if (!s_preview_lightbox || s_preview_retiring) {
@@ -219,22 +214,12 @@ static bool preview_lightbox_show_image(const lv_image_dsc_t *image)
     return true;
 }
 
-void ui_preview_lightbox_show(const lv_image_dsc_t *image)
-{
-    (void)preview_lightbox_show_image(image);
-}
-
 static bool preview_lightbox_show_image_object(lv_obj_t *image_object)
 {
     if (!image_object || !lv_obj_has_class(image_object, &lv_image_class)) return false;
     const void *source = lv_image_get_src(image_object);
     if (!source || lv_image_src_get_type(source) != LV_IMAGE_SRC_VARIABLE) return false;
     return preview_lightbox_show_image(source);
-}
-
-void ui_preview_lightbox_show_object(lv_obj_t *image_object)
-{
-    (void)preview_lightbox_show_image_object(image_object);
 }
 
 static bool fullscreen_job_is_current(const fullscreen_job_t *job)

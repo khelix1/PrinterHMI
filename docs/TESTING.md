@@ -2804,3 +2804,233 @@ checks do not substitute for the ESP-IDF build or panel validation.
 Panel: Network open/close/reopen, connected/offline values, port/host updates,
 repeated scans and selecting a network/password workflow; Settings and Setup
 network dialogs; printer switches and genuine Quiet loss/recovery warnings.
+
+### v7.1.46-dev Shared shell lifecycle
+
+Run `shell_lifecycle_test.py` with the usual host LVGL flags. It uses the real
+shell and E-stop owners with controlled wall time and transport fixtures. Check
+external/normal top-bar/navigation deletion, independently retired clock/name/
+signal/navigation fields, replacement roots created by DELETE callbacks, timer/
+object balance, early/late calls and navigation-first creation. The first lifecycle
+assertion fails on unchanged v45.
+
+Verify zero invalidations over 100 identical clock/Wi-Fi refreshes; a minute change
+and unknown clock must update, while an unrelated timer is ignored. Check signal
+hysteresis/disconnect, all eight routes, current printer-switch button ownership,
+fake event targets and actual E-stop command dispatch. Existing Studio/Operator
+Dashboard, recovery, Settings display, notification, telemetry, responsive, Setup
+and connection-race suites remain required, along with inventory/version/public-
+tree/boundary checks and guarded updater rollback/recovery.
+
+Panel: top bar across page/theme changes, clock/timezone and Wi-Fi bars, active
+printer title/chooser, all navigation routes and Settings dialog close/reopen.
+Retain the existing safe E-stop verification workflow; do not interrupt a print
+merely to test it. The updater requires checkpoint b180ec7cf752 and applies v46
+without committing, pushing, building or flashing. Host checks are not panel or
+ESP-IDF build validation.
+
+### v7.1.47-dev Unused entry point removal
+
+Run network_backup_dialog, profiles_layout, notification_backup,
+thumbnail_manager, aspect_preview_pipeline, responsive_layout, camera_pipeline,
+printer_switch_refresh, connection_refresh_race and security_boundaries checks.
+Supply the usual LVGL flags where required. Repeat Network/backup under ASan/UBSan.
+Backup fixtures use actual progress APIs with NULL and non-NULL callbacks; retain
+validation, authentication, rollback and temporary-file promotion assertions.
+The profile editor rejects port zero and 65536 and retains save retry/cancel.
+Thumbnail readiness is tested through mark_result(true). The old-v36 race fixture
+must still fail its original runtime assertion. Retain inventory, version,
+public-tree/non-viewer and updater preflight/rollback/recovery checks.
+
+Build with `./tools/build_idf6_hosted3.sh` and panel-check active-profile port
+editing, Wi-Fi/password dialogs, backup export/restore and Files/Dashboard previews.
+These hardware checks cannot be performed in the host environment.
+
+### v7.1.48-dev Memory label retirement
+
+Run telemetry_modern_layout_test.py with the usual host LVGL source/archive flags.
+Its memory lifecycle fixture now binds metric cells directly rather than obsolete
+combined labels. Retain SDK-read counts, nested refresh, callback rebinding,
+old-field deletion, individual metric values, zero values, redraw silence and
+unbind/deletion checks across the full theme/density/text-size/viewport matrix.
+Run source membership, version/public-tree/non-viewer and updater recovery checks.
+Panel-check System Information values and page/theme changes after an IDF build.
+
+## v7.1.49-dev Preview helper removal
+
+Remove four preview helpers with no firmware callers: ui_thumbnail_fit_scale,
+ui_thumbnail_fill_object, ui_thumbnail_show_image and ui_thumbnail_clear. Remove
+their declarations. Keep the active file-pinned image entry point, placeholder
+setter and containment helper, including temporary lifetime guards during layout.
+No pixel decoder, cache, worker, lightbox ownership or scheduling change is made.
+
+Retarget wrapper-based safety checks to show_file_image with a NULL filename and
+the existing placeholder setter. Keep allocation failure, nested updates, callback
+retirement, native routing, temporary-event-hook balance and layout-interruption
+coverage for the active fit helper. Drop tests specific to the deleted scale/fill
+utilities; test containment after resizing instead. Retain decoder pixel sampling,
+aspect fit/packed dimensions, padding, crop, bounds and degenerate-image tests.
+
+Apply over effective v7.1.48-dev on chore/stale-code-cleanup-main, checkpoint
+b180ec7cf752. Source membership remains 157. Build with
+`./tools/build_idf6_hosted3.sh`; target build and panel validation are not available
+here. Panel-check Files row previews, Dashboard/Printer thumbnails, image taps and
+fullscreen fit, including page/theme changes. The updater performs no commit,
+push, build, flash or printer action.
+
+## v7.1.50-dev Notification and preview interfaces
+
+Remove the unused boolean notification getter/setter. Active callers already use
+Quiet / Standard / Detailed through ui_toast_level and ui_toast_set_level. Host
+preference tests now use those APIs too. Retain the stored boolean migration in
+ui_toast_init and backup parsing: older preferences and backups remain readable.
+No notice filtering, warning delivery or Quiet connection-loss policy changes.
+
+Remove the unused Active Print canvas filename-size accessor and placeholder-hide
+helper. Keep the active image application, placeholder setter, buffer ownership,
+file matching and preview generation paths. These removals have no production
+callers. No modules or persisted formats change; source membership remains 157.
+
+Run notifications, notification_backup, active_preview_safety and
+aspect_preview_pipeline host suites, plus inventory, version, public-tree,
+non-viewer and guarded updater recovery checks. Existing notification fixtures
+retain persistence failures/retry, legacy migration, warning/connection policy and
+all theme/density/text-size layouts. Host tests cannot validate target firmware.
+
+Apply over effective v7.1.49-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check notification
+level selection/persistence, genuine Quiet connection-loss/recovery and Dashboard/
+Printer previews. The updater performs no Git mutation, build, flash or printer
+command.
+
+## v7.1.51-dev Obsolete button family
+
+Remove the unused ui_create_button custom-color constructor and its primary,
+secondary, success, warning and danger wrappers from ui_widgets.c/.h. No firmware
+caller uses this family. Active controls use ui_button_create and the shared
+semantic styling/touch-target paths; these remain unchanged.
+
+Remove the obsolete custom-color sample from the Console pressed-frame catalog.
+Retain every semantic button kind, status style, navigation, Studio action, theme
+preview and surface-role checks. Drop the removed API names from the button-label
+inventory scanner; continue scanning active button constructors and popup actions.
+No layout, action routing, persisted format, transport or Quiet notice policy
+changes. Firmware source membership remains 157.
+
+Validate Console layout/pressed frames, button text-fit inventory and LVGL95
+modernization suites, plus source membership, version/public-tree/non-viewer and
+guarded updater rollback/recovery checks. Host tests cannot validate the target
+firmware or physical panel.
+
+Apply over effective v7.1.50-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check Console actions
+and dialogs, button pressed states and theme changes. The updater performs no
+Git mutation, build, flash or printer action.
+
+## v7.1.52-dev Component constructors
+
+Remove three test-only constructors: ui_active_print_create, ui_page_state_create
+and ui_thumbnail_wrap. Production uses ui_active_print_create_profile,
+ui_page_state_create_owned and ui_thumbnail_create. Remove the old declarations,
+fixed Active Print layout preset and alternate thumbnail-box initialization.
+No active page layout or thumbnail ownership behavior changes.
+
+Active Print fixtures now use the current Dashboard layout profile with explicit
+test rectangles. Keep canvas replacement, generation, buffer bounds, nested and
+interrupted update tests. Page-state tests exercise an optional NULL owner slot
+through create_owned, preserving the lifetime check. Remove the obsolete wrapped-
+box scenario from thumbnail safety tests; standard creation, owner binding,
+replacement slots, layout interruption, native routing and allocations remain.
+
+Run aspect_preview_pipeline, active_preview_safety, page_state_safety and
+thumbnail_component_safety host suites with usual LVGL flags. Retain source,
+version/public-tree/non-viewer and updater rollback/recovery checks. Source
+membership remains 157. No persisted formats, connection policy or Quiet warnings
+change. Host checks do not validate firmware or the physical panel.
+
+Apply over effective v7.1.51-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check Dashboard and
+Printer previews, Files image taps/fullscreen, and loading/offline/empty page
+states. The updater performs no Git mutation, build, flash or printer command.
+
+## v7.1.53-dev Lightbox and Wi-Fi wrappers
+
+Remove five public entry points with no firmware callers: the lightbox descriptor
+show, image-object show and is-open wrappers, and the owned Wi-Fi scan show/render
+wrappers. Keep the underlying lightbox snapshot/image-object implementation and
+file-pinned asynchronous fullscreen entry point. Keep the Wi-Fi scan rendering,
+password workflow, owned close and status APIs. Fix the Network Tools header's
+stale port-dialog ownership comment.
+
+Retarget tests that include the real implementation to the underlying functions
+and current popup state. Keep assertions for immutable snapshots, source aliasing,
+worker queue/retry/stale publication, native close taps, allocation failure and
+buffer cleanup. Retain Wi-Fi row selection, status-field deletion/reopen, keyboard
+and popup ownership, inline validation, backups and replacement callbacks. No
+user-facing route, cache algorithm, persisted format, scheduling or Quiet warning
+policy changes. Firmware source membership remains 157.
+
+Run the full preview_cache_ownership suite (with cJSON and LVGL host paths) and
+network_backup_dialog suite. Retain source, version/public-tree/non-viewer and
+updater rollback/recovery checks. Host checks do not validate the ESP-IDF build
+or physical panel.
+
+Apply over effective v7.1.52-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check Files and
+Dashboard/Printer image taps, fullscreen close/reopen and Wi-Fi scan/password
+flows. The updater performs no Git mutation, build, flash or printer command.
+
+## v7.1.54-dev Preview crop retirement
+
+Remove the unused thumbnail_render_to_rgb565 center-crop entry point and its
+sampling branch. Remove the shared renderer's fill flag: all active callers use
+either tightly packed aspect-preserving previews or complete-image letterbox fit.
+Keep those algorithms, decoded pixel-format conversion, no-cache decoder lifetime,
+stride handling and descriptor ownership unchanged.
+
+Remove crop-only pixel assertions. Retain full-image exact sampling/padding,
+packed width/height, untouched buffer tails, guard pixels, degenerate sources,
+NULL rejection and containment/resizing coverage. The preview_fill test filename
+stays stable for existing commands, with its description updated to active modes.
+No user-facing crop option is removed: firmware had no caller of this path.
+
+Run preview_fill, aspect_preview_pipeline and full preview_cache_ownership host
+suites, plus source/version/public-tree/non-viewer and updater recovery checks.
+Firmware source membership remains 157. No cache format, worker scheduling,
+persisted setting, transport behavior or Quiet warning policy changes. No target
+binary-size or performance claim is made.
+
+Apply over effective v7.1.53-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`; host tests cannot validate
+target firmware or the panel. Panel-check wide/portrait previews in Files,
+Dashboard/Printer and fullscreen, including close/reopen. The updater performs no
+Git mutation, build, flash or printer command.
+
+## v7.1.55-dev Unreachable status formatter
+
+Remove ui_printer_popups_show_printer_status, an unreachable status-summary
+formatter with no firmware caller, and its public declaration. Retain the shared
+ui_dashboard_status_popup_show/close implementation used by active workflows,
+including error/status messages and Drybox live status.
+
+Retarget the sensor/status fixture's long-file presentation case to the shared
+popup with fixture-supplied text. Keep full 255-character filename visibility,
+wrapping, scroll/footer bounds, native close and external deletion/reopen checks.
+Keep filament sensor toggles, acknowledgement/timeout, reorder/removal, stale
+profile and unsafe-name tests. Active Printer controls and status routes do not
+change. No scheduling, schema, cache or Quiet warning policy changes.
+
+Run sensor_status_layout, hotend_layout and motion_layout host suites, plus source,
+version/public-tree/non-viewer and guarded updater recovery checks. Firmware source
+membership remains 157. Host tests cannot validate the ESP-IDF build or panel.
+
+Apply over effective v7.1.54-dev on chore/stale-code-cleanup-main at checkpoint
+b180ec7cf752. Build with `./tools/build_idf6_hosted3.sh`. Panel-check filament
+sensors, active Printer controls and shared status dialogs. No commit, push,
+build, flash or printer command is performed by the updater.
+
+Checkpoint recommendation: the straightforward unused-interface removal pass is
+ready for integration review after panel validation. Remaining low-reference
+interfaces include intentional test/reset hooks, generated theme dispatch and
+legacy/request ownership code that needs separate design review. Reference counts
+alone are not sufficient evidence to remove them.

@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix='notice-backup-') as t:
  subprocess.run([str(p/'test')],check=True)
 
 
-# Backup/restore progress and compatibility entry point checks.
+# Backup/restore progress and NULL-callback entry point checks.
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
@@ -54,7 +54,6 @@ def function(name):
 functions='\n'.join(function(name) for name in [
     'settings_backup_export_with_progress','settings_backup_restore_with_progress',
     'settings_backup_restore_encrypted_with_progress'])
-wrappers=source[source.index('/* Compatibility entry points'):]
 preamble=r'''
 #include <assert.h>
 #include <errno.h>
@@ -100,7 +99,7 @@ int main(int argc,char **argv){
  assert(settings_backup_export_with_progress(progress,phases,status,sizeof(status)));
  assert(phase_count==2&&phases[0]==SETTINGS_BACKUP_STAGE_PREPARING&&phases[1]==SETTINGS_BACKUP_STAGE_WRITING);
  FILE *f=fopen(backup,"rb");assert(f);char data[64]={0};assert(fread(data,1,sizeof(data)-1,f)>0);fclose(f);assert(strstr(data,"backup"));
- assert(settings_backup_export(status,sizeof(status)));assert(access(temporary,F_OK)!=0&&access(previous,F_OK)!=0);
+ assert(settings_backup_export_with_progress(NULL,NULL,status,sizeof(status)));assert(access(temporary,F_OK)!=0&&access(previous,F_OK)!=0);
  reset();load_ok=false;assert(!settings_backup_restore_with_progress(progress,phases,status,sizeof(status)));
  assert(phase_count==1&&phases[0]==SETTINGS_BACKUP_STAGE_READING&&!applies&&!captures);
  reset();assert(!settings_backup_restore_encrypted_with_progress("wrong-passphrase",progress,phases,status,sizeof(status)));
@@ -113,12 +112,12 @@ int main(int argc,char **argv){
  assert(applies==1&&captures==1&&phase_count==2&&phases[0]==SETTINGS_BACKUP_STAGE_AUTHENTICATING&&phases[1]==SETTINGS_BACKUP_STAGE_APPLYING&&strstr(status,"Reboot"));
  reset();apply_ok=false;assert(!settings_backup_restore_encrypted_with_progress("correct-passphrase",progress,phases,status,sizeof(status)));
  assert(applies==2&&phase_count==3&&phases[2]==SETTINGS_BACKUP_STAGE_ROLLING_BACK);
- reset();assert(settings_backup_restore(status,sizeof(status))&&applies==1&&!phase_count);
- reset();assert(settings_backup_restore_encrypted("correct-passphrase",status,sizeof(status))&&applies==1&&!phase_count);
- puts("PASS: actual plain export and plain/encrypted restore stage order, validation/authentication rejection before settings changes, rollback, compatibility callers and real temporary-file promotion");
+ reset();assert(settings_backup_restore_with_progress(NULL,NULL,status,sizeof(status))&&applies==1&&!phase_count);
+ reset();assert(settings_backup_restore_encrypted_with_progress("correct-passphrase",NULL,NULL,status,sizeof(status))&&applies==1&&!phase_count);
+ puts("PASS: actual plain export and plain/encrypted restore stage order, validation/authentication rejection before settings changes, rollback, NULL callback callers and real temporary-file promotion");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='backup-progress-') as tmp:
-    p=Path(tmp);(p/'test.c').write_text(preamble+functions+wrappers+checks)
+    p=Path(tmp);(p/'test.c').write_text(preamble+functions+checks)
     subprocess.run(['cc','-std=c11','-D_POSIX_C_SOURCE=200809L','-Wall','-Wextra','-Werror','-I',str(root/'main'),str(p/'test.c'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test'),str(p)],check=True)

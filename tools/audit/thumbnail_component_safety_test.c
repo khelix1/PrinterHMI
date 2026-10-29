@@ -45,7 +45,7 @@ static void tap(lv_indev_t *input,lv_obj_t *object){lv_obj_update_layout(lv_scre
 static void checks(lv_indev_t *input)
 {
  create();unsigned before=opened;tap(input,owned->box);assert(opened==before);
- lv_obj_delete(owned->label);assert(!owned->label);ui_thumbnail_clear(owned);assert(owned->label);
+ lv_obj_delete(owned->label);assert(!owned->label);ui_thumbnail_set_placeholder(owned,"THUMBNAIL");assert(owned->label);
  ui_thumbnail_show_file_image(owned,&image,0,"shown.gcode");assert(owned->canvas&&!owned->label&&bytes==286*215*2);
  tap(input,owned->canvas);assert(opened==before+1&&!strcmp(opened_file,"shown.gcode"));
  lv_obj_delete(owned->canvas);assert(!owned->canvas);ui_thumbnail_show_file_image(owned,&image,0,"new.gcode");assert(owned->canvas);
@@ -56,29 +56,24 @@ static void checks(lv_indev_t *input)
  lv_obj_add_flag(owned->canvas,LV_OBJ_FLAG_HIDDEN);lv_obj_send_event(owned->box,LV_EVENT_CLICKED,NULL);assert(opened==before);lv_obj_remove_flag(owned->canvas,LV_OBJ_FLAG_HIDDEN);
  render_hook=nested_update;ui_thumbnail_show_file_image(owned,&image,0,"outer.gcode");assert(!strcmp(owned->loaded_file,"outer.gcode")&&owned->canvas);
  ui_thumbnail_show_file_image(owned,&image,0,owned->loaded_file);assert(!strcmp(owned->loaded_file,"outer.gcode"));
- ui_thumbnail_show_image(owned,&image,0);lv_obj_send_event(owned->box,LV_EVENT_CLICKED,NULL);assert(!opened_file[0]);
+ ui_thumbnail_show_file_image(owned,&image,0,NULL);lv_obj_send_event(owned->box,LV_EVENT_CLICKED,NULL);assert(!opened_file[0]);
  char long_file[170];memset(long_file,'x',sizeof(long_file)-1);long_file[169]=0;ui_thumbnail_show_file_image(owned,&image,0,long_file);assert(!owned->loaded_file[0]);
  fail_render=true;ui_thumbnail_show_file_image(owned,&image,0,"fail.gcode");assert(!owned->canvas&&owned->label&&!strcmp(lv_label_get_text(owned->label),"PREVIEW UNAVAILABLE"));fail_render=false;
  ui_thumbnail_show_file_image(owned,&image,256,"again.gcode");assert(owned->canvas);open_hook=destroy;lv_obj_send_event(owned->box,LV_EVENT_CLICKED,NULL);assert(!owned&&!bytes);
- create();fail_memory=true;ui_thumbnail_show_image(owned,&image,0);assert(owned->label&&!owned->canvas&&!bytes);fail_memory=false;destroy();
- create();render_hook=destroy_buffered;ui_thumbnail_show_image(owned,&image,0);assert(!owned&&!bytes);
- create();delete_hook=destroy;ui_thumbnail_show_image(owned,&image,0);assert(!owned&&!bytes);
- create();ui_thumbnail_show_image(owned,&image,0);delete_hook=destroy;ui_thumbnail_set_placeholder(owned,"close");assert(!owned&&!bytes);
+ create();fail_memory=true;ui_thumbnail_show_file_image(owned,&image,0,NULL);assert(owned->label&&!owned->canvas&&!bytes);fail_memory=false;destroy();
+ create();render_hook=destroy_buffered;ui_thumbnail_show_file_image(owned,&image,0,NULL);assert(!owned&&!bytes);
+ create();delete_hook=destroy;ui_thumbnail_show_file_image(owned,&image,0,NULL);assert(!owned&&!bytes);
+ create();ui_thumbnail_show_file_image(owned,&image,0,NULL);delete_hook=destroy;ui_thumbnail_set_placeholder(owned,"close");assert(!owned&&!bytes);
  create();ui_thumbnail_t *old=owned;owned=NULL;create();ui_thumbnail_t *replacement=owned;lv_obj_delete(old->box);assert(owned==replacement);destroy();
- lv_obj_t *box=lv_obj_create(lv_screen_active());ui_thumbnail_bind_owner(ui_thumbnail_wrap(box),&owned);assert(owned);ui_thumbnail_show_image(owned,&image,0);destroy();assert(!bytes);
  /* The generic fit helpers must drop their temporary deletion hooks. */
- create();ui_thumbnail_show_image(owned,&image,0);unsigned box_events=lv_obj_get_event_count(owned->box),image_events=lv_obj_get_event_count(owned->canvas);
- for(unsigned i=0;i<3;i++){ui_thumbnail_fit_scale(owned->box,4,2,0);ui_thumbnail_fit_object(owned->canvas,owned->box,4,2,0);ui_thumbnail_fill_object(owned->canvas,owned->box,4,2);}
+ create();ui_thumbnail_show_file_image(owned,&image,0,NULL);unsigned box_events=lv_obj_get_event_count(owned->box),image_events=lv_obj_get_event_count(owned->canvas);
+ for(unsigned i=0;i<3;i++){ui_thumbnail_fit_object(owned->canvas,owned->box,4,2,0);}
  assert(box_events==lv_obj_get_event_count(owned->box)&&image_events==lv_obj_get_event_count(owned->canvas));destroy();
- for(unsigned method=0;method<3;method++){
-  create();ui_thumbnail_show_image(owned,&image,0);layout_hook=destroy;
-  if(method==0)assert(ui_thumbnail_fit_scale(owned->box,4,2,0)==256);
-  if(method==1)ui_thumbnail_fit_object(owned->canvas,owned->box,4,2,0);
-  if(method==2)ui_thumbnail_fill_object(owned->canvas,owned->box,4,2);
-  assert(!owned&&!bytes);
- }
- create();layout_hook=delete_canvas;ui_thumbnail_show_image(owned,&image,0);assert(owned&&!owned->canvas);ui_thumbnail_show_image(owned,&image,0);assert(owned->canvas);destroy();assert(!bytes);
- create();layout_hook=destroy;ui_thumbnail_show_image(owned,&image,0);assert(!owned&&!bytes);
+ create();ui_thumbnail_show_file_image(owned,&image,0,NULL);layout_hook=destroy;
+ ui_thumbnail_fit_object(owned->canvas,owned->box,4,2,0);assert(!owned&&!bytes);
+
+ create();layout_hook=delete_canvas;ui_thumbnail_show_file_image(owned,&image,0,NULL);assert(owned&&!owned->canvas);ui_thumbnail_show_file_image(owned,&image,0,NULL);assert(owned->canvas);destroy();assert(!bytes);
+ create();layout_hook=destroy;ui_thumbnail_show_file_image(owned,&image,0,NULL);assert(!owned&&!bytes);
 }
 int main(void){lv_init();lv_display_t *display=lv_display_create(1024,600);lv_indev_t *input=lv_indev_create();lv_indev_set_type(input,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(input,read_touch);
  for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});checks(input);}

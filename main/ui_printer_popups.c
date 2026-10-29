@@ -2030,42 +2030,6 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
     s_filament_refresh_timer = lv_timer_create(refresh_filament_list, 500, NULL);
 }
 
-void ui_printer_popups_show_printer_status(
-    const char *state,
-    const char *file,
-    const char *progress,
-    const char *elapsed,
-    const char *remaining,
-    double nozzle_temp,
-    double nozzle_target,
-    double bed_temp,
-    double bed_target,
-    bool moonraker_connected)
-{
-    char body[1024];
-
-    snprintf(body,sizeof(body),
-             "State: %s\n"
-             "Progress: %s\n"
-             "Nozzle: %.1f / %.1f C\n"
-             "Bed: %.1f / %.1f C\n"
-             "Elapsed: %s\n"
-             "Remaining: %s\n"
-             "Moonraker: %s\n\n"
-             "File: %.255s",
-             state ? state : "--",
-             progress ? progress : "-- %",
-             nozzle_temp,nozzle_target,bed_temp,bed_target,
-             elapsed ? elapsed : "--:--",
-             remaining ? remaining : "--:--",
-             moonraker_connected ? "Connected" : "Offline",
-             (file && file[0]) ? file : "No active file");
-
-    ui_dashboard_status_popup_show(
-        "Printer status",
-        body);
-}
-
 void ui_printer_popups_close_all(void)
 {
     ui_printer_toolhead_close();

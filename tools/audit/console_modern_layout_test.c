@@ -74,8 +74,7 @@ static void capture(const char *name){const char *folder=getenv("CONSOLE_SCREENS
 static void press_catalog(void){
  for(unsigned kind=0;kind<=UI_BUTTON_OUTLINED;kind++){lv_obj_t *b=ui_button_create(lv_screen_active(),kind,"ACTION");lv_obj_set_size(b,140,48);frame(b);ui_button_apply_kind(b,UI_BUTTON_DANGER);frame(b);lv_obj_delete(b);}
  for(unsigned kind=0;kind<=UI_STATUS_ACTIVE;kind++){lv_obj_t *b=lv_button_create(lv_screen_active());ui_apply_button_status_style(b,kind);lv_obj_set_size(b,140,48);frame(b);lv_obj_delete(b);}
- lv_obj_t *b=ui_create_button(lv_screen_active(),"CUSTOM",UI_CONTROL);lv_obj_set_size(b,140,48);frame(b);lv_obj_delete(b);
- b=ui_create_operator_nav_button(lv_screen_active(),8,8,156,52,LV_SYMBOL_HOME,"Dashboard");frame(b);lv_obj_delete(b);
+ lv_obj_t *b=ui_create_operator_nav_button(lv_screen_active(),8,8,156,52,LV_SYMBOL_HOME,"Dashboard");frame(b);lv_obj_delete(b);
  b=studio_action(lv_screen_active(),"Studio",8,8,156,52,NULL,NULL);frame(b);lv_obj_delete(b);
  b=ui_theme_preview_create(lv_screen_active(),ui_theme_get_active(),false,0,0,300,240,NULL,NULL);frame(b);lv_obj_delete(b);
  b=ui_theme_preview_create(lv_screen_active(),ui_theme_get_active(),true,0,0,300,240,NULL,NULL);frame(b);lv_obj_delete(b);

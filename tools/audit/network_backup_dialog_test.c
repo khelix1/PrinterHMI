@@ -3,12 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "custom_theme.h"
-#define close_cb network_close_cb
-#define save_cb network_save_cb
 #include "ui_network_tools.c"
 #include "keyboard_layout_checks.h"
-#undef close_cb
-#undef save_cb
 #include "network_wifi_scan.c"
 #include "ui_settings_backup_popup.c"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -22,14 +18,13 @@ static unsigned worker_starts;
 static void run_backup_hook(void){if(backup_hook){void(*hook)(void)=backup_hook;backup_hook=NULL;hook();}}
 static bool allowed=true,worker_allowed=true;
 static unsigned restored,encrypted_restored,removed,exported,selected_calls;
-static int saved_port;
 static settings_backup_encrypted_worker_state_t worker_state;
 static char worker_message[256]="Worker status",selected_ssid[33],scan_status[192];
 static const char passphrase[]="test-passphrase-123";
-bool settings_backup_export(char *s,size_t n){exported++;run_backup_hook();snprintf(s,n,"Backup exported");return allowed;}
+static bool fixture_export(char *s,size_t n){exported++;run_backup_hook();snprintf(s,n,"Backup exported");return allowed;}
 bool settings_backup_preflight(char *s,size_t n){snprintf(s,n,"Backup verified: schema 1, 2 printer profiles.\nActive printer: Sermoon D1.\nAppearance, display and notifications included.\nPlain backups omit API keys.");return allowed;}
-bool settings_backup_restore(char *s,size_t n){restored++;run_backup_hook();snprintf(s,n,allowed?"Restored; reboot required":"Restore failed; current settings retained");return allowed;}
-bool settings_backup_restore_encrypted(const char *p,char *s,size_t n){assert(!strcmp(p,passphrase));encrypted_restored++;run_backup_hook();snprintf(s,n,"Encrypted restore result");return allowed;}
+static bool fixture_restore(char *s,size_t n){restored++;run_backup_hook();snprintf(s,n,allowed?"Restored; reboot required":"Restore failed; current settings retained");return allowed;}
+static bool fixture_restore_encrypted(const char *p,char *s,size_t n){assert(!strcmp(p,passphrase));encrypted_restored++;run_backup_hook();snprintf(s,n,"Encrypted restore result");return allowed;}
 bool settings_backup_remove_all(char *s,size_t n){removed++;run_backup_hook();snprintf(s,n,allowed?"Removed backup files":"Remove failed; retry available");return allowed;}
 bool settings_backup_encrypted_worker_start_export(const char *p,char *s,size_t n){assert(!strcmp(p,passphrase));snprintf(s,n,"Worker busy");worker_starts++;run_backup_hook();if(worker_allowed)worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_ENCRYPTING;return worker_allowed;}
 bool settings_backup_encrypted_worker_start_verify(const char *p,char *s,size_t n){assert(!strcmp(p,passphrase));snprintf(s,n,"Worker busy");worker_starts++;run_backup_hook();if(worker_allowed)worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_VERIFYING;return worker_allowed;}
@@ -46,26 +41,26 @@ bool settings_backup_export_with_progress(settings_backup_progress_cb_t cb,void 
 {
     mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_PREPARING);
     mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_WRITING);
-    return settings_backup_export(s,n);
+    return fixture_export(s,n);
 }
 bool settings_backup_restore_with_progress(settings_backup_progress_cb_t cb,void *ctx,char *s,size_t n)
 {
     mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_READING);
     mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_APPLYING);
     if(!allowed)mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_ROLLING_BACK);
-    return settings_backup_restore(s,n);
+    return fixture_restore(s,n);
 }
 bool settings_backup_restore_encrypted_with_progress(const char *p,settings_backup_progress_cb_t cb,void *ctx,char *s,size_t n)
 {
     mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_AUTHENTICATING);
     mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_APPLYING);
     if(!allowed)mock_stage(cb,ctx,SETTINGS_BACKUP_STAGE_ROLLING_BACK);
-    return settings_backup_restore_encrypted(p,s,n);
+    return fixture_restore_encrypted(p,s,n);
 }
 static unsigned password_saves;
 static void password_nested(lv_event_t *event){password_saves++;owned_password_save(event);}
 static void noop(lv_event_t *e){(void)e;}
-static void port_saved(int port){assert(!s_moon_port_popup);saved_port=port;}
+
 static void selected(lv_event_t *e){selected_calls++;ui_network_tools_wifi_select_owned(lv_event_get_target_obj(e),lv_event_get_user_data(e),selected_ssid,sizeof(selected_ssid),scan_status,sizeof(scan_status));}
 static void inside(lv_obj_t *child,lv_obj_t *parent)
 {lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);assert(a.x1>=b.x1&&a.x2<=b.x2&&a.y1>=b.y1&&a.y2<=b.y2);}
@@ -100,7 +95,7 @@ static void layout(lv_obj_t *popup)
 static void network(void)
 {
     wifi_ap_record_t aps[20]={0};for(unsigned i=0;i<20;i++){snprintf((char *)aps[i].ssid,sizeof(aps[i].ssid),"Long-network-name-abcdefghij-%02u",i);aps[i].rssi=-57-(int)i;}
-    ui_network_tools_wifi_scan_render_owned(scan_status,sizeof(scan_status),aps,20,20,noop,selected);
+    network_wifi_scan_render_results(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,&s_wifi_selected_btn,scan_status,sizeof(scan_status),aps,20,20,noop,selected);
     layout(s_wifi_scan_popup);assert(lv_obj_get_child_count(s_wifi_scan_list)==20);
     lv_obj_t *row=lv_obj_get_child(s_wifi_scan_list,19);lv_obj_scroll_to_view(row,LV_ANIM_OFF);lv_obj_update_layout(row);
     inside(lv_obj_get_child(row,0),row);assert(strstr(lv_label_get_text(lv_obj_get_child(row,0)),(char *)aps[19].ssid));
@@ -115,28 +110,12 @@ static void network(void)
     char copy[65];ui_network_tools_wifi_password_copy_owned(copy,sizeof(copy));assert(!strcmp(copy,"wifi-secret"));
     assert(strstr(lv_label_get_text(s_wifi_password_status),"failed"));
     lv_obj_delete(s_wifi_scan_popup);assert(!s_wifi_scan_popup&&!s_wifi_scan_list&&!s_wifi_selected_btn&&!s_wifi_password_popup&&!s_wifi_password_textarea&&!s_wifi_password_status);
-    ui_network_port_popup_show(7125,port_saved);layout(s_moon_port_popup);saved_port=0;
-    lv_textarea_set_text(s_moon_port_ta,"0");lv_obj_send_event(lv_obj_get_child(s_moon_port_popup,2),LV_EVENT_READY,NULL);assert(s_moon_port_popup&&!saved_port&&strstr(lv_label_get_text(s_port_status),"65535"));
-    lv_obj_t *foreign=lv_textarea_create(lv_screen_active());
-    lv_obj_add_event_cb(foreign,port_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
-    lv_textarea_set_text(foreign,"7126");assert(strstr(lv_label_get_text(s_port_status),"65535"));lv_obj_delete(foreign);
-    lv_textarea_set_text(s_moon_port_ta,"65536");assert(!saved_port&&!strcmp(lv_label_get_text(s_port_status),s_port_guidance));
-    lv_obj_send_event(lv_obj_get_child(s_moon_port_popup,2),LV_EVENT_READY,NULL);assert(s_moon_port_popup&&!saved_port&&strstr(lv_label_get_text(s_port_status),"65535"));
-    lv_textarea_set_text(s_moon_port_ta,"7126");assert(!saved_port&&!strcmp(lv_label_get_text(s_port_status),s_port_guidance));
-    network_save_cb(NULL);assert(!s_moon_port_popup&&saved_port==7126);
-    ui_network_port_popup_show(7125,port_saved);saved_port=0;
-    lv_textarea_set_text(s_moon_port_ta,"0");network_save_cb(NULL);assert(strstr(lv_label_get_text(s_port_status),"65535"));
-    lv_textarea_set_text(s_moon_port_ta,"7127");ui_network_port_popup_close();assert(!saved_port);
-    ui_network_port_popup_show(7125,port_saved);lv_obj_delete(s_port_status);assert(!s_port_status);
-    lv_textarea_set_text(s_moon_port_ta,"7128");assert(!saved_port);ui_network_port_popup_close();
-    ui_network_port_popup_show(7125,port_saved);lv_obj_delete(s_moon_port_ta);assert(!s_moon_port_ta&&lv_keyboard_get_textarea(s_port_keyboard)==NULL);network_save_cb(NULL);ui_network_port_popup_close();
-    ui_network_port_popup_show(7125,port_saved);lv_obj_delete(s_moon_port_popup);assert(!s_moon_port_ta&&!s_save_cb);
     ui_network_tools_wifi_password_show_owned("fixture",noop,password_nested);unsigned saves=password_saves;owned_password_save(NULL);assert(password_saves==saves+1);lv_obj_t *keyboard=lv_obj_get_child(s_wifi_password_popup,2);
     lv_obj_delete(s_wifi_password_textarea);assert(!s_wifi_password_textarea&&lv_keyboard_get_textarea(keyboard)==NULL);
     owned_password_save(NULL);assert(password_saves==saves+1);ui_network_tools_wifi_password_copy_owned(copy,sizeof(copy));assert(!copy[0]);ui_network_tools_wifi_password_close_owned();
-    ui_network_tools_wifi_scan_render_owned(scan_status,sizeof(scan_status),aps,2,2,noop,selected);
+    network_wifi_scan_render_results(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,&s_wifi_selected_btn,scan_status,sizeof(scan_status),aps,2,2,noop,selected);
     lv_obj_send_event(lv_obj_get_child(s_wifi_scan_list,0),LV_EVENT_CLICKED,NULL);lv_obj_delete(s_wifi_selected_btn);assert(!s_wifi_selected_btn);
-    lv_obj_delete(s_wifi_scan_status_label);assert(!s_wifi_scan_status_label);ui_network_tools_wifi_scan_show_owned("retry",noop);ui_network_tools_wifi_scan_close_owned();
+    lv_obj_delete(s_wifi_scan_status_label);assert(!s_wifi_scan_status_label);ui_network_tools_show_wifi_scan_popup(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,"retry",noop);ui_network_tools_wifi_scan_close_owned();
     ui_network_tools_show_test_moonraker_popup("Moonraker failed","Complete connection error and troubleshooting details remain reachable with large text in a narrow viewport.",false);
     lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);layout(popup);
     lv_obj_send_event(lv_obj_get_child(lv_obj_get_child(popup,-1),0),LV_EVENT_CLICKED,NULL);

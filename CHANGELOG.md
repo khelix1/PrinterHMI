@@ -1,5 +1,16 @@
 # Changelog
 
+## [7.1.0] - 2026-10-28
+
+### Stable release preparation
+
+- Consolidate accepted non-viewer development through v7.1.55-dev: Files caching,
+  Dashboard filename layout, live Bed Mesh, connection/setup and lifecycle fixes.
+- Retire stale code and preview/UI compatibility paths; preserve stored settings
+  migration and Quiet connection-loss warnings.
+- Keep experimental G-code viewing and Theme Maker outside this release.
+- See [v7.1.0 release notes](docs/releases/v7.1.0.md) for scope and validation limits.
+
 ## [7.1.55-dev] - 2026-10-28
 
 ### Remove unreachable Printer status formatter

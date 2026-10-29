@@ -1,11 +1,11 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v7.1.55-dev firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v7.1.0 firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
-The current development firmware supports up to four Moonraker printer profiles, live
+The v7.1.0 firmware supports up to four Moonraker printer profiles, live
 printer and drybox status, file browsing with thumbnails and metadata,
 telemetry, print controls, exclude-object control, a dedicated 3D Bed Mesh
 workspace, detected Klipper macros, a live console, persistent display and
@@ -20,22 +20,23 @@ remain with khelix.
 Thanks to the open-source projects, font authors and tools that make PrinterHMI
 possible. See [Software credits](docs/SOFTWARE_CREDITS.md) and [NOTICE](NOTICE).
 
-The `chore/stale-code-cleanup-main` branch continues stale-code cleanup from
-current `main`, retaining the independent Files, Dashboard and Bed Mesh fixes.
-The experimental G-code viewer remains on its separate branches.
+Version 7.1.0 consolidates Files thumbnail caching, Dashboard filename layout,
+live Bed Mesh viewing, setup completion and UI lifecycle improvements. Experimental
+G-code viewing and Theme Maker remain on separate branches and are not included.
+See [v7.1.0 release notes](docs/releases/v7.1.0.md).
 
 ## Status
 
-- Firmware version: `7.1.55-dev`
+- Firmware version: `7.1.0`
 - Latest published stable: `7.0.0`
-- Validation: stale-code and repository cleanup checked on the host; target checks are documented in the development release notes
+- Validation: host regression checks and operator panel feedback; stable publication rebuilds and audits the complete P4+C6 stack
 - Target: `esp32p4`
 - Known-good ESP-IDF: `6.0.2`
 - LVGL: `9.5.0` as locked by `dependencies.lock`
 - Display: JD9165, 1024 x 600, MIPI-DSI
 - Touch: GT911 over I2C
 - Network: ESP32-C6 through `esp_wifi_remote`/`esp_hosted`
-- Release state: stable
+- Release state: v7.1.0 prepared for stable publication
 
 See [Known Issues](docs/KNOWN_ISSUES.md) before distributing firmware or
 publishing repository history.

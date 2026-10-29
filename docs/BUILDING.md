@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v7.1.55-dev.
+- `partitions.csv` is the only supported partition layout for v7.1.0.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy
@@ -112,7 +112,7 @@ are expected to work from an arbitrary checkout path.
 
 ## Development and release versions
 
-`version.txt` owns the current build identity: `7.0.0`. Regular local builds
+`version.txt` owns the current build identity: `7.1.0`. Regular local builds
 are Custom. CMake accepts `X.Y.Z`, `X.Y.Z-dev` and generated nightly identities.
 Stable release tooling reads the version source and rejects development suffixes
 before build or network publication. Nightly tooling restores the exact original
@@ -120,3 +120,15 @@ version after its temporary nightly build. Release preparation updates the versi
 `./tools/release_stable.sh` from a clean, integrated `main` checkout to build and
 publish the Stable channel; regular local builds remain Custom. Known device
 validation limits are retained in the release notes.
+
+### Publishing v7.1.0 from the cleanup checkpoint
+
+Apply the release preparation over v7.1.55-dev at cleanup checkpoint
+`7f3307a33364`. Build and panel-check the final identity with
+`PRINTERHMI_BUILD_CHANNEL=stable ./tools/build_idf6_hosted3.sh`.
+Commit the version/documentation preparation on `chore/stale-code-cleanup-main`,
+then integrate that branch into an up-to-date `main` with `git merge --ff-only`.
+Run `./tools/release_stable.sh` from clean `main`. It builds the complete P4+C6
+stack, audits outputs, atomically pushes main and the v7.1.0 tag, then publishes
+OTA/full-stack archives and their checksums. Do not run the nightly checkpoint
+script for this publication. Keep the cleanup branch until publication succeeds.

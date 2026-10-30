@@ -1,3 +1,4 @@
+#include "ui_case_lighting.h"
 #include "moonraker_command_route.h"
 #include <stdio.h>
 #include <errno.h>
@@ -1580,6 +1581,7 @@ static void printer_chooser_manage_bridge(int profile_index)
 
 static void app_hide_operator_pages(void)
 {
+    ui_case_lighting_close();
     ui_camera_hide();
     ui_tools_hide();
     ui_bed_mesh_close();
@@ -1696,6 +1698,7 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_TOOLS:
+        ui_tools_set_lighting_callback(ui_case_lighting_show);
         ui_tools_set_callbacks(tools_open_calibration_bridge, tools_open_bed_mesh_bridge, tools_open_devices_bridge, tools_open_macros_bridge);
         ui_tools_show();
         return;

@@ -1,3 +1,6 @@
+#include "case_lighting.h"
+#include "moonraker_config_controller.h"
+#include "esp_timer.h"
 #include "ui_tools.h"
 #include "printer_connection_policy.h"
 #include "ui_value_update.h"
@@ -14,6 +17,46 @@
 #include "ui_responsive_layout.h"
 #include "ui_studio_layout.h"
 
+static ui_tools_open_cb_t s_lighting_callback;
+static lv_obj_t *s_lighting_button;
+static bool lighting_detected(void)
+{
+    uint32_t owner=moonraker_config_generation();
+    case_lighting_snapshot_t light;
+    case_lighting_snapshot(&light,esp_timer_get_time());
+    return owner==moonraker_config_generation() && light.generation==owner &&
+        light.discovered && light.available;
+}
+static void lighting_visibility_refresh(void)
+{
+    if(!s_lighting_button)return;
+    if(s_lighting_callback && lighting_detected())
+        lv_obj_remove_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN);
+}
+static void lighting_deleted(lv_event_t *event)
+{
+    if(lv_event_get_target_obj(event)==s_lighting_button)s_lighting_button=NULL;
+}
+static void lighting_cb(lv_event_t *event)
+{
+    if(lv_event_get_code(event)==LV_EVENT_CLICKED &&
+       lv_event_get_target_obj(event)==s_lighting_button && s_lighting_callback &&
+       !lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN) && lighting_detected())
+        s_lighting_callback();
+}
+void ui_tools_set_lighting_callback(ui_tools_open_cb_t callback){s_lighting_callback=callback;}
+static void lighting_button_create(lv_obj_t *parent)
+{
+    if(!s_lighting_callback)return;
+    s_lighting_button=ui_button_create(parent,UI_BUTTON_OUTLINED,"Lighting");
+    lv_obj_add_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(s_lighting_button,156,48);
+    lv_obj_align(s_lighting_button,LV_ALIGN_TOP_RIGHT,-20,8);
+    lv_obj_add_event_cb(s_lighting_button,lighting_cb,LV_EVENT_CLICKED,NULL);
+    lv_obj_add_event_cb(s_lighting_button,lighting_deleted,LV_EVENT_DELETE,NULL);
+}
+
 static lv_obj_t *s_root;
 static lv_obj_t *s_tiles;
 static lv_obj_t *s_banner;
@@ -24,6 +67,7 @@ static const char *const s_descriptions[]={"Tune and validate your printer.","Pr
 static void tools_connection_refresh(lv_timer_t *timer)
 {
     (void)timer;if(!s_root)return;
+    lighting_visibility_refresh();
     moonraker_state_t state;moonraker_state_snapshot(&state);
     for(unsigned i=0;i<4;i++) {
         const char *reason=i<2?printer_idle_reason(&state):printer_connection_reason(&state);
@@ -35,7 +79,7 @@ static ui_tools_open_cb_t s_callbacks[4];
 static void tools_deleted(lv_event_t *event){
     if(lv_event_get_target_obj(event)!=s_root)return;
     if(s_connection_timer)lv_timer_delete(s_connection_timer);
-    s_connection_timer=NULL;s_root=NULL;s_tiles=NULL;s_center_rule=NULL;s_banner=NULL;
+    s_connection_timer=NULL;s_lighting_button=NULL;s_root=NULL;s_tiles=NULL;s_center_rule=NULL;s_banner=NULL;
     for(unsigned i=0;i<4;i++)s_body_labels[i]=NULL;
 }
 
@@ -186,6 +230,7 @@ static void studio_tools_create(void)
 void ui_tools_show(void)
 {
     if (s_root) {
+        tools_connection_refresh(NULL);
         lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(s_root);
         return;
@@ -197,7 +242,7 @@ void ui_tools_show(void)
     lv_obj_set_pos(s_root, UI_PAGE_ROOT_X, UI_PAGE_ROOT_Y);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     ui_apply_root_style(s_root);
-    if(ui_theme_is_studio()){studio_tools_create();tools_rule_create();s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);return;}
+    if(ui_theme_is_studio()){studio_tools_create();lighting_button_create(s_root);tools_rule_create();s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);return;}
     s_banner=ui_create_operator_page_header(s_root,"Tools",
         "Calibration and operator utilities",UI_PAGE_RAIL_WIDTH);
 
@@ -226,6 +271,7 @@ void ui_tools_show(void)
              "Macros", "Run available printer macros.", 3);
     tools_rule_create();
     lv_obj_send_event(s_tiles, LV_EVENT_SIZE_CHANGED, NULL);
+    lighting_button_create(s_root);
     s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);tools_connection_refresh(NULL);
 }
 

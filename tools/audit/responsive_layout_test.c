@@ -49,7 +49,13 @@ static void cards(lv_obj_t *list){
  }
 }
 #if defined(TEST_TOOLS)
+#include "case_lighting.h"
+static case_lighting_snapshot_t test_light;
+int64_t esp_timer_get_time(void){return 1000000;}
+void case_lighting_snapshot(case_lighting_snapshot_t *out,int64_t now){(void)now;*out=test_light;}
 #include "ui_tools.c"
+static unsigned lighting_opens;
+static void lighting_open_fixture(void){lighting_opens++;}
 static void tools_symbol_check(void){
  const uint32_t codepoints[]={0xF021,0xF03E,0xF0E7,0xF04B};
  for(unsigned i=0;i<4;i++){
@@ -80,7 +86,24 @@ static void tools_divider_check(void){
   }
  }
 }
-static void run(int width){ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);tools_symbol_check();tools_divider_check();if(!ui_theme_is_studio()){inside(s_banner,s_root);for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++)inside(lv_obj_get_child(s_banner,i),s_banner);}snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
+static void lighting_visibility_checks(void)
+{
+ unsigned before=lighting_opens;
+ test_light=(case_lighting_snapshot_t){.generation=config_generation};tools_connection_refresh(NULL);
+ assert(lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ lv_obj_send_event(s_lighting_button,LV_EVENT_CLICKED,NULL);assert(lighting_opens==before);
+ test_light.discovered=true;tools_connection_refresh(NULL);assert(lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ test_light.available=true;tools_connection_refresh(NULL);assert(!lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ lv_obj_send_event(s_lighting_button,LV_EVENT_CLICKED,NULL);assert(lighting_opens==before+1);
+ /* No timer refresh yet: a prior printer's visible button must not dispatch. */
+ config_generation++;lv_obj_send_event(s_lighting_button,LV_EVENT_CLICKED,NULL);assert(lighting_opens==before+1);
+ tools_connection_refresh(NULL);assert(lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ test_light.generation=config_generation;test_light.available=false;tools_connection_refresh(NULL);assert(lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ test_light.available=true;tools_connection_refresh(NULL);assert(!lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ test_light=(case_lighting_snapshot_t){.generation=config_generation};tools_connection_refresh(NULL);assert(lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
+ test_light.discovered=test_light.available=true;tools_connection_refresh(NULL);
+}
+static void run(int width){test_light=(case_lighting_snapshot_t){0};ui_tools_set_lighting_callback(lighting_open_fixture);ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);assert(s_lighting_button);lighting_visibility_checks();inside(s_lighting_button,s_root);unsigned old_lighting=lighting_opens;lv_obj_send_event(s_lighting_button,LV_EVENT_CLICKED,NULL);assert(lighting_opens==old_lighting+1);tools_symbol_check();tools_divider_check();if(!ui_theme_is_studio()){inside(s_banner,s_root);for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++)inside(lv_obj_get_child(s_banner,i),s_banner);}snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
 #elif defined(TEST_FILES)
 #include "ui_page_state.c"
 #include "ui_files.c"

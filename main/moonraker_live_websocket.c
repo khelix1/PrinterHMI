@@ -1,3 +1,4 @@
+#include "case_lighting.h"
 #include "moonraker_command_route.h"
 #include "moonraker_live_websocket.h"
 #include "moonraker_config_controller.h"
@@ -680,8 +681,9 @@ static bool handle_tools_response(const char *json, size_t length)
         cJSON *config = cJSON_GetObjectItemCaseSensitive(configfile, "config");
         macro_controller_update_parameters(config);
         motion_diagnostics_controller_update_config(config);
+        case_lighting_config(config,s_generation);
     } else {
-        consumed = endstop_status_controller_merge(root, s_generation);
+        consumed = case_lighting_response(root,s_generation) || endstop_status_controller_merge(root, s_generation);
     }
     cJSON_Delete(root);
     return consumed;
@@ -772,6 +774,7 @@ static bool handle_object_list_response(
                        [MOONRAKER_FILAMENT_SENSOR_NAME_MAX] = {{0}};
     size_t filament_count = 0;
 
+    case_lighting_objects(objects,s_generation);
     moonraker_capabilities_t capabilities = {
         .discovered = true,
         .has_heated_bed =
@@ -957,6 +960,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         return;
     }
 
+    case_lighting_status_json(s_message_buffer,(size_t)payload_length,s_generation);
     if (handle_tools_response(s_message_buffer, (size_t)payload_length)) return;
 
     if (handle_object_list_response(
@@ -995,6 +999,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         break;
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_READY:
+        case_lighting_reset(s_generation);
         /* A Klippy restart invalidates the old object subscription. */
         device_catalog_controller_reset();
         motion_diagnostics_controller_reset();
@@ -1023,6 +1028,7 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
         break;
 
     case MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED:
+        case_lighting_reset(s_generation);
         device_catalog_controller_reset();
         motion_diagnostics_controller_reset();
         macro_controller_update_from_objects(NULL);
@@ -1072,6 +1078,7 @@ static void websocket_event_handler(
 
     switch ((esp_websocket_event_id_t)event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
+        case_lighting_reset(s_generation);
         s_connected = true;
         s_subscribed = false;
         s_subscription_ready = false;
@@ -1297,6 +1304,7 @@ static bool create_client(
     copy_text(s_host, sizeof(s_host), host);
     copy_text(s_api_key, sizeof(s_api_key), api_key);
     s_generation = generation;
+    case_lighting_reset(generation);
     __atomic_store_n(
         &s_accepted_generation,
         generation,
@@ -1510,4 +1518,18 @@ bool moonraker_live_websocket_take_file_change(void)
         &s_file_change_pending,
         false,
         __ATOMIC_ACQ_REL);
+}
+
+/* Stack-local fixed-pin request; no HTTP fallback or blocking command buffer. */
+bool moonraker_live_websocket_set_case_led(uint32_t generation,int percent)
+{
+    if(generation!=s_generation || !moonraker_live_websocket_subscribed())return false;
+    char command[96],request[224];
+    uint32_t id=case_lighting_begin(generation,percent,esp_timer_get_time(),command,sizeof(command));
+    if(!id)return false;
+    int n=snprintf(request,sizeof(request),"{\"jsonrpc\":\"2.0\",\"method\":\"printer.gcode.script\",\"params\":{\"script\":\"%s\"},\"id\":%u}",command,(unsigned)id);
+    bool ok=n>0&&(size_t)n<sizeof(request)&&generation==s_generation&&moonraker_live_websocket_subscribed()&&
+        esp_websocket_client_send_text(s_client,request,n,0)==n;
+    if(!ok)case_lighting_failed(id,generation);
+    return ok;
 }

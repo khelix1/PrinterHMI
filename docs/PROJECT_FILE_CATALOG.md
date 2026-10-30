@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.1.0 source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.2.2-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -208,6 +208,10 @@ are not architecture modules and must not be tracked as production source.
 
 ## Independent cleanup branch
 
-The firmware contains 157 C sources; all `main/*.c` files are classified in the
+The firmware contains 159 C sources; all `main/*.c` files are classified in the
 firmware list. The standalone and G-code mesh experiments are absent. Retired
 source rewrite scripts and unused UI APIs are described in [Code cleanup](CODE_CLEANUP.md).
+
+Lighting is owned by `case_lighting.c` (generation-bound configuration/live state/command model)
+and `ui_case_lighting.c` (Tools modal). The existing live WebSocket owns discovery,
+config/status forwarding and nonblocking fixed-pin command transport.

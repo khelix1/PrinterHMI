@@ -3034,3 +3034,41 @@ ready for integration review after panel validation. Remaining low-reference
 interfaces include intentional test/reset hooks, generated theme dispatch and
 legacy/request ownership code that needs separate design review. Reference counts
 alone are not sufficient evidence to remove them.
+
+## v7.2.0-dev Case lighting
+
+Host checks exercise actual model/transport and LVGL UI, scaled/digital values,
+malformed data, ownership, timeout/retry and release-only dispatch. Source/version,
+parked-viewer and release boundary checks remain. Firmware sources total 159.
+The target toolchain/panel is unavailable here. Build with
+`./tools/build_idf6_hosted3.sh`, then verify real case_led controls, external value
+changes, printer switching, disconnect/reconnect and digital fallback. Do not use
+stable publication tooling for this development build.
+
+## v7.2.1-dev Lighting slider regression
+
+Native tests assert the requested position across refreshes and stale old-value
+updates, unchanged position on confirmation, and rollback on timeout. The new
+pending-position assertion fails against v7.2.0-dev. Retain printing, digital,
+offline, profile-change, send-failure and direct/partial-teardown checks across
+all five themes, densities and text sizes. Model/transport sanitizer checks also
+remain. No new network requests, configuration or stored preference changes.
+
+Apply over effective v7.2.0-dev on feature/case-lighting at the v7.1.0 checkpoint
+7a0f63936a09. Build with `./tools/build_idf6_hosted3.sh`; target/panel validation is
+not available here. Check the track/knob at 0/100%, dragging/releasing at several
+values, normal confirmation and disconnect/reconnect. No commit, push or flash
+is performed by the updater.
+
+## v7.2.2-dev Lighting discovery visibility
+
+Native Tools tests cover undiscovered/missing/present lights, printer switching
+before refresh, discovery arrival/removal/reset and action routing across all five
+themes, densities, text sizes, widths and custom metric profiles. Retain the
+Lighting UI/model/transport and updater recovery checks. Source count remains 159.
+
+Apply over effective v7.2.1-dev on feature/case-lighting, based on v7.1.0 checkpoint
+7a0f63936a09. Build with `./tools/build_idf6_hosted3.sh`; target/panel validation is
+not available here. Switch between a case_led printer and one without it, and
+open Tools before connection discovery finishes. The updater performs no Git
+mutation, build, flash or printer command.

@@ -80,6 +80,8 @@ idf_component_register(
         "camera_jpeg_decoder.c"
 
         # Tools
+        "case_lighting.c"
+        "ui_case_lighting.c"
         "ui_tools.c"
 
         # Dashboard

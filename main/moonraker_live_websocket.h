@@ -44,6 +44,9 @@ bool moonraker_live_websocket_fresh(int64_t maximum_age_us);
 bool moonraker_live_websocket_send_gcode(
     const char *script);
 
+/* Fixed case_led action for this captured profile; nonblocking, live echo confirms. */
+bool moonraker_live_websocket_set_case_led(uint32_t generation,int percent);
+
 /* Read-only diagnostic query; request IDs are owned by the endstop controller. */
 bool moonraker_live_websocket_request_endstops(uint32_t request_id);
 

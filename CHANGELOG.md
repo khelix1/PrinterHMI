@@ -1,5 +1,30 @@
 # Changelog
 
+## [7.2.2-dev] - 2026-10-29
+
+### Lighting discovery visibility
+
+- Show Tools Lighting only for a detected case_led on the active printer.
+- Recheck ownership on click to reject stale actions between refresh ticks.
+- Retain the existing four Tools tiles and current lighting controls.
+
+## [7.2.1-dev] - 2026-10-29
+
+### Lighting slider feedback
+
+- Hold the requested position while waiting for live confirmation.
+- Use shared themed slider styling with a slim track and thumb clearance.
+- Retain timeout/failure rollback and single-command release behavior.
+
+## [7.2.0-dev] - 2026-10-29
+
+### Tools case lighting
+
+- Add live case_led on/off and PWM brightness in a Tools header action.
+- Honor output scale, serialize release-only commands and confirm live values.
+- Fence commands to the active printer and disable unavailable/offline controls.
+- Add model/transport and native UI ownership/layout tests.
+
 ## [7.1.0] - 2026-10-28
 
 ### Stable release preparation

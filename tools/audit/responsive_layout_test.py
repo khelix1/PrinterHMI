@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
     (tmp/"esp_log.h").write_text("#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n")
     (tmp/"esp_wifi_types.h").write_text("#pragma once\n#include <stdint.h>\ntypedef struct { uint8_t ssid[33]; int8_t rssi; } wifi_ap_record_t;\n")
     (tmp/"esp_wifi.h").write_text("#pragma once\n#include \"esp_wifi_types.h\"\n")
+    (tmp/"esp_timer.h").write_text("#pragma once\n#include <stdint.h>\nint64_t esp_timer_get_time(void);\n")
     sources=["ui_popup.c","ui_button.c","ui_theme.c","ui_theme_a.c","ui_theme_b.c","ui_theme_c.c","ui_theme_studio.c","ui_studio_icons.c","assets/fonts/studio/inter_18.c","assets/fonts/studio/inter_20.c","assets/fonts/studio/inter_24.c","assets/fonts/studio/inter_28.c","assets/fonts/studio/inter_32.c","assets/fonts/studio/inter_48.c","assets/fonts/studio/inter_64.c","assets/fonts/studio/inter_96.c","ui_font_fallback.c","ui_text.c","ui_widgets.c","console_filter.c","macro_parameter_utils.c","ui_page_title.c","ui_page_layout_profile.c","ui_thumbnail.c","ui_status_banner.c"]
     for variant in (args.variant or ["TOOLS","FILES","MACROS","NETWORK"]):
         executable=tmp/variant.lower()

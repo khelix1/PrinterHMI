@@ -1,5 +1,12 @@
 # Final project review: 7.0.0-dev
 
+> Engineering record: version, branch, PASS and pending statements below refer
+> to the checkpoint described in each section, not necessarily current `main`.
+> Use [Building](BUILDING.md), [Known issues](KNOWN_ISSUES.md),
+> [Release checklist](RELEASE_CHECKLIST.md) and the
+> [2026-10-30 audit](PROJECT_AUDIT_2026_10_30.md) for current procedures and limits.
+
+
 Release preparation: current identity is 7.0.0. This report records the earlier
 7.0.0-dev UI review; later security/failure-path results and remaining limitations
 are included in [the v7.0.0 release notes](releases/v7.0.0.md) and

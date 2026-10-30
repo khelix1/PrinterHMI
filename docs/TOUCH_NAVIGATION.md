@@ -12,4 +12,9 @@ Host tests use LVGL 9.5 pointer input to check label and edge taps, adjacent act
 
 ESP-IDF firmware compilation and physical panel testing remain pending. Verify discovery Retry/Close, nested Back, Files thumbnail taps while loading, repeated editor opens and scrolling on the panel. Physical print/recovery tests remain pending as previously recorded.
 
-Stable version remains 6.5.6. This pass stays on feature/profile-setup-dialogs; it does not merge or publish firmware.
+
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

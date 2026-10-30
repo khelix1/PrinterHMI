@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v7.2.3-dev.
+- `partitions.csv` is the only supported partition layout for v7.2.4-dev.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy
@@ -90,12 +90,11 @@ When changing `main/idf_component.yml`:
 
 ## Build diagnostics
 
-Useful commands:
+After a successful canonical build, inspect that configured build directory:
 
 ```bash
-idf.py size
-idf.py size-components
-idf.py size-files
+source "$HOME/esp/esp-idf-v6.0.2/export.sh"
+idf.py -B build-idf6-hosted3 size size-components size-files
 ```
 
 Treat new compiler warnings, partition overflows, internal-memory regressions
@@ -103,16 +102,16 @@ and bootloader-size regressions as release blockers. For v5 and later, compare
 the startup `.bss`/internal-RAM map and confirm the image passes
 `vApplicationGetTimerTaskMemory()` before accepting a build.
 
-## Non-portable lockfile note
+## Portable dependency paths
 
-The current lockfile records the local board component source path. A future
-cleanup should make that component reference repository-relative before builds
-are expected to work from an arbitrary checkout path.
-
+The local board component uses repository-relative paths in the manifest and
+lockfile. `tools/audit/dependencies_lock_audit.sh` rejects private absolute paths.
+Builds and project-root archives must work from another checkout directory; do
+not reintroduce a machine-specific board-component path.
 
 ## Development and release versions
 
-`version.txt` owns the current build identity: `7.2.3-dev`. Local `X.Y.Z-dev` builds
+`version.txt` owns the current build identity: `7.2.4-dev`. Local `X.Y.Z-dev` builds
 are Development; unlabelled final-version local builds are Custom. CMake accepts `X.Y.Z`, `X.Y.Z-dev` and generated nightly identities.
 Stable release tooling reads the version source and rejects development suffixes
 before build or network publication. Nightly tooling restores the exact original
@@ -121,30 +120,20 @@ version after its temporary nightly build. Release preparation updates the versi
 publish the Stable channel. Known device
 validation limits are retained in the release notes.
 
-### Publishing v7.1.0 from the cleanup checkpoint
+### Publishing a stable release
 
-Apply the release preparation over v7.1.55-dev at cleanup checkpoint
-`7f3307a33364`. Build and panel-check the final identity with
-`PRINTERHMI_BUILD_CHANNEL=stable ./tools/build_idf6_hosted3.sh`.
-Commit the version/documentation preparation on `chore/stale-code-cleanup-main`,
-then integrate that branch into an up-to-date `main` with `git merge --ff-only`.
-Run `./tools/release_stable.sh` from clean `main`. It builds the complete P4+C6
-stack, audits outputs, atomically pushes main and the v7.1.0 tag, then publishes
-OTA/full-stack archives and their checksums. Do not run the nightly checkpoint
-script for this publication. Keep the cleanup branch until publication succeeds.
+Prepare a final `X.Y.Z` in `version.txt`, current release notes and matching
+identity documentation. Build and panel-check with
+`PRINTERHMI_BUILD_CHANNEL=stable ./tools/build_idf6_hosted3.sh`. Commit the
+reviewed result on its feature/release branch. Integrate into up-to-date `main`
+with `git merge --ff-only`, then run `./tools/release_stable.sh` from clean main.
+The script builds and audits the complete P4+C6 stack, atomically pushes main
+and the version tag, and publishes OTA/full-stack assets and checksums. Skip
+nightly checkpointing for this publication. Keep the branch until publication
+succeeds. Published v7.1.0 and v7.2.0 preparation steps are history, not commands
+to rerun for the next release.
 
-### Publishing v7.2.0 lighting
-
-Apply release preparation over effective v7.2.2-dev on feature/case-lighting,
-based on main checkpoint `7a0f63936a09`. Build/panel-check with
-`PRINTERHMI_BUILD_CHANNEL=stable ./tools/build_idf6_hosted3.sh`. Commit the reviewed
-lighting files and final version/notes, integrate into an up-to-date main with
-`git merge --ff-only feature/case-lighting`, and run `./tools/release_stable.sh`
-from clean main. The stable script builds/audits the P4+C6 stack and atomically
-pushes main plus the tag before publishing the assets. Skip nightly checkpointing
-for this release and retain the feature branch until publication succeeds.
-
-### OTA channel identity (v7.2.3-dev)
+### OTA channel identity
 
 Local `-dev` versions embed channel Development (3). Existing IDs for Custom (0),
 Stable (1) and Nightly (2) are retained. A stable build still requires a final

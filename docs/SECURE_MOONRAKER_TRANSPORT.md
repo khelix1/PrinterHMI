@@ -12,8 +12,9 @@ Each profile has a security selector beneath its Moonraker port:
 
 - **Standard HTTP** uses `http://` and `ws://` on the configured port.
 - **Secure HTTPS/WSS** shows PEM files in the SD-card root. Selecting a CA
-  stores it only for that profile, changes its port to 443, and uses verified
-  `https://` and `wss://` connections.
+  stores it only for that profile and uses verified `https://` and `wss://`
+  connections. An ordinary 7125 draft changes to 443; explicit ports are retained
+  for multiple secure instances. Review the actual TLS listener before saving.
 
 TLS and Moonraker API-key authentication are independent. A secure profile
 never falls back to HTTP when certificate validation, the TLS proxy, or its CA

@@ -1,5 +1,21 @@
 # Changelog
 
+## [7.2.4-dev] - 2026-10-30
+
+- Fix an oversized-camera-test JPEG heap overwrite; enforce buffer capacity on
+  every byte, bound the frame-read phase and reject failed HTTP/header responses.
+- Reject truncated camera-test URLs before creating the worker.
+- Reject missing, overlapping, changed-length and stale-generation WebSocket
+  fragments before JSON parsing; reset assembly on reconnect/retirement.
+- Reject non-finite/unrepresentable Bed Mesh numbers before publication.
+- Stop application OTA logs from recording full download URLs and tokens.
+- Remove the unused synchronous printer-health poller and stale API comment.
+- Repair About modified-source/channel coverage and Bed Mesh fixture linkage.
+- Review all main-repository documentation; correct security/build/recovery/OTA
+  instructions, configuration defaults and paths, and label historical records.
+- Add sanitizer-backed camera, fragment and mesh input regressions. See the
+  [project audit](docs/PROJECT_AUDIT_2026_10_30.md) for findings and remaining risks.
+
 ## [7.2.3-dev] - 2026-10-29
 
 - Label local `-dev` firmware as Development in Settings, About and OTA identity.

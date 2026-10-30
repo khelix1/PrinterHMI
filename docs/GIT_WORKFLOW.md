@@ -2,7 +2,9 @@
 
 ## Stable baseline
 
-`main` represents integrated, device-tested work. Annotated tags identify
+`main` represents integrated work, which may use a Development identity.
+Nightly and Stable release notes record their validation status; do not infer
+complete hardware coverage solely from a branch name. Annotated tags identify
 important rollback points. The initial Git baseline is:
 
 ```text
@@ -31,8 +33,8 @@ Build and test on hardware before committing. Merge only a verified result:
 git add <paths>
 git commit -m "Describe the verified outcome"
 git switch main
+git pull --ff-only origin main
 git merge --ff-only <feature-name>
-git branch -d <feature-name>
 ```
 
 ## End-of-night checkpoint
@@ -66,6 +68,10 @@ The repository includes `tools/end_of_night_checkpoint.sh`. On a clean,
 tested `main` branch it runs the public-tree audit, builds `PrinterHMI.bin`,
 creates its checksum, pushes `main`, creates a commit-specific nightly tag,
 publishes a GitHub prerelease and verifies the remote commit and both assets.
+
+On a clean feature branch the checkpoint backs up the branch without creating
+firmware; only integrated main publishes a nightly. Keep the feature branch
+until the intended publication completes, then verify ancestry and delete it.
 
 It requires ESP-IDF 6.0.2 at the standard project path and an
 authenticated GitHub CLI. The checkpoint invokes the canonical IDF6 build
@@ -112,3 +118,17 @@ git switch -c inspect-known-good known-good-v8-2026-07-22
 ```
 
 Never use `git reset --hard` as a routine recovery method.
+
+## Stable publication and branch archives
+
+For Stable, prepare the final version/release notes and use
+`./tools/release_stable.sh` from clean integrated main instead of the nightly
+checkpoint. It builds the full stack and publishes the versioned assets.
+
+A merged local branch can be deleted after confirming it is an ancestor of main.
+For unmerged experiments, first push an archive tag at the complete local tip,
+including any commits ahead of its remote branch. Verify that tag before
+removing a branch name. Archive tags retain history; they do not merge it.
+`chore/stale-code-cleanup` retains the latest parked 3D viewer work, and
+`feature/theme-maker` is separately parked. Neither is an active cleanup branch
+to merge wholesale into current main.

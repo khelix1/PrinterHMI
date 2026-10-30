@@ -14,4 +14,9 @@ Appearance dialogs use the chooser's screen-local opaque modal model, avoiding c
 
 Existing theme chooser/custom theme lifecycle and action-text/pressed-frame audits pass. Strict host compilation covers Settings and appearance owners. Target firmware compilation, physical theme transition flashes, touch behavior, dropdowns/keyboards after transitions and long-running printer operation remain panel checks. Previously pending physical print/recovery tests remain pending.
 
-The pass remains on feature/profile-setup-dialogs. Stable version remains 6.5.6. The installer does not commit, push, merge or publish firmware.
+
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

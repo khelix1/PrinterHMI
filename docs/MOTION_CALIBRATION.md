@@ -57,7 +57,7 @@ workflow in normal and large text, reach the final list/result line, cancel
 before sending commands, and confirm offline/unhomed/printer-switch states.
 Only run physical calibration on an attended, prepared printer. Existing
 printing-dependent recovery and active-print control tests remain pending.
-Stable version remains 6.5.6; this update neither commits nor pushes the branch.
+
 
 ## View available mesh during a print
 
@@ -66,3 +66,8 @@ refreshes when new mesh data arrives. Unchanged snapshots avoid unnecessary
 redraw. A disconnected cached snapshot is labeled "Last reported mesh"; a printer
 change fences the old viewer until reopened. Calibration and profile-changing
 commands still require the original connected/idle conditions.
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

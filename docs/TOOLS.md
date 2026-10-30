@@ -1,7 +1,9 @@
 # Tools guide
 
 Tools provides Calibration, Bed Mesh, Devices and Macros for the selected
-printer. Actions that move, heat or persist configuration check printer
+printer. A Lighting action also appears when the active printer reports
+`output_pin case_led`; see [Lighting](LIGHTING.md). Actions that move, heat or
+persist configuration check printer
 readiness and their workflow requirements again when dispatched.
 
 ## Calibration

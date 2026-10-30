@@ -1,5 +1,12 @@
 # Bug and security review — feature/profile-setup-dialogs
 
+> Engineering record: version, branch, PASS and pending statements below refer
+> to the checkpoint described in each section, not necessarily current `main`.
+> Use [Building](BUILDING.md), [Known issues](KNOWN_ISSUES.md),
+> [Release checklist](RELEASE_CHECKLIST.md) and the
+> [2026-10-30 audit](PROJECT_AUDIT_2026_10_30.md) for current procedures and limits.
+
+
 Reviewed checkpoint `004f6c2`, with the final UI/keyboard pass retained. This
 pass covers application source and host regressions. It is not a penetration
 test, a dependency CVE inventory, or a claim that the device is secure against

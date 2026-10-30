@@ -57,6 +57,8 @@ static bool s_file_change_pending = false;
 static char *s_message_buffer = NULL;
 static size_t s_message_capacity = 0;
 static uint32_t s_message_generation = 0;
+static size_t s_message_received;
+static size_t s_message_expected;
 
 static uint32_t s_generation = 0;
 static uint32_t s_accepted_generation = 0;
@@ -917,48 +919,49 @@ static bool handle_object_list_response(
 }
 
 
+/* Never parse a tail fragment using stale or uninitialized buffer contents. */
+static int assemble_websocket_message(const esp_websocket_event_data_t *data)
+{
+    if (!data || !data->data_ptr || data->data_len <= 0) return 0;
+    if (data->op_code != 0x1 && data->op_code != 0x0) return 0;
+    int length = data->payload_len > 0 ? data->payload_len : data->data_len;
+    if (length <= 0 || data->payload_offset < 0 ||
+        data->payload_offset > length ||
+        data->data_len > length - data->payload_offset ||
+        (size_t)length >= WS_MESSAGE_MAX_BYTES) {
+        s_message_received = s_message_expected = 0;
+        ESP_LOGW(TAG, "WS invalid fragment geometry");
+        return 0;
+    }
+    if (data->payload_offset == 0) {
+        s_message_received = 0;
+        s_message_expected = (size_t)length;
+        s_message_generation = s_generation;
+    } else if (s_message_expected != (size_t)length ||
+               s_message_received != (size_t)data->payload_offset ||
+               s_message_generation != s_generation) {
+        s_message_received = s_message_expected = 0;
+        ESP_LOGW(TAG, "WS incomplete or out-of-order message discarded");
+        return 0;
+    }
+    if (!ensure_message_capacity((size_t)length + 1)) {
+        s_message_received = s_message_expected = 0;
+        ESP_LOGW(TAG, "WS message allocation failed");
+        return 0;
+    }
+    memcpy(s_message_buffer + s_message_received, data->data_ptr,
+           (size_t)data->data_len);
+    s_message_received += (size_t)data->data_len;
+    if (s_message_received < s_message_expected) return 0;
+    s_message_buffer[length] = '\0';
+    s_message_received = s_message_expected = 0;
+    return length;
+}
+
 static void handle_websocket_data(esp_websocket_event_data_t *data)
 {
-    if (!data || !data->data_ptr || data->data_len <= 0) return;
-    if (data->op_code != 0x1 && data->op_code != 0x0) return;
-
-    int payload_length = data->payload_len > 0
-        ? data->payload_len
-        : data->data_len;
-
-    if (payload_length <= 0 ||
-        data->payload_offset < 0 ||
-        data->data_len > payload_length - data->payload_offset) {
-        ESP_LOGW(TAG, "WS invalid fragment geometry");
-        return;
-    }
-
-    size_t required = (size_t)payload_length + 1;
-    if (!ensure_message_capacity(required)) {
-        ESP_LOGW(TAG, "WS message allocation failed: %u bytes",
-                 (unsigned)required);
-        return;
-    }
-
-    if (data->payload_offset == 0) {
-        s_message_buffer[0] = '\0';
-        s_message_generation = s_generation;
-    }
-
-    memcpy(
-        s_message_buffer + data->payload_offset,
-        data->data_ptr,
-        (size_t)data->data_len);
-
-    int received_end = data->payload_offset + data->data_len;
-    if (received_end < payload_length) return;
-
-    s_message_buffer[payload_length] = '\0';
-
-    if (s_message_generation != s_generation) {
-        ESP_LOGW(TAG, "WS discarded stale generation message");
-        return;
-    }
+    int payload_length = assemble_websocket_message(data);
+    if (payload_length <= 0) return;
 
     case_lighting_status_json(s_message_buffer,(size_t)payload_length,s_generation);
     if (handle_tools_response(s_message_buffer, (size_t)payload_length)) return;
@@ -1078,6 +1081,7 @@ static void websocket_event_handler(
 
     switch ((esp_websocket_event_id_t)event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
+        s_message_received = s_message_expected = 0;
         case_lighting_reset(s_generation);
         s_connected = true;
         s_subscribed = false;
@@ -1091,6 +1095,7 @@ static void websocket_event_handler(
         break;
 
     case WEBSOCKET_EVENT_DISCONNECTED:
+        s_message_received = s_message_expected = 0;
         device_catalog_controller_reset();
         motion_diagnostics_controller_reset();
         macro_controller_update_from_objects(NULL);
@@ -1128,6 +1133,7 @@ static void websocket_event_handler(
         break;
 
     case WEBSOCKET_EVENT_CLOSED:
+        s_message_received = s_message_expected = 0;
         device_catalog_controller_reset();
         motion_diagnostics_controller_reset();
         macro_controller_update_from_objects(NULL);
@@ -1157,6 +1163,7 @@ static void destroy_client(void)
     s_subscribe_pending = false;
     s_last_status_update_us = 0;
     s_message_generation = 0;
+    s_message_received = s_message_expected = 0;
     __atomic_store_n(&s_file_change_pending, false, __ATOMIC_RELEASE);
     device_catalog_controller_reset();
     motion_diagnostics_controller_reset();
@@ -1315,6 +1322,7 @@ static bool create_client(
      */
     s_last_status_update_us = 0;
     s_message_generation = 0;
+    s_message_received = s_message_expected = 0;
 
     esp_websocket_client_config_t config = {
         .uri = s_uri,

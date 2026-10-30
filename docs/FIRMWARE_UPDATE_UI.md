@@ -18,8 +18,8 @@ Run `python3 tools/audit/calibration_dialog_layout_test.py` with LVGL sources av
 ## Running firmware identity and available releases
 
 The browser shows the running image's embedded build channel, version and source
-revision. Regular local builds are **Custom**, even when their base version equals
-a published stable release. `tools/release_stable.sh` supplies the Stable build
+revision. Local `X.Y.Z-dev` builds are **Development**. Unlabelled final-version local
+builds are **Custom**, even when their base version equals a published release. `tools/release_stable.sh` supplies the Stable build
 channel through the full-stack build. Generated `nightly-YYYY-MM-DD-commit` versions
 identify Nightly builds. The channel describes the firmware build, not whether it
 was installed using a custom URL; downloading an official build by URL does not
@@ -31,8 +31,8 @@ turn it into a custom build.
 | Matching nightly channel and complete nightly identity | Installed |
 | Later stable semantic version or later nightly date in its channel | Update available |
 | Earlier comparable version/date | Older |
-| Stable release at the same base version as a custom build | Switch to Stable |
-| Changing between stable and nightly channels | Switch to Stable/Nightly |
+| Stable release selected from Development or Custom, regardless of numeric patch counter | Switch to Stable |
+| Changing to a different Stable/Nightly channel | Switch to Stable/Nightly |
 | Different nightly commit on the same date | Different Build |
 
 An installed row has an accent border; the browser opens the installed nightly
@@ -56,9 +56,10 @@ trace.
 The host audit repeatedly exercises both transitions, external deletion, rapid
 taps, keyboard submission/cancellation, pending-start cancellation and rejected
 async allocation across all themes, density, text sizes and viewport fixtures.
-`tools/audit/firmware_identity_test.py` compiles all three build channels and tests
+`tools/audit/firmware_identity_test.py` compiles all four build channels and tests
 comparison cases. CMake channel execution is optional when CMake is available;
-this environment lacks CMake and the ESP-IDF target toolchain. A target build,
+the current audit executed those CMake channel configurations, but ESP-IDF
+target compilation remains a separate check. A target build,
 physical panel test and actual OTA/reboot remain pending.
 
 
@@ -76,10 +77,19 @@ Telemetry history status now has room for the compiler-reported worst-case text.
 The stricter Telemetry owner compilation also checks hotend-option assembly: bounded copies retain all four maximum-length object names without a potentially truncating append. Host selector tests cover those names and active-tool selection.
 
 
-## Development identity
+## Development identity and channel transitions
 
-The current branch uses `7.0.0-dev` and local builds remain Custom. Settings and
-OTA display the embedded version and source revision. A final Stable `7.0.0` is
-newer than `7.0.0-dev`; Stable `6.5.6` is older. Stable publishing rejects `-dev`.
-Latest published stable remains `6.5.6`. The intermittent OTA failure that cleared
-after reboot remains unresolved.
+Development, Nightly and Stable are distinct build identities. A development
+patch counter such as `7.2.2-dev` does not establish that it is newer than Stable
+`7.2.0`. Selecting Stable from Development/Custom/Nightly is a channel switch,
+not a claimed downgrade. Numeric upgrade/reinstall/downgrade ordering is used
+within Stable; Nightly uses its date and full identity. Same-date different
+hashes are different builds with no inferred order. Stable publishing rejects
+`-dev` versions. See [Building](BUILDING.md) for the current version policy and
+[the changelog](../CHANGELOG.md) for published versions. These rules take effect
+only after firmware containing the channel fix is installed.
+
+Application OTA start/save logs omit full URLs as of v7.2.4-dev, because custom
+URLs can contain credentials or tokens. Logs from older firmware, SDKs and
+external servers still require review before sharing. The unresolved historical
+backup-to-OTA panic remains listed in [Known issues](KNOWN_ISSUES.md).

@@ -1,5 +1,11 @@
 # LVGL ESP Portation
 
+> PrinterHMI note: this is generic upstream component documentation. Its example
+> boards, defaults and version-selection instructions are not the application
+> configuration. Use [PrinterHMI Building](../../docs/BUILDING.md) and
+> [Hardware](../../docs/HARDWARE.md); preserve the pinned local overrides.
+
+
 [![Component Registry](https://components.espressif.com/components/espressif/esp_lvgl_port/badge.svg)](https://components.espressif.com/components/espressif/esp_lvgl_port)
 ![maintenance-status](https://img.shields.io/badge/maintenance-actively--developed-brightgreen.svg)
 

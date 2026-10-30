@@ -10,7 +10,9 @@ PrinterHMI can keep two independent configuration backups on the SD card:
 ## Creating an encrypted backup
 
 Open **Settings → Configuration Backup**, choose **ENCRYPT**, enter a
-passphrase of at least 12 characters, then enter it again to confirm. The HMI
+passphrase of 12–96 UTF-8 bytes, then enter it again to confirm. ASCII
+passphrases have the same byte and character count; multibyte text reaches the
+byte limit sooner. The HMI
 shows live progress while it derives the key, encrypts the configuration, and
 writes the SD-card file.
 
@@ -43,3 +45,11 @@ Encrypted backups are portable: they can be restored on a replacement HMI only
 when the passphrase is available. PrinterHMI cannot recover or reset a lost
 passphrase. Store it in an appropriate password manager before relying on an
 encrypted backup for disaster recovery.
+
+## What a backup does not protect
+
+Neither format exports Wi-Fi passwords. CA certificates and additional camera
+catalog slots remain panel-local; configure the intended CA after moving to a
+replacement panel. Both formats include the primary camera URL, which can itself
+contain credentials or tokens. Use encrypted export when that URL is sensitive.
+Encrypted SD files do not encrypt the device's ordinary NVS storage.

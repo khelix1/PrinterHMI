@@ -5,7 +5,7 @@
 Start the serial monitor from the configured ESP-IDF environment:
 
 ```bash
-idf.py -p /dev/ttyUSB0 monitor
+ESPPORT=/dev/ttyUSB0 ./tools/build_idf6_hosted3.sh monitor
 ```
 
 Capture the reset reason, application version, OTA slot/state, PSRAM result,
@@ -57,7 +57,7 @@ display startup or another path is disturbing the display/backlight.
 ## Moonraker is offline
 
 - Verify the active printer profile name, host and port.
-- For Secure mode, verify port 443, the certificate IP/DNS name and the CA PEM selected for that profile; see `SECURE_MOONRAKER_SETUP.md`.
+- For Secure mode, verify the configured HTTPS port (443 by default), the certificate IP/DNS name and the CA PEM selected for that profile; see `SECURE_MOONRAKER_SETUP.md`.
 - Test `/server/info` from another device on the same network.
 - Confirm Moonraker is listening on the expected interface and port.
 - Check local firewall and network isolation.
@@ -97,7 +97,8 @@ layer number, capture the serial log and Moonraker `virtual_sdcard`,
 
 - Confirm SDMMC mount succeeds on the documented pins.
 - Check card format and write access.
-- Verify `/sdcard/cache` and `/sdcard/hmi/profile_previews` can be created.
+- Verify the cache directories listed in [Preview rendering](PREVIEW_RENDERING.md)
+  can be created, including `/sdcard/hmi/profile_previews`.
 - Treat a missing thumbnail as non-fatal; file controls should remain usable.
 - Remove only the affected cache entry when diagnosing stale preview data.
 

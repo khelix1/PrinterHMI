@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix="lvgl95-ui-") as directory:
         return str(obj)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         objects=list(pool.map(compile_ui,sources))
-    for channel in range(3):
+    for channel in range(4):
         executable=tmp/("about"+str(channel))
         subprocess.run([*common,f"-DPRINTERHMI_FIRMWARE_CHANNEL={channel}",'-DPRINTERHMI_SOURCE_REVISION="abcdef123456"','-DPRINTERHMI_SOURCE_MODIFIED=1',str(root/"tools/audit/about_dialog_layout_test.c"),*objects,str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
         subprocess.run([str(executable)],check=True)

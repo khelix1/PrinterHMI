@@ -19,7 +19,7 @@ on the printer host and do not copy it to the SD card.
 ## Install on the printer host
 
 On the printer host, clone the public PrinterHMI repository (or use an
-existing clone), then run the installer from its `tools/` directory. Replace
+existing clone), then run the installer from the repository root. Replace
 `192.168.1.50` with the Moonraker/Nginx printer-host IP address or hostname
 that PrinterHMI will use for this profile. Do **not** use the HMI's own address:
 `--host` becomes the certificate IP/DNS subject alternative name and must match
@@ -40,7 +40,7 @@ at the requested path after verification succeeds.
 For a Moonraker instance on a nonstandard local endpoint, specify it directly:
 
 ```bash
-sudo bash ./install_moonraker_tls_nginx.sh   --host printer.local --upstream 127.0.0.1:7126   --export-ca /tmp/moonraker-local-ca.pem
+sudo bash tools/install_moonraker_tls_nginx.sh   --host printer.local --upstream 127.0.0.1:7126   --export-ca /tmp/moonraker-local-ca.pem
 ```
 
 If an older or incomplete PrinterHMI TLS site exists, inspect it and rerun with
@@ -55,8 +55,9 @@ if the newly configured HTTPS endpoint cannot be verified.
 2. On the panel, open **Settings → Printer Profiles → Edit** for that printer.
 3. Under **Moonraker Port**, open the security selector and choose **SELECT
    .PEM**. The picker shows only `.pem` files in the SD-card root.
-4. Select that printer's CA. Secure HTTPS/WSS is selected and the port becomes
-   **443** automatically.
+4. Select that printer's CA. Secure HTTPS/WSS is selected. A draft still using the ordinary **7125** port
+   changes to **443**; other explicit ports are retained. Set the actual TLS
+   listener port for this instance before saving.
 5. Save the profile, then confirm it reconnects and reports live state.
 
 Each profile stores its own CA. Three printers can therefore use separate
@@ -72,7 +73,7 @@ sudo curl --fail --cacert /etc/nginx/printerhmi-tls/ca.crt   https://YOUR_HOST/s
 ```
 
 If the panel reports offline, verify the host/IP used by the profile matches
-the certificate SAN, that port 443 is reachable, and that the selected PEM is
+the certificate SAN, that the configured HTTPS port is reachable, and that the selected PEM is
 the CA exported by that host. Choose **Standard HTTP** to intentionally return
 that profile to its previous unencrypted port and behavior; a failed secure
 connection never does this on its own.
@@ -82,8 +83,8 @@ connection never does this on its own.
 Create one HTTPS listener for each local Moonraker instance; create no ports
 you do not need. The CA and certificate are shared across ports on the same
 host. Configure 443 to 7125 and 444 to 7126 by running the installer twice
-with --upstream 127.0.0.1:7125 --listen-port 443, then --upstream
-127.0.0.1:7126 --listen-port 444.
+with `--upstream 127.0.0.1:7125 --listen-port 443`, then
+`--upstream 127.0.0.1:7126 --listen-port 444`.
 
 Use the matching HTTPS ports in secure PrinterHMI profiles and import the same
 CA PEM for both. Discovery lists TLS proxy ports 443-446. The installer also

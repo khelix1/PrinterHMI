@@ -165,8 +165,7 @@ void ota_manager_set_url(const char *url)
     if (err == ESP_OK) {
         ESP_LOGI(
             TAG,
-            "OTA: saved URL to NVS: %s",
-            s_ota_url
+            "OTA: saved URL to NVS"
         );
     } else {
         ESP_LOGW(
@@ -250,8 +249,7 @@ static void update_task(void *arg)
     (void)arg;
 
     ESP_LOGI(TAG,
-             "task starting from %s",
-             s_task_url);
+             "task starting");
 
 
     s_worker_http = NULL;
@@ -533,8 +531,7 @@ bool ota_manager_start(const char *url)
     ui_ota_progress_show(ota_manager_cancel);
 
     ESP_LOGI(TAG,
-             "starting task for %s",
-             s_task_url);
+             "starting firmware update task");
 
     operator_event_log_add(
         OPERATOR_EVENT_INFO,

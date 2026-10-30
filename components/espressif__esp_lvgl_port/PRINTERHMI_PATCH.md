@@ -1,14 +1,23 @@
 # PrinterHMI ESP LVGL port customization
 
-This local component preserves a compatibility adjustment required by the
-PrinterHMI LVGL dependency.
+Upstream base: `espressif/esp_lvgl_port` 2.8.0~1. PrinterHMI pins LVGL 9.5.0;
+this directory is a local override, not an unmodified registry download.
 
-Upstream base: `espressif/esp_lvgl_port` 2.8.0~1.
+Intentional local behavior:
 
-Intentional change:
+- The compatibility change removes `LV_COLOR_FORMAT_RGB565_SWAPPED` references;
+  RGB565 and the existing `swap_bytes` flag remain the supported path. The old
+  9.2.x wording described the original patch checkpoint, not the current pin.
+- Display allocations honor `CONFIG_LV_DRAW_BUF_ALIGN`. The supported wrapper
+  selects the accepted PPA fill-only configuration and applies the separate
+  guarded LVGL alignment/cache corrections.
+- The LVGL9 touch adapter forwards bounded touch coordinates through the weak
+  `printerhmi_bed_mesh_multitouch_update` hook. Bed Mesh owns gesture interpretation;
+  this port does not enable the parked G-code viewer.
 
-- Removed references to `LV_COLOR_FORMAT_RGB565_SWAPPED`, which is unavailable
-  in the selected LVGL 9.2.x API. RGB565 and the existing `swap_bytes` flag
-  remain the supported path.
-
-Recheck this patch whenever LVGL or esp_lvgl_port is upgraded.
+See [Building](../../docs/BUILDING.md),
+[Graphics acceleration](../../docs/GRAPHICS_ACCELERATION.md) and
+[Hardware](../../docs/HARDWARE.md) for the application configuration. Generic
+upstream examples and benchmarks in this directory are not PrinterHMI settings
+or measured PrinterHMI frame rates. Recheck local changes whenever upgrading
+LVGL, the port or BSP; retain target display/touch/OTA regression coverage.

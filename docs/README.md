@@ -1,7 +1,8 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v7.2.3-dev behavior unless they are
-under `history/`.
+Operator/build guides describe current v7.2.4-dev behavior. `releases/`,
+`history/`, the changelog and the engineering records identified below describe
+their own checkpoints; they are not automatically current procedures.
 
 | Document | Purpose |
 | --- | --- |
@@ -44,9 +45,9 @@ reviewed change rather than silently accepting drift.
 See [Encrypted Configuration Backups](ENCRYPTED_CONFIGURATION_BACKUPS.md) for
 the portable encrypted-backup format, restore verification, and recovery rules.
 
-Current control-dialog closeout: [Nightly validation and pending printing checks](NIGHTLY_VALIDATION.md).
+Historical control-dialog closeout: [Nightly validation and pending printing checks](NIGHTLY_VALIDATION.md).
 
-Settings and large-text source closeout: [validation and pending follow-ups](SETTINGS_LAYOUT_VALIDATION.md).
+Historical Settings and large-text source closeout: [validation and pending follow-ups](SETTINGS_LAYOUT_VALIDATION.md).
 
 - [STUDIO Dark](STUDIO_DARK_TRIAL.md): independent dark theme, native LVGL Dashboard and panel validation.
 
@@ -57,6 +58,27 @@ Settings and large-text source closeout: [validation and pending follow-ups](SET
 - [Console layouts, command feedback and pressed button frames](CONSOLE.md)
 - [Notification policy and remaining migration](NOTIFICATIONS.md)
 
-See [v7.2.3-dev release notes](releases/v7.2.3-dev.md) for the current development scope and [Code cleanup](CODE_CLEANUP.md) for development history.
+See [v7.2.4-dev release notes](releases/v7.2.4-dev.md) for the current development scope and [Code cleanup](CODE_CLEANUP.md) for development history.
 
 - [Lighting](LIGHTING.md) — Tools case-light control and PWM brightness.
+
+See [Project audit — 2026-10-30](PROJECT_AUDIT_2026_10_30.md) for current input-hardening findings, validation and remaining trust boundaries.
+
+## Documentation types
+
+- Current runbooks: Building, Full-stack build, Flashing and OTA, Configuration,
+  Hardware, Troubleshooting, Git workflow, Release checklist and Security Policy.
+- Operator guides: the feature guides linked above, including Lighting,
+  notifications, previews, themes, calibration, Console and firmware-update UI.
+- Engineering records: TESTING, CODE_CLEANUP, LVGL_MODERNIZATION,
+  MODERNIZATION_CLOSEOUT, SECURITY_REVIEW, SETTINGS_LAYOUT_VALIDATION and
+  NIGHTLY_VALIDATION. Their checkpoint-specific PASS/pending/release statements
+  are historical evidence; consult the current audit and known issues as well.
+- Release notes and CHANGELOG preserve each release's facts. `history/` and
+  third-party license notices are retained as historical/upstream records.
+
+The 2026-10-30 documentation pass covers all 128 project-authored/upstream-notice
+Markdown/RST files tracked outside components on the reviewed main checkpoint,
+plus all 11 local-component documentation files and the new audit/release note.
+Upstream component documentation is labeled separately from PrinterHMI runbooks.
+See the [audit](PROJECT_AUDIT_2026_10_30.md) for scope and corrections.

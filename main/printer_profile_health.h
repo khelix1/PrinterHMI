@@ -7,10 +7,9 @@
 /*
  * Lightweight multi-printer health cache.
  *
- * The existing application runtime worker calls poll_one(). No additional
- * FreeRTOS task, timer, mutex, or scheduler allocation is introduced.
+ * The existing combined status/preview worker reports health results here.
+ * This cache starts no task, timer or separate endpoint probe.
  */
-void printer_profile_health_poll_one(void);
 /* Preserve unchanged endpoints; clear health only where config changed. */
 void printer_profile_health_reconcile(void);
 

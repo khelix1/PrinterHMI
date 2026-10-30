@@ -1,5 +1,11 @@
 # ESP LVGL RGB Screen Example
 
+> Standalone upstream example: instructions below apply only to this example,
+> not the PrinterHMI project root. Do not delete PrinterHMI's tracked sdkconfig
+> or lockfile to follow an example. Use the
+> [application build guide](../../../../docs/BUILDING.md) for PrinterHMI firmware.
+
+
 Very simple example for demonstration of initialization and usage of the `esp_lvgl_port` component with RGB LCD. This example contains four main parts:
 
 ## 1. LCD HW initialization - `app_lcd_init()`

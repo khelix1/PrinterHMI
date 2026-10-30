@@ -45,7 +45,7 @@ native sizing and tap-to-close behavior remain in place.
 
 The shared decoder already uses `no_cache` for temporary image descriptors and
 closes its decode session on success/failure; this behavior is retained. SD cache
-retention policy and other download-buffer lifetimes remain separate follow-ups.
+retention and download-buffer ownership are described below.
 
 ## Verification
 
@@ -88,7 +88,8 @@ network ownership. Successful transfers attempt a PSRAM realloc to the actual
 PNG size before handing ownership to the caller. Allocation failure preserves
 the complete original buffer; existing decode/publication/release paths remain
 responsible for freeing it. Small previews and 900×520 fullscreen sizing are
-unchanged. Version remains 6.5.6 on the LVGL modernization branch.
+unchanged. That behavior was introduced during the LVGL modernization; see the current
+changelog for release status.
 
 ## Aspect-aware pipeline checks
 

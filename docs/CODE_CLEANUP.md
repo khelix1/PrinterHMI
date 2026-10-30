@@ -1,8 +1,17 @@
 # Independent stale-code cleanup
 
+> Engineering record: version, branch, PASS and pending statements below refer
+> to the checkpoint described in each section, not necessarily current `main`.
+> Use [Building](BUILDING.md), [Known issues](KNOWN_ISSUES.md),
+> [Release checklist](RELEASE_CHECKLIST.md) and the
+> [2026-10-30 audit](PROJECT_AUDIT_2026_10_30.md) for current procedures and limits.
+
+
 The first two batches were selectively integrated into main as v7.1.33-dev.
-Current branch `chore/stale-code-cleanup-main` continues from that integrated
-checkpoint. Experimental viewer ancestry remains on the parked branches.
+Later cleanup was integrated into the v7.1.0 release; the deleted
+`chore/stale-code-cleanup-main` name below is historical. The separate parked
+`chore/stale-code-cleanup` branch retains the latest experimental viewer work
+and must not be confused with that completed main-based cleanup.
 
 ## Retired code
 

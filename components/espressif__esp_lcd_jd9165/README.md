@@ -1,5 +1,11 @@
 # ESP LCD JD9165
 
+> PrinterHMI note: this is generic upstream component documentation. Its example
+> boards, defaults and version-selection instructions are not the application
+> configuration. Use [PrinterHMI Building](../../docs/BUILDING.md) and
+> [Hardware](../../docs/HARDWARE.md); preserve the pinned local overrides.
+
+
 [![Component Registry](https://components.espressif.com/components/espressif/esp_lcd_jd9165/badge.svg)](https://components.espressif.com/components/espressif/esp_lcd_jd9165)
 
 Implementation of the JD9165 LCD controller with esp_lcd component.

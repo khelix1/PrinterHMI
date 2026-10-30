@@ -17,7 +17,7 @@ Opening Settings → OTA update after an encrypted backup previously caused a
 panic/rollback sequence. The event could not subsequently be reproduced after
 installing the latest local build. Host reviews fixed several memory-failure
 and lifecycle paths, but none is established as the cause or resolution of
-this event. v7.0.0 retains this investigation and the remaining physical
+this event. The investigation remains open, along with the physical
 printing/recovery/soak coverage as disclosed validation limits.
 
 # Network Transport
@@ -60,6 +60,12 @@ completion signal if that does not destabilize startup.
 ---
 
 # Security Limitations
+
+The [2026-10-30 project audit](PROJECT_AUDIT_2026_10_30.md) records input-hardening
+fixes, coverage limits and remaining trust boundaries. Current configuration also
+leaves Secure Boot, flash encryption and NVS encryption disabled; encrypted SD
+backups do not protect credentials stored in device flash.
+
 
 ## Local network transport
 

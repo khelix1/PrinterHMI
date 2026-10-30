@@ -4,8 +4,11 @@ PrinterHMI supports complete, versioned custom-theme packages stored on the SD
 card. The firmware applies, remembers, rescans, and removes packages; it does
 not include an on-device theme editor or Theme Laboratory.
 
-Built-in **Foundry**, **Operator**, and **Dark Glass** themes remain part of the
-firmware and cannot be removed.
+The normal built-in chooser exposes **STUDIO Dark** and **Operator**. Legacy
+Foundry, Dark Glass and Operator Shell IDs remain compiled for compatibility and
+host coverage. Built-in themes cannot be removed. Version 1 custom packages
+retain the supported base IDs listed below; the parked Theme Maker is not part
+of the released firmware.
 
 ## Create a theme
 

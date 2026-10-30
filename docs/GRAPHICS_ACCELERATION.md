@@ -2,7 +2,8 @@
 
 ## Current accepted build default
 
-After the cache-handoff fix, the user confirmed Dashboard black blocks were gone and Files scrolling was fast and smooth. The supported `tools/build_idf6_hosted3.sh` wrapper now defaults to the verified PPA fill-only configuration, including both guarded LVGL corrections. PPA image drawing and port rotation remain disabled; version 7.0.0-dev, direct mode, double buffering and LCD timing are unchanged. Physical Camera performance remains untested. Earlier trial/default statements below are historical.
+After the cache-handoff fix, the user confirmed Dashboard black blocks were gone and Files scrolling was fast and smooth. The supported `tools/build_idf6_hosted3.sh` wrapper now defaults to the verified PPA fill-only configuration, including both guarded LVGL corrections. PPA image drawing and port rotation remain disabled; direct mode, double buffering and LCD timing are retained. The current build
+version is owned by `version.txt`; 7.0.0-dev references below describe the trial. Physical Camera performance remains untested. Earlier trial/default statements below are historical.
 
 Run `./tools/build_idf6_hosted3.sh` to build, or `./tools/build_idf6_hosted3.sh flash monitor` to build, flash and monitor using the same selected SDKCONFIG. Use `PRINTERHMI_PPA_TRIAL=0 ./tools/build_idf6_hosted3.sh flash monitor` for the explicit software fallback. An unset variable defaults to PPA; an existing exported value of 0 still deliberately selects software. The wrapper prints the renderer chosen.
 
@@ -18,7 +19,7 @@ For troubleshooting, use `idf.py -B build-idf6-hosted3 -D SDKCONFIG=sdkconfig.id
 
 PrinterHMI 7.0.0-dev, feature/profile-setup-dialogs. Reviewed against the checked-in BSP/port and pinned LVGL 9.5.0 sources. No accelerator settings are changed by the camera polish patch.
 
-## Verified current path
+## Historical software-seed baseline
 
 - BSP `components/espressif__esp32_p4_function_ev_board/esp32_p4_function_ev_board.c` already calls `esp_lcd_dpi_panel_enable_dma2d(disp_panel)` during JD9165 initialization. DMA2D display support is already enabled.
 - The supported build script explicitly uses `sdkconfig.idf6`; changing only `sdkconfig` does not change that firmware. Both currently use RGB565, direct mode, tear avoidance and two DPI framebuffers. The port's DSI tear-avoidance branch in `components/espressif__esp_lvgl_port/src/lvgl9/esp_lvgl_port_disp.c` obtains both full-screen driver framebuffers and overrides the nominal 50-line draw-buffer setting. Do not infer a partial/single-buffer runtime from the macros used by main.c.

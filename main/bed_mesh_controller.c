@@ -1,5 +1,6 @@
 #include "bed_mesh_controller.h"
 #include <float.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "esp_heap_caps.h"
@@ -65,10 +66,16 @@ static bool ensure_profile_capacity(void)
     return true;
 }
 
+/* Reserve float arithmetic headroom for display exaggeration and interpolation. */
+static bool display_number(double value){
+    return isfinite(value) && fabs(value) <= (double)FLT_MAX / 4096.0;
+}
+
 static bool read_xy(cJSON *a,double *x,double *y){
     if(!cJSON_IsArray(a)||cJSON_GetArraySize(a)<2) return false;
     cJSON *jx=cJSON_GetArrayItem(a,0), *jy=cJSON_GetArrayItem(a,1);
-    if(!cJSON_IsNumber(jx)||!cJSON_IsNumber(jy)) return false;
+    if(!cJSON_IsNumber(jx)||!cJSON_IsNumber(jy)||
+       !display_number(jx->valuedouble)||!display_number(jy->valuedouble)) return false;
     *x=jx->valuedouble; *y=jy->valuedouble; return true;
 }
 
@@ -273,6 +280,16 @@ bool bed_mesh_controller_merge_status(cJSON *status)
             ? BED_MESH_MAX_COLS
             : (uint16_t)source_cols;
     size_t count = (size_t)rows * cols;
+
+    /* Reject unrepresentable server numbers before changing the cached mesh. */
+    for (uint16_t y = 0; y < rows; ++y) {
+        cJSON *row = cJSON_GetArrayItem(matrix, y);
+        for (uint16_t x = 0; x < cols; ++x) {
+            cJSON *value = cJSON_IsArray(row) ? cJSON_GetArrayItem(row, x) : NULL;
+            if (cJSON_IsNumber(value) && !display_number(value->valuedouble))
+                return false;
+        }
+    }
 
     lock();
 

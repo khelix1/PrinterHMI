@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.2.3-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.2.4-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -215,3 +215,12 @@ source rewrite scripts and unused UI APIs are described in [Code cleanup](CODE_C
 Lighting is owned by `case_lighting.c` (generation-bound configuration/live state/command model)
 and `ui_case_lighting.c` (Tools modal). The existing live WebSocket owns discovery,
 config/status forwarding and nonblocking fixed-pin command transport.
+
+### Project input-hardening audit (v7.2.4-dev)
+
+`camera_input_test.py`, `websocket_fragments_test.py` and `bed_mesh_input_test.py`
+exercise actual camera acquisition, pre-JSON assembly and mesh-number boundaries
+under ASan/UBSan. `PROJECT_AUDIT_2026_10_30.md` records scope, findings, host/target
+limits and remaining trust boundaries. The obsolete synchronous
+`printer_profile_health_poll_one` entry point is retired; the combined worker
+remains the health owner.

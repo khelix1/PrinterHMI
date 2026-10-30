@@ -24,4 +24,9 @@ Temperature and fan controls use a checked dispatch callback in the application.
 
 Real LVGL owner suites exercise keyboard completion/cancel, field and keyboard/footer bounds, full focused-field visibility after scrolling, port and motion rejection/correction, masked fields, accepted-character and length limits, temperature/fan rejection/retry, printer-generation fencing, nested deletion and duplicate Setup connection prevention. Coverage spans all five themes, densities and normal/large text; individual owner suites include standard/narrow/short viewports. Console, hotend, notification and theme-preview regressions pass, including separate production compilation with warnings treated as errors where supported. The Console test driver links the dashboard-profile and small font used by the theme previews.
 
-Host renders were inspected. Firmware build, touch/keyboard entry, actual network failures, real temperature/fan requests and earlier printing/recovery tests remain pending. Stable remains 6.5.6 and the feature branch stays open; this patch does not commit or push.
+Host renders were inspected. Firmware build, touch/keyboard entry, actual network failures, real temperature/fan requests and earlier printing/recovery tests remain pending.
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

@@ -3,6 +3,12 @@
 
 # I2C OLED example
 
+> Standalone upstream example: instructions below apply only to this example,
+> not the PrinterHMI project root. Do not delete PrinterHMI's tracked sdkconfig
+> or lockfile to follow an example. Use the
+> [application build guide](../../../../docs/BUILDING.md) for PrinterHMI firmware.
+
+
 [esp_lcd](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/lcd.html) supports I2C interfaced OLED LCD, whose color depth is usually 1bpp.
 
 This example shows how to make use of the SSD1306 panel driver from `esp_lcd` component to facilitate the porting of LVGL library. In the end, example will display a scrolling text on the OLED screen.

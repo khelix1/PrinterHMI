@@ -2,14 +2,14 @@
 
 ## Supported target
 
-PrinterHMI v7.2.3-dev targets the JC1060P470C-I/W operator panel built around the
+PrinterHMI v7.2.4-dev targets the JC1060P470C-I/W operator panel built around the
 ESP32-P4.
 
 | Function | Hardware |
 | --- | --- |
 | Application processor | ESP32-P4, dual-core RISC-V |
 | Network coprocessor | ESP32-C6 through Espressif hosted Wi-Fi |
-| Display | 7-inch 1024 x 600 JD9165 MIPI-DSI panel |
+| Display | 1024 x 600 JD9165 MIPI-DSI panel (JC1060P470C-I/W) |
 | Touch | GT911 capacitive touch controller |
 | Flash | 16 MiB |
 | External RAM | Hex PSRAM at 200 MHz |
@@ -50,7 +50,7 @@ appearance may remain when the splash first becomes visible.
 | D3 | 42 |
 
 The card is mounted at `/sdcard`. Thumbnail cache files are stored beneath
-`/sdcard/cache`, and per-printer preview files beneath
+`/sdcard/hmi/thumbs`, `/sdcard/hmi/thumbs32` and `/sdcard/hmi/rows`, and per-printer preview files beneath
 `/sdcard/hmi/profile_previews`.
 
 ## Memory policy

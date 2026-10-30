@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.2.3-dev is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.2.4-dev is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -37,9 +37,10 @@ flowchart TD
 ### Shell and pages
 
 `ui_shell` owns the persistent top status bar, navigation rail, clock and active
-printer identity. It routes ten pages in operator workflow order:
-Dashboard, Printer, Files, Bed Mesh, Macros, Console, Telemetry, Drybox,
-Network and Settings. Its persistent runtime pointer tables are allocated once
+printer identity. Its eight primary destinations are Dashboard, Printer, Files,
+Camera, Tools, Console, Drybox and Settings. Tools provides Bed Mesh, Macros,
+Devices and Calibration; Settings provides Network and setup flows. Its persistent
+runtime pointer tables are allocated once
 in PSRAM after scheduler startup.
 
 Each page has a top-level UI owner. Larger pages delegate to components such as

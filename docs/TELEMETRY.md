@@ -85,10 +85,15 @@ editing, command review and printer ownership have dedicated interaction checks.
 Target build, OTA and panel checks remain pending. Check normal/large text in
 each theme, all views, tool/range/target selection, Hold/Resume, graph scrolling,
 Devices navigation, an offline transition and a printer switch. Existing
-printing-dependent recovery/control tests remain pending. Stable stays 6.5.6.
+printing-dependent recovery/control tests remain pending.
 
 ## Continuous live traces and flat selectors
 
 History samples and chart columns use the same wall-clock two-second bins. UI polling jitter no longer accumulates into artificial gaps. Each bin records one actual live snapshot with its original timestamp; missed intervals, disconnected printers and invalid sensor readings remain gaps. Clock rollback and printer changes still reset ownership.
 
 The range and hotend selectors use flat fields with a small corner radius, no inherited card/pill shadow, and matching dropdown lists. Keyboard focus remains visible. The host audit covers jitter across a full 300-point window, true gaps, invalid readings and selector styling in every theme, density, text size and supported viewport.
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

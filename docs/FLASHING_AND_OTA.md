@@ -8,10 +8,7 @@ Build and flash through ESP-IDF:
 cd PrinterHMI_v3_2
 ./tools/build_idf6_hosted3.sh
 
-source "$HOME/esp/esp-idf-v6.0.2/export.sh"
-idf.py -B build-idf6-hosted3 \
-    -D SDKCONFIG="$PWD/sdkconfig.idf6" \
-    -p /dev/ttyUSB0 flash monitor
+ESPPORT=/dev/ttyUSB0 ./tools/build_idf6_hosted3.sh flash monitor
 ```
 
 Replace `/dev/ttyUSB0` with the detected serial port. A full USB flash writes
@@ -20,7 +17,7 @@ to ESP-IDF's generated flash arguments.
 
 ## Matching P4 and C6 firmware
 
-PrinterHMI v6.1.1 requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
+The supported PrinterHMI platform requires ESP-Hosted 3.0.5 on both the ESP32-P4 host and
 ESP32-C6 co-processor. The complete release archive contains normal P4 OTA
 and full-flash images plus the matching C6 full-flash image.
 
@@ -105,13 +102,8 @@ cd PrinterHMI_v3_2
 ./tools/build_idf6_hosted3.sh
 
 source "$HOME/esp/esp-idf-v6.0.2/export.sh"
-idf.py -B build-idf6-hosted3 \
-    -D SDKCONFIG="$PWD/sdkconfig.idf6" \
-    -p /dev/ttyUSB0 erase-flash
-
-idf.py -B build-idf6-hosted3 \
-    -D SDKCONFIG="$PWD/sdkconfig.idf6" \
-    -p /dev/ttyUSB0 flash monitor
+ESPPORT=/dev/ttyUSB0 idf.py -B build-idf6-hosted3 erase-flash
+ESPPORT=/dev/ttyUSB0 ./tools/build_idf6_hosted3.sh flash monitor
 ```
 
 `erase-flash` destroys all flash-resident settings and OTA state. Use it only
@@ -120,8 +112,8 @@ when that loss is intended. It does not erase the removable SD card.
 ## Nightly firmware
 
 A clean, tested `main` checkpoint publishes a GitHub prerelease tagged
-`nightly-YYYY-MM-DD-<commit>`. It contains `PrinterHMI.bin` and its SHA-256
-checksum. `tools/end_of_night_checkpoint.sh` builds, audits, pushes, tags,
+`nightly-YYYY-MM-DD-<commit>`. It contains `PrinterHMI-nightly-YYYY-MM-DD-<commit>.bin` and its matching
+`.bin.sha256` checksum file. `tools/end_of_night_checkpoint.sh` builds, audits, pushes, tags,
 publishes and verifies these assets.
 
 Nightly builds are development checkpoints, not versioned releases.

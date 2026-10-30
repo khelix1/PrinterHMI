@@ -1,5 +1,11 @@
 # BSP: ESP32-P4 Function EV Board
 
+> PrinterHMI note: this is generic upstream component documentation. Its example
+> boards, defaults and version-selection instructions are not the application
+> configuration. Use [PrinterHMI Building](../../docs/BUILDING.md) and
+> [Hardware](../../docs/HARDWARE.md); preserve the pinned local overrides.
+
+
 [![Component Registry](https://components.espressif.com/components/espressif/esp32_p4_function_ev_board/badge.svg)](https://components.espressif.com/components/espressif/esp32_p4_function_ev_board)
 
 ESP32-P4 Function EV Board is internal Espressif board for testing features on ESP32P4 chip.

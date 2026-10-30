@@ -13,6 +13,8 @@
 
 ## Versioning
 
+- [ ] Stable publication uses a final `X.Y.Z`; Development uses `X.Y.Z-dev`
+      and generated Nightly identities are kept separate.
 - [ ] `version.txt` contains the intended semantic release version.
 - [ ] CMake derives `PROJECT_VER` from `version.txt`.
 - [ ] Runtime version labels read the running image's `esp_app_desc_t`.
@@ -39,7 +41,8 @@
 - [ ] Startup has no repeated splash flashing.
 - [ ] Startup passes `vApplicationGetTimerTaskMemory()` and reaches
       `main_task: Calling app_main()`.
-- [ ] All ten sidebar destinations fit, highlight and open.
+- [ ] All eight navigation destinations fit, highlight and open: Dashboard, Printer,
+      Files, Camera, Tools, Console, Drybox and Settings.
 - [ ] Navigation, themes and modal popups pass.
 - [ ] Settings > About PrinterHMI shows the running image identity, credits
       and a working Close action without clipping or overlap.
@@ -58,7 +61,7 @@
       requires confirmation.
 - [ ] Console command history, live responses and severity colors pass.
 - [ ] Wi-Fi, SNTP, Moonraker HTTP/WebSocket and multi-printer switching pass.
-- [ ] When released, Secure profiles verify HTTPS/WSS with their own selected CA, reject an incorrect CA, and never silently downgrade.
+- [ ] Secure profiles verify HTTPS/WSS with their own selected CA, reject an incorrect CA, and never silently downgrade.
 - [ ] A disconnected active or inactive Moonraker profile leaves touch and
       page navigation responsive while the connection recovers.
 - [ ] A new print starts at 0% with unknown layers until fresh Moonraker
@@ -77,7 +80,6 @@
 
 ```bash
 git status --short
-./tools/build_v6_stack.sh
 ./tools/release_stable.sh
 ```
 

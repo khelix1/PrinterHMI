@@ -22,4 +22,9 @@ The source audit traced button creation through `ui_button.c`, `ui_widgets.c`, `
 
 The full older `lvgl95_modernization_test.py` has superseded popup/Macros layout expectations; its Console owner regression is run using `--variant CONSOLE`. Native dialog owners and the source-derived footer audit provide current geometry checks.
 
-Firmware build, OTA and physical-panel verification remain pending. Check dragging history, editing commands, keyboard reach and border feedback on the panel. Existing printing/recovery tests remain pending. Stable remains 6.5.6; the feature branch stays open. Drybox retains its previous layout at the user's request.
+Firmware build, OTA and physical-panel verification remain pending. Check dragging history, editing commands, keyboard reach and border feedback on the panel. Existing printing/recovery tests remain pending.  Drybox retains its previous layout at the user's request.
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

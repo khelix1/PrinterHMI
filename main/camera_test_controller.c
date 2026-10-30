@@ -5,6 +5,7 @@
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
+#include "esp_timer.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
@@ -13,6 +14,7 @@
 #include <string.h>
 
 #define CAMERA_TEST_FRAME_CAPACITY (256 * 1024)
+#define CAMERA_TEST_READ_BUDGET_US (5 * 1000 * 1000LL)
 
 static TaskHandle_t s_task = NULL;
 static char s_url[192];
@@ -67,12 +69,15 @@ static bool fetch_frame(int *width, int *height, size_t *bytes)
     uint8_t previous = 0;
     size_t used = 0;
     char chunk[1024];
-    if (esp_http_client_open(client, 0) == ESP_OK) {
-        (void)esp_http_client_fetch_headers(client);
-        while (used < CAMERA_TEST_FRAME_CAPACITY && !complete) {
+    if (esp_http_client_open(client, 0) == ESP_OK &&
+        esp_http_client_fetch_headers(client) >= 0 &&
+        esp_http_client_get_status_code(client) == 200) {
+        int64_t started_us = esp_timer_get_time();
+        while (used < CAMERA_TEST_FRAME_CAPACITY && !complete &&
+               esp_timer_get_time() - started_us < CAMERA_TEST_READ_BUDGET_US) {
             int read = esp_http_client_read(client, chunk, sizeof(chunk));
             if (read <= 0) break;
-            for (int index = 0; index < read; ++index) {
+            for (int index = 0; index < read && used < CAMERA_TEST_FRAME_CAPACITY; ++index) {
                 uint8_t value = (uint8_t)chunk[index];
                 if (!started) {
                     if (previous == 0xff && value == 0xd8) {
@@ -109,7 +114,8 @@ static void camera_test_task(void *arg)
 
 bool camera_test_start(const char *url)
 {
-    if (!url || !url[0] || s_task) return false;
+    if (!url || !url[0] || strnlen(url, sizeof(s_url)) >= sizeof(s_url) || s_task)
+        return false;
     strlcpy(s_url, url, sizeof(s_url));
     s_ok = false; s_width = s_height = 0; s_bytes = 0;
     __atomic_store_n(&s_ready, false, __ATOMIC_RELEASE);

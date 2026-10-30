@@ -12,4 +12,9 @@ Host LVGL checks cover all five themes, density and text-size variants. Instrume
 
 These checks measure host behavior and widget/timer lifetime, not ESP32 heap usage or hardware frame rate. Firmware build, physical scrolling with live printers and long-run heap behavior remain pending. Physical print/recovery tests remain pending as previously recorded.
 
-The pass stays on feature/profile-setup-dialogs. Stable version remains 6.5.6; no commit, push or release is performed by the installer.
+
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

@@ -1,5 +1,12 @@
 # Test plan
 
+> Engineering record: version, branch, PASS and pending statements below refer
+> to the checkpoint described in each section, not necessarily current `main`.
+> Use [Building](BUILDING.md), [Known issues](KNOWN_ISSUES.md),
+> [Release checklist](RELEASE_CHECKLIST.md) and the
+> [2026-10-30 audit](PROJECT_AUDIT_2026_10_30.md) for current procedures and limits.
+
+
 PrinterHMI changes are not complete when they compile. The target device is the
 acceptance environment.
 
@@ -3107,3 +3114,23 @@ Settings/About and the installed OTA identity. Select Stable v7.2.0: expect
 Switch to Stable with both identities and no downgrade warning. Review a Nightly
 choice and retain its warning. Host tests cover stable-to-older-stable ordering;
 actual installation/reboot/retained settings remain target validation steps.
+
+## v7.2.4-dev project input hardening
+
+Run `python3 tools/audit/camera_input_test.py` and
+`python3 tools/audit/websocket_fragments_test.py` for real camera worker and
+pre-JSON WebSocket assembly under ASan/UBSan. Run
+`python3 tools/audit/bed_mesh_input_test.py --cjson-dir PATH` against actual
+cJSON and controller code. Camera and Bed Mesh runners accept `--source` for
+before-patch regressions. Camera overflow reproduces under AddressSanitizer in
+the unchanged source. LeakSanitizer is disabled in these host fixtures.
+
+Repeat About, connection controls, chooser, Setup Center, profiles, camera
+pipeline, preview ownership, OTA transfer, case lighting, connection races and
+security boundary tests with documented host dependencies. OTA transfer captures
+actual formatted application log messages and rejects complete fixture URLs.
+About now covers all four channel IDs. Connection control fixtures explicitly
+stub the separate mesh snapshot and renderer owners; action restrictions remain
+under test. See the [project audit](PROJECT_AUDIT_2026_10_30.md) for the full
+90-suite initial run and residual risks. Target build, panel and soak coverage
+remain pending.

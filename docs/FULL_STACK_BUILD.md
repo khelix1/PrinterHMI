@@ -1,6 +1,6 @@
 # Full-stack build
 
-PrinterHMI v6 uses ESP-IDF 6.0.2 for both processors. The complete builder
+The supported PrinterHMI platform uses ESP-IDF 6.0.2 for both processors. The complete builder
 creates the normal ESP32-P4 application and matching ESP32-C6 ESP-Hosted
 firmware.
 
@@ -19,7 +19,7 @@ the exact tested v6.0.2 tag alongside other SDK installations.
 Install Git, Python 3 and the standard ESP-IDF host prerequisites, then run:
 
 ```bash
-git clone https://github.com/khelix1/PrinterHMI.git
+git clone https://github.com/khelix1/PrinterHMI.git PrinterHMI_v3_2
 cd PrinterHMI_v3_2
 ./tools/build_v6_stack.sh --bootstrap
 ```

@@ -20,7 +20,7 @@ The Settings and Network pages provide runtime configuration for:
 | Moonraker profile count | One configured profile |
 | Moonraker profile name | `Printer 1` |
 | Moonraker port | `7125` |
-| Theme | Operator |
+| Theme | STUDIO Dark (saved selections retain their existing IDs) |
 | Accent | Theme default |
 | Density | Comfortable |
 | Accessibility options | Off |
@@ -40,13 +40,18 @@ network assumptions.
 | `netcfg` | `mp_schema`, `mp_active`, `pN_used`, `pN_name`, `pN_host`, `pN_port` | Multi-printer profiles |
 | `display` | `brightness`, `sleep_min` | Display settings |
 | `ui_theme` | `active`, `custom_id`, `accent`, `density`, `large_text`, `contrast`, `solid_glass`, `reduce_motion` | Appearance manager |
-
-Custom `.phmitheme` packages are discovered from
-`/sdcard/PrinterHMI/themes/`. See [Custom themes](CUSTOM_THEMES.md) for the
-package contract, validation limits and fallback behavior.
 | `time_cfg` | `zone_id` | Timezone configuration |
 | `ota` | `url` | OTA manager |
 | `hmi` | `last_file` | Thumbnail/session restore |
+| `netcfg` | `pN_key`, `pN_cam`, `pN_tls` | Profile API key, primary camera URL, secure mode |
+| `moon_tls` | `ca_pem_N` | Per-profile CA trust store |
+| `netcfg` | `pN_cM`, `pN_nM`, `pN_vM`, `pN_cdef` | Additional camera URL/name, view transform, default camera |
+| `notifications` | `level` (legacy `confirm`) | Appliance-wide notification preference |
+
+`N` and `M` denote zero-based profile and camera slots. These are internal keys,
+not an invitation to edit NVS manually. Custom `.phmitheme` packages are
+discovered from `/sdcard/PrinterHMI/themes/`; see
+[Custom themes](CUSTOM_THEMES.md) for validation and fallback behavior.
 
 Legacy `netcfg/moon_host` and `netcfg/moon_port` values are migrated into
 profile zero when the multi-printer schema is first loaded.
@@ -76,7 +81,8 @@ Current API paths include server information, file listing, file metadata,
 thumbnail download, object subscription, G-code script execution and print
 start. Standard profiles use local-network HTTP and `ws://`. A profile can
 instead select verified HTTPS/WSS with its own SD-card-root CA PEM; that choice
-sets port 443 and never silently falls back to HTTP. See
+defaults to port 443 for an ordinary endpoint and supports explicit TLS proxy
+ports for multiple instances; it never silently falls back to HTTP. See
 [Secure Moonraker setup](SECURE_MOONRAKER_SETUP.md).
 
 Use a DHCP reservation for the HMI. If Moonraker `trusted_clients` is required,
@@ -131,5 +137,5 @@ Any NVS schema change must include:
 
 Use **Settings → Configuration Backup → ENCRYPT** when a portable backup must
 also retain Moonraker API keys. The encrypted file requires a passphrase of at
-least 12 characters for both verification and restore. The regular **BACK UP**
+least 12 and at most 96 UTF-8 bytes for verification and restore. The regular **BACK UP**
 file continues to omit API keys by design.

@@ -1,5 +1,12 @@
 # Control-dialog nightly validation
 
+> Engineering record: version, branch, PASS and pending statements below refer
+> to the checkpoint described in each section, not necessarily current `main`.
+> Use [Building](BUILDING.md), [Known issues](KNOWN_ISSUES.md),
+> [Release checklist](RELEASE_CHECKLIST.md) and the
+> [2026-10-30 audit](PROJECT_AUDIT_2026_10_30.md) for current procedures and limits.
+
+
 Stable version: 6.5.6. This is a development nightly, not a new stable release.
 
 Included: paused filament recovery with temperature selection; responsive

@@ -16,7 +16,9 @@ unrelated UI, transport and configuration changes.
 ## Before committing
 
 1. Review `git status --short` and `git diff`.
-2. Run `idf.py build` from an ESP-IDF 5.4.4 environment.
+2. Build with `./tools/build_idf6_hosted3.sh` using the pinned ESP-IDF 6.0.2
+   environment; see [Building](docs/BUILDING.md). Do not substitute a plain
+   `idf.py build` or reuse an IDF 5.x build cache.
 3. Install the image by USB or OTA.
 4. Exercise the affected UI and its failure path on the target hardware.
 5. Confirm there are no new watchdog resets, heap failures or persistent-state
@@ -30,10 +32,17 @@ unrelated UI, transport and configuration changes.
 git add <changed-paths>
 git commit -m "Describe the verified outcome"
 git switch main
+git pull --ff-only origin main
 git merge --ff-only <short-feature-name>
+./tools/end_of_night_checkpoint.sh
+git merge-base --is-ancestor <short-feature-name> main
 git branch -d <short-feature-name>
-git push origin main --follow-tags
 ```
+
+The checkpoint publishes a nightly only from clean integrated `main`. For a
+stable release, first prepare a final `X.Y.Z` version and release notes, then
+use `./tools/release_stable.sh` instead of the nightly checkpoint. Keep the
+feature branch until publication succeeds. See [Git workflow](docs/GIT_WORKFLOW.md).
 
 Do not commit build output, local credentials, generated archives, mechanical
 backup files or private network endpoints.

@@ -30,4 +30,9 @@ The responsive page audit covers offline/reconnected Tools hints, Files detail/c
 
 Target firmware build and physical panel tests remain pending. On the panel, disconnect/reconnect a printer while Files confirmation or Macro Run is open, check idle versus printing controls, switch printers during file metadata loading, and inspect Bed Mesh command availability. Confirm active-print hotend/bed/fan controls continue working. Physical print/recovery tests remain pending as previously recorded.
 
-The installer stays on feature/profile-setup-dialogs, preserves stable version 6.5.6 and does not commit, push, merge or publish firmware.
+
+
+
+Validation statements above record the implementation-stage checks. Current
+release status and open limitations are maintained in [Known issues](KNOWN_ISSUES.md),
+the [changelog](../CHANGELOG.md) and the [current audit](PROJECT_AUDIT_2026_10_30.md).

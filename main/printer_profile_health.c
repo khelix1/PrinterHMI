@@ -7,7 +7,6 @@
 #include "esp_timer.h"
 
 #include "moonraker_config_controller.h"
-#include "moonraker_probe.h"
 
 static const char *TAG = "printer_health";
 
@@ -111,91 +110,6 @@ bool printer_profile_health_get(
 
     return s_online[profile_index];
 }
-
-
-void printer_profile_health_poll_one(void)
-{
-    uint32_t generation_before = moonraker_config_generation();
-
-    if (generation_before != s_generation) {
-        printer_profile_health_reconcile();
-        generation_before = s_generation;
-    }
-
-    int index = s_next_profile;
-    s_next_profile =
-        (s_next_profile + 1) % MOONRAKER_CONFIG_MAX_PROFILES;
-
-    const moonraker_profile_t *profile =
-        moonraker_config_profile(index);
-
-    if (!profile || !profile->configured) {
-        s_online[index] = false;
-        s_known[index] = true;
-        s_printer_state[index][0] = '\0';
-        return;
-    }
-
-    char host[MOONRAKER_CONFIG_HOST_LENGTH];
-    strlcpy(host, profile->host, sizeof(host));
-    int port = profile->port;
-
-    bool online = moonraker_probe_host(host, port);
-
-    if (generation_before != moonraker_config_generation()) {
-        return;
-    }
-
-    bool changed = false;
-
-    if (online) {
-        s_failures[index] = 0;
-        changed =
-            !s_known[index] ||
-            !s_online[index];
-        s_online[index] = true;
-        s_known[index] = true;
-    } else if (!s_known[index]) {
-        /*
-         * Initial discovery should not leave an unresponsive configured
-         * printer in an unknown state.
-         */
-        s_failures[index] = 1;
-        s_online[index] = false;
-        s_known[index] = true;
-        changed = true;
-    } else if (s_online[index]) {
-        if (s_failures[index] < UINT8_MAX) {
-            ++s_failures[index];
-        }
-
-        if (s_failures[index] >=
-            PROFILE_HEALTH_FAILURE_THRESHOLD) {
-            s_online[index] = false;
-            changed = true;
-        } else {
-            ESP_LOGW(
-                TAG,
-                "Profile %d %s:%d probe missed (%u/%u)",
-                index + 1,
-                host,
-                port,
-                (unsigned)s_failures[index],
-                (unsigned)PROFILE_HEALTH_FAILURE_THRESHOLD);
-        }
-    }
-
-    if (changed) {
-        ESP_LOGI(
-            TAG,
-            "Profile %d %s:%d is %s",
-            index + 1,
-            host,
-            port,
-            s_online[index] ? "online" : "offline");
-    }
-}
-
 
 
 void printer_profile_health_set_live_state(

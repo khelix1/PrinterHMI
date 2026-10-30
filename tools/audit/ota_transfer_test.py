@@ -9,7 +9,7 @@ root=Path(__file__).resolve().parents[2]
 stubs={
 'lvgl.h':'#pragma once\n#include <stddef.h>\n',
 'esp_err.h':'#pragma once\ntypedef int esp_err_t;\n#define ESP_OK 0\n#define ESP_FAIL -1\n#define ESP_ERR_TIMEOUT -2\nconst char *esp_err_to_name(esp_err_t);\n',
-'esp_log.h':'#pragma once\n#include <stdio.h>\n#define ESP_LOGI(t,...) do { (void)(t); if(0) printf(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n',
+'esp_log.h':'#pragma once\n#include <stdio.h>\nvoid fixture_log(const char*,...);\n#define ESP_LOGI(t,...) do { (void)(t); fixture_log(__VA_ARGS__); } while(0)\n#define ESP_LOGW ESP_LOGI\n#define ESP_LOGE ESP_LOGI\n',
 'esp_timer.h':'#pragma once\n#include <stdint.h>\nint64_t esp_timer_get_time(void);\n',
 'esp_crt_bundle.h':'#pragma once\n#include "esp_err.h"\nesp_err_t esp_crt_bundle_attach(void*);\n',
 'esp_http_client.h':'#pragma once\n#include <stdbool.h>\n#include "esp_err.h"\ntypedef void *esp_http_client_handle_t;\nesp_err_t esp_http_client_set_timeout_ms(esp_http_client_handle_t,int);\ntypedef struct { const char *url; int timeout_ms; bool keep_alive_enable; esp_err_t(*crt_bundle_attach)(void*); int buffer_size; int buffer_size_tx; } esp_http_client_config_t;\n',
@@ -23,8 +23,13 @@ stubs={
 fixture=r'''
 #include <assert.h>
 #include <setjmp.h>
+#include <stdarg.h>
 #include <string.h>
 #include "ota_manager.c"
+void fixture_log(const char *format,...){
+ char rendered[1024];va_list args;va_start(args,format);vsnprintf(rendered,sizeof(rendered),format,args);va_end(args);
+ assert(!strstr(rendered,"https://fixture/")&&!strstr(rendered,"?token="));
+}
 static int64_t clock_us;
 static bool locked,task_accept=true,exclusive=true,ready=true,complete=true;
 static int mode,reads,aborts,finishes,releases,reboots,pumps,closes,read_timeout;

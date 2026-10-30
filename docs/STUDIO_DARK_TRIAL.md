@@ -3,9 +3,14 @@
 STUDIO Dark is an opt-in LVGL 9.5 interface for the 1024 × 600 ESP32-P4 panel.
 Select **Settings → Interface Theme → STUDIO DARK**. The saved selection survives
 reboot. The operator accepted the current panel layout on October 9, 2026,
-and the theme no longer carries a trial label. Operator remains the factory
-default; firmware identity remains 6.5.6. STUDIO includes deferred chooser
+and the theme no longer carries a trial label. STUDIO Dark is now the fresh-settings default; saved theme IDs remain valid.
+The filename is retained for links to the earlier trial history. STUDIO includes deferred chooser
 construction and the 16 KB LVGL task stack correction.
+
+
+Earlier checkpoint-specific validation and closeout notes below are historical;
+see [Console](CONSOLE.md), [Theme previews](THEME_PREVIEWS.md), [Building](BUILDING.md)
+and [Known issues](KNOWN_ISSUES.md) for current behavior and limits.
 
 ## Composition
 
@@ -21,13 +26,13 @@ The eight main pages use separately authored compositions:
   guarded jogging, extrusion and Z-offset popup; Tune opens speed/flow controls.
 - Drybox: humidity arc, open temperature readouts and program capsules. Existing
   program commands and availability states remain authoritative; no timer is invented.
-- Tools: two-by-two utility card grid with icons and descriptions.
+- Tools: Calibration, Bed Mesh, Devices and Macros, plus detected case lighting.
 - Files: scrolling job ledger and embedded preview/metadata inspector. Details
   opens the full metadata text; Print remains disabled until metadata is ready.
 - Camera: feed surface with overlaid status and controls. Configure, view transforms,
   source selection and fullscreen retain the existing camera pipeline.
-- Console: fixed command composer and six-row history pages. Older/Newer navigate
-  filtered history; Follow returns to live output. The page does not scroll.
+- Console: wrapped, scrolling history with filters, search and Follow; command
+  entry uses the shared keyboard dialog. The old six-row pager is retired.
 - Settings: flat editorial rows, fine rules and a scrolling settings viewport.
   Existing settings, descriptions and callbacks remain available.
 
@@ -161,7 +166,7 @@ scrolling; Tools uses a two-by-two card grid.
 
 Closeout removes the trial display labels, builds the accepted sources, merges
 the feature branch into main and runs the existing end-of-night checkpoint.
-Stable identity stays 6.5.6. Printing, runout recovery and extended hardware
+At that historical checkpoint, stable identity remained 6.5.6. Printing, runout recovery and extended hardware
 soak checks remain pending; acceptance does not substitute for those checks.
 
 ## CI whitespace cleanup

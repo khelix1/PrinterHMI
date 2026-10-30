@@ -1,11 +1,11 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v7.2.3-dev firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v7.2.4-dev firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
-The v7.2.3-dev firmware supports up to four Moonraker printer profiles, live
+The v7.2.4-dev firmware supports up to four Moonraker printer profiles, live
 printer and drybox status, file browsing with thumbnails and metadata,
 telemetry, print controls, exclude-object control, a dedicated 3D Bed Mesh
 workspace, detected Klipper macros, a live console, persistent display and
@@ -25,13 +25,14 @@ Version 7.2.0 adds Tools → Lighting for the active printer's Klipper
 when that output is detected. Experimental G-code viewing and Theme Maker remain
 parked. See [Lighting](docs/LIGHTING.md) and [release notes](docs/releases/v7.2.0.md).
 
-The current development patch distinguishes Development, Nightly and Stable in
-firmware identity and treats cross-channel installation as a channel switch.
-See [v7.2.3-dev notes](docs/releases/v7.2.3-dev.md).
+The current development patch hardens camera test input, WebSocket assembly,
+Bed Mesh numbers and OTA logging, and retires an unused health probe.
+See [v7.2.4-dev notes](docs/releases/v7.2.4-dev.md) and the
+[project audit](docs/PROJECT_AUDIT_2026_10_30.md).
 
 ## Status
 
-- Firmware version: `7.2.3-dev`
+- Firmware version: `7.2.4-dev`
 - Latest stable: `7.2.0`
 - Validation: host regression checks and operator panel feedback; stable publication rebuilds and audits the complete P4+C6 stack
 - Target: `esp32p4`
@@ -40,7 +41,7 @@ See [v7.2.3-dev notes](docs/releases/v7.2.3-dev.md).
 - Display: JD9165, 1024 x 600, MIPI-DSI
 - Touch: GT911 over I2C
 - Network: ESP32-C6 through `esp_wifi_remote`/`esp_hosted`
-- Release state: development (OTA channel classification fix)
+- Release state: development (project input and security hardening)
 
 See [Known Issues](docs/KNOWN_ISSUES.md) before distributing firmware or
 publishing repository history.
@@ -127,10 +128,7 @@ cd PrinterHMI
 # Or build and package both the P4 and C6 firmware stack:
 ./tools/build_v6_stack.sh
 
-source "$HOME/esp/esp-idf-v6.0.2/export.sh"
-idf.py -B build-idf6-hosted3 \
-    -D SDKCONFIG="$PWD/sdkconfig.idf6" \
-    -p /dev/ttyUSB0 flash monitor
+ESPPORT=/dev/ttyUSB0 ./tools/build_idf6_hosted3.sh flash monitor
 ```
 
 Use the serial device appropriate for the workstation. Do not commit local

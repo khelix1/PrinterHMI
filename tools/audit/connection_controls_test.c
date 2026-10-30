@@ -59,6 +59,14 @@ assert(file_detail_loader_start("host",7125,"key","job.gcode",ready));file_detai
 #include "ui_bed_mesh_profiles.c"
 #undef s
 #include "ui_bed_mesh.c"
+/* Connection gating is under test; rendering and transport are independent owners. */
+void ui_bed_mesh_renderer_render(const ui_bed_mesh_renderer_config_t *config){(void)config;}
+bool bed_mesh_controller_snapshot(bed_mesh_snapshot_t *out,float *values,size_t capacity,
+    bed_mesh_profile_name_t *names,size_t profile_capacity){
+ (void)values;(void)capacity;(void)names;(void)profile_capacity;
+ memset(out,0,sizeof(*out));return false;
+}
+
 static uint32_t profile=1;static unsigned sent;
 uint32_t moonraker_config_generation(void){return profile;}
 static bool send(const char*c){assert(c&&c[0]);sent++;return true;}

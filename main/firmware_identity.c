@@ -27,7 +27,8 @@ void firmware_identity_get(firmware_identity_t *identity)
 const char *firmware_identity_channel_name(firmware_channel_t channel)
 {
     return channel == FIRMWARE_CHANNEL_STABLE ? "Stable" :
-           channel == FIRMWARE_CHANNEL_NIGHTLY ? "Nightly" : "Custom";
+           channel == FIRMWARE_CHANNEL_NIGHTLY ? "Nightly" :
+           channel == FIRMWARE_CHANNEL_DEVELOPMENT ? "Development" : "Custom";
 }
 void firmware_identity_format(char *out, size_t capacity)
 {
@@ -36,7 +37,7 @@ void firmware_identity_format(char *out, size_t capacity)
     firmware_identity_get(&identity);
     snprintf(out, capacity, "Installed: %s | %s | %s%s",
              firmware_identity_channel_name(identity.channel), identity.version,
-             identity.revision, identity.modified && identity.channel==FIRMWARE_CHANNEL_CUSTOM ? " (modified)" : "");
+             identity.revision, identity.modified ? " (modified)" : "");
 }
 static bool semver(const char *version, unsigned long parts[3], bool *development)
 {
@@ -72,20 +73,21 @@ int firmware_identity_compare(const firmware_identity_t *installed,
                              firmware_channel_t channel,const char *candidate)
 {
     if(!installed || !candidate)return FIRMWARE_RELATION_OTHER_BUILD;
-    if(installed->channel==channel && !strcmp(installed->version,candidate))return 0;
-    if(channel==FIRMWARE_CHANNEL_STABLE && installed->channel!=FIRMWARE_CHANNEL_NIGHTLY) {
+    if(channel==FIRMWARE_CHANNEL_STABLE) {
         unsigned long a[3],b[3];
         bool candidate_dev, installed_dev;
+        if(installed->channel!=FIRMWARE_CHANNEL_STABLE)
+            return FIRMWARE_RELATION_SWITCH_CHANNEL;
         if(semver(candidate,a,&candidate_dev) && !candidate_dev &&
-           semver(installed->version,b,&installed_dev)) {
+           semver(installed->version,b,&installed_dev) && !installed_dev) {
             for(unsigned i=0;i<3;i++)if(a[i]!=b[i])return a[i]>b[i]?1:-1;
-            if (installed_dev) return 1; /* Final release follows its development build. */
-            return installed->channel==FIRMWARE_CHANNEL_STABLE ? 0 : FIRMWARE_RELATION_SWITCH_CHANNEL;
+            return 0;
         }
     }
     if(channel==FIRMWARE_CHANNEL_NIGHTLY && installed->channel==channel) {
         char a[11],b[11];
         if(nightly_date(candidate,a) && nightly_date(installed->version,b)) {
+            if(!strcmp(installed->version,candidate))return 0;
             int difference=strcmp(a,b);
             if(difference)return difference>0?1:-1;
             return FIRMWARE_RELATION_OTHER_BUILD; /* Same-day hashes have no ordering. */

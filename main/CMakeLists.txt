@@ -214,7 +214,8 @@ idf_component_register(
 )
 
 # Release entry points explicitly label Stable; a generated nightly identity
-# labels Nightly. Ordinary development builds always remain Custom.
+# labels Nightly. A -dev version labels Development; unlabelled final builds
+# remain Custom until explicitly built by the Stable release entry point.
 set(printerhmi_firmware_channel 0)
 if(PRINTERHMI_VERSION MATCHES "^nightly-")
     set(printerhmi_firmware_channel 2)
@@ -226,6 +227,9 @@ elseif("$ENV{PRINTERHMI_BUILD_CHANNEL}" STREQUAL "stable")
 elseif(NOT "$ENV{PRINTERHMI_BUILD_CHANNEL}" STREQUAL "" AND
        NOT "$ENV{PRINTERHMI_BUILD_CHANNEL}" STREQUAL "custom")
     message(FATAL_ERROR "PRINTERHMI_BUILD_CHANNEL must be stable or custom for a semantic version")
+endif()
+if(printerhmi_firmware_channel EQUAL 0 AND PRINTERHMI_VERSION MATCHES "-dev$")
+    set(printerhmi_firmware_channel 3)
 endif()
 execute_process(COMMAND git rev-parse --short=12 HEAD
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."

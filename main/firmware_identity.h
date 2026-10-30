@@ -6,6 +6,7 @@ typedef enum {
     FIRMWARE_CHANNEL_CUSTOM = 0,
     FIRMWARE_CHANNEL_STABLE = 1,
     FIRMWARE_CHANNEL_NIGHTLY = 2,
+    FIRMWARE_CHANNEL_DEVELOPMENT = 3,
 } firmware_channel_t;
 
 typedef struct {
@@ -18,7 +19,7 @@ typedef struct {
 void firmware_identity_get(firmware_identity_t *identity);
 const char *firmware_identity_channel_name(firmware_channel_t channel);
 void firmware_identity_format(char *out, size_t capacity);
-/* Channel-aware ordering: equal version alone cannot identify a custom build. */
+/* Order releases only within a channel. Cross-channel versions are incomparable. */
 int firmware_identity_compare(const firmware_identity_t *installed,
                              firmware_channel_t candidate_channel,
                              const char *candidate_version);

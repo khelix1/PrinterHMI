@@ -188,6 +188,8 @@ static void release_select_cb(lv_event_t *event)
         s_selected->relation == OTA_RELEASE_INSTALLED;
     bool downgrade =
         s_selected->relation == OTA_RELEASE_OLDER;
+    bool switch_channel =
+        s_selected->relation == OTA_RELEASE_SWITCH_CHANNEL;
     bool danger = nightly || installed || downgrade;
 
     s_confirm=ui_ota_dialog("Install firmware?",720,440,danger ? UI_POPUP_DANGER : UI_POPUP_STANDARD);
@@ -199,7 +201,8 @@ static void release_select_cb(lv_event_t *event)
             ? (nightly ? "Reinstall Nightly" : "Reinstall")
             : (nightly
                 ? (downgrade ? "Install older Nightly" : "Install Nightly")
-                : (downgrade ? "Downgrade to" : "Install"));
+                : (downgrade ? "Downgrade to" :
+                   switch_channel ? "Switch to Stable" : "Install"));
     char title[112];
     snprintf(title, sizeof(title), "%s %s",
              action, s_selected->version);
@@ -222,6 +225,11 @@ static void release_select_cb(lv_event_t *event)
     } else if (downgrade) {
         warning =
             "Warning: this replaces newer installed firmware.\n\n";
+    } else if (switch_channel) {
+        warning =
+            "This changes the firmware channel to Stable. Development and "
+            "nightly version numbers do not establish an upgrade or downgrade "
+            "relative to a stable release. Review the release notes before switching.\n\n";
     }
 
     lv_obj_t *content = ui_ota_body(s_confirm);

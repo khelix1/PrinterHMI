@@ -3086,3 +3086,24 @@ in this sandbox. Retain responsive Tools, readiness, offline navigation and
 emergency/recovery transport regressions. Run stable release audits and updater
 rollback/recovery checks. Build the final Stable identity and panel-check before
 publication; host fixtures do not establish panel or RTOS behavior.
+
+## v7.2.3-dev OTA channel comparisons
+
+Run `python3 tools/audit/firmware_identity_test.py` for embedded channel names,
+all four IDs, legacy Custom `7.2.2-dev` → Stable `7.2.0`, cross-channel choices,
+Stable upgrade/reinstall/downgrade, and exact/different/older/newer Nightly cases.
+With CMake available it also exercises actual component channel definitions and
+rejects a development version forced into Stable.
+
+Run `python3 tools/audit/calibration_dialog_layout_test.py --variant OTAFAILURE`
+with the documented LVGL source/archive options for the real OTA browser. It
+checks explicit Switch to Stable wording, channel context, retained genuine
+stable downgrade warnings, Nightly confirmation and existing failure/lifecycle
+cases across themes, density and text settings. Run the development version,
+source membership and document-link audits as well.
+
+On the tablet, build with `./tools/build_idf6_hosted3.sh`, check Development in
+Settings/About and the installed OTA identity. Select Stable v7.2.0: expect
+Switch to Stable with both identities and no downgrade warning. Review a Nightly
+choice and retain its warning. Host tests cover stable-to-older-stable ordering;
+actual installation/reboot/retained settings remain target validation steps.

@@ -299,7 +299,7 @@ bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
  catalog_reads++;if(catalog_hook){void(*hook)(void)=catalog_hook;catalog_hook=NULL;hook();}
  if(index>=4)return false;
  memset(out,0,sizeof(*out));out->channel=index<2?OTA_RELEASE_CHANNEL_STABLE:OTA_RELEASE_CHANNEL_NIGHTLY;
- out->relation=index==1?OTA_RELEASE_OLDER:OTA_RELEASE_NEWER;
+ out->relation=index==0?OTA_RELEASE_SWITCH_CHANNEL:index==1?OTA_RELEASE_OLDER:OTA_RELEASE_NEWER;
  snprintf(out->version,sizeof(out->version),"nightly-2026-10-10-012345abcdef");
  strcpy(out->notes,"Long release notes describing this update and everything the operator needs to know. Settings and printer profiles are retained. Review the selected build before installing.");
  strcpy(out->published,"2026-10-10");snprintf(out->asset_url,sizeof(out->asset_url),"https://fixture/fw%u.bin",(unsigned)index);out->asset_size=2500000;return true;
@@ -389,7 +389,14 @@ static void run(void){
  click(lv_obj_get_child(s_list,0));assert(s_confirm);
  assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_confirm),0)),"Installed: Custom"));
  assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_confirm),1)),"Selected: Stable"));
+ assert(strstr(lv_label_get_text(lv_obj_get_child(s_confirm,0)),"Switch to Stable"));
+ assert(!strstr(lv_label_get_text(lv_obj_get_child(s_confirm,0)),"Downgrade"));
+ assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_confirm),2)),"changes the firmware channel"));
  layout(s_confirm);click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),0));assert(!s_confirm&&s_popup);
+ click(lv_obj_get_child(s_list,1));assert(s_confirm);
+ assert(strstr(lv_label_get_text(lv_obj_get_child(s_confirm,0)),"Downgrade to"));
+ assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_confirm),2)),"newer installed firmware"));
+ confirm_close();
  click(s_nightly_tab);assert(s_channel==OTA_RELEASE_CHANNEL_NIGHTLY);layout(s_popup);
  click(lv_obj_get_child(s_list,2));layout(s_confirm);before_updates=chosen_updates;click(lv_obj_get_child(lv_obj_get_child(s_confirm,2),1));
  assert(chosen_updates==before_updates+1&&!strcmp(chosen_url,"https://fixture/fw2.bin")&&!s_popup&&!s_confirm&&!s_timer);

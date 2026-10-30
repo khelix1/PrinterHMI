@@ -93,7 +93,7 @@ static void about_build(void)
     about_field(software, "Channel", firmware_identity_channel_name(identity.channel));
     char revision[48];
     snprintf(revision, sizeof(revision), "%s%s", identity.revision,
-             identity.modified && identity.channel == FIRMWARE_CHANNEL_CUSTOM ? " (modified)" : "");
+             identity.modified ? " (modified)" : "");
     about_field(software, "Source", revision);
     char build[48];
     if (app && app->date[0] && app->time[0])

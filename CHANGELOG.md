@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.2.3-dev] - 2026-10-29
+
+- Label local `-dev` firmware as Development in Settings, About and OTA identity.
+- Treat moves between Development, Nightly, Custom and Stable as channel switches;
+  development patch counters no longer produce false stable downgrade warnings.
+- Retain numeric upgrade/downgrade ordering within Stable and date ordering
+  within Nightly. Show an explicit Switch to Stable confirmation.
+- Keep modified-source marking visible for Development builds.
+- Add legacy `7.2.2-dev` → `7.2.0` regressions and real OTA dialog checks.
+
 ## [7.2.0] - 2026-10-29
 
 ### Stable case lighting release preparation

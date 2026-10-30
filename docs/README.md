@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Documents in this directory describe current v7.2.0 behavior unless they are
+Documents in this directory describe current v7.2.3-dev behavior unless they are
 under `history/`.
 
 | Document | Purpose |
@@ -57,6 +57,6 @@ Settings and large-text source closeout: [validation and pending follow-ups](SET
 - [Console layouts, command feedback and pressed button frames](CONSOLE.md)
 - [Notification policy and remaining migration](NOTIFICATIONS.md)
 
-See [v7.2.0 release notes](releases/v7.2.0.md) for the current development scope and [Code cleanup](CODE_CLEANUP.md) for development history.
+See [v7.2.3-dev release notes](releases/v7.2.3-dev.md) for the current development scope and [Code cleanup](CODE_CLEANUP.md) for development history.
 
 - [Lighting](LIGHTING.md) — Tools case-light control and PWM brightness.

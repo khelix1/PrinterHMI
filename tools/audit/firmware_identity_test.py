@@ -24,31 +24,47 @@ int main(void){
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_NIGHTLY,"nightly-2026-10-11-abcdef")==3);
  i.channel=FIRMWARE_CHANNEL_CUSTOM;
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.6")==3);
- assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.7")==1);
- assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.5")==-1);
+ assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.7")==3);
+ assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.5")==3);
  strcpy(i.version,"7.0.0-dev");
- assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.0.0")==1);
- assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.6")==-1);
- assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.0.1")==1);
+ assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.0.0")==3);
+ assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.6")==3);
+ assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.0.1")==3);
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.0.0-dev")==3);
  strcpy(i.version,"7.0.0-dev-extra");assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.0.0")==3);
  strcpy(i.version,"unknown");assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.6")==3);
+ /* Legacy dev builds used Custom and incremented patches within a release train. */
+ for(unsigned channel=0;channel<4;channel++) {
+  if(channel==FIRMWARE_CHANNEL_STABLE)continue;
+  i.channel=(firmware_channel_t)channel;
+  strcpy(i.version,"7.2.2-dev");
+  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.2.0")==3);
+  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.2.2")==3);
+  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v7.2.3")==3);
+ }
+ i.channel=FIRMWARE_CHANNEL_DEVELOPMENT;strcpy(i.version,"7.2.1-dev");
+ assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_NIGHTLY,"nightly-2026-10-29-abcdef")==3);
+ assert(!strcmp(firmware_identity_channel_name(i.channel),"Development"));
+ if(PRINTERHMI_FIRMWARE_CHANNEL==FIRMWARE_CHANNEL_DEVELOPMENT) {
+  strcpy(app.version,"7.2.1-dev");firmware_identity_format(text,sizeof(text));
+  assert(strstr(text,"Development | 7.2.1-dev")&&strstr(text,"(modified)"));
+ }
  i.channel=FIRMWARE_CHANNEL_NIGHTLY;strcpy(i.version,"nightly-2026-10-11-abcdef");
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_NIGHTLY,"nightly-2026-10-11-abcdef")==0);
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_NIGHTLY,"nightly-2026-10-12-123456")==1);
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_NIGHTLY,"nightly-2026-10-10-123456")==-1);
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_NIGHTLY,"nightly-2026-10-11-123456")==2);
  assert(firmware_identity_compare(&i,FIRMWARE_CHANNEL_STABLE,"v6.5.6")==3);
- puts("PASS: embedded channel/revision and Stable/Nightly/Custom installed/update/older/channel-switch/same-day rules");}
+ puts("PASS: embedded channel/revision and Stable/Nightly/Development/Custom installed/update/older/channel-switch/same-day rules");}
 '''
 with tempfile.TemporaryDirectory(prefix='firmware-identity-') as t:
  p=Path(t);(p/'esp_app_desc.h').write_text('#pragma once\ntypedef struct {char version[32];} esp_app_desc_t;\nconst esp_app_desc_t *esp_app_get_description(void);\n');(p/'test.c').write_text(source)
- for channel in range(3):
+ for channel in range(4):
   subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wrestrict',f'-DPRINTERHMI_FIRMWARE_CHANNEL={channel}','-DPRINTERHMI_SOURCE_REVISION="abcdef123456"','-I',str(p),'-I',str(root/'main'),str(p/'test.c'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
  (p/'dummy.c').write_text('int placeholder;\n')
  (p/'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.16)\nproject(identity C)\nfunction(idf_component_register)\n add_library(identity STATIC dummy.c)\n set(COMPONENT_LIB identity PARENT_SCOPE)\nendfunction()\ninclude("'+(root/'main/CMakeLists.txt').as_posix()+'")\nget_target_property(definitions identity COMPILE_DEFINITIONS)\nfile(WRITE "${CMAKE_BINARY_DIR}/identity.txt" "${definitions}")\n')
- for n,(version,env_channel,expected) in enumerate([('6.5.6','',0),('6.5.6','stable',1),('nightly-2026-10-11-abcdef','',2),('6.5.6','custom',0),('7.0.0-dev','',0),('7.0.0-dev','custom',0)]):
+ for n,(version,env_channel,expected) in enumerate([('6.5.6','',0),('6.5.6','stable',1),('nightly-2026-10-11-abcdef','',2),('6.5.6','custom',0),('7.0.0-dev','',3),('7.0.0-dev','custom',3),('7.2.1-dev','',3),('7.2.1-dev','custom',3)]):
   env=os.environ.copy();env['PRINTERHMI_BUILD_CHANNEL']=env_channel
   if not shutil.which('cmake'):continue
   result=subprocess.run(['cmake','-S',str(p),'-B',str(p/f'build{n}'),f'-DPRINTERHMI_VERSION={version}'],env=env,capture_output=True,text=True)

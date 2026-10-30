@@ -75,7 +75,7 @@ Current documentation is checked by `tools/audit/version_audit.sh`.
   configuration.
 - `sdkconfig` records the known-good resolved configuration and should change
   only when an intentional configuration change is reviewed.
-- `partitions.csv` is the only supported partition layout for v7.2.0.
+- `partitions.csv` is the only supported partition layout for v7.2.3-dev.
 - Do not place credentials in either configuration file.
 
 ## Dependency policy
@@ -112,13 +112,13 @@ are expected to work from an arbitrary checkout path.
 
 ## Development and release versions
 
-`version.txt` owns the current build identity: `7.2.0`. Regular local builds
-are Custom. CMake accepts `X.Y.Z`, `X.Y.Z-dev` and generated nightly identities.
+`version.txt` owns the current build identity: `7.2.3-dev`. Local `X.Y.Z-dev` builds
+are Development; unlabelled final-version local builds are Custom. CMake accepts `X.Y.Z`, `X.Y.Z-dev` and generated nightly identities.
 Stable release tooling reads the version source and rejects development suffixes
 before build or network publication. Nightly tooling restores the exact original
 version after its temporary nightly build. Release preparation updates the version and release notes together. Use
 `./tools/release_stable.sh` from a clean, integrated `main` checkout to build and
-publish the Stable channel; regular local builds remain Custom. Known device
+publish the Stable channel. Known device
 validation limits are retained in the release notes.
 
 ### Publishing v7.1.0 from the cleanup checkpoint
@@ -143,3 +143,15 @@ lighting files and final version/notes, integrate into an up-to-date main with
 from clean main. The stable script builds/audits the P4+C6 stack and atomically
 pushes main plus the tag before publishing the assets. Skip nightly checkpointing
 for this release and retain the feature branch until publication succeeds.
+
+### OTA channel identity (v7.2.3-dev)
+
+Local `-dev` versions embed channel Development (3). Existing IDs for Custom (0),
+Stable (1) and Nightly (2) are retained. A stable build still requires a final
+`X.Y.Z` version and explicit release tooling. No NVS migration is needed.
+
+OTA compares numeric versions only within Stable and dates only within Nightly.
+Moving from Development or legacy Custom-labelled dev images to a stable release
+is a channel switch, even when development patch numbers are numerically larger.
+The operator sees installed and selected identities and release notes. This does
+not bypass target bootloader anti-rollback checks or firmware image validation.

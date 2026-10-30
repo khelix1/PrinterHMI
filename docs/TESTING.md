@@ -3072,3 +3072,17 @@ Apply over effective v7.2.1-dev on feature/case-lighting, based on v7.1.0 checkp
 not available here. Switch between a case_led printer and one without it, and
 open Tools before connection discovery finishes. The updater performs no Git
 mutation, build, flash or printer command.
+
+## v7.2.0 Final lighting review
+
+Run case_lighting_test.py with cJSON: model and extracted WebSocket adapter plus
+case_lighting_lock_test.c exercise critical-section depth, reset/config changes
+and competing requests during float formatting. A 0.004 live value must remain
+pending after requesting Off until an actual zero update arrives.
+Run case_lighting_ui_test.py with cJSON/LVGL for the sub-1% On indication, real
+zero command, callback-created replacement dialogs and existing timeout/feedback/teardown matrix. Reproduce both new
+assertions against unchanged v7.2.2-dev. ASan/UBSan pass with leak detection disabled
+in this sandbox. Retain responsive Tools, readiness, offline navigation and
+emergency/recovery transport regressions. Run stable release audits and updater
+rollback/recovery checks. Build the final Stable identity and panel-check before
+publication; host fixtures do not establish panel or RTOS behavior.

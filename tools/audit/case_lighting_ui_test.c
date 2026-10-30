@@ -10,12 +10,13 @@ static int64_t clock_us;
 static bool connected=true,send_ok=true;
 static unsigned sends;
 static int sent_percent;
+static void (*send_hook)(void);
 static moonraker_state_t live;
 uint32_t moonraker_config_generation(void){return generation;}
 int64_t esp_timer_get_time(void){return clock_us;}
 void moonraker_state_snapshot(moonraker_state_t *out){*out=live;}
 bool moonraker_live_websocket_subscribed(void){return connected;}
-bool moonraker_live_websocket_set_case_led(uint32_t owner,int percent){assert(owner==generation);sends++;sent_percent=percent;char cmd[96];unsigned id=case_lighting_begin(owner,percent,clock_us,cmd,sizeof(cmd));if(!send_ok)case_lighting_failed(id,owner);return send_ok;}
+bool moonraker_live_websocket_set_case_led(uint32_t owner,int percent){assert(owner==generation);sends++;sent_percent=percent;char cmd[96];unsigned id=case_lighting_begin(owner,percent,clock_us,cmd,sizeof(cmd));if(!send_ok)case_lighting_failed(id,owner);if(send_hook){void(*hook)(void)=send_hook;send_hook=NULL;hook();}return send_ok;}
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t*b){(void)a;(void)b;return false;}
@@ -26,6 +27,7 @@ static void prepare(bool pwm)
  r=cJSON_Parse(pwm?"{\"output_pin case_led\":{\"pwm\":true}}":"{\"output_pin case_led\":{}}");case_lighting_config(r,generation);cJSON_Delete(r);
  const char *json="{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0}}}}";case_lighting_status_json(json,strlen(json),generation);
 }
+static void replace_during_send(void){ui_case_lighting_close();generation++;prepare(true);ui_case_lighting_show();}
 static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_coords(child,&a);lv_obj_get_coords(parent,&b);assert(a.x1>=b.x1&&a.y1>=b.y1&&a.x2<=b.x2&&a.y2<=b.y2);}
 static void run(void)
 {
@@ -49,9 +51,20 @@ static void run(void)
  generation++;before=sends;refresh(NULL);assert(strstr(lv_label_get_text(s_status),"Printer changed"));lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before);
  lv_obj_delete(s_popup);assert(!s_popup&&!s_timer&&!s_switch&&!s_status);ui_case_lighting_close();
  prepare(false);ui_case_lighting_show();assert(lv_obj_has_state(s_slider,LV_STATE_DISABLED)&&!lv_obj_has_state(s_switch,LV_STATE_DISABLED));
+ ui_case_lighting_close();prepare(true);ui_case_lighting_show();
+ const char *dim="{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.004}}}}";
+ case_lighting_status_json(dim,strlen(dim),generation);refresh(NULL);
+ assert(lv_obj_has_state(s_switch,LV_STATE_CHECKED)&&strstr(lv_label_get_text(s_value),"<1%"));
+ before=sends;lv_obj_remove_state(s_switch,LV_STATE_CHECKED);lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before+1&&sent_percent==0);
+ ui_case_lighting_close();prepare(false);ui_case_lighting_show();
  connected=false;refresh(NULL);assert(lv_obj_has_state(s_switch,LV_STATE_DISABLED));connected=true;
  lv_obj_delete(s_value);lv_obj_delete(s_slider);assert(!s_value&&!s_slider);refresh(NULL);ui_case_lighting_close();assert(!s_timer);
  case_lighting_reset(generation);ui_case_lighting_show();assert(lv_obj_has_state(s_switch,LV_STATE_DISABLED));ui_case_lighting_close();
+ prepare(true);ui_case_lighting_show();send_ok=false;send_hook=replace_during_send;
+ lv_obj_add_state(s_switch,LV_STATE_CHECKED);lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);
+ assert(s_popup&&s_owner==generation&&!strcmp(lv_label_get_text(s_status),"Discovering printer lighting..."));
+ send_ok=true;refresh(NULL);ui_case_lighting_close();
+
 }
 int main(void)
 {

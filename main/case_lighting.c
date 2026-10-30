@@ -10,11 +10,13 @@
 #define FIRST_REQUEST 700000000U
 static case_lighting_snapshot_t s_light;
 static uint32_t s_request=FIRST_REQUEST;
+static uint32_t s_revision;
 static portMUX_TYPE s_light_lock=portMUX_INITIALIZER_UNLOCKED;
 
 void case_lighting_reset(uint32_t generation)
 {
     portENTER_CRITICAL(&s_light_lock);
+    ++s_revision;
     memset(&s_light,0,sizeof(s_light));s_light.generation=generation;
     portEXIT_CRITICAL(&s_light_lock);
 }
@@ -25,7 +27,7 @@ void case_lighting_objects(const cJSON *objects,uint32_t generation)
     cJSON_ArrayForEach(entry,objects)
         if(cJSON_IsString(entry)&&!strcmp(entry->valuestring,"output_pin case_led"))found=true;
     portENTER_CRITICAL(&s_light_lock);
-    if(s_light.generation==generation){s_light.discovered=true;s_light.available=found;}
+    if(s_light.generation==generation){++s_revision;s_light.discovered=true;s_light.available=found;}
     portEXIT_CRITICAL(&s_light_lock);
 }
 static bool config_number(const cJSON *entry,double *number)
@@ -61,7 +63,7 @@ void case_lighting_config(const cJSON *config,uint32_t generation)
     const cJSON *value=cJSON_GetObjectItemCaseSensitive(pin,"scale");
     if(is_pwm&&value&&!config_number(value,&scale))valid=false;
     portENTER_CRITICAL(&s_light_lock);
-    if(s_light.generation==generation){s_light.configured=valid;s_light.pwm=is_pwm;s_light.scale=scale;}
+    if(s_light.generation==generation){++s_revision;s_light.configured=valid;s_light.pwm=is_pwm;s_light.scale=scale;}
     portEXIT_CRITICAL(&s_light_lock);
 }
 void case_lighting_status_json(const char *json,size_t length,uint32_t generation)
@@ -88,7 +90,7 @@ void case_lighting_status_json(const char *json,size_t length,uint32_t generatio
             s_light.known=valid;
             if(valid){
                 s_light.value=value->valuedouble;
-                if(s_light.pending&&fabs(s_light.value-s_light.target/100.0)<0.0051){
+                if(s_light.pending&&fabs(s_light.value-s_light.target/100.0)<=0.000001){
                     s_light.pending=false;s_light.error[0]=0;
                 }
             }
@@ -110,30 +112,54 @@ void case_lighting_snapshot(case_lighting_snapshot_t *out,int64_t now_us)
     if(!out)return;
     portENTER_CRITICAL(&s_light_lock);
     if(s_light.pending&&now_us-s_light.started_us>=5000000LL){
-        s_light.pending=false;snprintf(s_light.error,sizeof(s_light.error),"No live confirmation. Check the printer and retry.");
+        s_light.pending=false;
+        static const char message[]="No live confirmation. Check the printer and retry.";
+        memcpy(s_light.error,message,sizeof(message));
     }
     *out=s_light;portEXIT_CRITICAL(&s_light_lock);
+}
+/* Caller holds the lighting lock. */
+static bool command_allowed(uint32_t generation,int percent)
+{
+    return s_light.generation==generation && s_light.discovered &&
+        s_light.available && s_light.configured && s_light.known &&
+        !s_light.pending && percent>=0 && percent<=100 &&
+        (s_light.pwm || percent==0 || percent==100);
 }
 uint32_t case_lighting_begin(uint32_t generation,int percent,int64_t now_us,char *command,size_t size)
 {
     if(!command||!size)return 0;
-    command[0]=0;uint32_t request=0;
+    command[0]=0;
     portENTER_CRITICAL(&s_light_lock);
-    if(s_light.generation==generation&&s_light.discovered&&s_light.available&&s_light.configured&&s_light.known&&!s_light.pending&&percent>=0&&percent<=100&&(s_light.pwm||percent==0||percent==100)){
-        int n=snprintf(command,size,"SET_PIN PIN=case_led VALUE=%.12g",percent/100.0*s_light.scale);
-        if(n>0&&(size_t)n<size){
-            if(++s_request>=800000000U)s_request=FIRST_REQUEST+1;
-            request=s_request;s_light.request=request;s_light.pending=true;s_light.target=percent;
-            s_light.started_us=now_us;s_light.error[0]=0;
-        }else command[0]=0;
+    bool allowed=command_allowed(generation,percent);
+    double scale=s_light.scale;
+    uint32_t revision=s_revision;
+    portEXIT_CRITICAL(&s_light_lock);
+    if(!allowed)return 0;
+
+    /* Float formatting may take libc locks/allocate: never hold an RTOS spinlock. */
+    int n=snprintf(command,size,"SET_PIN PIN=case_led VALUE=%.12g",percent/100.0*scale);
+    if(n<=0||(size_t)n>=size){command[0]=0;return 0;}
+
+    uint32_t request=0;
+    portENTER_CRITICAL(&s_light_lock);
+    if(s_revision==revision && command_allowed(generation,percent)){
+        if(++s_request>=800000000U)s_request=FIRST_REQUEST+1;
+        request=s_request;++s_revision;
+        s_light.request=request;s_light.pending=true;s_light.target=percent;
+        s_light.started_us=now_us;s_light.error[0]=0;
     }
-    portEXIT_CRITICAL(&s_light_lock);return request;
+    portEXIT_CRITICAL(&s_light_lock);
+    if(!request)command[0]=0;
+    return request;
 }
 void case_lighting_failed(uint32_t request,uint32_t generation)
 {
     portENTER_CRITICAL(&s_light_lock);
     if(s_light.generation==generation&&s_light.pending&&s_light.request==request){
-        s_light.pending=false;snprintf(s_light.error,sizeof(s_light.error),"Lighting command failed. Retry when connected.");
+        s_light.pending=false;
+        static const char message[]="Lighting command failed. Retry when connected.";
+        memcpy(s_light.error,message,sizeof(message));
     }
     portEXIT_CRITICAL(&s_light_lock);
 }

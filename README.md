@@ -1,11 +1,11 @@
 # PrinterHMI
 
 PrinterHMI is a dedicated 1024 x 600 touchscreen operator interface for a
-Klipper/Moonraker print cell. The v7.2.2-dev firmware targets the ESP32-P4 based
+Klipper/Moonraker print cell. The v7.2.0 firmware targets the ESP32-P4 based
 JC1060P470C-I/W panel and communicates with its ESP32-C6 networking
 coprocessor through Espressif's hosted Wi-Fi stack.
 
-The v7.2.2-dev firmware supports up to four Moonraker printer profiles, live
+The v7.2.0 firmware supports up to four Moonraker printer profiles, live
 printer and drybox status, file browsing with thumbnails and metadata,
 telemetry, print controls, exclude-object control, a dedicated 3D Bed Mesh
 workspace, detected Klipper macros, a live console, persistent display and
@@ -20,14 +20,15 @@ remain with khelix.
 Thanks to the open-source projects, font authors and tools that make PrinterHMI
 possible. See [Software credits](docs/SOFTWARE_CREDITS.md) and [NOTICE](NOTICE).
 
-The `feature/case-lighting` branch adds Tools → Lighting for the active printer's
-Klipper `output_pin case_led`: live on/off and PWM brightness. Experimental G-code
-viewing and Theme Maker remain parked. See [Lighting](docs/LIGHTING.md).
+Version 7.2.0 adds Tools → Lighting for the active printer's Klipper
+`output_pin case_led`, with on/off and PWM brightness. The action appears only
+when that output is detected. Experimental G-code viewing and Theme Maker remain
+parked. See [Lighting](docs/LIGHTING.md) and [release notes](docs/releases/v7.2.0.md).
 
 ## Status
 
-- Firmware version: `7.2.2-dev`
-- Latest published stable: `7.1.0`
+- Firmware version: `7.2.0`
+- Previous stable: `7.1.0`
 - Validation: host regression checks and operator panel feedback; stable publication rebuilds and audits the complete P4+C6 stack
 - Target: `esp32p4`
 - Known-good ESP-IDF: `6.0.2`
@@ -35,7 +36,7 @@ viewing and Theme Maker remain parked. See [Lighting](docs/LIGHTING.md).
 - Display: JD9165, 1024 x 600, MIPI-DSI
 - Touch: GT911 over I2C
 - Network: ESP32-C6 through `esp_wifi_remote`/`esp_hosted`
-- Release state: development
+- Release state: stable
 
 See [Known Issues](docs/KNOWN_ISSUES.md) before distributing firmware or
 publishing repository history.

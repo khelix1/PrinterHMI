@@ -34,5 +34,8 @@ int main(void)
  setup(true,1,6);config("{\"output_pin case_led\":{\"pwm\":true,\"scale\":\"nan\"}}",6);assert(!case_lighting_begin(6,1,0,cmd,sizeof(cmd)));
  setup(true,1,7);status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":2}}}}",7);case_lighting_snapshot(&s,0);assert(!s.known&&!case_lighting_begin(7,0,0,cmd,sizeof(cmd)));
  setup(true,0.000001,8);assert(case_lighting_begin(8,100,0,cmd,sizeof(cmd))&&!strcmp(cmd,"SET_PIN PIN=case_led VALUE=1e-06"));
+ setup(true,1,9);status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.004}}}}",9);
+ assert(case_lighting_begin(9,0,0,cmd,sizeof(cmd)));status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.004}}}}",9);case_lighting_snapshot(&s,1);assert(s.pending);
+ status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0}}}}",9);case_lighting_snapshot(&s,2);assert(!s.pending);
  puts("PASS: exact output discovery, normalized/scaled PWM, digital guards, malformed config/status, pending serialization, stale generation/error rejection, timeout/retry and reset");
 }

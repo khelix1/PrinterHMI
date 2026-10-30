@@ -10,11 +10,12 @@
 
 static lv_obj_t *s_popup,*s_status,*s_switch,*s_slider,*s_value;
 static lv_timer_t *s_timer;
-static uint32_t s_owner;
+static uint32_t s_owner,s_epoch;
 static int s_last_on=100;
 static bool s_dispatching;
 static void retire(void)
 {
+    ++s_epoch;
     if(s_timer)lv_timer_delete(s_timer);
     s_timer=NULL;s_popup=s_status=s_switch=s_slider=s_value=NULL;
 }
@@ -56,12 +57,13 @@ static void refresh(lv_timer_t *timer)
     enabled(s_switch,!*reason);enabled(s_slider,!*reason&&light.pwm);
     if(light.known){
         int value=(int)lround(light.value*100);
-        if(value>0)s_last_on=value;
+        bool on=light.value>0;
+        if(on)s_last_on=value>0?value:1;
         /* Keep the requested position until live status confirms or fails. */
-        if(light.pending)value=light.target;
-        if(s_switch){if(value>0)lv_obj_add_state(s_switch,LV_STATE_CHECKED);else lv_obj_remove_state(s_switch,LV_STATE_CHECKED);}
+        if(light.pending){value=light.target;on=value>0;}
+        if(s_switch){if(on)lv_obj_add_state(s_switch,LV_STATE_CHECKED);else lv_obj_remove_state(s_switch,LV_STATE_CHECKED);}
         if(s_slider&&!lv_obj_has_state(s_slider,LV_STATE_PRESSED))lv_slider_set_value(s_slider,value,LV_ANIM_OFF);
-        if(s_value&&(!s_slider||!lv_obj_has_state(s_slider,LV_STATE_PRESSED))){char text[48];snprintf(text,sizeof(text),"Brightness: %d%%",value);ui_value_set_text(s_value,text);}
+        if(s_value&&(!s_slider||!lv_obj_has_state(s_slider,LV_STATE_PRESSED))){char text[48];if(on&&!value)snprintf(text,sizeof(text),"Brightness: <1%%");else snprintf(text,sizeof(text),"Brightness: %d%%",value);ui_value_set_text(s_value,text);}
     }
     if(s_status)ui_value_set_text(s_status,*reason?reason:light.error[0]?light.error:light.pwm?"Live case lighting":"On/off output - brightness requires PWM.");
 }
@@ -69,10 +71,12 @@ static void apply(int percent)
 {
     if(s_dispatching||!s_popup)return;
     case_lighting_snapshot_t light={0};if(*ready(&light)){refresh(NULL);return;}
-    if((int)lround(light.value*100)==percent){refresh(NULL);return;}
+    if(fabs(light.value-percent/100.0)<=0.000001){refresh(NULL);return;}
+    uint32_t epoch=s_epoch;
     s_dispatching=true;
     bool sent=moonraker_live_websocket_set_case_led(s_owner,percent);
     s_dispatching=false;
+    if(epoch!=s_epoch||!s_popup)return;
     refresh(NULL);
     if(!sent&&s_status)ui_value_set_text(s_status,"Could not send lighting command. Retry when connected.");
 }

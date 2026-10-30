@@ -4,7 +4,7 @@ The **Tools → Lighting** button appears only when `output_pin case_led` has be
 detected for the active printer. It remains hidden during initial discovery or
 when that printer has no matching light. Detection updates while Tools is open.
 Open **Lighting** for the active printer. The toggle switches the case
-light on/off. With PWM enabled, drag the brightness slider and release to send a
+light on/off. A nonzero value below 1% stays On and is displayed as <1%. With PWM enabled, drag the brightness slider and release to send a
 single command. Turning on restores the last nonzero value observed while the
 dialog is open (100% if no nonzero value has been observed). While Applying is shown, the slider holds the requested position. Live Klipper
 status confirms it; failure/timeout returns to the last live value. Commands
@@ -45,3 +45,7 @@ Run responsive Tools, offline navigation, readiness and emergency transport
 regressions too. Host lock fixtures do not simulate RTOS concurrency or a panel.
 Panel-check real on/off, several brightness levels, scaled/digital outputs,
 external changes, printing, close/reopen, unavailable printers and reconnects.
+
+The final review also checks that command formatting runs outside RTOS critical
+sections and rejects resets/configuration changes or a competing request before
+the pending command is committed. Float rounding never suppresses a real Off.

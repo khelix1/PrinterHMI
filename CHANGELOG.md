@@ -1,5 +1,16 @@
 # Changelog
 
+## [7.2.0] - 2026-10-29
+
+### Stable case lighting release preparation
+
+- Consolidate Tools case_led detection, on/off and PWM brightness, slider feedback
+  and active-printer visibility through v7.2.2-dev.
+- Fix sub-1% On/Off handling and tighten live confirmation matching.
+- Move command formatting outside the RTOS lock and fence concurrent changes.
+- Remove unused test scaffolding; retain active API and model/transport coverage.
+- See [v7.2.0 release notes](docs/releases/v7.2.0.md) for validation limits.
+
 ## [7.2.2-dev] - 2026-10-29
 
 ### Lighting discovery visibility

@@ -15,3 +15,7 @@ with tempfile.TemporaryDirectory(prefix='case-lighting-') as folder:
  (t/'lighting_transport.inc').write_text(ws[start:ws.index('\n}\n',start)+3])
  subprocess.run(['cc','-std=c11','-O1','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-fno-pie','-no-pie','-I',str(t),'-I',str(root/'main'),'-I',str(a.cjson_dir),str(root/'tools/audit/case_lighting_transport_test.c'),str(root/'main/case_lighting.c'),str(a.cjson_dir/'cJSON.c'),'-lm','-o',str(exe)],check=True)
  subprocess.run([str(exe)],check=True)
+
+ (t/'freertos/FreeRTOS.h').write_text('#pragma once\ntypedef int portMUX_TYPE;\n#define portMUX_INITIALIZER_UNLOCKED 0\nvoid lighting_test_enter(void);\nvoid lighting_test_exit(void);\n#define portENTER_CRITICAL(p) ((void)(p),lighting_test_enter())\n#define portEXIT_CRITICAL(p) ((void)(p),lighting_test_exit())\n')
+ subprocess.run(['cc','-std=c11','-O1','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-fno-pie','-no-pie','-I',str(t),'-I',str(root/'main'),'-I',str(a.cjson_dir),str(root/'tools/audit/case_lighting_lock_test.c'),str(a.cjson_dir/'cJSON.c'),'-lm','-o',str(exe)],check=True)
+ subprocess.run([str(exe)],check=True)

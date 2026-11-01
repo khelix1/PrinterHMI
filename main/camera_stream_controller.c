@@ -1,4 +1,8 @@
 #include "camera_stream_controller.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_camera.h"
+#endif
 #include "camera_jpeg_decoder.h"
 
 #include "network_activity_controller.h"
@@ -193,6 +197,9 @@ static void camera_stream_task(void *arg)
 
 bool camera_stream_start(const char *url)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_stream_start(url);
+#endif
     if (!url || !url[0] || s_task) return false;
     if (!s_result_queue) {
         s_result_queue = xQueueCreate(1, sizeof(camera_frame_result_t));
@@ -215,6 +222,9 @@ bool camera_stream_start(const char *url)
 
 bool camera_stream_busy(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_stream_busy();
+#endif
     return s_task != NULL;
 }
 
@@ -226,6 +236,9 @@ bool camera_stream_take_result(
     int *height,
     bool *ok)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_stream_take(pixels, pixel_size, width, height, ok);
+#endif
     camera_frame_result_t result = {0};
     if (!s_result_queue || xQueueReceive(s_result_queue, &result, 0) != pdPASS) {
         return false;
@@ -246,12 +259,18 @@ bool camera_stream_take_result(
 
 void camera_stream_request_stop(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) { demo_camera_stream_stop(); return; }
+#endif
     __atomic_store_n(&s_stop_requested, true, __ATOMIC_RELEASE);
     camera_discard_results();
 }
 
 void camera_stream_stop(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) { demo_camera_stream_stop(); return; }
+#endif
     /*
      * Request the MJPEG worker to close its HTTP connection, then wait for
      * the task to release network_activity_controller before returning.

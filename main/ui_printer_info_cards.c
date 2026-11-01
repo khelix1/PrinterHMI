@@ -111,8 +111,10 @@ void ui_printer_info_cards_create(
         return;
     }
 
+    /* A rebuilt page may use a different theme. Retire Studio-only fields
+     * before constructing either layout, so refresh cannot follow old labels. */
+    memset(cards,0,sizeof(*cards));
     if(ui_theme_is_studio()) {
-        memset(cards,0,sizeof(*cards));
         const char *names[]={"Nozzle","Bed"};
         lv_obj_t **values[]={&cards->nozzle,&cards->bed};
         lv_obj_t **targets[]={&cards->nozzle_target,&cards->bed_target};

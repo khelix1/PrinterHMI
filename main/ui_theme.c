@@ -21,6 +21,9 @@ static ui_theme_id_t s_active_theme = UI_THEME_DEFAULT;
 static ui_accent_id_t s_active_accent = UI_ACCENT_DEFAULT;
 static ui_density_id_t s_active_density = UI_DENSITY_COMFORTABLE;
 static ui_accessibility_t s_accessibility = {0};
+static void (*s_root_decorator)(lv_obj_t *);
+void ui_theme_set_root_decorator(void (*decorate)(lv_obj_t *)) { s_root_decorator = decorate; }
+void ui_theme_decorate_root(lv_obj_t *object) { if (object && s_root_decorator) s_root_decorator(object); }
 
 /*
  * Theme D: Operator Shell.
@@ -117,6 +120,22 @@ const char *ui_theme_name(ui_theme_id_t theme)
         default:
             return "Operator";
     }
+}
+
+lv_color_t ui_theme_studio_color(uint32_t operator_rgb, uint32_t foundry_rgb,
+                                uint32_t glass_rgb, uint32_t fallback_rgb)
+{
+    uint32_t rgb = fallback_rgb;
+    if (!custom_theme_color_override(operator_rgb, foundry_rgb, glass_rgb, &rgb)) rgb = fallback_rgb;
+    return lv_color_hex(rgb);
+}
+
+int32_t ui_theme_studio_metric(int32_t operator_value, int32_t foundry_value,
+                               int32_t glass_value, int32_t fallback_value)
+{
+    int32_t value = fallback_value;
+    return custom_theme_metric_override(operator_value, foundry_value, glass_value, &value)
+        ? value : fallback_value;
 }
 
 lv_color_t ui_theme_color(uint32_t operator_rgb,
@@ -306,6 +325,7 @@ static void apply_custom_surface_opacity(lv_obj_t *object)
 void ui_apply_root_style(lv_obj_t *obj)
 {
     DISPATCH_VOID(apply_root_style, obj);
+    ui_theme_decorate_root(obj);
 }
 
 void ui_apply_panel_style(lv_obj_t *obj)
@@ -455,7 +475,7 @@ void ui_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
         lv_obj_set_style_anim_duration(obj, ui_theme_motion_enabled() ? 400 : 0, cursor);
         lv_obj_set_style_border_width(obj, 0, LV_PART_CURSOR | LV_STATE_DISABLED);
     }
-    if (ui_theme_is_studio()) { ui_theme_studio_apply_surface_role(obj, role); return; }
+    if (ui_theme_is_studio()) { ui_theme_studio_apply_surface_role(obj, role); if (role == UI_SURFACE_PAGE_DEEP || role == UI_SURFACE_TELEMETRY_ROOT) ui_theme_decorate_root(obj); return; }
     if (s_active_theme == UI_THEME_CLASSIC) {
         ui_theme_a_apply_surface_role(obj, role);
     } else if (s_active_theme == UI_THEME_GLASS) {
@@ -473,6 +493,7 @@ void ui_apply_surface_role(lv_obj_t *obj, ui_surface_role_t role)
             apply_custom_surface_opacity(obj);
             break;
     }
+    if (role == UI_SURFACE_PAGE_DEEP || role == UI_SURFACE_TELEMETRY_ROOT) ui_theme_decorate_root(obj);
 }
 
 void ui_apply_custom_label_style(lv_obj_t *obj,

@@ -1,3 +1,7 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_ota.h"
+#endif
 #include "ota_release_catalog.h"
 #include "firmware_identity.h"
 #include "network_activity_controller.h"
@@ -570,6 +574,9 @@ static void release_catalog_task(void *argument)
 
 bool ota_release_catalog_start(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_ota_catalog_start();
+#endif
     if (!lock_catalog()) return false;
     if (s_task_running) {
         unlock_catalog();
@@ -608,6 +615,9 @@ bool ota_release_catalog_start(void)
 void ota_release_catalog_snapshot(
     ota_release_catalog_snapshot_t *snapshot)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) { demo_ota_catalog_snapshot(snapshot); return; }
+#endif
     if (!snapshot) {
         return;
     }
@@ -634,6 +644,9 @@ bool ota_release_catalog_entry(
     size_t index,
     ota_release_entry_t *entry)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_ota_catalog_entry(index, entry);
+#endif
     if (!entry) {
         return false;
     }

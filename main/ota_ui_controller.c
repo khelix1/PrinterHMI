@@ -1,4 +1,8 @@
 #include "ota_ui_controller.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_ota.h"
+#endif
 
 #include <stdio.h>
 
@@ -73,6 +77,9 @@ static void ota_popup_remote_bridge(void)
 void ota_ui_controller_open_event_cb(lv_event_t *event)
 {
     (void)event;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){demo_ota_open();return;}
+#endif
     ui_ota_popup_quiesce_camera();
     ui_ota_release_browser_show(ota_catalog_start_bridge,
                                 ota_open_custom_url_bridge);

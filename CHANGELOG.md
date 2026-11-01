@@ -1,5 +1,138 @@
 # Changelog
 
+## [7.3.0] - 2026-11-01
+
+- Add a tablet offline demo and refresh Theme Maker tablet simulation.
+- Move offline demo entry to Settings and improve externally started print layer estimates.
+
+## [7.2.23-dev] - 2026-11-01
+
+- Estimate current layer when an external print progresses but the printer keeps reporting layer zero.
+
+## [7.2.22-dev] - 2026-11-01
+
+- Move the offline demo entry from the printer chooser to Settings.
+
+## [7.2.21-dev] - 2026-11-01
+
+- Update the offline demo introduction to describe the available sample workflows and maintenance limits.
+
+## [7.2.20-dev] - 2026-11-01
+
+- Keep simulated print pause, resume and cancel commands consistent with the current printer state.
+
+## [7.2.19-dev] - 2026-11-01
+
+- Add a continuous sample print journey check in both themes and document demo verification.
+
+## [7.2.18-dev] - 2026-10-31
+
+- Keep sample printer discovery retry available in offline demo.
+
+## [7.2.17-dev] - 2026-10-31
+
+- Enable the Network page in demo mode with local sample Wi-Fi and printer discovery.
+- Keep sample passwords out of saved credentials and real Wi-Fi operations.
+
+## [7.2.16-dev] - 2026-10-31
+
+- Enable Setup Center in the offline demo with a sample network and printer discovery.
+- Keep sample network credentials and discovery separate from real Wi-Fi.
+
+## [7.2.15-dev] - 2026-10-31
+
+- Add an offline OTA catalog and simulated transfer to tablet demo.
+- Block real OTA workers in demo; allow cancellation and completion without reboot.
+
+## [7.2.14-dev] - 2026-10-31
+
+- Enable real Calibration dialogs in tablet demo using bounded local commands and results.
+- Simulate probe accuracy, guided probe/Z, screws, gantry, shaper, resonance, PID and pressure-advance workflows.
+- Keep demo saves local and reset calibration state on printer changes or disconnects.
+
+## [7.2.13-dev] - 2026-10-31
+
+- Keep the Dashboard Camera/Thumbnail toggle above incoming frames and thumbnail updates.
+- Return from Dashboard camera fullscreen to the Dashboard live view.
+- Mark the sample feed as DEMO CAMERA and remove the desktop-only layering workaround.
+
+## [7.2.12-dev] - 2026-10-31
+
+- Enable the actual Camera page in tablet demo with local sample views.
+- Share sample artwork with the desktop, label it clearly, and isolate all camera transport.
+- Keep selection, rotation, mirroring, fullscreen and catalog settings in demo RAM.
+
+## [7.2.11-dev] - 2026-10-31
+
+- Enable Devices, Macros and Drybox in tablet demo with shared offline catalogs.
+- Publish local live readings, lighting values, motion details and positional endstop replies.
+- Add bounded numeric sample-macro execution and filament-presence feedback.
+- Simulate Drybox heating, humidity, Hold/Resume/Stop and emergency/error shutdown.
+- Preserve per-printer jobs/filament/Drybox state and retain transport/storage isolation.
+
+
+## [7.2.10-dev] - 2026-10-31
+
+- Select Dashboard when opening it programmatically after a demo print start.
+- Return successful normal-firmware print starts to Dashboard; preserve Files on failure/cancel.
+- Publish demo object-exclusion capability, object names/polygons and per-printer excluded state.
+- Reset exclusions for fresh sample jobs and printing/paused/idle scenarios.
+
+
+## [7.2.9-dev] - 2026-10-31
+
+- Share Files browsing/search/folders/details/print confirmation between desktop and tablet demo.
+- Add embedded previews and local full-resolution thumbnail/metadata routes.
+- Start sample jobs with consistent heating targets, progress and layer state; reject unknown or busy starts.
+- Restore demo Dashboard/Printer previews and active layer/time updates without network or SD workers.
+- Retire local preview/selection owners on printer switches. Live Files behavior remains unchanged.
+
+
+## [7.2.8-dev] - 2026-10-31
+
+- Add selectable tablet offline demo with restart confirmation and RAM settings.
+- Keep saved printer profiles/preferences separate and block live transports in demo.
+- Reuse the desktop printer model for simulated controls, progress, scenarios, Lighting and Bed Mesh.
+- Mark unsupported firmware demo workflows explicitly; retain broader desktop fixtures.
+
+
+## [7.2.7-dev] - 2026-10-31
+
+- Place Operator's detected Lighting action inside the Tools header instead of
+  partly above it. Reserve title/subtitle space while the button is visible
+  and restore that space when the active printer has no case light.
+- Reapply the alignment when the page resizes; retain Studio's plain heading
+  and the existing detection and command guards.
+
+
+## [7.2.6-dev] - 2026-10-30
+
+- Exercise all 15 native page routes and standalone control dialogs in Studio
+  and Operator, including repeated appearance and Printer-page rebuilds.
+- Reset Printer card references before creating either layout, fixing stale
+  Studio-only temperature targets when switching to Operator.
+- Route desktop Escape through the foreground dialog's actual dismissal action
+  instead of deleting its objects; simulated OTA cancellation now retires its
+  timer and permits reopening. Preserve nested confirmations and dropdown owners.
+- Keep fullscreen Camera/preview dismissal and notice acknowledgement with their
+  real owners. Add an optional sanitizer build for host regression checks.
+
+
+## [7.2.5-dev] - 2026-10-30
+
+- Refresh Theme Maker against current main, preserving its native firmware UI
+  and theme export/background support without importing the parked 3D viewer.
+- Add an explicit Tablet simulation view using native widgets and built-in
+  appearance independently of the theme being edited.
+- Compile the real Setup Center, Lighting and OTA review/progress dialogs.
+  Service replies and installation remain local simulations.
+- Share command effects, timed heating and print progress in a portable model;
+  add idle, printing, paused, completed, disconnected and error scenarios.
+- Preserve backend state across page navigation and stop automatic native
+  retry loops after a helper failure. Firmware offline demo integration follows
+  separately; this patch does not enable it on the tablet.
+
+
 ## [7.2.4-dev] - 2026-10-30
 
 - Fix an oversized-camera-test JPEG heap overwrite; enforce buffer capacity on

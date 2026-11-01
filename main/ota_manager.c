@@ -1,3 +1,7 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_ota.h"
+#endif
 #include "ota_manager.h"
 #include "ota_release_catalog.h"
 
@@ -508,6 +512,9 @@ cancelled:
 
 bool ota_manager_start(const char *url)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return false;
+#endif
     if (!url || !url[0] || strnlen(url, sizeof(s_task_url)) >= sizeof(s_task_url) || s_task_running) {
         return false;
     }
@@ -564,11 +571,17 @@ bool ota_manager_start(const char *url)
 
 bool ota_manager_is_running(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_ota_running();
+#endif
     return s_task_running;
 }
 
 void ota_manager_cancel(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return;
+#endif
     if (!s_task_running || !s_cancel_allowed) {
         return;
     }
@@ -581,6 +594,9 @@ void ota_manager_cancel(void)
 
 void ota_manager_pump_ui(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return;
+#endif
     if (s_cancel_complete) {
         s_cancel_complete = false;
         ui_ota_progress_close();

@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.2.4-dev is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.3.0 is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -323,3 +323,13 @@ printing checks.
 ## Telemetry view and history ownership
 
 `telemetry_history` owns the bounded PSRAM-first timestamped ring, named hotend snapshots, capability normalization and reset generation. `ui_telemetry` owns view/range/tool/hold controls, live status and the page lifecycle. `ui_telemetry_charts` binds four reusable instruments to the selected view and projects samples into fixed-time bins; it owns actual/target series, scales/extrema and newest-sample markers. `ui_telemetry_components` owns native instrument label/card construction. Existing main refresh and active-printer reset adapters remain unchanged; telemetry adds no network or worker tasks. See [Telemetry](TELEMETRY.md).
+
+
+The selectable offline demo is a boot-lifetime mode. `demo_platform.h` is force
+included only for the main application component. In live mode its wrappers
+forward NVS and client creation unchanged. In demo they route supported NVS
+operations into bounded, transactional PSRAM storage and refuse HTTP/WebSocket
+creation. SDK/BSP component APIs are not interposed. The implementation file
+explicitly opts out of macros for its sole persistent boot-selection flag.
+`demo_printer.c` owns sample state and publishes through the existing locked
+Moonraker snapshot boundary; no live polling/status worker starts in demo.

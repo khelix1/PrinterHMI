@@ -1,4 +1,11 @@
 #include "ui_case_lighting.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_setup.h"
+#include "demo_calibration.h"
+#include "ui_demo_files.h"
+#include "ui_preview_lightbox.h"
+#endif
 #include "moonraker_command_route.h"
 #include <stdio.h>
 #include <errno.h>
@@ -128,6 +135,7 @@ static void start_sntp_time_sync(void);
 static void sntp_wait_task(void *arg);
 
 #include "ui_theme.h"
+#include "custom_theme_background.h"
 #include "ui_theme_studio.h"
 #include "theme_manager.h"
 #include "ui_cards.h"
@@ -663,6 +671,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 static void wifi_prepare_transport(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return;
+#endif
     if (s_wifi_transport_ready) {
         return;
     }
@@ -713,6 +724,9 @@ static void wifi_prepare_transport(void)
 
 static void wifi_init_sta(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return;
+#endif
     ESP_LOGI(TAG, "wifi_init_sta ENTER");
 
     wifi_prepare_transport();
@@ -1271,6 +1285,9 @@ static bool moonraker_send_gcode_http(const char *cmd, bool notify_failure)
 static bool moonraker_send_gcode_raw(
     const char *command)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return demo_printer_command(command);
+#endif
     if (!command || !command[0]) {
         return false;
     }
@@ -1288,6 +1305,9 @@ static bool moonraker_send_gcode_raw(
  * same WebSocket/HTTP fallback without a duplicate transient error toast. */
 static bool console_send_gcode(const char *command)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return demo_printer_command(command);
+#endif
     if (!command || !command[0]) return false;
     if (moonraker_live_websocket_send_gcode(command)) return true;
     return moonraker_send_gcode_http(command, false);
@@ -1296,6 +1316,13 @@ static bool console_send_gcode(const char *command)
 static bool moonraker_send_gcode_impl(
     const char *requested, bool notify_failure)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        bool ok=demo_printer_command(requested);
+        if(!ok && notify_failure)ui_toast_show(UI_STATUS_WARNING,"Offline demo","This command is not simulated yet.");
+        return ok;
+    }
+#endif
     if(moonraker_command_admin_method(requested))return notify_failure ? moonraker_send_gcode_raw(requested) : console_send_gcode(requested);
     printer_action_resolution_t resolution;
 
@@ -1348,6 +1375,16 @@ static void ui_network_tools_open_wifi_scan_cb(lv_event_t *e)
 
 static void printer_profiles_active_changed_bridge(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        ui_printer_popups_close_all();ui_case_lighting_close();ui_demo_files_close();
+        ui_preview_lightbox_close();thumbnail_session_clear_selected_file();thumbnail_session_clear_thumbnail_path();
+        thumbnail_preview_coordinator_reset();last_dashboard_print_state[0]=0;
+        ui_printer_preview_reset();demo_printer_tick();dashboard_restore_active_profile_preview();
+        ui_shell_set_active_printer_name(moonraker_config_active_profile_name());
+        ui_printer_chooser_refresh();return;
+    }
+#endif
     /* FAILURE_STATE_POLISH_V1 */
     ui_printer_popups_close_all();
 
@@ -1397,6 +1434,19 @@ static void ui_network_tools_open_printer_profiles_cb(
 
 static void scan_moonraker_now(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        uint32_t request=ui_printer_profiles_discovery_request();
+        if(!request)return;
+        char name[33];esp_ip4_addr_t sample_ip={.addr=0x0100007f};
+        if(!demo_setup_network(name,sizeof(name))) {
+            moonraker_discovery_show_for_request("Connect to the sample network first.",ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request);return;
+        }
+        if(!moonraker_discovery_show_for_request("Finding sample printers...",ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request))return;
+        if(request!=ui_printer_profiles_discovery_request()){moonraker_discovery_close_request(request);return;}
+        (void)moonraker_discovery_start(&sample_ip);return;
+    }
+#endif
     uint32_t request=ui_printer_profiles_discovery_request();
     if(!request)return;
     if(!s_got_ip){
@@ -1423,6 +1473,16 @@ void ui_network_create(void)
 
 static void ui_network_refresh_bridge(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        char name[33]={0}; bool connected=demo_setup_network(name,sizeof(name));
+        moonraker_state_t state; moonraker_state_snapshot(&state);
+        network_status_controller_refresh("Offline demo",connected,name,ui_network_tools_selected_wifi_ssid,
+            connected?"127.0.0.1":"--",state.moonraker_ok,moonraker_config_host(),
+            state.moonraker_ok?200:0,ui_network_tools_network_scan_status);
+        return;
+    }
+#endif
     char ip_buf[32];
 
     if (s_got_ip) {
@@ -1495,6 +1555,7 @@ void ui_command_bar_action(const char *action)
 {
     if (!action) return;
 
+
     if (strcmp(action, "RESUME") == 0) {
         ui_filament_recovery_show(action_send_gcode_inline);
         return;
@@ -1512,6 +1573,9 @@ void ui_command_bar_action(const char *action)
         return;
     }
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled() && !strcmp(action,"FILES")){ui_shell_page_action(UI_SHELL_PAGE_FILES);ui_shell_set_active_nav(UI_SHELL_PAGE_FILES);return;}
+#endif
     if (strcmp(action, "FILES") == 0) {
     ui_files_set_callbacks(
         files_refresh_bridge,
@@ -1581,6 +1645,9 @@ static void printer_chooser_manage_bridge(int profile_index)
 
 static void app_hide_operator_pages(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())ui_demo_files_close();
+#endif
     ui_case_lighting_close();
     ui_camera_hide();
     ui_tools_hide();
@@ -1654,6 +1721,9 @@ static bool setup_connect_wifi(const char *ssid, const char *password)
 
 static void app_open_setup_wizard(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){ui_setup_wizard_show_with_appearance_callback(demo_setup_connect,app_theme_changed);return;}
+#endif
     ui_setup_wizard_show_with_appearance_callback(setup_connect_wifi,app_theme_changed);
 }
 
@@ -1685,6 +1755,7 @@ void ui_shell_page_action(ui_shell_page_t page)
 
     switch (page) {
     case UI_SHELL_PAGE_DASHBOARD:
+        ui_shell_set_active_nav(UI_SHELL_PAGE_DASHBOARD);
         ui_dashboard_create();
         dashboard_restore_active_profile_preview();
         return;
@@ -1704,6 +1775,9 @@ void ui_shell_page_action(ui_shell_page_t page)
         return;
 
     case UI_SHELL_PAGE_FILES:
+#ifdef PRINTERHMI_DEMO_RUNTIME
+        if(demo_mode_enabled()){ui_demo_files_show(demo_printer_command);return;}
+#endif
         ui_files_set_callbacks(
             files_refresh_bridge,
             files_select_bridge,
@@ -1723,7 +1797,11 @@ void ui_shell_page_action(ui_shell_page_t page)
     case UI_SHELL_PAGE_CALIBRATION:
         ui_calibration_show(
             calibration_open_bed_mesh_bridge,
+#ifdef PRINTERHMI_DEMO_RUNTIME
+            demo_mode_enabled() ? demo_calibration_send : action_send_gcode_inline);
+#else
             action_send_gcode_inline);
+#endif
         return;
 
     case UI_SHELL_PAGE_DEVICES:
@@ -1793,6 +1871,9 @@ static void ota_ui_timer_cb(lv_timer_t *timer)
 static void ui_refresh_timer_cb(lv_timer_t *timer)
 {
     int64_t ui_refresh_t0 = esp_timer_get_time();
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    demo_printer_tick();
+#endif
 
     files_page_controller_process_live_notification();
 
@@ -1884,6 +1965,24 @@ ui_drybox_refresh();
         telemetry_state.printer_state,
         moonraker_exclude_objects_available());
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        const lv_image_dsc_t *image=ui_demo_files_image(telemetry_state.printer_file);
+        int profile=moonraker_config_active_profile_index();
+        if(image && telemetry_state.live_data_ok) {
+            if(!printer_preview_cache_matches(profile,telemetry_state.printer_file))
+                printer_preview_cache_publish_active(telemetry_state.printer_file,(const uint16_t *)image->data,image->header.w,image->header.h);
+            if(!ui_dashboard_thumb_canvas_matches(telemetry_state.printer_file))dashboard_restore_active_profile_preview();
+            ui_printer_preview_show(telemetry_state.printer_state,telemetry_state.printer_file,telemetry_state.printer_file);
+        }
+        dashboard_runtime_controller_tick(&(dashboard_runtime_context_t){
+            .meta_object_height=20,.meta_layer_height=.2,
+            .dashboard_canvas=&dash_thumb_canvas,.dashboard_image=&dash_thumb_img,
+            .last_print_state=last_dashboard_print_state,.last_print_state_size=sizeof(last_dashboard_print_state),
+            .preview_network_ready=false,
+        });
+    }
+#endif
     int64_t ui_refresh_dt = esp_timer_get_time() - ui_refresh_t0;
     if (ui_refresh_dt > 50000) {
         ESP_LOGW(TAG, "UI_REFRESH_SLOW %lld us", (long long)ui_refresh_dt);
@@ -2102,6 +2201,13 @@ static void clear_sensitive_buffer(
 
 static bool connect_selected_wifi(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        bool ok=demo_setup_connect(ui_network_tools_selected_wifi_ssid,ui_network_tools_selected_wifi_password);
+        safe_copy(ui_network_tools_network_scan_status,sizeof(ui_network_tools_network_scan_status),ok?"Demo network connected":"Select a sample network");
+        return ok;
+    }
+#endif
     if (!ui_network_tools_selected_wifi_ssid[0]) {
         safe_copy(ui_network_tools_network_scan_status, sizeof(ui_network_tools_network_scan_status),
                   "No WiFi selected");
@@ -2181,6 +2287,15 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
         ui_network_tools_selected_wifi_password,
         sizeof(ui_network_tools_selected_wifi_password));
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        bool ok=connect_selected_wifi();
+        clear_sensitive_buffer(ui_network_tools_selected_wifi_password,sizeof(ui_network_tools_selected_wifi_password));
+        if(ok){ui_network_tools_wifi_password_close_owned();ui_network_tools_wifi_scan_close_owned();ui_network_refresh_bridge();}
+        else ui_network_tools_wifi_password_set_status(ui_network_tools_network_scan_status);
+        return;
+    }
+#endif
     if (wifi_credentials_store_save(
             ui_network_tools_selected_wifi_ssid,
             ui_network_tools_selected_wifi_password)) {
@@ -2238,6 +2353,14 @@ static void ui_network_tools_wifi_ssid_selected_cb(lv_event_t *e)
 /* BEGIN LEGACY NETWORK BLOCK */
 static void ui_network_tools_wifi_scan_now(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){
+        wifi_ap_record_t sample={0};strlcpy((char *)sample.ssid,"Demo network",sizeof(sample.ssid));sample.rssi=-48;
+        ui_network_render_scan_results(&sample,1,1,ui_network_tools_wifi_ssid_selected_cb);
+        safe_copy(ui_network_tools_network_scan_status,sizeof(ui_network_tools_network_scan_status),"One sample network found");
+        return;
+    }
+#endif
     if (!network_activity_controller_request_exclusive()) {
         safe_copy(
             ui_network_tools_network_scan_status,
@@ -2596,7 +2719,9 @@ static void printer_file_detail_start_bridge(void)
         close_printer_file_detail_popup);
     if(!started) {
         ui_files_print_feedback(moonraker_status);
+        return;
     }
+    ui_shell_page_action(UI_SHELL_PAGE_DASHBOARD);
 }
 
 
@@ -3059,6 +3184,9 @@ static void files_preview_bridge(const char *path)
 
 void app_files_reload(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){ui_demo_files_show(demo_printer_command);return;}
+#endif
     files_page_controller_reload(
         s_got_ip,
         s_moonraker_ok,
@@ -3115,6 +3243,7 @@ void ui_printer_create(void)
     lv_obj_set_style_border_width(printer_panel, 0, 0);
     lv_obj_set_style_radius(printer_panel, 0, 0);
     lv_obj_set_style_pad_all(printer_panel, 0, 0);
+    ui_theme_decorate_root(printer_panel);
 
     if (!ui_theme_is_studio()) {
     ui_page_title_create(
@@ -3211,10 +3340,12 @@ void ui_printer_create(void)
 
 static void build_drybox_dashboard(void)
 {
+    ui_theme_set_root_decorator(custom_theme_background_apply);
     lv_obj_t *scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, UI_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(scr, UI_TEXT, 0);
+    ui_theme_decorate_root(scr);
 
     /* Top bar now belongs to ui_shell. */
     if (!ui_global_estop_init(action_send_gcode_inline)) {
@@ -3266,6 +3397,9 @@ static esp_err_t sdmmc_host_init_existing_controller(void)
 
 static void init_sd_card_storage(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return;
+#endif
     sd_card_ok = false;
     snprintf(sd_status, sizeof(sd_status), "SD: mounting...");
 
@@ -3585,6 +3719,9 @@ static void app_startup_show_initial_ui(void)
     ESP_LOGI(TAG, "STARTUP_TRACE splash-created");
 
     build_drybox_dashboard();
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())ui_shell_set_active_printer_name(moonraker_config_active_profile_name());
+#endif
     ESP_LOGI(TAG, "STARTUP_TRACE dashboard-shell-built");
     hide_settings_tab();
     ui_dashboard_create();
@@ -3598,7 +3735,11 @@ static void app_startup_show_initial_ui(void)
     ui_printer_chooser_show(
         printer_chooser_select_bridge,
         printer_chooser_manage_bridge);
-    if (onboarding_controller_should_show()) {
+    if (
+#ifdef PRINTERHMI_DEMO_RUNTIME
+        !demo_mode_enabled() &&
+#endif
+        onboarding_controller_should_show()) {
         app_open_setup_wizard();
     }
     ui_splash_create();
@@ -3621,6 +3762,9 @@ static void app_startup_wait_ms(unsigned milliseconds)
 
 static void app_start_runtime_services(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return; /* UI refresh owns the local simulation clock. */
+#endif
     BaseType_t rc = xTaskCreatePinnedToCore(
         hmi_runtime_task,
         "hmi_runtime",
@@ -3655,6 +3799,9 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(!demo_mode_init()) { ESP_LOGE(TAG,"Demo isolation unavailable; startup stopped"); return; }
+#endif
     operator_event_log_init();
     console_controller_init();
     macro_controller_init();
@@ -3681,6 +3828,12 @@ void app_main(void)
      * before any UI or transport path can take a state snapshot.
      */
     moonraker_module_init();
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        if(!demo_printer_init()){ESP_LOGE(TAG,"Demo printer unavailable; startup stopped");return;}
+        s_moonraker_ok=true;
+    }
+#endif
     if (!moonraker_transport_security_controller_init()) {
         ESP_LOGE(TAG, "Secure Moonraker transport unavailable");
     }
@@ -3795,6 +3948,9 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG, "Starting WiFi after display/touch/dashboard");
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(!demo_mode_enabled())
+#endif
     wifi_init_sta();
 
     app_splash_wifi_waiting_locked(s_got_ip);

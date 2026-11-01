@@ -35,6 +35,8 @@ int main(void){moonraker_webcam_t w;bool found;size_t count;
  puts("PASS: real camera discovery worker captures printer identity; stale results discarded; persistence only during current-owner consumption; empty/start-failure/retry states");return 0;}
 #else
 #include "moonraker_discovery.c"
+static bool demo_active;
+bool demo_mode_enabled(void){return demo_active;}
 static uint32_t printer_generation=1;
 uint32_t moonraker_config_generation(void){return printer_generation;}
 static unsigned closed, selected;
@@ -140,6 +142,13 @@ static void snapshot(unsigned theme,const char *state){const char*path=getenv("D
 static void inside(lv_obj_t*a,lv_obj_t*b){lv_area_t x,y;lv_obj_get_coords(a,&x);lv_obj_get_coords(b,&y);assert(x.x1>=y.x1&&x.y1>=y.y1&&x.x2<=y.x2&&x.y2<=y.y2);}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);esp_ip4_addr_t ip={.addr=0x640144c0};
  lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
+ for(unsigned theme=0;theme<5;theme++) {
+  ui_theme_set_active(theme); demo_active=true; s_has_scan_ip=false;
+  moonraker_discovery_show("Demo scan",on_close,on_select);
+  assert(moonraker_discovery_start(&ip));assert(s_has_scan_ip && s_candidate_count==1 && !s_scan_task_handle);
+  discovery_retry_cb(NULL);assert(s_candidate_count==1 && !s_scan_task_handle && strstr(s_status,"Sample printer found"));
+  moonraker_discovery_close();demo_active=false;
+ }
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned size=0;size<3;size++){
   lv_display_set_resolution(d,(unsigned[]){1024,640,480}[size],(unsigned[]){600,480,320}[size]);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   lv_obj_t*page=lv_obj_create(lv_screen_active());lv_obj_set_size(page,lv_display_get_horizontal_resolution(d)-16,lv_display_get_vertical_resolution(d)-16);lv_obj_set_pos(page,8,8);lv_obj_clear_flag(page,LV_OBJ_FLAG_SCROLLABLE);

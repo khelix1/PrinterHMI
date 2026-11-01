@@ -9,6 +9,7 @@ static void source_set(lv_obj_t *,const void *);
 #undef lv_image_set_src
 #include "custom_theme.h"
 static unsigned allocated,freed,takes,starts,stops,fullscreen;
+static void (*fullscreen_close)(void);
 static uint32_t generation=1;
 static bool pending,busy=true,configured=true,start_ok=true;
 static uint8_t *offered;static size_t offered_size;static int offered_w,offered_h;
@@ -25,7 +26,7 @@ bool camera_stream_take_result(uint8_t **p,size_t*n,int*w,int*h,bool*ok){takes++
 bool camera_stream_busy(void){bool result=busy;hook(&busy_hook);return result;}
 bool camera_stream_start(const char *url){assert(!strcmp(url,"http://camera.local/stream"));starts++;busy=start_ok;hook(&start_hook);return start_ok;}
 void camera_stream_request_stop(void){stops++;busy=false;if(pending){heap_caps_free(offered);pending=false;}hook(&stop_hook);}
-void ui_camera_show_fullscreen(void){fullscreen++;}
+void ui_camera_show_fullscreen_returning(void (*callback)(void)){fullscreen_close=callback;fullscreen++;}
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t*b){(void)a;(void)b;return false;}
@@ -68,6 +69,8 @@ int main(void)
   dashboard_camera_mode_set(true);offer(3,2,12);dashboard_camera_poll_cb(NULL);source_hook=reopen_frame;dashboard_camera_release_frame();assert(dash32_camera_frame&&lv_image_get_src(dash32_camera_image)==&dash32_camera_dsc);
   ui_dashboard_set_camera_quiesced(true);assert(!dash32_camera_mode&&!dash32_camera_timer&&!dash32_camera_frame);ui_dashboard_set_camera_quiesced(false);assert(dash32_camera_mode);
   unsigned fs=fullscreen;lv_obj_add_state(dash32_camera_image,LV_STATE_DISABLED);lv_obj_send_event(dash32_camera_image,LV_EVENT_CLICKED,NULL);assert(fullscreen==fs);lv_obj_remove_state(dash32_camera_image,LV_STATE_DISABLED);lv_obj_send_event(dash32_camera_image,LV_EVENT_CLICKED,NULL);assert(fullscreen==fs+1&&!dash32_camera_mode);
+  assert(fullscreen_close);fullscreen_close();assert(dash32_camera_mode);dashboard_camera_mode_set(false);
+  dashboard_camera_mode_set(true);lv_obj_send_event(dash32_camera_image,LV_EVENT_CLICKED,NULL);assert(!dash32_camera_mode);++generation;fullscreen_close();assert(!dash32_camera_mode);
   configured=false;ui_dashboard_refresh_camera();assert(lv_obj_has_flag(dash32_camera_toggle,LV_OBJ_FLAG_HIDDEN));configured=true;ui_dashboard_refresh_camera();assert(!lv_obj_has_flag(dash32_camera_toggle,LV_OBJ_FLAG_HIDDEN));
   dashboard_camera_mode_set(true);lv_obj_delete(dash32_camera_status);assert(!dash32_camera_status);dashboard_camera_set_status("safe");lv_obj_delete(dash32_camera_toggle);assert(!dash32_camera_mode&&!dash32_camera_toggle&&!dash32_camera_timer);ui_dashboard_destroy();assert(!dash32_root&&!dash32_page.root&&allocated==freed&&timers()==baseline);
  }

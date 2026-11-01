@@ -1,4 +1,8 @@
 #include "camera_test_controller.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_camera.h"
+#endif
 
 #include "network_activity_controller.h"
 
@@ -114,6 +118,9 @@ static void camera_test_task(void *arg)
 
 bool camera_test_start(const char *url)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_test_start(url);
+#endif
     if (!url || !url[0] || strnlen(url, sizeof(s_url)) >= sizeof(s_url) || s_task)
         return false;
     strlcpy(s_url, url, sizeof(s_url));
@@ -128,10 +135,18 @@ bool camera_test_start(const char *url)
     return true;
 }
 
-bool camera_test_busy(void) { return s_task != NULL; }
+bool camera_test_busy(void) {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return false;
+#endif
+    return s_task != NULL;
+}
 
 bool camera_test_take_result(bool *ok, int *width, int *height, size_t *bytes)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_test_take(ok, width, height, bytes);
+#endif
     if (!__atomic_exchange_n(&s_ready, false, __ATOMIC_ACQ_REL)) return false;
     if (ok) *ok = s_ok;
     if (width) *width = s_width;

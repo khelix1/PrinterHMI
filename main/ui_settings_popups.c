@@ -1,3 +1,7 @@
+#include "ui_toast.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "ui_widgets.h"
 #include "ui_settings_popups.h"
 #include "ui_text.h"
@@ -226,6 +230,9 @@ static void reset_settings_confirm_cb(lv_event_t *e)
 
 void reset_settings_cb(lv_event_t *e)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){ui_toast_show(UI_STATUS_WARNING,"Offline demo","Factory reset is unavailable in demo mode. Exit demo first.");return;}
+#endif
     (void)e;
 
     if (s_reset_settings_popup) {
@@ -610,6 +617,7 @@ static void custom_theme_remove_cb(lv_event_t *event)
 static const char *custom_base_label(ui_theme_id_t theme)
 {
     switch (theme) {
+        case UI_THEME_STUDIO_DARK: return "Studio base";
         case UI_THEME_CLASSIC: return "Foundry base";
         case UI_THEME_GLASS: return "Dark Glass base";
         case UI_THEME_OPERATOR:
@@ -797,8 +805,7 @@ static void theme_popup_create_async(void *user_data)
         0, 0, ui_theme_density_metric(236, 248, 260), 48, custom_theme_manager_show_cb, NULL, NULL);
     lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 144, 48, theme_close_cb, NULL, NULL);
-    /* Keep the custom-theme flow available in source for later restoration. */
-    lv_obj_add_flag(custom,LV_OBJ_FLAG_HIDDEN);
+    /* SD themes are managed separately from the built-in theme previews. */
     lv_obj_set_flex_grow(custom, 1); lv_obj_set_flex_grow(close, 1);
     theme_footer_fit(footer);
 }

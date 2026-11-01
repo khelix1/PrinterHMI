@@ -1,3 +1,6 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "moonraker_discovery.h"
 #include "ui_text.h"
 #include "ui_button.h"
@@ -611,6 +614,18 @@ bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
 {
     if(!s_popup || !s_results_list || s_discovery_dispatching ||
         s_owner_generation!=moonraker_config_generation())return false;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        if(!ip)return false;
+        s_has_scan_ip = true;
+        s_retry_ip = *ip;
+        moonraker_probe_result_t sample={.reachable=true,.klippy_ready=true};
+        copy_text(sample.identity,sizeof(sample.identity),"Demo printer");
+        bool added=moonraker_discovery_add_candidate("demo.invalid",7125,&sample);
+        moonraker_discovery_set_status(added?"Sample printer found. Select a printer.":"Unable to show sample printer.");
+        return added;
+    }
+#endif
     s_has_scan_ip = ip != NULL;
     if (ip) s_retry_ip = *ip;
     if (!ip || s_scan_task_handle) {

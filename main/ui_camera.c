@@ -1,4 +1,7 @@
 #include "ui_camera.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "ui_text.h"
 #include "ui_value_update.h"
 
@@ -81,6 +84,7 @@ static void camera_close_popups(void)
 }
 static size_t s_camera_index = 0;
 static bool s_fullscreen = false;
+static void (*s_fullscreen_on_close)(void);
 static bool s_setup_active = false;
 static bool s_camera_retiring;
 static bool s_camera_polling;
@@ -201,6 +205,7 @@ static void camera_retire_page(bool root_is_deleting)
     s_view_button = s_retry_button = s_selector_label = NULL;
     s_selector_text[0] = s_selector_rendered[0] = 0;
     s_fullscreen = false;
+    s_fullscreen_on_close = NULL;
     camera_reset_timing();
     if (timer) lv_timer_delete(timer);
     if (detached) lv_obj_delete(detached);
@@ -506,18 +511,32 @@ static void camera_set_viewport(bool fullscreen)
 }
 
 
+void ui_camera_exit_fullscreen(void)
+{
+    if (!s_fullscreen) return;
+    void (*on_close)(void) = s_fullscreen_on_close;
+    s_fullscreen_on_close = NULL;
+    ++s_camera_ui_epoch;
+    if (on_close) {
+        ui_camera_hide();
+        on_close();
+    } else camera_set_viewport(false);
+}
+
 static void camera_image_tap_cb(lv_event_t *event)
 {
     if (event && camera_owned_action(event,s_image) && s_fullscreen) {
-        ++s_camera_ui_epoch;
-        camera_set_viewport(false);
+        ui_camera_exit_fullscreen();
     }
 }
 
 
 static void camera_fullscreen_cb(lv_event_t *event)
 {
-    if (camera_owned_action(event,s_fullscreen_button)) {++s_camera_ui_epoch;camera_set_viewport(!s_fullscreen);}
+    if (camera_owned_action(event,s_fullscreen_button)) {
+        if (s_fullscreen) ui_camera_exit_fullscreen();
+        else { ++s_camera_ui_epoch; camera_set_viewport(true); }
+    }
 }
 
 
@@ -585,7 +604,13 @@ static void camera_poll_cb(lv_timer_t *timer)
             if(!camera_ui_current(&context))goto finished;
             camera_apply_view_transform();
             if(!camera_ui_current(&context))goto finished;
-            if(!s_camera_last_frame_tick)camera_set_status("Live | receiving camera frames");
+            if(!s_camera_last_frame_tick) {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+                camera_set_status(demo_mode_enabled() ? "DEMO | Sample camera view" : "Live | receiving camera frames");
+#else
+                camera_set_status("Live | receiving camera frames");
+#endif
+            }
             if(!camera_ui_current(&context))goto finished;
             s_camera_last_frame_tick=now;
             if(!s_camera_window_tick)s_camera_window_tick=now;
@@ -593,6 +618,10 @@ static void camera_poll_cb(lv_timer_t *timer)
             uint32_t elapsed=now-s_camera_window_tick;
             if(elapsed>=1000){
                 char status[48];unsigned fps=(s_camera_frame_count*1000U+elapsed/2U)/elapsed;
+                #ifdef PRINTERHMI_DEMO_RUNTIME
+                if (demo_mode_enabled()) snprintf(status,sizeof(status),"DEMO | Sample camera view");
+                else
+#endif
                 snprintf(status,sizeof(status),"Live  |  %u FPS",fps);
                 camera_set_status(status);
                 if(!camera_ui_current(&context))goto finished;
@@ -972,6 +1001,7 @@ static bool camera_show_page(void)
 
 void ui_camera_show(void)
 {
+    s_fullscreen_on_close = NULL;
     (void)camera_show_page();
 }
 
@@ -981,6 +1011,13 @@ void ui_camera_show_fullscreen(void)
 }
 
 
+void ui_camera_show_fullscreen_returning(void (*on_close)(void))
+{
+    s_fullscreen_on_close = NULL;
+    ui_camera_show_fullscreen();
+    if (s_fullscreen) s_fullscreen_on_close = on_close;
+}
+
 void ui_camera_destroy(void)
 {
     camera_retire_page(false);
@@ -989,6 +1026,7 @@ void ui_camera_destroy(void)
 
 void ui_camera_hide(void)
 {
+    s_fullscreen_on_close = NULL;
     ++s_camera_ui_epoch;
     camera_ui_context_t context=camera_ui_context();
     if(s_fullscreen)camera_set_viewport(false);

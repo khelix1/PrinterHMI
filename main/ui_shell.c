@@ -1,3 +1,6 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "ui_shell.h"
 #include "ui_text.h"
 #include "ui_button.h"
@@ -521,6 +524,15 @@ void ui_shell_raise_nav(void)
 void ui_shell_set_active_printer_name(const char *printer_name)
 {
     if (!s_shell) return;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    char demo_name[64];
+    if(demo_mode_enabled()) {
+        const char *name=printer_name && printer_name[0]?printer_name:"Sample printer";
+        if(!strncmp(name,"DEMO ",5))name+=5;
+        lv_snprintf(demo_name,sizeof(demo_name),"DEMO | %.48s",name);
+        printer_name=demo_name;
+    }
+#endif
     ui_global_estop_set_printer_name(printer_name);
     if (!s_shell_title_label) return;
 

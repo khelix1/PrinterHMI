@@ -80,6 +80,20 @@ void moonraker_module_init(void)
     moonraker_state_reset();
 }
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_files.h"
+#include "printer_simulation.h"
+void moonraker_state_publish_demo(const moonraker_state_t *state,const moonraker_filament_state_t *filament,const bool excluded[2])
+{
+    if(!demo_mode_enabled() || !state || !filament || !excluded)return;
+    state_lock();g_moonraker_state=*state;
+    if(g_moonraker_filament_state)*g_moonraker_filament_state=*filament;
+    if(g_moonraker_exclude_state)printer_simulation_objects(g_moonraker_exclude_state,excluded);
+    s_websocket_status_us=esp_timer_get_time();state_unlock();
+}
+#endif
+
 static void mr_safe_copy(char *dst, size_t dst_sz, const char *src)
 {
     if (!dst || dst_sz == 0) return;
@@ -1572,6 +1586,15 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
 
     *out_buf = NULL;
     *out_len = 0;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        size_t size=0;const uint8_t *png=demo_files_png(encoded_thumb_path,&size);
+        if(!png)return false;
+        uint8_t *copy=heap_caps_malloc(size,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+        if(!copy)return false;
+        memcpy(copy,png,size);*out_buf=copy;*out_len=size;return true;
+    }
+#endif
 
     if (!host ||
         !host[0] ||
@@ -1667,6 +1690,9 @@ bool moonraker_fetch_thumbnail_encoded_quiet(
     uint8_t **out_buf,
     size_t *out_len)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return moonraker_fetch_thumbnail_encoded_internal(host,port,encoded_thumb_path,out_buf,out_len,false);
+#endif
     if (!network_activity_controller_acquire_exclusive(5000)) {
         return false;
     }
@@ -1699,6 +1725,14 @@ bool moonraker_fetch_file_metadata(const char *host,
                                    int *http_code,
                                    esp_err_t *err_out)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        bool ok=demo_files_metadata(encoded_filename,body,body_sz);
+        if(http_code){*http_code=ok?200:404;}
+        if(err_out){*err_out=ok?ESP_OK:ESP_FAIL;}
+        return ok;
+    }
+#endif
     if (http_code) {
         *http_code = 0;
     }
@@ -1764,6 +1798,9 @@ bool moonraker_send_gcode_script(const char *host,
         return false;
     }
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) { bool ok=demo_printer_command(cmd);if(http_code)*http_code=ok?200:400;if(err_out)*err_out=ok?ESP_OK:ESP_ERR_NOT_SUPPORTED;return ok; }
+#endif
     const char *admin_method=moonraker_command_admin_method(cmd);
     const char *path=admin_method && strcmp(admin_method,"printer.emergency_stop")==0
         ? "/printer/emergency_stop" : admin_method?"/printer/firmware_restart":"/printer/gcode/script";
@@ -1911,6 +1948,14 @@ bool moonraker_start_print_file(const char *host,
                                 int *http_code,
                                 esp_err_t *err_out)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        bool known=demo_files_find(filename)!=NULL;bool ok=known && demo_printer_start_file(filename);
+        if(http_code){*http_code=ok?200:known?409:404;}
+        if(err_out){*err_out=ok?ESP_OK:ESP_FAIL;}
+        return ok;
+    }
+#endif
     if (http_code) *http_code = 0;
     if (err_out) *err_out = ESP_FAIL;
 

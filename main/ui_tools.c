@@ -17,6 +17,7 @@
 #include "ui_responsive_layout.h"
 #include "ui_studio_layout.h"
 
+static void lighting_layout(void);
 static ui_tools_open_cb_t s_lighting_callback;
 static lv_obj_t *s_lighting_button;
 static bool lighting_detected(void)
@@ -33,6 +34,7 @@ static void lighting_visibility_refresh(void)
     if(s_lighting_callback && lighting_detected())
         lv_obj_remove_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN);
+    lighting_layout();
 }
 static void lighting_deleted(lv_event_t *event)
 {
@@ -61,6 +63,27 @@ static lv_obj_t *s_root;
 static lv_obj_t *s_tiles;
 static lv_obj_t *s_banner;
 static lv_obj_t *s_center_rule;
+/* Studio has a plain heading. Operator places this action inside its banner,
+ * leaving a reserved column so enlarged labels cannot run beneath the button. */
+static void lighting_layout(void)
+{
+    if(!s_lighting_button)return;
+    if(ui_theme_is_studio()){
+        lv_obj_align(s_lighting_button,LV_ALIGN_TOP_RIGHT,-20,8);
+        return;
+    }
+    if(!s_banner)return;
+    lv_obj_align_to(s_lighting_button,s_banner,LV_ALIGN_RIGHT_MID,-20,0);
+    int32_t width=lv_obj_get_width(s_banner)-40;
+    if(!lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN))
+        width-=lv_obj_get_width(s_lighting_button)+20;
+    if(width<1)width=1;
+    for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++){
+        lv_obj_t *label=lv_obj_get_child(s_banner,i);
+        if(lv_obj_has_class(label,&lv_label_class))lv_obj_set_width(label,width);
+    }
+}
+
 static lv_obj_t *s_body_labels[4];
 static lv_timer_t *s_connection_timer;
 static const char *const s_descriptions[]={"Tune and validate your printer.","Probe and visualize the bed surface.","Inspect devices and live readings.","Run available printer macros."};
@@ -205,6 +228,7 @@ static void tools_size_changed(lv_event_t *event)
             lv_obj_set_width(lv_obj_get_child(s_banner,i),width-40);
     }
     lv_obj_set_size(s_tiles,width,lv_obj_get_content_height(s_root)-142);
+    lighting_layout();
 }
 
 static void tools_style_scroll_surface(void)

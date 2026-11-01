@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.2.4-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.2.14-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -224,3 +224,54 @@ under ASan/UBSan. `PROJECT_AUDIT_2026_10_30.md` records scope, findings, host/ta
 limits and remaining trust boundaries. The obsolete synchronous
 `printer_profile_health_poll_one` entry point is retired; the combined worker
 remains the health owner.
+
+### Theme Maker simulation refresh (v7.2.5-dev)
+
+`tools/theme-maker/` hosts the desktop editor and native LVGL tablet runtime.
+At that checkpoint, `shared/printer_simulation.c` owned portable command/state and clock behavior;
+Linux fixtures adapt cameras, network, storage, lighting and OTA locally.
+`custom_theme_background.c` and `theme_background_asset.c` retain the parked
+Theme Maker export support. No firmware demo mode is enabled by this patch.
+
+
+### Tablet offline demo (v7.2.8-dev)
+
+`main/demo_platform.c/h` owns the boot selection and app-only NVS/client boundary.
+`main/demo_storage.c/h` provides bounded transactional RAM settings, and
+`main/demo_printer.c` publishes local state for the existing UI. The shared model
+now lives in `main/printer_simulation.c/h` and the desktop links it directly.
+`main/ui_demo_mode.c` supplies entry/exit confirmations and six scenarios.
+`tools/audit/demo_isolation_test.py` and its C harness exercise actual runtime
+and storage code with SDK spies and sanitizers. Native demo popup tests exercise
+entry, exit, scenarios and desktop boot-selection refusal.
+
+
+### Files demo (v7.2.9-dev)
+
+`main/demo_files.c/h` owns the immutable sample catalog and strict metadata/image
+lookup. `main/ui_demo_files.c/h` is shared by the tablet demo and Linux adapter.
+`main/demo_preview_assets.inc` contains its generated image data;
+`tools/demo/generate-previews.py` rebuilds those originals and small previews.
+
+
+### Navigation and demo objects (v7.2.10-dev)
+
+`printer_simulation_objects` fills the shared two-object snapshot. The demo
+publisher supplies it under the existing Moonraker state lock. Normal and demo
+print-start routes share Dashboard selection behavior.
+`tools/audit/files_navigation_objects_test.py` exercises the actual bridge,
+Dashboard destination and publisher; native `files-navigation-test.py` and
+`demo-objects-test.py` check both themes and Dashboard/Printer controls.
+
+
+### Demo services (v7.2.11-dev)
+
+`printer_simulation_catalog.c/h` builds caller-owned device/macro/status JSON and
+applies the supported numeric sample macros transactionally. `demo_services.c/h`
+binds those samples to the real device, macro, motion and endstop controllers.
+The demo backend retains its own per-printer state; no live worker is started.
+
+`main/demo_camera.c/h` owns demo-only camera operations and locally discovered
+URLs; `demo_camera_frame.c` draws the common desktop/tablet sample image.
+
+`main/demo_calibration.c/h` simulates Calibration commands and results locally.

@@ -1,3 +1,6 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "ui_settings.h"
 #include "firmware_identity.h"
 #include "ui_scroll_anchor.h"
@@ -172,6 +175,9 @@ static void settings_about_cb(lv_event_t *event)
 
 static void settings_backup_cb(lv_event_t *event)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){ui_toast_show(UI_STATUS_WARNING,"Offline demo","Exit demo before opening configuration backups.");return;}
+#endif
     (void)event;
     ui_settings_backup_popup_show();
 }

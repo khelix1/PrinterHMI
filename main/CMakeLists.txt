@@ -1,5 +1,17 @@
 idf_component_register(
     SRCS
+        "demo_calibration.c"
+        "demo_camera.c"
+        "demo_camera_frame.c"
+        "demo_services.c"
+        "printer_simulation_catalog.c"
+        "demo_files.c"
+        "ui_demo_files.c"
+        "demo_storage.c"
+        "demo_platform.c"
+        "demo_printer.c"
+        "ui_demo_mode.c"
+        "printer_simulation.c"
         "dashboard_runtime_controller.c"
         # Application entry point
         "main.c"
@@ -24,6 +36,8 @@ idf_component_register(
         "assets/fonts/studio/inter_96.c"
         "theme_manager.c"
         "custom_theme.c"
+        "custom_theme_background.c"
+        "theme_background_asset.c"
         "ui_theme_preview.c"
         "ui_appearance_popups.c"
         "ui_widgets.c"
@@ -249,3 +263,8 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     PRINTERHMI_FIRMWARE_CHANNEL=${printerhmi_firmware_channel}
     PRINTERHMI_SOURCE_REVISION="${printerhmi_source_revision}"
     PRINTERHMI_SOURCE_MODIFIED=${printerhmi_source_modified})
+
+# Only main sources see the demo storage/transport boundary; SDK/BSP keep their APIs.
+target_compile_definitions(${COMPONENT_LIB} PRIVATE PRINTERHMI_DEMO_RUNTIME=1 PRINTERHMI_DEMO_UI=1)
+target_compile_options(${COMPONENT_LIB} PRIVATE "-include${CMAKE_CURRENT_SOURCE_DIR}/demo_platform.h")
+set_source_files_properties(demo_platform.c PROPERTIES COMPILE_DEFINITIONS PRINTERHMI_DEMO_PLATFORM_IMPLEMENTATION=1)

@@ -1,6 +1,9 @@
 #include "case_lighting.h"
 #include "moonraker_command_route.h"
 #include "moonraker_live_websocket.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "moonraker_config_controller.h"
 #include "moonraker_transport_security_controller.h"
 
@@ -658,6 +661,9 @@ bool moonraker_live_websocket_send_gcode(
 
 bool moonraker_live_websocket_request_endstops(uint32_t request_id)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return demo_printer_endstops(request_id);
+#endif
     if (!s_client || !moonraker_live_websocket_connected() || request_id < ENDSTOP_REQUEST_FIRST ||
         s_generation != __atomic_load_n(&s_accepted_generation, __ATOMIC_ACQUIRE)) return false;
     char request[128];
@@ -1482,6 +1488,9 @@ void moonraker_live_websocket_tasklet(
 
 bool moonraker_live_websocket_connected(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){moonraker_state_t state;moonraker_state_snapshot(&state);return state.moonraker_ok && state.live_data_ok;}
+#endif
     return s_connected && s_generation == moonraker_config_generation() &&
         s_generation == __atomic_load_n(
         &s_accepted_generation, __ATOMIC_ACQUIRE);
@@ -1496,12 +1505,18 @@ bool moonraker_live_websocket_running(void)
 
 bool moonraker_live_websocket_subscribed(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()){moonraker_state_t s;moonraker_state_snapshot(&s);return s.live_data_ok&&s.moonraker_ok;}
+#endif
     return moonraker_live_websocket_connected() && s_subscribed;
 }
 
 
 bool moonraker_live_websocket_fresh(int64_t maximum_age_us)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return maximum_age_us>0 && moonraker_live_websocket_subscribed();
+#endif
     int64_t updated = s_last_status_update_us;
     if (!moonraker_live_websocket_subscribed() || updated <= 0 || maximum_age_us <= 0) {
         return false;
@@ -1531,6 +1546,9 @@ bool moonraker_live_websocket_take_file_change(void)
 /* Stack-local fixed-pin request; no HTTP fallback or blocking command buffer. */
 bool moonraker_live_websocket_set_case_led(uint32_t generation,int percent)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return demo_printer_light(generation,percent);
+#endif
     if(generation!=s_generation || !moonraker_live_websocket_subscribed())return false;
     char command[96],request[224];
     uint32_t id=case_lighting_begin(generation,percent,esp_timer_get_time(),command,sizeof(command));

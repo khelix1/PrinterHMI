@@ -3134,3 +3134,154 @@ stub the separate mesh snapshot and renderer owners; action restrictions remain
 under test. See the [project audit](PROJECT_AUDIT_2026_10_30.md) for the full
 90-suite initial run and residual risks. Target build, panel and soak coverage
 remain pending.
+
+## v7.2.5-dev Theme Maker simulation
+
+The Linux runtime compiles the application UI against LVGL with local services.
+`tools/theme-maker/linux/native-test.py` covers the existing page/popup pointer,
+keyboard, cursor, ownership and workflow checks. `simulation-refresh-test.py`
+adds Lighting, OTA, Setup Center, persistence failures, appearance rebuilds and
+scenario/clock navigation checks. `simulation-model-test.py` compiles the portable
+state model with UBSan and tests thermal/progress behavior, paused/offline state,
+completion, new jobs, emergency stop and numeric input bounds.
+
+`ui-coverage-test.py` fails when a new production UI source lacks a mapped native
+owner. Its boot/logo/graphics-instrumentation exclusions are explicit; mapping
+81 modules does not prove that every possible interaction was executed. Editor
+event fixtures test exact-mode separation, stale frames, scenario requests and
+project immutability. Target builds and Linux Mint GUI/touch validation remain
+separate checks. Firmware offline demo is not enabled in this batch.
+
+## v7.2.6-dev popup ownership and theme rebuild checks
+
+`tools/theme-maker/linux/popup-parity-test.py` drives real pointer/key events over
+15 page routes in both supported built-in themes, repeated standalone controls,
+OTA cancellation/review/URL entry, Lighting and lightbox dismissal, dropdown
+cleanup, and alternating Studio/Operator Printer-page rebuilds. The shared
+`ui_printer_info_cards_create` reset fixes the sanitizer-reproduced stale-target
+label path. Desktop Escape uses each visible action's callback rather than
+retiring the widget while leaving a backend operation running.
+
+`native/build.py --sanitize --output-dir /tmp/theme-maker-sanitized` can instrument
+the host application and fixtures. Supply the same LVGL source/library options
+as the normal build. Run with `ASAN_OPTIONS=detect_leaks=0` and
+`UBSAN_OPTIONS=halt_on_error=1`; the hosted ptrace environment does not support
+LeakSanitizer. Reused LVGL library objects are not instrumented.
+
+
+## Tablet demo isolation (v7.2.8-dev)
+
+Run `python3 tools/audit/demo_isolation_test.py --cjson-dir /path/to/cJSON`.
+It compiles the actual demo platform, transactional RAM storage, profile controller,
+lighting and mesh controllers, portable model and runtime with ASan/UBSan and SDK
+spies. It checks live API delegation, boot flag changes, no real NVS or transport
+calls in demo, read-only/stale handles, uncommitted rollback, type/length errors,
+allocation failures, simulated progress, profile switching, lighting and mesh.
+Leak detection is disabled for environments that do not support LeakSanitizer.
+
+Build only with `./tools/build_idf6_hosted3.sh`. On hardware, record saved profiles
+and appearance first. Enter via Printers > Demo, confirm Restart, exercise both
+sample printers and scenarios, then exit the same way. Confirm real profiles,
+appearance and connection return unchanged. Reboot once while in demo and verify
+it remains offline; network/service actions must give local notices. This test
+requires the physical panel and is not replaced by host sanitizer results.
+
+For host coverage of the actual tablet demo UI guards, build the native helper
+with `--sanitize --firmware-demo-ui --output-dir /tmp/tablet-demo-ui` plus the
+usual LVGL source/archive options. Run
+`python3 tools/theme-maker/linux/firmware-demo-ui-test.py --helper /tmp/tablet-demo-ui/printerhmi-ui-host`.
+This test-only helper cannot be packaged by `build-deb.py`. It exercises demo
+markers, scenario callbacks and failed entry/exit persistence without restarting
+the host. The normal desktop helper uses `demo-popup-test.py` for its offline-only
+behavior. Neither host build substitutes for an ESP-IDF firmware build.
+
+
+## Files demo (v7.2.9-dev)
+
+The existing `demo_isolation_test.py --cjson-dir /path/to/cJSON` also compiles the
+actual early demo branches from Moonraker metadata, thumbnail and file-start
+functions. The live suffixes are spies in this host harness. It checks encoded
+paths, unknown/traversal/control-character inputs, bounded response buffers,
+owned PNG copies, allocation failure, 404/409 behavior, literal console starts
+and the absence of transport fallback. Full firmware compilation is separate.
+
+Run `python3 tools/demo/generate-previews.py --check` to verify generated artwork.
+Normal native Files tests now use the same backend as tablet demo. The tablet
+UI-guard helper must leave Files enabled while Camera and Drybox remain disabled.
+On the tablet, enter demo, browse/search/sort samples, view small and fullscreen
+previews, cancel a print confirmation, choose Idle, then start a sample. Check
+Dashboard and Printer filename/image/layers/time, pause/resume, and switch both
+printers while previews are open. Exit demo and confirm real Files still works.
+
+
+## Print navigation and demo objects (v7.2.10-dev)
+
+Run `python3 tools/audit/files_navigation_objects_test.py` for the actual normal
+file-start completion bridge, Dashboard destination and demo object publisher.
+The harness supplies a fake start API and state-lock spies; it cannot send a
+printer command. It verifies success returns to Dashboard, failures stay in
+Files, and the published object snapshot enables exclusion until both sample
+objects are excluded. Run the existing demo isolation test for per-printer
+state and fresh-scenario resets.
+
+Run `python3 tools/theme-maker/linux/files-navigation-test.py` to compare actual
+Dashboard/Files navigation button pixels after successful and cancelled print
+confirmation in both Studio and Operator. `python3 tools/theme-maker/linux/demo-objects-test.py` exercises exclusion,
+exhaustion and scenario reset on Dashboard and Printer in both themes. On hardware, check a
+demo job's Object control on both pages, reset the demo job, and verify switching
+printers keeps their exclusions separate. Check the next normal print start
+returns to Dashboard only when accepted; do not start a real print just to run
+host checks.
+
+
+## Demo service pages (v7.2.11-dev)
+
+`demo_isolation_test.py --cjson-dir /path/to/cJSON` now compiles the real catalog,
+macro, device, motion, endstop and demo-service modules. It checks full/limited
+profiles, live catalog values, numeric macro rejection without mutation, local
+file starts, filament presence, heating/humidity, favorites in RAM, positional
+endstop responses through the actual WebSocket demo entry, and zero original
+storage/transport calls. A real normal printer is never required by this harness.
+
+`tools/theme-maker/linux/demo-services-test.py` exercises the real Devices,
+Endstops, reviewed CLEAN_NOZZLE, and Drybox program widgets in Studio and Operator.
+Use `--helper /path/to/test-helper` to repeat against the host-only
+`--sanitize --firmware-demo-ui` build. This tests tablet UI guards with local
+adapters; the SDK isolation harness separately exercises the actual demo backend.
+The LVGL archive itself is not sanitizer-instrumented. Hardware build/verification
+remain necessary.
+
+On the tablet, try Devices filters and Endstops while Idle, run a reviewed
+CLEAN_NOZZLE TEMP=215 macro, then exercise Drybox PLA/PETG, Hold/Resume and Stop.
+Switch printers and verify capabilities, catalogs and program state stay with
+their owner. Choose Offline and verify controls/readings retire, then restore a
+scenario. Exit demo and confirm real profiles/settings return unchanged.
+
+## Demo camera (v7.2.12-dev)
+
+`tools/audit/demo_isolation_test.py --cjson-dir /path/to/cJSON` exercises local
+camera setup, discovery, frame ownership/timing, rejection of arbitrary URLs,
+and allocation failures; it also audits the controller demo entry guards.
+`firmware-demo-ui-test.py` checks the Camera route in both themes using the
+host-only firmware UI guards. On the tablet, try switching views, rotation,
+mirroring, fullscreen, leaving the page and switching printers. Confirm the
+DEMO label and that the saved live printer camera settings return after exit.
+
+## Dashboard camera stacking and return (v7.2.13-dev)
+
+`tools/theme-maker/linux/dashboard-camera-test.py` exercises both themes without
+the old native fixture stacking workaround: toggle repeatedly, wait for frames,
+open and dismiss fullscreen, then use Camera navigation from Printer.
+`tools/audit/dashboard_camera_safety_test.py` exercises the real Dashboard
+owner and `camera_pipeline_test.py` checks real Camera lifetime. Test the same
+flows on the tablet, including thumbnail loads and printer switching.
+
+## Demo Calibration (v7.2.14-dev)
+
+`tools/audit/demo_isolation_test.py --cjson-dir /path/to/cJSON` checks actual
+demo capability publishing, commands, results, profile switching, invalid
+inputs and original NVS/transport call counts. Build the host helper with
+`--sanitize --firmware-demo-ui` and run `demo-calibration-test.py --helper`
+to exercise real widgets against the real simulated command handler in both
+themes. On the tablet verify Accuracy, Shaper, Apply & restart, manual probe,
+printer switching, busy/offline behavior and restoration of your real settings.

@@ -115,3 +115,18 @@ also be kept with the backup.
   854 × 528.
 - **Theme disappears after restore:** copy the matching `.phmitheme` package
   back to the SD card, then rescan Custom Themes.
+
+## Theme Maker development exports
+
+The simulation-refresh branch retains the parked Theme Maker schema extensions.
+Version 1 packages keep the existing Operator, Foundry and Glass palette/layout
+contract. Version 2 adds the Studio base, full palette and component radii while
+rejecting legacy layout rectangles or transparent Studio surfaces. Version 3
+adds validated relative `.phmibg` background assets. The background header and
+asset name are checked before selection. Copy a theme bundle's companion assets
+alongside its package on SD.
+
+Studio exports and artwork require firmware containing these extensions; older
+main releases support version 1 only. Desktop simulation alone does not update
+the tablet. Theme Maker's dedicated Tablet simulation uses built-in appearance;
+Panel preview is the surface for checking editable palettes and artwork.

@@ -1,4 +1,8 @@
 #include "camera_discovery_controller.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_camera.h"
+#endif
 
 #include "moonraker_config_controller.h"
 #include "camera_catalog_controller.h"
@@ -50,6 +54,9 @@ bool camera_discovery_start(const char *host, int port, const char *api_key)
 bool camera_discovery_start_for_profile(int profile, const char *host, int port,
                                         const char *api_key)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_discovery_start(profile, host, port);
+#endif
     if (profile < 0 || profile >= MOONRAKER_CONFIG_MAX_PROFILES ||
         !host || !host[0] || port <= 0 || port >= 65536 || s_task) {
         return false;
@@ -83,6 +90,9 @@ bool camera_discovery_start_for_profile(int profile, const char *host, int port,
 
 bool camera_discovery_busy(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return false;
+#endif
     return s_task != NULL;
 }
 
@@ -90,6 +100,9 @@ bool camera_discovery_busy(void)
 bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found,
                                   size_t *count)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) return demo_camera_discovery_take(webcam, found, count);
+#endif
     if (!__atomic_exchange_n(
             &s_result_ready,
             false,

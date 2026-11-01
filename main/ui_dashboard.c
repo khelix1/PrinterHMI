@@ -1,5 +1,8 @@
 #include "ui_dashboard.h"
 #include "ui_text.h"
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "ui_value_update.h"
 #include "misc/cache/instance/lv_image_cache.h"
 #include "esp_app_desc.h"
@@ -57,6 +60,8 @@ static lv_timer_t *dash32_camera_timer = NULL;
 static uint8_t *dash32_camera_frame = NULL;
 static lv_image_dsc_t dash32_camera_dsc;
 static bool dash32_camera_mode = false;
+static lv_obj_t *dash32_fullscreen_origin;
+static uint32_t dash32_fullscreen_generation, dash32_fullscreen_epoch;
 static bool dash32_camera_quiesced = false;
 static bool dash32_camera_restore_after_ota = false;
 static uint32_t dash32_camera_epoch,dash32_camera_generation;
@@ -103,6 +108,20 @@ static void dashboard_camera_set_status(const char *text)
 {
     ui_value_set_text(dash32_camera_status,text?text:ui_text(""));
 }
+/* Thumbnail updates and video frames can create or raise sibling objects.
+ * Keep the active image above the thumbnail and its controls above both. */
+static void dashboard_camera_raise_layers(void)
+{
+    if (!dash32_root) return;
+    if (dash32_camera_mode && dash32_camera_image &&
+        !lv_obj_has_flag(dash32_camera_image, LV_OBJ_FLAG_HIDDEN))
+        lv_obj_move_foreground(dash32_camera_image);
+    if (dash32_camera_mode && dash32_camera_status &&
+        !lv_obj_has_flag(dash32_camera_status, LV_OBJ_FLAG_HIDDEN))
+        lv_obj_move_foreground(dash32_camera_status);
+    if (dash32_camera_toggle && !lv_obj_has_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN))
+        lv_obj_move_foreground(dash32_camera_toggle);
+}
 static void dashboard_camera_poll_cb(lv_timer_t *timer)
 {
     dashboard_camera_context_t context=dashboard_camera_context();
@@ -146,8 +165,13 @@ static void dashboard_camera_poll_cb(lv_timer_t *timer)
             if(!dashboard_camera_current(&context))goto finished;
             lv_obj_center(dash32_camera_image);
             if(!dashboard_camera_current(&context))goto finished;
-            lv_obj_move_foreground(dash32_camera_image);
+            dashboard_camera_raise_layers();
+            if(!dashboard_camera_current(&context))goto finished;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+            dashboard_camera_set_status(demo_mode_enabled() ? "DEMO CAMERA" : "LIVE CAMERA");
+#else
             dashboard_camera_set_status("LIVE CAMERA");
+#endif
         }
         if(!dashboard_camera_current(&context))goto finished;
     }
@@ -224,6 +248,18 @@ static void dashboard_camera_toggle_cb(lv_event_t *event)
     if(!dashboard_camera_action(event,dash32_camera_toggle))return;
     dash32_camera_dispatching=true;dashboard_camera_mode_set(!dash32_camera_mode);dash32_camera_dispatching=false;
 }
+static void dashboard_camera_fullscreen_closed(void)
+{
+    lv_obj_t *origin = dash32_fullscreen_origin;
+    uint32_t generation = dash32_fullscreen_generation;
+    uint32_t epoch = dash32_fullscreen_epoch;
+    dash32_fullscreen_origin = NULL;
+    if (origin && origin == dash32_root && epoch == dash32_camera_epoch &&
+        generation == moonraker_config_generation() &&
+        dash32_camera_toggle && !dash32_camera_quiesced &&
+        !lv_obj_has_flag(dash32_camera_toggle, LV_OBJ_FLAG_HIDDEN))
+        dashboard_camera_mode_set(true);
+}
 static void dashboard_camera_open_fullscreen_cb(lv_event_t *event)
 {
     if(!dashboard_camera_action(event,dash32_camera_image) || !dash32_camera_mode)return;
@@ -231,7 +267,10 @@ static void dashboard_camera_open_fullscreen_cb(lv_event_t *event)
     lv_obj_t *root=dash32_root;uint32_t epoch=dash32_camera_epoch;
     dashboard_camera_mode_set(false);
     if(root==dash32_root && dash32_camera_epoch==epoch+1U && !dash32_camera_mode && !dash32_camera_quiesced){
-        ui_camera_show_fullscreen();
+        dash32_fullscreen_origin = root;
+        dash32_fullscreen_generation = moonraker_config_generation();
+        dash32_fullscreen_epoch = dash32_camera_epoch;
+        ui_camera_show_fullscreen_returning(dashboard_camera_fullscreen_closed);
     }
     dash32_camera_dispatching=false;
 }
@@ -567,6 +606,7 @@ bool ui_dashboard_thumb_ready(void)
 void ui_dashboard_thumb_set_placeholder(const char *text)
 {
     ui_active_print_thumb_set_placeholder(dash32_active_print, text);
+    dashboard_camera_raise_layers();
 }
 
 
@@ -588,9 +628,11 @@ void ui_dashboard_thumb_delete_canvas(void)
 void ui_dashboard_thumb_show_canvas_from_buffer(int w, int h, const char *file)
 {
     ui_active_print_thumb_show_canvas_from_buffer(dash32_active_print, w, h, file);
+    dashboard_camera_raise_layers();
 }
 
 void ui_dashboard_thumb_apply_canvas_from_buffer(int w, int h, const char *file)
 {
     ui_active_print_thumb_apply_canvas_from_buffer(dash32_active_print, w, h, file);
+    dashboard_camera_raise_layers();
 }

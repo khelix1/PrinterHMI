@@ -204,6 +204,9 @@ typedef struct {
 void moonraker_module_init(void);
 
 void moonraker_state_snapshot(moonraker_state_t *out);
+#ifdef PRINTERHMI_DEMO_RUNTIME
+void moonraker_state_publish_demo(const moonraker_state_t *,const moonraker_filament_state_t *,const bool excluded[2]);
+#endif
 /* Expire stale WebSocket state atomically against status publication. */
 void moonraker_state_expire_websocket(int64_t maximum_age_us);
 void moonraker_filament_state_snapshot(

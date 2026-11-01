@@ -159,8 +159,14 @@ static void run_save_config_cb(lv_event_t *event)
     calibration_session_controller_reset();
     ui_cal_dialog_title_divided(popup, ui_text("Configuration save requested"));
     ui_value_set_text(s_save_feedback,
+#ifdef PRINTERHMI_DEMO_RUNTIME
+        demo_mode_enabled() ? "Demo: simulated save. No printer was changed or restarted." :
+#endif
         "SAVE_CONFIG was accepted. Klipper is expected to save and restart. Wait for Ready before starting a print.");
     ui_value_set_text(s_results_feedback,
+#ifdef PRINTERHMI_DEMO_RUNTIME
+        demo_mode_enabled() ? "Demo: simulated save complete." :
+#endif
         "Configuration save requested. Wait for the printer to reconnect as Ready.");
 }
 
@@ -195,6 +201,9 @@ static void apply_restart_button_cb(lv_event_t *event)
     lv_obj_add_event_cb(*s_context->save_confirm_popup, save_confirm_deleted, LV_EVENT_DELETE, NULL);
     ui_cal_dialog_title_divided(*s_context->save_confirm_popup, ui_text("Apply calibration & restart?"));
     ui_cal_dialog_text(ui_cal_dialog_body(*s_context->save_confirm_popup),
+#ifdef PRINTERHMI_DEMO_RUNTIME
+        demo_mode_enabled() ? "Demo: simulate saving these sample results? No printer will be changed or restarted." :
+#endif
         "PrinterHMI will run SAVE_CONFIG. Klipper will write the reported calibration values and restart.\n\n"
         "The printer will disconnect temporarily. Do not start a print until it reconnects as Ready.");
     s_save_feedback = ui_cal_dialog_text(ui_cal_dialog_body(*s_context->save_confirm_popup), "");

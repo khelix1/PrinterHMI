@@ -5,6 +5,7 @@
 #include <string.h>
 #include "lvgl.h"
 #include "ui_network.h"
+#include "demo_setup.h"
 #include "ui_network_tools.h"
 #include "ui_widgets.h"
 #include "ui_cards.h"

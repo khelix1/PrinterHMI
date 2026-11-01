@@ -65,10 +65,11 @@ void ui_demo_mode_show(void) {
                      "profiles are temporary. Returning to your printers "
                      "restarts the tablet and restores your saved settings."
                    : "The tablet will restart into an offline simulation. Your "
-                     "saved printers and settings are kept. Open Printers > "
+                     "saved printers and settings are kept. Open Settings > "
                      "Demo to return to normal operation.");
   ui_cal_dialog_caption(body,
-      "Demo pages: Dashboard, Printer, Files, Lighting, Bed Mesh, Devices, Macros and Drybox. Camera, Calibration and setup/service workflows are still in progress.");
+      "Explore sample prints, Camera, Tools, Calibration, Network and Setup. "
+      "Updates are simulated; backup, restore and factory reset require normal mode.");
   if (active && !confirming) {
     const char *names[] = {"idle",     "printing", "paused",
                            "complete", "offline",  "error"};

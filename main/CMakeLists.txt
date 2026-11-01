@@ -1,5 +1,7 @@
 idf_component_register(
     SRCS
+        "demo_setup.c"
+        "demo_ota.c"
         "demo_calibration.c"
         "demo_camera.c"
         "demo_camera_frame.c"

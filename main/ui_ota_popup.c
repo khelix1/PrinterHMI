@@ -1,3 +1,6 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#endif
 #include "ui_ota_popup.h"
 #include "ui_text.h"
 
@@ -194,6 +197,9 @@ void ui_ota_progress_pump(const char *status_text,
 
     if(s_progress_cancel_btn) {
         bool finished=!ota_manager_is_running() && percent<100;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+        if (demo_mode_enabled() && !ota_manager_is_running()) finished=true;
+#endif
         ui_value_set_text(lv_obj_get_child(s_progress_cancel_btn,0),finished ? "Close" : "Cancel");
         if((cancel_enabled && !s_progress_cancel_pending) || finished)lv_obj_remove_state(s_progress_cancel_btn,LV_STATE_DISABLED);
         else lv_obj_add_state(s_progress_cancel_btn,LV_STATE_DISABLED);

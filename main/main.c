@@ -1,6 +1,7 @@
 #include "ui_case_lighting.h"
 #ifdef PRINTERHMI_DEMO_RUNTIME
 #include "demo_mode.h"
+#include "demo_setup.h"
 #include "demo_calibration.h"
 #include "ui_demo_files.h"
 #include "ui_preview_lightbox.h"
@@ -1434,7 +1435,17 @@ static void ui_network_tools_open_printer_profiles_cb(
 static void scan_moonraker_now(void)
 {
 #ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled()){ui_toast_show(UI_STATUS_WARNING,"Offline demo","Network discovery is unavailable in demo mode.");return;}
+    if(demo_mode_enabled()) {
+        uint32_t request=ui_printer_profiles_discovery_request();
+        if(!request)return;
+        char name[33];esp_ip4_addr_t sample_ip={.addr=0x0100007f};
+        if(!demo_setup_network(name,sizeof(name))) {
+            moonraker_discovery_show_for_request("Connect to the sample network first.",ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request);return;
+        }
+        if(!moonraker_discovery_show_for_request("Finding sample printers...",ui_printer_profiles_cancel_discovery_request,moonraker_discovery_selected_bridge,request))return;
+        if(request!=ui_printer_profiles_discovery_request()){moonraker_discovery_close_request(request);return;}
+        (void)moonraker_discovery_start(&sample_ip);return;
+    }
 #endif
     uint32_t request=ui_printer_profiles_discovery_request();
     if(!request)return;
@@ -1462,6 +1473,16 @@ void ui_network_create(void)
 
 static void ui_network_refresh_bridge(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        char name[33]={0}; bool connected=demo_setup_network(name,sizeof(name));
+        moonraker_state_t state; moonraker_state_snapshot(&state);
+        network_status_controller_refresh("Offline demo",connected,name,ui_network_tools_selected_wifi_ssid,
+            connected?"127.0.0.1":"--",state.moonraker_ok,moonraker_config_host(),
+            state.moonraker_ok?200:0,ui_network_tools_network_scan_status);
+        return;
+    }
+#endif
     char ip_buf[32];
 
     if (s_got_ip) {
@@ -1667,9 +1688,6 @@ static void tools_open_macros_bridge(void) { ui_shell_page_action(UI_SHELL_PAGE_
 
 static void settings_open_network_bridge(lv_event_t *event)
 {
-#ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled()){ui_toast_show(UI_STATUS_WARNING,"Offline demo","Exit demo to configure networking.");return;}
-#endif
     (void)event;
 
     app_hide_operator_pages();
@@ -1704,7 +1722,7 @@ static bool setup_connect_wifi(const char *ssid, const char *password)
 static void app_open_setup_wizard(void)
 {
 #ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled()){ui_toast_show(UI_STATUS_WARNING,"Offline demo","Setup is unavailable in this demo batch. Exit demo to configure the tablet.");return;}
+    if(demo_mode_enabled()){ui_setup_wizard_show_with_appearance_callback(demo_setup_connect,app_theme_changed);return;}
 #endif
     ui_setup_wizard_show_with_appearance_callback(setup_connect_wifi,app_theme_changed);
 }
@@ -2183,6 +2201,13 @@ static void clear_sensitive_buffer(
 
 static bool connect_selected_wifi(void)
 {
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        bool ok=demo_setup_connect(ui_network_tools_selected_wifi_ssid,ui_network_tools_selected_wifi_password);
+        safe_copy(ui_network_tools_network_scan_status,sizeof(ui_network_tools_network_scan_status),ok?"Demo network connected":"Select a sample network");
+        return ok;
+    }
+#endif
     if (!ui_network_tools_selected_wifi_ssid[0]) {
         safe_copy(ui_network_tools_network_scan_status, sizeof(ui_network_tools_network_scan_status),
                   "No WiFi selected");
@@ -2262,6 +2287,15 @@ static void ui_network_tools_save_wifi_password_only_cb(lv_event_t *e)
         ui_network_tools_selected_wifi_password,
         sizeof(ui_network_tools_selected_wifi_password));
 
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        bool ok=connect_selected_wifi();
+        clear_sensitive_buffer(ui_network_tools_selected_wifi_password,sizeof(ui_network_tools_selected_wifi_password));
+        if(ok){ui_network_tools_wifi_password_close_owned();ui_network_tools_wifi_scan_close_owned();ui_network_refresh_bridge();}
+        else ui_network_tools_wifi_password_set_status(ui_network_tools_network_scan_status);
+        return;
+    }
+#endif
     if (wifi_credentials_store_save(
             ui_network_tools_selected_wifi_ssid,
             ui_network_tools_selected_wifi_password)) {
@@ -2320,7 +2354,12 @@ static void ui_network_tools_wifi_ssid_selected_cb(lv_event_t *e)
 static void ui_network_tools_wifi_scan_now(void)
 {
 #ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled()){ui_toast_show(UI_STATUS_WARNING,"Offline demo","Network discovery is unavailable in demo mode.");return;}
+    if(demo_mode_enabled()){
+        wifi_ap_record_t sample={0};strlcpy((char *)sample.ssid,"Demo network",sizeof(sample.ssid));sample.rssi=-48;
+        ui_network_render_scan_results(&sample,1,1,ui_network_tools_wifi_ssid_selected_cb);
+        safe_copy(ui_network_tools_network_scan_status,sizeof(ui_network_tools_network_scan_status),"One sample network found");
+        return;
+    }
 #endif
     if (!network_activity_controller_request_exclusive()) {
         safe_copy(

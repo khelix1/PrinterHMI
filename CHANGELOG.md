@@ -1,5 +1,49 @@
 # Changelog
 
+## [7.3.0] - 2026-11-01
+
+- Add a tablet offline demo and refresh Theme Maker tablet simulation.
+- Move offline demo entry to Settings and improve externally started print layer estimates.
+
+## [7.2.23-dev] - 2026-11-01
+
+- Estimate current layer when an external print progresses but the printer keeps reporting layer zero.
+
+## [7.2.22-dev] - 2026-11-01
+
+- Move the offline demo entry from the printer chooser to Settings.
+
+## [7.2.21-dev] - 2026-11-01
+
+- Update the offline demo introduction to describe the available sample workflows and maintenance limits.
+
+## [7.2.20-dev] - 2026-11-01
+
+- Keep simulated print pause, resume and cancel commands consistent with the current printer state.
+
+## [7.2.19-dev] - 2026-11-01
+
+- Add a continuous sample print journey check in both themes and document demo verification.
+
+## [7.2.18-dev] - 2026-10-31
+
+- Keep sample printer discovery retry available in offline demo.
+
+## [7.2.17-dev] - 2026-10-31
+
+- Enable the Network page in demo mode with local sample Wi-Fi and printer discovery.
+- Keep sample passwords out of saved credentials and real Wi-Fi operations.
+
+## [7.2.16-dev] - 2026-10-31
+
+- Enable Setup Center in the offline demo with a sample network and printer discovery.
+- Keep sample network credentials and discovery separate from real Wi-Fi.
+
+## [7.2.15-dev] - 2026-10-31
+
+- Add an offline OTA catalog and simulated transfer to tablet demo.
+- Block real OTA workers in demo; allow cancellation and completion without reboot.
+
 ## [7.2.14-dev] - 2026-10-31
 
 - Enable real Calibration dialogs in tablet demo using bounded local commands and results.

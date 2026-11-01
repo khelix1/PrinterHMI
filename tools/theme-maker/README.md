@@ -1,3 +1,32 @@
+# Demo in Settings — v7.2.22-dev / preview43
+
+Demo is accessed from Settings; entering and exiting tablet demo still requires a restart. Native helper capability 32.
+
+# Demo introduction — v7.2.21-dev / preview42
+
+The demo introduction describes the available sample workflows and maintenance limits. Native helper capability 31.
+
+# Demo print transitions — v7.2.20-dev / preview41
+
+Pause, resume and cancel respect the simulated print state. Native helper capability 30.
+
+# Demo Network — v7.2.17-dev / preview40
+
+The tablet demo opens the real Network page with sample scan, connection and
+printer discovery. No sample password is saved. Native helper capability 29.
+
+# Demo Setup Center — v7.2.16-dev / preview39
+
+The tablet demo uses local sample network and printer discovery in Setup
+Center. It keeps sample settings in RAM and discards sample passwords. Native
+helper capability 28; verify on tablet hardware.
+
+# Demo OTA — v7.2.15-dev / preview38
+
+The tablet demo includes sample releases and simulated OTA progress, including
+cancel and completion. No firmware or printer configuration is changed. Native
+helper capability 27; real hardware verification remains necessary.
+
 # Demo Calibration — v7.2.14-dev / preview37
 
 The tablet demo enables the real Calibration page with local sample results,

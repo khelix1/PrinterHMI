@@ -3180,7 +3180,7 @@ allocation failures, simulated progress, profile switching, lighting and mesh.
 Leak detection is disabled for environments that do not support LeakSanitizer.
 
 Build only with `./tools/build_idf6_hosted3.sh`. On hardware, record saved profiles
-and appearance first. Enter via Printers > Demo, confirm Restart, exercise both
+and appearance first. Enter via Settings > Demo, confirm Restart, exercise both
 sample printers and scenarios, then exit the same way. Confirm real profiles,
 appearance and connection return unchanged. Reboot once while in demo and verify
 it remains offline; network/service actions must give local notices. This test
@@ -3285,3 +3285,29 @@ inputs and original NVS/transport call counts. Build the host helper with
 to exercise real widgets against the real simulated command handler in both
 themes. On the tablet verify Accuracy, Shaper, Apply & restart, manual probe,
 printer switching, busy/offline behavior and restoration of your real settings.
+
+## Demo OTA (v7.2.15-dev)
+
+The firmware-demo-ui helper runs `demo-ota-test.py` through the actual demo
+catalog and transfer callbacks. `demo_isolation_test.py` checks the early
+demo guards in OTA manager, catalog and entry. On hardware, exercise sample
+release selection, cancellation, completion, closing and reopening, then exit
+demo and verify the normal release browser.
+
+## Demo Setup Center (v7.2.16-dev)
+
+Run `demo-setup-test.py` against the sanitized firmware-demo-ui helper and
+`demo_isolation_test.py --cjson-dir /path/to/cJSON`. On the tablet, try Setup
+Center's sample network and printer discovery, then exit demo and verify the
+real network and printer settings are unchanged.
+
+## Demo Network (v7.2.17-dev)
+
+Run `demo-network-test.py` with the sanitized firmware-demo-ui helper and
+`demo_isolation_test.py --cjson-dir /path/to/cJSON`. Test Network access, sample
+scan/connect and printer discovery on the tablet; exit demo and verify your
+real connection and saved settings.
+
+### Demo end-to-end journey (v7.2.19-dev)
+
+Run `python3 tools/theme-maker/linux/demo-journey-test.py --helper /path/to/firmware-demo-ui/printerhmi-ui-host` to check file selection, print start, pause, resume and object exclusion across both themes. The host uses local fixtures and does not replace tablet verification. Run `demo_isolation_test.py --cjson-dir /path/to/cJSON` for the SDK-spy boundary tests.

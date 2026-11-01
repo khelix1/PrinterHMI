@@ -6,6 +6,16 @@
 #include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_ota.h"
+bool ota_manager_is_running(void){return demo_ota_running();}
+bool ota_release_catalog_start(void){return demo_ota_catalog_start();}
+void ota_release_catalog_snapshot(ota_release_catalog_snapshot_t *out){demo_ota_catalog_snapshot(out);}
+bool ota_release_catalog_entry(size_t i,ota_release_entry_t *out){return demo_ota_catalog_entry(i,out);}
+void host_ota_show(void){demo_ota_open();}
+void host_ota_close(void){demo_ota_stop();ui_ota_popup_close();ui_ota_progress_close();}
+void host_ota_fixture(int value){(void)value;}
+#else
 static bool ready;
 static lv_timer_t *progress;
 static int percent;
@@ -26,3 +36,5 @@ static void custom(void){char identity[160];firmware_identity_format(identity,si
 void host_ota_show(void){ui_ota_release_browser_show(start,custom);}
 void host_ota_close(void){if(progress)lv_timer_delete(progress);progress=NULL;ui_ota_popup_close();ui_ota_progress_close();}
 void host_ota_fixture(int value){mode=value;ready=false;}
+
+#endif

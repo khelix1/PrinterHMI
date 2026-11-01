@@ -54,7 +54,7 @@ if args.firmware_demo_ui: flags+=['-DPRINTERHMI_DEMO_RUNTIME=1','-include',str(r
 else: flags+=['-DPRINTERHMI_DEMO_DESKTOP=1']
 compiler=['cc','-include',str(here/'shims/host_compat.h'),'-std=c11','-D_POSIX_C_SOURCE=200809L','-O2','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections',*flags,'-I',str(here/'vendor/cjson'),'-I',str(here/'shims'),'-I',str(out),'-I',str(lvgl),'-I',str(lvgl/'src'),'-I',str(root/'main')]
 source_files=[root/'main/printer_simulation.c',root/'main/demo_camera_frame.c']+[here/name for name in ['host.c','demo_fixture.c','setup_fixture.c','ota_fixture.c','lighting_fixture.c','tuning_bridge.c','page_bridge.c','console_fixture.c','printer_bridge.c','dashboard_bridge.c','files_bridge.c','camera_bridge.c','profiles_bridge.c','camera_fixture.c','drybox_bridge.c','notification_fixture.c','settings_bridge.c','settings_fixture.c','settings_popups_bridge.c','network_bridge.c','profile_fixture.c','discovery_bridge.c','telemetry_fixture.c','devices_fixture.c','sprintf_bridge.c','macros_fixture.c','mesh_bridge.c','mesh_fixture.c','calibration_fixture.c','vendor/cjson/cJSON.c']]+[root/'main'/name for name in sources]
-if args.firmware_demo_ui: source_files += [root/'main/demo_calibration.c']
+if args.firmware_demo_ui: source_files += [root/'main/demo_calibration.c',root/'main/demo_ota.c',root/'main/demo_setup.c']
 if args.sanitize:compiler+=['-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Wno-error=format-truncation']
 def compile_host(source):
  obj=out/('host_'+source.relative_to(root).as_posix().replace('/','_')+'.o')

@@ -1,3 +1,7 @@
+#ifdef PRINTERHMI_DEMO_RUNTIME
+#include "demo_mode.h"
+#include "demo_setup.h"
+#endif
 #include "ui_setup_wizard.h"
 #include "ui_text.h"
 #include "timezone_config.h"
@@ -573,9 +577,14 @@ static bool setup_network_content(void)
     uint32_t epoch=s_setup_epoch;
     wifi_ap_record_t ap={0};esp_netif_ip_info_t ip={0};
     s_setup_dispatching=true;
-    bool connected=esp_wifi_sta_get_ap_info(&ap)==ESP_OK;
-    esp_netif_t *netif=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    bool has_ip=connected && netif && esp_netif_get_ip_info(netif,&ip)==ESP_OK && ip.ip.addr!=0;
+    bool connected=false,has_ip=false;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) { connected=demo_setup_network((char*)ap.ssid,sizeof(ap.ssid));has_ip=connected;ip.ip.addr=0x0100007f; }
+    else
+#endif
+    { connected=esp_wifi_sta_get_ap_info(&ap)==ESP_OK;
+      esp_netif_t *netif=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      has_ip=connected && netif && esp_netif_get_ip_info(netif,&ip)==ESP_OK && ip.ip.addr!=0; }
     s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch))return false;
     char address[32];
@@ -651,7 +660,11 @@ static bool setup_review_content(bool final)
     int index=moonraker_config_active_profile_index();
     wifi_ap_record_t network={0};
     s_setup_dispatching=true;
-    bool connected=esp_wifi_sta_get_ap_info(&network)==ESP_OK;
+    bool connected;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())connected=demo_setup_network((char*)network.ssid,sizeof(network.ssid));else
+#endif
+    connected=esp_wifi_sta_get_ap_info(&network)==ESP_OK;
     s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || generation!=moonraker_config_generation() || index!=moonraker_config_active_profile_index())return false;
     const moonraker_profile_t *printer=moonraker_config_profile(index);
@@ -913,6 +926,12 @@ static void wifi_scan_open(void)
     setup_watch(s_wifi_list);
     setup_action(s_actions,"Scan again",UI_POPUP_ACTION_SECONDARY,wifi_scan_open_cb);
     if(s_wifi_scan_busy){s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;}
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) {
+        s_wifi_count=1;strlcpy(s_wifi[0].ssid,"Demo network",sizeof(s_wifi[0].ssid));s_wifi[0].rssi=-48;
+        s_wifi_scan_done=true;s_wifi_scan_busy=false;s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;
+    }
+#endif
     s_wifi_scan_busy=true;
     s_wifi_scan_done = false;
     if (xTaskCreate(wifi_scan_task, "setup_wifi_scan", 4096, NULL, 4, NULL) != pdPASS) {
@@ -938,7 +957,11 @@ static void wifi_verify(lv_timer_t *timer)
     if(!s_poll || (timer && timer!=s_poll) || !s_center || s_setup_dispatching)return;
     uint32_t epoch=s_setup_epoch;
     wifi_ap_record_t info;
-    esp_err_t result=esp_wifi_sta_get_ap_info(&info);
+    esp_err_t result;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())result=demo_setup_network((char*)info.ssid,sizeof(info.ssid))?ESP_OK:ESP_FAIL;else
+#endif
+    result=esp_wifi_sta_get_ap_info(&info);
     if(!setup_current(epoch))return;
     if (result != ESP_OK ||
         strcmp((const char *)info.ssid, s_selected_ssid)) {
@@ -999,9 +1022,15 @@ static void printer_editor_discover_cb(void)
 {
     uint32_t request=ui_printer_profiles_discovery_request();
     if(!request)return;
-    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_ip_info_t ip = {0};
-    if (!netif || esp_netif_get_ip_info(netif, &ip) != ESP_OK || ip.ip.addr == 0) {
+    bool ready=false;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled()) { char name[33];ready=demo_setup_network(name,sizeof(name));ip.ip.addr=0x0100007f; }
+    else
+#endif
+    { esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      ready=netif && esp_netif_get_ip_info(netif,&ip)==ESP_OK && ip.ip.addr!=0; }
+    if (!ready) {
         set_status("Connect to Wi-Fi before discovering printers.");
         return;
     }
@@ -1224,6 +1253,9 @@ static void camera_open(void)
 static bool setup_wifi_is_ready(void)
 {
     wifi_ap_record_t info;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return demo_setup_network((char*)info.ssid,sizeof(info.ssid));
+#endif
     return esp_wifi_sta_get_ap_info(&info) == ESP_OK;
 }
 

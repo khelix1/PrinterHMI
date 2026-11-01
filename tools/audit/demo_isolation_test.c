@@ -7,6 +7,7 @@
 #include "case_lighting.h"
 #include "demo_files.h"
 #include "demo_camera.h"
+#include "demo_setup.h"
 #include "demo_calibration.h"
 #include "calibration_session_controller.h"
 #include "calibration_capability_controller.h"
@@ -566,6 +567,13 @@ int main(int argc, char **argv) {
   transactions();
   runtime();
   files();
+  char demo_ssid[33];
+  assert(!demo_setup_network(demo_ssid,sizeof(demo_ssid)));
+  assert(!demo_setup_connect("", "secret"));
+  assert(!demo_setup_connect("012345678901234567890123456789012", "secret"));
+  assert(demo_setup_connect("Demo network", "secret"));
+  assert(!demo_setup_network(demo_ssid,4));
+  assert(demo_setup_network(demo_ssid,sizeof(demo_ssid)) && !strcmp(demo_ssid,"Demo network"));
   camera();
   services();
   calibration();

@@ -33,6 +33,10 @@ void thumbnail_preview_coordinator_update(thumbnail_preview_coordinator_context_
  preview_calls++;
 }
 int main(void){
+ printer_layer_result_t edge=printer_layer_resolver_resolve(0,40,6,20,.5,0);assert(edge.valid&&edge.current==0);
+ edge=printer_layer_resolver_resolve(0,40,-1,0,0,1);assert(edge.valid&&edge.current==40);
+ edge=printer_layer_resolver_resolve(0,-1,6,0,0,.5);assert(!edge.valid);
+ edge=printer_layer_resolver_resolve(8,40,6,20,.5,.5);assert(edge.valid&&edge.current==8);
  lv_init();lv_display_t *display=lv_display_create(1024,600);
  char last[32]="";
  dashboard_runtime_context_t context={.meta_object_height=20,.meta_layer_height=.5,.dashboard_canvas=&dashboard_canvas,.dashboard_image=&dashboard_image,.last_print_state=last,.last_print_state_size=sizeof(last),.preview_network_ready=true,.free_thumbnail=free_thumbnails};
@@ -42,6 +46,13 @@ int main(void){
  assert(!strcmp(layer,"12/40")&&!strcmp(elapsed,"00:20")&&!strcmp(remaining,"0:20")&&!strcmp(last,"PRINTING")&&preview_calls==1&&!cleanups);
  /* Metadata fallback remains active when slicer layer counts are absent. */
  live.current_layer=live.total_layer=-1;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40"));
+ /* An externally started job may report zero indefinitely even as it moves. */
+ live.current_layer=0;live.total_layer=40;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40"));
+ live.total_layer=-1;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40"));
+ live.total_layer=40;
+ live.current_gcode_z=-1;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"20/40"));
+ live.progress=0;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"0/40"));
+ live.current_layer=-1;live.current_gcode_z=6;live.progress=.5;
  strcpy(live.printer_state,"paused");dashboard_runtime_controller_tick(&context);assert(!strcmp(last,"PAUSED")&&!cleanups);
  live.live_data_ok=false;dashboard_runtime_controller_tick(&context);assert(!strcmp(elapsed,"--:--")&&!strcmp(last,"WAITING FOR KLIPPER")&&!cleanups);
  live.moonraker_ok=false;context.preview_network_ready=false;unsigned before=preview_calls;dashboard_runtime_controller_tick(&context);assert(!strcmp(last,"OFFLINE")&&preview_calls==before&&!cleanups);

@@ -37,15 +37,15 @@ bool printer_simulation_apply(moonraker_state_t *state,bool excluded[2],bool *se
  else if(!strcmp(command,"DRY_HOLD")){state->drybox_active_program=3;state->heater_on=false;state->heater_target=0;state->drybox_fan_speed=40;}
  else if(!strcmp(command,"DRY_RESUME")){if(state->drybox_selected_program){state->drybox_active_program=state->drybox_selected_program;state->heater_target=state->drybox_active_program==1?45:55;state->heater_on=true;state->drybox_fan_speed=80;}}
  else if(!strcmp(command,"DRY_STOP")){state->drybox_active_program=0;state->heater_target=0;state->heater_on=false;state->drybox_fan_speed=0;}
- else if(!strcmp(command,"PAUSE"))strcpy(state->printer_state,"paused");
- else if(!strcmp(command,"RESUME"))strcpy(state->printer_state,"printing");
+ else if(!strcmp(command,"PAUSE")){if(!state->moonraker_ok || !state->live_data_ok || strcmp(state->printer_state,"printing"))return false;strcpy(state->printer_state,"paused");}
+ else if(!strcmp(command,"RESUME")){if(!state->moonraker_ok || !state->live_data_ok || strcmp(state->printer_state,"paused"))return false;strcpy(state->printer_state,"printing");}
  else if(!strcmp(command,"G28")||!strcmp(command,"HOME_ALL")){state->toolhead_x=state->toolhead_y=state->toolhead_z=0;snprintf(state->homed_axes,sizeof(state->homed_axes),"xyz");}
  else if(sscanf(command,"SET_GCODE_OFFSET Z_ADJUST=%lf",&v)==1){if(!isfinite(v)||v<-10||v>10)return false;state->z_offset+=v;}
  else if(!strcmp(command,"SET_GCODE_OFFSET Z=0 MOVE=1"))state->z_offset=0;
  else if(strstr(command,"G91\nG1 ")){char axis;if(sscanf(command,"G91\nG1 %c%lf",&axis,&v)==2){double *position=axis=='X'?&state->toolhead_x:axis=='Y'?&state->toolhead_y:axis=='Z'?&state->toolhead_z:NULL;if(!isfinite(v)||fabs(v)>1000)return false;if(position)*position+=v;}}
  else if(!strcmp(command,"M112")){strcpy(state->printer_state,"shutdown");state->nozzle_target=state->bed_target=state->part_fan_speed=state->heater_target=0;state->heater_on=false;state->drybox_active_program=0;state->drybox_fan_speed=0;}
  else if(!strcmp(command,"FIRMWARE_RESTART"))strcpy(state->printer_state,"standby");
- else if(!strcmp(command,"CANCEL_PRINT")){snprintf(state->printer_state,sizeof(state->printer_state),"cancelled");state->nozzle_target=state->bed_target=state->part_fan_speed=0;}
+ else if(!strcmp(command,"CANCEL_PRINT")){if(!state->moonraker_ok || !state->live_data_ok || (strcmp(state->printer_state,"printing") && strcmp(state->printer_state,"paused")))return false;snprintf(state->printer_state,sizeof(state->printer_state),"cancelled");state->nozzle_target=state->bed_target=state->part_fan_speed=0;}
  else return false;
  return true;
 }

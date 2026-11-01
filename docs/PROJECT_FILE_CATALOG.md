@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.2.14-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.3.0 source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -275,3 +275,7 @@ The demo backend retains its own per-printer state; no live worker is started.
 URLs; `demo_camera_frame.c` draws the common desktop/tablet sample image.
 
 `main/demo_calibration.c/h` simulates Calibration commands and results locally.
+
+`main/demo_ota.c/h` owns the offline OTA sample catalog and transfer.
+
+`main/demo_setup.c/h` holds the offline Setup sample network in RAM.

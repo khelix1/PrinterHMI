@@ -1,8 +1,4 @@
 #include "ui_printer_chooser.h"
-#ifdef PRINTERHMI_DEMO_UI
-#include "demo_mode.h"
-static void demo_clicked(lv_event_t *event) { (void)event;ui_demo_mode_show(); }
-#endif
 #include "ui_text.h"
 #include "ui_value_update.h"
 #include "ui_text_fit.h"
@@ -668,17 +664,6 @@ void ui_printer_chooser_show(
         if(manage){lv_obj_set_parent(manage,banner);lv_obj_set_pos(manage,516,18);}
         section_y=122;section_height=176;row_step=188;section_width=397;column_step=417;
     }
-#ifdef PRINTERHMI_DEMO_UI
-    lv_obj_t *demo=ui_button_create(ui_theme_is_studio()?s_root:lv_obj_get_parent(title),UI_BUTTON_OUTLINED,"Demo");
-    lv_obj_set_size(demo,136,44);
-    lv_obj_set_pos(demo,ui_theme_is_studio()?544:430,ui_theme_is_studio()?0:18);
-    lv_obj_set_width(title,ui_theme_is_studio()?520:390);
-    if(!ui_theme_is_studio()) {
-        lv_obj_set_width(subtitle,390);
-        if(manage){lv_obj_set_pos(manage,580,18);lv_obj_set_width(manage,214);}
-    }
-    lv_obj_add_event_cb(demo,demo_clicked,LV_EVENT_CLICKED,NULL);
-#endif
     for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index)
         create_card(index, section_x + (index % 2) * column_step,
             section_y + (index / 2) * row_step, section_width, section_height);

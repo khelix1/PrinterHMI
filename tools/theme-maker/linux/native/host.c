@@ -281,9 +281,9 @@ static void handle_key(uint32_t key){
 int main(int argc,char **argv){
  if(argc==2&&!strcmp(argv[1],"--version")){
 #ifdef PRINTERHMI_DEMO_RUNTIME
-  puts("printerhmi-ui-host 26 test-only");
+  puts("printerhmi-ui-host 32 test-only");
 #else
-  puts("printerhmi-ui-host 26");
+  puts("printerhmi-ui-host 32");
 #endif
   return 0;
  }

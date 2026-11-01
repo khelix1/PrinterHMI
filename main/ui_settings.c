@@ -1,4 +1,4 @@
-#ifdef PRINTERHMI_DEMO_RUNTIME
+#if defined(PRINTERHMI_DEMO_RUNTIME) || defined(PRINTERHMI_DEMO_UI)
 #include "demo_mode.h"
 #endif
 #include "ui_settings.h"
@@ -58,6 +58,10 @@ static lv_obj_t *s_settings_content;
 static lv_obj_t *s_brightness_slider,*s_brightness_value,*s_sleep_action,*s_reboot_action;
 static uint32_t s_settings_page_epoch;
 static bool s_display_io_dispatching,s_wake_pending;
+#ifdef PRINTERHMI_DEMO_UI
+static void settings_demo_cb(lv_event_t *event)
+{ (void)event; ui_demo_mode_show(); }
+#endif
 static void settings_display_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
@@ -588,7 +592,11 @@ void ui_settings_show_page(
     int section_y = 0;
 
     /* Setup Center */
-    const int setup_height = first_row_y + action_height + 6;
+    const int setup_height = first_row_y + action_height + 6
+#ifdef PRINTERHMI_DEMO_UI
+        + action_height + 1
+#endif
+        ;
     lv_obj_t *setup = ui_settings_section_create(
         content,
         "Setup center",
@@ -602,6 +610,12 @@ void ui_settings_show_page(
         first_row_y,
         setup_cb,
         false);
+#ifdef PRINTERHMI_DEMO_UI
+    ui_settings_section_add_divider(setup, first_row_y + action_height);
+    ui_settings_section_add_action_row(setup, "Offline demo",
+        "Explore PrinterHMI using sample printers and data", "Demo",
+        first_row_y + action_height + 1, settings_demo_cb, false);
+#endif
     section_y += setup_height + section_gap;
 
     /*

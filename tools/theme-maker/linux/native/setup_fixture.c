@@ -21,7 +21,12 @@ esp_err_t esp_wifi_sta_get_ap_info(wifi_ap_record_t *out)
 esp_netif_t *esp_netif_get_handle_from_ifkey(const char *key){static esp_netif_t netif;return key&&!strcmp(key,"WIFI_STA_DEF")?&netif:NULL;}
 esp_err_t esp_netif_get_ip_info(esp_netif_t *netif,esp_netif_ip_info_t *out){if(!netif||!out||!host_network_online())return ESP_FAIL;out->ip.addr=0x0100007f;return ESP_OK;}
 bool camera_discovery_start(const char *host,int port,const char *key){return camera_discovery_start_for_profile(moonraker_config_active_profile_index(),host,port,key);}
-void host_setup_show(void){ui_setup_wizard_show_with_appearance_callback(host_network_setup_connect,host_page_rebuild_settings);}
+void host_setup_show(void){
+#ifdef PRINTERHMI_DEMO_RUNTIME
+ if(demo_mode_enabled()){ui_setup_wizard_show_with_appearance_callback(demo_setup_connect,host_page_rebuild_settings);return;}
+#endif
+ ui_setup_wizard_show_with_appearance_callback(host_network_setup_connect,host_page_rebuild_settings);
+}
 
 void host_setup_close(void){ui_setup_wizard_close();setup_completion_done_cb(NULL);}
 bool host_setup_escape(void){

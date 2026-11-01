@@ -14,6 +14,12 @@ class PopupParityTests(unittest.TestCase):
   self.host.process.stdin.write(b'ui-text\n');self.host.process.stdin.flush();n=int(self.host.process.stdout.readline().split()[1]);return self.host._read(n,time.monotonic()+5).decode()
  def press(self,name):
   self.host.process.stdin.write(('bounds '+name+'\n').encode());self.host.process.stdin.flush();found,x1,y1,x2,y2=map(int,self.host.process.stdout.readline().split()[1:]);self.assertTrue(found,'Missing button '+name);return self.click((x1+x2)//2,(y1+y2)//2)
+ def reveal(self,name):
+  for _ in range(25):
+   self.host.process.stdin.write(('bounds '+name+'\n').encode());self.host.process.stdin.flush();found,x1,y1,x2,y2=map(int,self.host.process.stdout.readline().split()[1:]);self.assertTrue(found,'Missing button '+name)
+   if 135 <= y1 and y2 <= 475:return
+   self.host.request('wheel 500 350 '+('180' if y2>475 else '-180'))
+  self.fail('Could not reveal '+name)
  def operator(self):
   self.host.request('open setup 0');self.press('Display');self.press('Operator');self.host.request('advance 300');self.press('Set up later')
  def ota(self):

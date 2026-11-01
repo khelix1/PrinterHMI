@@ -47,7 +47,7 @@ class ThemeMaker(Gtk.Application):
             if path.is_file():
                 try:
                     version=subprocess.check_output([str(path),'--version'],timeout=2,text=True,stdin=subprocess.DEVNULL,stderr=subprocess.DEVNULL).strip()
-                    if version=='printerhmi-ui-host 26':
+                    if version=='printerhmi-ui-host 32':
                         self.native_path=path
                         return path
                 except (OSError,subprocess.SubprocessError): pass

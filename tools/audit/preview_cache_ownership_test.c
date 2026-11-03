@@ -54,9 +54,10 @@ static bool metadata_fail,download_fail,bump_profile_in_fetch;
 static unsigned metadata_requests,thumbnail_requests;
 static char downloaded[768];
 static const char *metadata_reply;
+static const char *expected_metadata_file="file.gcode";
 void thumbnail_manager_url_encode(const char *in,char *out,size_t size){assert(strlen(in)<size);snprintf(out,size,"%s",in);}
 bool moonraker_fetch_file_metadata(const char *host,int port,const char *key,const char *file,char *out,size_t size,int *code,esp_err_t *error){
- assert(!strcmp(host,"printer.local")&&port==7125&&!strcmp(key,"key")&&!strcmp(file,"file.gcode"));metadata_requests++;
+ assert(!strcmp(host,"printer.local")&&port==7125&&!strcmp(key,"key")&&!strcmp(file,expected_metadata_file));metadata_requests++;
  *code=metadata_fail?500:200;*error=metadata_fail?ESP_FAIL:ESP_OK;
  snprintf(out,size,"%s",metadata_reply);if(bump_profile_in_fetch){bump_profile_in_fetch=false;profile_generation++;}return !metadata_fail;
 }
@@ -80,6 +81,9 @@ static void source_checks(void){
  assert(fetch_preview_png("printer.local",7125,"key","file.gcode",&png,&size));heap_caps_free(png);assert(metadata_requests==1&&thumbnail_requests==1&&!strcmp(downloaded,"row.png"));
  metadata_fail=true;assert(!fetch_preview_png("printer.local",7125,"key","file.gcode",&png,&size)&&!png&&!size);metadata_fail=false;
  download_fail=true;assert(!fetch_preview_png("printer.local",7125,"key","file.gcode",&png,&size)&&!png&&!size);download_fail=false;
+ expected_metadata_file="folder/sub/file.gcode";
+ assert(fetch_preview_png("printer.local",7125,"key",expected_metadata_file,&png,&size));heap_caps_free(png);
+ assert(!strcmp(downloaded,"folder/sub/row.png"));expected_metadata_file="file.gcode";
  assert(!owned_bytes);assert(ROW_PREVIEW_SLOT_COUNT>=64&&ROW_PREVIEW_QUEUE_LENGTH>=64&&ROW_PREVIEW_WIDTH==96&&ROW_PREVIEW_HEIGHT==96);
  puts("PASS: smallest adequate source, portrait/missing/invalid dimensions, large-only fallback, malformed metadata and fresh fetch failure cleanup");
 }
@@ -92,7 +96,7 @@ SemaphoreHandle_t xSemaphoreCreateMutex(void){return (void *)1;}
 int xTaskCreatePinnedToCore(void (*fn)(void*),const char *name,unsigned stack,void *arg,unsigned priority,void *task,int core){(void)name;(void)stack;(void)arg;(void)priority;(void)task;(void)core;assert(fn==preview_worker);return pdPASS;}
 static void drain_worker(void){run_worker=true;if(!setjmp(worker_end))preview_worker(NULL);run_worker=false;}
 static int delivered;static lv_obj_t *consumer;
-static void ready(const char *file,const lv_image_dsc_t *image){assert(display_locked && !strcmp(file,"file.gcode"));delivered++;lv_image_set_src(consumer,image);}
+static void ready(const char *file,const lv_image_dsc_t *image){assert(display_locked && !strcmp(file,expected_metadata_file));delivered++;lv_image_set_src(consumer,image);}
 static void run(void){
  source_checks();
  s_slots=heap_caps_calloc(ROW_PREVIEW_SLOT_COUNT,sizeof(*s_slots),MALLOC_CAP_SPIRAM);s_lock=(void*)1;s_generation=1;s_profile_generation=profile_generation;s_slots[0].generation=1;strcpy(s_slots[0].file,"file.gcode");s_slots[0].state=ROW_PREVIEW_LOADING;s_ready_cb=ready;consumer=lv_image_create(lv_screen_active());

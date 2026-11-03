@@ -1,4 +1,5 @@
 #include "case_lighting.h"
+#include "json_document_parse.h"
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include <ctype.h>
@@ -70,12 +71,12 @@ void case_lighting_status_json(const char *json,size_t length,uint32_t generatio
 {
     /* Avoid reparsing unrelated high-rate temperature/position messages. */
     static const char key[]="output_pin case_led";
-    if(!json||length<sizeof(key)-1)return;
+    if(!json||length<sizeof(key)-1||length>128*1024)return;
     bool mentions=false;
     for(size_t i=0;i<=length-(sizeof(key)-1);i++)
         if(!memcmp(json+i,key,sizeof(key)-1)){mentions=true;break;}
     if(!mentions)return;
-    cJSON *root=cJSON_ParseWithLength(json,length);if(!root)return;
+    cJSON *root=json_document_parse_bounded(json,length,128*1024,16);if(!root)return;
     const cJSON *result=cJSON_GetObjectItemCaseSensitive(root,"result");
     const cJSON *status=cJSON_GetObjectItemCaseSensitive(result,"status");
     const cJSON *method=cJSON_GetObjectItemCaseSensitive(root,"method");
@@ -102,7 +103,7 @@ void case_lighting_status_json(const char *json,size_t length,uint32_t generatio
 bool case_lighting_response(const cJSON *root,uint32_t generation)
 {
     const cJSON *id=cJSON_GetObjectItemCaseSensitive(root,"id");
-    if(!cJSON_IsNumber(id)||id->valuedouble<FIRST_REQUEST||id->valuedouble>=800000000||floor(id->valuedouble)!=id->valuedouble)return false;
+    if(!cJSON_IsNumber(id)||!isfinite(id->valuedouble)||id->valuedouble<FIRST_REQUEST||id->valuedouble>=800000000||floor(id->valuedouble)!=id->valuedouble)return false;
     uint32_t request=(uint32_t)id->valuedouble;
     if(cJSON_GetObjectItemCaseSensitive(root,"error"))case_lighting_failed(request,generation);
     return true;

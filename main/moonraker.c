@@ -1,4 +1,5 @@
 #include "moonraker.h"
+#include "printer_files.h"
 #include "moonraker_command_route.h"
 #include "moonraker_transport_security_controller.h"
 #include "network_activity_controller.h"
@@ -1391,7 +1392,7 @@ static bool moonraker_http_get_raw(
 
     buffer[0] = 0;
 
-    char url[512];
+    char url[1024];
 
     const char *ca_pem = NULL;
     int url_len = moonraker_transport_security_build_http_url_for_endpoint(
@@ -1614,7 +1615,7 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
         return false;
     }
 
-    char path[384];
+    char path[896];
 
     int path_len = snprintf(
         path,
@@ -1749,7 +1750,7 @@ bool moonraker_fetch_file_metadata(const char *host,
         return false;
     }
 
-    char path[320];
+    char path[PRINTER_FILES_MAX_PATH * 3 + 64];
 
     int path_len = snprintf(
         path,
@@ -1959,7 +1960,8 @@ bool moonraker_start_print_file(const char *host,
     if (http_code) *http_code = 0;
     if (err_out) *err_out = ESP_FAIL;
 
-    if (!host || !host[0] || port <= 0 || !filename || !filename[0]) {
+    if (!host || !host[0] || port <= 0 || port > 65535 || !filename || !filename[0] ||
+        strnlen(filename, PRINTER_FILES_MAX_PATH) >= PRINTER_FILES_MAX_PATH) {
         return false;
     }
 
@@ -1970,7 +1972,7 @@ bool moonraker_start_print_file(const char *host,
         return false;
     }
 
-    char body[260];
+    char body[PRINTER_FILES_MAX_PATH * 6 + 32];
     cJSON *request = cJSON_CreateObject();
     if (!request) return false;
     bool encoded = cJSON_AddStringToObject(request, "filename", filename) &&

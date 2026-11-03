@@ -11,6 +11,7 @@ def function(signature):
 production="\n".join(function(name) for name in (
     "static void clear_sensitive_buffer(",
     "static bool connect_selected_wifi(void)",
+    "static bool setup_connect_wifi(",
     "static void ui_network_tools_save_wifi_password_only_cb("))
 fixture=r'''
 #include <assert.h>
@@ -22,7 +23,7 @@ typedef void lv_event_t;
 #define ESP_OK 0
 #define WIFI_IF_STA 0
 #define ESP_LOGI(...) ((void)0)
-typedef struct {struct {unsigned char ssid[32],password[64];} sta;} wifi_config_t;
+#include "wifi_station_config.h"
 static char ui_network_tools_selected_wifi_ssid[33]="Sermoon WiFi";
 static char ui_network_tools_selected_wifi_password[65],ui_network_tools_network_scan_status[192];
 static char saved_wifi_ssid[33],saved_wifi_password[65],wifi_status[128],inline_status[192];
@@ -53,11 +54,16 @@ int main(void){
  assert(config_calls==3&&connect_calls==2&&closed==1&&!ui_network_tools_selected_wifi_password[0]);
  assert(!strcmp(saved_wifi_ssid,"Sermoon WiFi")&&!strcmp(saved_wifi_password,input));
  ui_network_tools_selected_wifi_ssid[0]=0;assert(!connect_selected_wifi()&&config_calls==3);
+ ui_network_tools_selected_wifi_ssid[0]='S';
+ assert(setup_connect_wifi("Sermoon WiFi",input));assert(config_calls==4&&connect_calls==3);
+ char too_long[34];memset(too_long,'s',33);too_long[33]=0;
+ assert(!setup_connect_wifi(too_long,input)&&config_calls==4);
  puts("PASS: actual WiFi bridge retains editor on storage/config/start failures, closes on accepted request and clears temporary credentials");
 }
 '''
 with tempfile.TemporaryDirectory(prefix="wifi-connect-") as directory:
+    (Path(directory)/"esp_wifi.h").write_text('#pragma once\ntypedef struct {struct {unsigned char ssid[32],password[64];} sta;} wifi_config_t;\n')
     src=Path(directory)/"test.c";src.write_text(fixture+production+tests)
     executable=Path(directory)/"test"
-    subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror",str(src),"-o",str(executable)],check=True)
+    subprocess.run(["cc","-std=c11","-D_POSIX_C_SOURCE=200809L","-I",str(Path(directory)),"-I",str(root/"main"),"-O2","-Wall","-Wextra","-Werror",str(src),"-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)

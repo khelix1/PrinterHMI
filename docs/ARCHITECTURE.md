@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.3.0 is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.3.13-dev is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -123,13 +123,23 @@ flat values. These helpers do not own timers, transport or detached value caches
   trust material in `moonraker_tls_trust_store`; endpoint consumers share that
   policy.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
-  `moonraker` and consumed through controllers.
+  `moonraker` and consumed through controllers. `printer_files` owns bounded
+  file-list parsing and metadata formatting; `files_page_controller` owns list
+  state and invalid-response feedback. The former path-scraping fallback is
+  retired. Filename/list limits are declared in `printer_files.h`. The stateless
+  `thumbnail_path.h` resolver joins Moonraker thumbnail metadata with the
+  G-code parent before URL encoding across all preview consumers.
 - `macro_controller` derives a bounded, alphabetized public-macro catalog from
   Moonraker object discovery while excluding underscore-prefixed helpers.
   Configuration queries supply macro parameter hints; `macro_parameter_utils`
-  validates names/values and constructs a bounded command for review.
+  validates names/values and constructs a bounded command for review. The controller
+  rejects overlong catalog names and owns favorite-blob validation and persistence;
+  UI feedback reflects save success, not the requested favorite state.
 - `console_controller` retains bounded command and response history and
-  receives live `notify_gcode_response` WebSocket messages.
+  receives live `notify_gcode_response` WebSocket messages through a length-bounded,
+  depth-limited, complete-document parser. Shared JSON preflight lives in
+  `json_document_limits.h`, with complete-document parsing in
+  `json_document_parse.h` shared by Console and Lighting.
 
 ### Camera
 
@@ -197,6 +207,9 @@ flat values. These helpers do not own timers, transport or detached value caches
 ### Settings and persistence
 
 `wifi_credentials_store` owns the NVS read/write boundary for Wi-Fi credentials.
+Its load failures clear both caller buffers. The stateless `wifi_station_config.h`
+builder owns validation and copying into ESP station byte arrays; boot, Setup
+Center, and Network use the same builder without truncating full-width fields.
 
 NVS stores network configuration, printer profiles, theme selection,
 accessibility settings, brightness, display sleep, timezone, OTA URL and the
@@ -333,3 +346,7 @@ creation. SDK/BSP component APIs are not interposed. The implementation file
 explicitly opts out of macros for its sole persistent boot-selection flag.
 `demo_printer.c` owns sample state and publishes through the existing locked
 Moonraker snapshot boundary; no live polling/status worker starts in demo.
+
+OTA stable-tag parsing is owned by `firmware_identity`; `ota_release_catalog`
+uses that parser and validates complete bounded JSON and asset sizes before
+publishing entries. Transfer/cancellation state remains in `ota_manager`.

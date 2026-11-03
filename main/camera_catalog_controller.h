@@ -15,7 +15,10 @@ typedef struct {
     bool configured;
 } camera_catalog_entry_t;
 
-/* Camera 0 mirrors the existing per-profile stream URL for compatibility. */
+/* Camera 0 mirrors the existing per-profile stream URL for compatibility.
+ * Get clears its output even on failure. Missing slots return true/unconfigured;
+ * URL read errors and malformed URLs return false. Set rejects fields that
+ * cannot round-trip through the bounded entry before changing storage. */
 bool camera_catalog_get(int profile_index, size_t camera_index,
                         camera_catalog_entry_t *entry);
 bool camera_catalog_set(int profile_index, size_t camera_index,

@@ -268,7 +268,7 @@ bool thumbnail_manager_download_ram(const char *host,
         return true;
     }
 
-    char enc[256];
+    char enc[768];
     thumbnail_manager_url_encode(thumb_path, enc, sizeof(enc));
 
     uint8_t *buf = NULL;

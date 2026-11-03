@@ -43,55 +43,75 @@ static int compare_macro_names(
 }
 
 
-static void load_favorites(void)
+static bool load_favorites(void)
 {
-    if (s_favorites_loaded) return;
-    s_favorites_loaded = true;
+    if (s_favorites_loaded) return true;
+    macro_favorites_t loaded = {0};
     nvs_handle_t handle;
-    if (nvs_open(MACRO_NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) return;
-    size_t size = sizeof(s_favorites);
-    (void)nvs_get_blob(handle, MACRO_FAVORITES_KEY, &s_favorites, &size);
-    nvs_close(handle);
+    esp_err_t error = nvs_open(MACRO_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) return false;
+    if (error == ESP_OK) {
+        size_t size = sizeof(loaded);
+        error = nvs_get_blob(handle, MACRO_FAVORITES_KEY, &loaded, &size);
+        nvs_close(handle);
+        if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) return false;
+        if (error == ESP_OK && size != sizeof(loaded)) return false;
+        if (error == ESP_ERR_NVS_NOT_FOUND) memset(&loaded, 0, sizeof(loaded));
+    }
+    for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
+        /* A corrupt NVS blob must never reach strcmp without a terminator. */
+        if (!memchr(loaded.names[i], '\0', sizeof(loaded.names[i]))) {
+            memset(loaded.names[i], 0, sizeof(loaded.names[i]));
+        }
+    }
+    s_favorites = loaded;
+    s_favorites_loaded = true;
+    return true;
 }
 
-static void save_favorites(void)
+static bool save_favorites(const macro_favorites_t *favorites)
 {
     nvs_handle_t handle;
-    if (nvs_open(MACRO_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) return;
-    (void)nvs_set_blob(handle, MACRO_FAVORITES_KEY, &s_favorites, sizeof(s_favorites));
-    (void)nvs_commit(handle);
+    if (nvs_open(MACRO_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) return false;
+    esp_err_t error = nvs_set_blob(handle, MACRO_FAVORITES_KEY, favorites, sizeof(*favorites));
+    if (error == ESP_OK) error = nvs_commit(handle);
     nvs_close(handle);
+    return error == ESP_OK;
 }
 
 bool macro_controller_is_favorite(const char *name)
 {
-    if (!name || !name[0]) return false;
-    load_favorites();
+    if (!name || !name[0] || !load_favorites()) return false;
     for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
         if (strcmp(s_favorites.names[i], name) == 0) return true;
     }
     return false;
 }
 
-bool macro_controller_toggle_favorite(const char *name)
+bool macro_controller_set_favorite(const char *name, bool favorite)
 {
-    if (!name || !name[0]) return false;
-    load_favorites();
+    if (!name || !name[0] || strnlen(name, MACRO_CONTROLLER_NAME_MAX) >=
+        MACRO_CONTROLLER_NAME_MAX || !load_favorites()) return false;
+    macro_favorites_t updated = s_favorites;
+    size_t found = MACRO_FAVORITES_MAX, empty = MACRO_FAVORITES_MAX;
     for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
-        if (strcmp(s_favorites.names[i], name) == 0) {
-            s_favorites.names[i][0] = '\0';
-            save_favorites();
-            return false;
+        if (!strcmp(updated.names[i], name)) found = i;
+        if (!updated.names[i][0] && empty == MACRO_FAVORITES_MAX) empty = i;
+    }
+    if (favorite == (found != MACRO_FAVORITES_MAX)) return true;
+    if (favorite) {
+        if (empty == MACRO_FAVORITES_MAX) return false;
+        snprintf(updated.names[empty], sizeof(updated.names[empty]), "%s", name);
+    } else {
+        for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
+            if (!strcmp(updated.names[i], name)) {
+                memset(updated.names[i], 0, sizeof(updated.names[i]));
+            }
         }
     }
-    for (size_t i = 0; i < MACRO_FAVORITES_MAX; ++i) {
-        if (!s_favorites.names[i][0]) {
-            snprintf(s_favorites.names[i], sizeof(s_favorites.names[i]), "%s", name);
-            save_favorites();
-            return true;
-        }
-    }
-    return false;
+    if (!save_favorites(&updated)) return false;
+    s_favorites = updated;
+    return true;
 }
 
 bool macro_controller_init(void)
@@ -177,8 +197,8 @@ void macro_controller_update_from_objects(
 
             ++s_store->status.total_count;
 
-            if (s_store->status.count >=
-                MACRO_CONTROLLER_MAX_MACROS) {
+            if (strnlen(name, MACRO_CONTROLLER_NAME_MAX) >= MACRO_CONTROLLER_NAME_MAX ||
+                s_store->status.count >= MACRO_CONTROLLER_MAX_MACROS) {
                 s_store->status.truncated = true;
                 continue;
             }
@@ -274,7 +294,9 @@ void macro_controller_update_parameters(const struct cJSON *config)
         portEXIT_CRITICAL(&s_lock);
     }
     portENTER_CRITICAL(&s_lock);
-    if (s_store->status.generation == status.generation) ++s_store->status.generation;
+    if (s_store->status.generation == status.generation) {
+        if (++s_store->status.generation == 0) s_store->status.generation = 1;
+    }
     portEXIT_CRITICAL(&s_lock);
 }
 

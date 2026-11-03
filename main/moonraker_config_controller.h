@@ -27,7 +27,8 @@ typedef struct {
  * Loads the persistent profile collection.
  *
  * Existing netcfg/moon_host and netcfg/moon_port values are migrated
- * automatically into profile 0 ("Printer 1").
+ * into profile 0 ("Printer 1") only when the schema key is absent.
+ * Unreadable or unsupported collections are not overwritten on load.
  */
 bool moonraker_config_load(void);
 
@@ -67,8 +68,10 @@ bool moonraker_config_select_profile(
     int profile_index);
 
 /*
- * Creates or updates a profile. Runtime state changes only after the
- * complete profile collection has been committed to NVS.
+ * Creates or updates a profile. Successful saves advance the active endpoint
+ * generation; failed saves restore the previous runtime fields. Existing
+ * camera and TLS settings survive this basic connection-field edit.
+ * Separate NVS key writes are not a transaction.
  */
 bool moonraker_config_save_profile(
     int profile_index,
@@ -85,7 +88,7 @@ bool moonraker_config_delete_profile(
     int profile_index);
 
 /*
- * Validates and atomically replaces the complete profile collection.
+ * Validates and replaces the complete runtime profile collection after saving.
  * Used by versioned configuration restore.
  */
 bool moonraker_config_replace_profiles(

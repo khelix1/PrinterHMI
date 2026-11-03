@@ -1,4 +1,5 @@
 #include "console_controller.h"
+#include "json_document_parse.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -402,7 +403,7 @@ bool console_controller_ingest_websocket_json(
     const char *json,
     size_t length)
 {
-    if (!s_store || !json || length == 0) {
+    if (!s_store || !json || length == 0 || length > 128 * 1024) {
         return false;
     }
 
@@ -410,14 +411,19 @@ bool console_controller_ingest_websocket_json(
      * Status updates dominate WebSocket traffic. Avoid a second JSON parse
      * unless the complete frame can actually be a console response.
      */
-    if (!strstr(json, "\"notify_gcode_response\"")) {
-        return false;
+    static const char marker[] = "\"notify_gcode_response\"";
+    bool candidate = false;
+    if (length >= sizeof(marker) - 1) {
+        for (size_t i = 0; i <= length - (sizeof(marker) - 1); ++i) {
+            if (json[i] == '"' && !memcmp(json + i, marker, sizeof(marker) - 1)) {
+                candidate = true;
+                break;
+            }
+        }
     }
-
-    cJSON *root = cJSON_ParseWithLength(json, length);
-    if (!root) {
-        return false;
-    }
+    if (!candidate) return false;
+    cJSON *root = json_document_parse_bounded(json, length, 128 * 1024, 16);
+    if (!root) return false;
 
     cJSON *method =
         cJSON_GetObjectItemCaseSensitive(root, "method");

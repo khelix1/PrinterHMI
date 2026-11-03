@@ -27,6 +27,11 @@ size_t moonraker_probe_webcams_with_api_key(const char *h,int p,const char *k,mo
 int xTaskCreatePinnedToCoreWithCaps(void(*f)(void*),const char*n,unsigned z,void*a,unsigned pr,TaskHandle_t*t,int c,unsigned caps){(void)n;(void)z;(void)a;(void)pr;(void)c;(void)caps;if(fail_task)return 0;*t=(void*)1;task_fn=f;return pdPASS;}
 static void worker(void){in_worker=true;task_fn(NULL);in_worker=false;}
 int main(void){moonraker_webcam_t w;bool found;size_t count;
+ char long_host[MOONRAKER_CONFIG_HOST_LENGTH+1],long_key[MOONRAKER_CONFIG_API_KEY_LENGTH+1];
+ memset(long_host,'h',sizeof(long_host)-1);long_host[sizeof(long_host)-1]=0;
+ memset(long_key,'k',sizeof(long_key)-1);long_key[sizeof(long_key)-1]=0;
+ assert(!camera_discovery_start(long_host,7125,"key")&&!camera_discovery_busy());
+ assert(!camera_discovery_start("printer.local",7125,long_key)&&!camera_discovery_busy());
  assert(camera_discovery_start("printer.local",7125,"key"));assert(camera_discovery_busy());worker();assert(!saved&&!camera_discovery_busy());generation++;active_profile=expected_profile=1;assert(!camera_discovery_take_result(&w,&found,&count)&&!saved);
  assert(camera_discovery_start("printer.local",7125,"key"));worker();assert(camera_discovery_take_result(&w,&found,&count)&&found&&count==2&&saved==2);assert(!camera_discovery_take_result(&w,&found,&count));
  expected_profile=2;assert(camera_discovery_start_for_profile(2,"printer.local",7125,"key"));worker();assert(camera_discovery_take_result(&w,&found,&count)&&saved==4&&s_profile==2);assert(active_profile==1);expected_profile=active_profile;

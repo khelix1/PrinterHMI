@@ -57,7 +57,9 @@ void console_controller_clear(void);
 
 /*
  * Captures notify_gcode_response messages. Returns true only when the JSON
- * was a G-code response notification consumed by the console.
+ * was a G-code response notification consumed by the console. The buffer
+ * need not be NUL-terminated; length excludes any terminator. Input is bounded
+ * to 128 KiB and 16 nesting levels and must contain one complete JSON value.
  */
 bool console_controller_ingest_websocket_json(
     const char *json,

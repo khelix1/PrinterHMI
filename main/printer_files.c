@@ -1,20 +1,30 @@
+#include "thumbnail_path.h"
 #include "printer_files.h"
 #include "moonraker.h"
 
 #include <stdio.h>
+#include <limits.h>
+#include <math.h>
+#include "json_document_parse.h"
 #include <string.h>
 #include "cJSON.h"
+
+static int metadata_integer(double value, double scale)
+{
+    if (!isfinite(value) || value <= 0 || value > (INT_MAX - 0.5) / scale) return 0;
+    return (int)(value * scale + 0.5);
+}
 
 void printer_files_seconds_to_hhmm(double sec, char *out, size_t out_sz)
 {
     if (!out || out_sz == 0) return;
 
-    if (sec <= 0.0) {
+    if (!isfinite(sec) || sec <= 0.0 || sec > INT_MAX - 0.5) {
         snprintf(out, out_sz, "--:--");
         return;
     }
 
-    int total = (int)(sec + 0.5);
+    int total = metadata_integer(sec, 1);
     int h = total / 3600;
     int m = (total % 3600) / 60;
 
@@ -53,12 +63,14 @@ bool printer_files_build_metadata_text(const char *file,
         has_thumb = json_find_best_thumbnail_path(metadata_json,
                                                   thumbnail_path,
                                                   thumbnail_path_sz);
+        if (has_thumb) has_thumb = thumbnail_path_resolve(
+            file, thumbnail_path, thumbnail_path, thumbnail_path_sz);
     }
 
-    int filament_m = (int)((filament / 1000.0) + 0.5);
-    int layer_x100 = (int)((layer_height * 100.0) + 0.5);
-    int height_x10 = (int)((object_height * 10.0) + 0.5);
-    int size_mb_x100 = (int)(((size / (1024.0 * 1024.0)) * 100.0) + 0.5);
+    int filament_m = metadata_integer(filament, 1.0 / 1000.0);
+    int layer_x100 = metadata_integer(layer_height, 100);
+    int height_x10 = metadata_integer(object_height, 10);
+    int size_mb_x100 = metadata_integer(size, 100.0 / (1024.0 * 1024.0));
 
     snprintf(out, out_sz,
              "File:\n%.120s\n\n"
@@ -83,60 +95,31 @@ bool printer_files_build_metadata_text(const char *file,
 }
 
 
-int printer_files_for_each_path(const char *body,
-                                void (*cb)(const char *path, void *user),
-                                void *user)
-{
-    if (!body || !cb) return 0;
-
-    const char *pcur = body;
-    int count = 0;
-
-    while ((pcur = strstr(pcur, "\"path\""))) {
-        const char *colon = strchr(pcur, ':');
-        if (!colon) break;
-        const char *q1 = strchr(colon, '"');
-        if (!q1) break;
-        const char *q2 = strchr(q1 + 1, '"');
-        if (!q2) break;
-
-        char path[160];
-        size_t n = q2 - (q1 + 1);
-        if (n >= sizeof(path)) n = sizeof(path) - 1;
-        memcpy(path, q1 + 1, n);
-        path[n] = 0;
-
-        cb(path, user);
-        count++;
-
-        pcur = q2 + 1;
-    }
-
-    return count;
-}
-
 int printer_files_parse_entries(const char *body,
                                 printer_file_entry_t *entries,
                                 size_t capacity)
 {
-    if (!body || !entries || capacity == 0) return 0;
-
-    cJSON *root = cJSON_Parse(body);
-    if (!root) return 0;
+    if (!body || !entries || capacity == 0) return -1;
+    size_t length = strnlen(body, PRINTER_FILES_LIST_CAPACITY);
+    cJSON *root = json_document_parse_bounded(body, length,
+        PRINTER_FILES_LIST_CAPACITY - 1, 16);
+    if (!root) return -1;
 
     cJSON *array = cJSON_GetObjectItemCaseSensitive(root, "result");
     if (!cJSON_IsArray(array) && cJSON_IsArray(root)) array = root;
     if (!cJSON_IsArray(array)) {
         cJSON_Delete(root);
-        return 0;
+        return -1;
     }
 
     size_t count = 0;
     cJSON *item = NULL;
     cJSON_ArrayForEach(item, array) {
-        if (count >= capacity || !cJSON_IsObject(item)) break;
+        if (count >= capacity) break;
+        if (!cJSON_IsObject(item)) continue;
         cJSON *path = cJSON_GetObjectItemCaseSensitive(item, "path");
-        if (!cJSON_IsString(path) || !path->valuestring || !path->valuestring[0]) {
+        if (!cJSON_IsString(path) || !path->valuestring || !path->valuestring[0] ||
+            strnlen(path->valuestring, PRINTER_FILES_MAX_PATH) >= PRINTER_FILES_MAX_PATH) {
             continue;
         }
 
@@ -146,8 +129,8 @@ int printer_files_parse_entries(const char *body,
 
         cJSON *size = cJSON_GetObjectItemCaseSensitive(item, "size");
         cJSON *modified = cJSON_GetObjectItemCaseSensitive(item, "modified");
-        if (cJSON_IsNumber(size)) entry->size = size->valuedouble;
-        if (cJSON_IsNumber(modified)) entry->modified = modified->valuedouble;
+        if (cJSON_IsNumber(size) && isfinite(size->valuedouble) && size->valuedouble >= 0) entry->size = size->valuedouble;
+        if (cJSON_IsNumber(modified) && isfinite(modified->valuedouble) && modified->valuedouble >= 0) entry->modified = modified->valuedouble;
     }
 
     cJSON_Delete(root);

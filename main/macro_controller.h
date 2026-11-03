@@ -39,7 +39,8 @@ bool macro_controller_get(
 
 /* Favorites are panel-local shortcuts; the macro itself remains in Klipper. */
 bool macro_controller_is_favorite(const char *name);
-bool macro_controller_toggle_favorite(const char *name);
+/* Returns storage success; on failure the in-memory favorites stay unchanged. */
+bool macro_controller_set_favorite(const char *name, bool favorite);
 
 /* Config is the configfile.config map returned by Moonraker. */
 void macro_controller_update_parameters(const struct cJSON *config);

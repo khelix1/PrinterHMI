@@ -1,6 +1,7 @@
 #include "printer_preview_store.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -46,16 +47,36 @@ static void make_path(
 }
 
 
-static void strip_newline(char *text)
+/* Metadata is SD-card input. Reject incomplete/overlong lines before parsing. */
+static bool read_metadata_line(FILE *input, char *text, size_t size)
 {
-    if (!text) return;
-
+    if (!fgets(text, size, input)) return false;
     size_t length = strlen(text);
-    while (length > 0 &&
-           (text[length - 1] == '\n' ||
-            text[length - 1] == '\r')) {
-        text[--length] = '\0';
+    if (!length || text[length - 1] != '\n') return false;
+    text[--length] = '\0';
+    if (length && text[length - 1] == '\r') text[--length] = '\0';
+    return true;
+}
+
+static bool read_preview_metadata(FILE *input,
+    char *host, size_t host_size, int *port, char *file, size_t file_size)
+{
+    char magic[40], port_text[16];
+    if (!read_metadata_line(input, magic, sizeof(magic)) ||
+        strcmp(magic, "PRINTERHMI_PREVIEW_V1") ||
+        !read_metadata_line(input, host, host_size) || !host[0] ||
+        !read_metadata_line(input, port_text, sizeof(port_text)) ||
+        !read_metadata_line(input, file, file_size) || !file[0] ||
+        fgetc(input) != EOF || ferror(input)) return false;
+    for (size_t i = 0; port_text[i]; ++i) {
+        if (port_text[i] < '0' || port_text[i] > '9') return false;
     }
+    errno = 0;
+    char *end;
+    long parsed = strtol(port_text, &end, 10);
+    if (errno || end == port_text || *end || parsed < 1 || parsed > 65535) return false;
+    *port = (int)parsed;
+    return true;
 }
 
 
@@ -116,7 +137,8 @@ bool printer_preview_store_store_png(
             profile_index,
             expected_host,
             expected_port) ||
-        !file || !file[0] ||
+        !file || !file[0] || strnlen(file, 160) >= 160 ||
+        strchr(file, '\n') || strchr(file, '\r') ||
         !png || png_size < 8 || png_size > 512 * 1024) {
         return false;
     }
@@ -232,19 +254,28 @@ bool printer_preview_store_store_active(
 }
 
 
-static bool restore_profile(int profile_index)
+static bool restore_profile(int profile_index, bool *retry)
 {
-    const moonraker_profile_t *profile =
-        moonraker_config_profile(profile_index);
-
-    if (!profile || !profile->configured) return false;
-
-    if (printer_preview_cache_image(
-            profile_index,
-            NULL,
-            NULL)) {
-        return true;
+    *retry = false;
+    /* Cache descriptors and profile fields belong to the display owner.
+     * Keep SD I/O outside this lock, then recheck ownership before publishing. */
+    if (!bsp_display_lock(50)) {
+        *retry = true;
+        return false;
     }
+    const moonraker_profile_t *profile = moonraker_config_profile(profile_index);
+    bool configured = profile && profile->configured;
+    bool cached = configured && printer_preview_cache_image(profile_index, NULL, NULL);
+    char expected_host[MOONRAKER_CONFIG_HOST_LENGTH] = "";
+    int expected_port = 0;
+    uint32_t generation = moonraker_config_generation();
+    if (configured) {
+        strlcpy(expected_host, profile->host, sizeof(expected_host));
+        expected_port = profile->port;
+    }
+    bsp_display_unlock();
+    if (!configured) return false;
+    if (cached) return true;
 
     char meta_path[96];
     make_path(profile_index, "meta", meta_path, sizeof(meta_path));
@@ -252,31 +283,14 @@ static bool restore_profile(int profile_index)
     FILE *metadata = fopen(meta_path, "rb");
     if (!metadata) return false;
 
-    char magic[40] = "";
-    char host[MOONRAKER_CONFIG_HOST_LENGTH] = "";
-    char port_text[16] = "";
-    char file[160] = "";
-
-    bool metadata_ok =
-        fgets(magic, sizeof(magic), metadata) &&
-        fgets(host, sizeof(host), metadata) &&
-        fgets(port_text, sizeof(port_text), metadata) &&
-        fgets(file, sizeof(file), metadata);
-
+    char host[MOONRAKER_CONFIG_HOST_LENGTH + 1] = "";
+    char file[161] = "";
+    int port = 0;
+    bool metadata_ok = read_preview_metadata(metadata,
+        host, sizeof(host), &port, file, sizeof(file));
     fclose(metadata);
 
-    if (!metadata_ok) return false;
-
-    strip_newline(magic);
-    strip_newline(host);
-    strip_newline(port_text);
-    strip_newline(file);
-
-    int port = atoi(port_text);
-
-    if (strcmp(magic, "PRINTERHMI_PREVIEW_V1") != 0 ||
-        !endpoint_matches(profile_index, host, port) ||
-        !file[0]) {
+    if (!metadata_ok || strcmp(expected_host, host) || expected_port != port) {
         return false;
     }
 
@@ -294,24 +308,24 @@ static bool restore_profile(int profile_index)
     }
 
     bool installed = false;
-
+    bool already_cached = false;
     if (bsp_display_lock(1000)) {
-        installed = printer_preview_cache_publish_png(
-            profile_index,
-            host,
-            port,
-            file,
-            png,
-            png_size,
-            PREVIEW_WIDTH,
-            PREVIEW_HEIGHT);
-
+        if (generation == moonraker_config_generation()) {
+            already_cached = printer_preview_cache_image(profile_index, NULL, NULL) != NULL;
+            installed = already_cached || printer_preview_cache_publish_png(
+                profile_index, host, port, file, png, png_size,
+                PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        } else {
+            *retry = true;
+        }
         bsp_display_unlock();
+    } else {
+        *retry = true;
     }
 
     heap_caps_free(png);
 
-    if (installed) {
+    if (installed && !already_cached) {
         ESP_LOGI(
             TAG,
             "Profile %d preview restored: %s",
@@ -344,8 +358,9 @@ void printer_preview_store_restore_one(bool sd_available)
 
         if (s_attempted[index]) continue;
 
-        s_attempted[index] = true;
-        restore_profile(index);
+        bool retry = false;
+        restore_profile(index, &retry);
+        s_attempted[index] = !retry;
         return;
     }
 }

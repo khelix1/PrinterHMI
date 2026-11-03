@@ -1,5 +1,6 @@
 #include "endstop_status_controller.h"
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 #include "cJSON.h"
 #include "esp_timer.h"
@@ -45,7 +46,9 @@ void endstop_status_controller_failed(const char *message)
 bool endstop_status_controller_merge(const struct cJSON *root, uint32_t generation)
 {
     const cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "id");
-    if (!cJSON_IsNumber(id) || id->valuedouble < ENDSTOP_REQUEST_FIRST ||
+    if (!cJSON_IsNumber(id) || !isfinite(id->valuedouble) ||
+        floor(id->valuedouble) != id->valuedouble ||
+        id->valuedouble < ENDSTOP_REQUEST_FIRST ||
         id->valuedouble >= 0x80000000U) return false;
     endstop_status_snapshot_t next = {0};
     next.owner_generation = generation;

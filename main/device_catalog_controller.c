@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -347,7 +348,7 @@ static bool status_number(
         ? cJSON_GetObjectItemCaseSensitive(object, field)
         : NULL;
 
-    if (!cJSON_IsNumber(item) || !output) {
+    if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) || !output) {
         return false;
     }
 
@@ -543,6 +544,9 @@ bool device_catalog_controller_merge_status(
         return false;
     }
 
+    portENTER_CRITICAL(&s_lock);
+    uint32_t catalog_generation = s_store->status.generation;
+    portEXIT_CRITICAL(&s_lock);
     bool received_value = false;
     bool changed = false;
     const cJSON *object = NULL;
@@ -558,6 +562,10 @@ bool device_catalog_controller_merge_status(
         bool found = false;
 
         portENTER_CRITICAL(&s_lock);
+        if (s_store->status.generation != catalog_generation) {
+            portEXIT_CRITICAL(&s_lock);
+            return false;
+        }
 
         for (size_t index = 0;
              index < s_store->status.stored_count;
@@ -589,6 +597,10 @@ bool device_catalog_controller_merge_status(
 
         received_value = true;
         portENTER_CRITICAL(&s_lock);
+        if (s_store->status.generation != catalog_generation) {
+            portEXIT_CRITICAL(&s_lock);
+            return false;
+        }
 
         for (size_t index = 0;
              index < s_store->status.stored_count;
@@ -623,9 +635,8 @@ bool device_catalog_controller_merge_status(
 
     if (changed) {
         portENTER_CRITICAL(&s_lock);
-        ++s_store->status.value_generation;
-
-        if (s_store->status.value_generation == 0) {
+        if (s_store->status.generation == catalog_generation &&
+            ++s_store->status.value_generation == 0) {
             s_store->status.value_generation = 1;
         }
 

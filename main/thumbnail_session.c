@@ -1,6 +1,8 @@
 #include "thumbnail_session.h"
 
 #include <stdio.h>
+#include <math.h>
+#include "moonraker_config_controller.h"
 #include <string.h>
 
 #include "esp_err.h"
@@ -20,6 +22,8 @@ static char s_selected_thumbnail_path[192] = "";
 #define METADATA_BODY_SIZE 8192
 static char *s_metadata_body = NULL;
 static char s_metadata_info[1024] = "";
+static char s_metadata_file[160];
+static uint32_t s_metadata_generation;
 static double s_metadata_object_height = 0.0;
 static double s_metadata_layer_height = 0.0;
 
@@ -132,14 +136,17 @@ bool thumbnail_session_build_metadata(
     char *out,
     size_t out_size)
 {
-    if (!file || !file[0] || !out || out_size == 0) {
+    s_metadata_file[0] = 0;
+    s_metadata_object_height = s_metadata_layer_height = 0;
+    if (!file || !file[0] || strlen(file) >= sizeof(s_metadata_file) || !out || out_size == 0) {
         return false;
     }
 
     s_metadata_object_height = 0.0;
     s_metadata_layer_height = 0.0;
 
-    char encoded[220];
+    uint32_t generation = moonraker_config_generation();
+    char encoded[sizeof(s_metadata_file) * 3];
     url_encode_filename(file, encoded, sizeof(encoded));
 
     if (!ensure_metadata_body()) {
@@ -194,14 +201,26 @@ bool thumbnail_session_build_metadata(
         "\"layer_height\"",
         &s_metadata_layer_height);
 
+    if (generation != moonraker_config_generation()) {
+        s_metadata_object_height = s_metadata_layer_height = 0;
+        s_selected_thumbnail_path[0] = 0;
+        return false;
+    }
+    snprintf(s_metadata_file, sizeof(s_metadata_file), "%s", file);
+    s_metadata_generation = generation;
     return true;
 }
 
 bool thumbnail_session_get_layer_metadata(
+    const char *file,
     double *object_height,
     double *layer_height)
 {
-    if (!object_height || !layer_height ||
+    if (object_height) *object_height = 0;
+    if (layer_height) *layer_height = 0;
+    if (!object_height || !layer_height || !file || !file[0] ||
+        strcmp(file, s_metadata_file) || s_metadata_generation != moonraker_config_generation() ||
+        !isfinite(s_metadata_object_height) || !isfinite(s_metadata_layer_height) ||
         s_metadata_object_height <= 0.0 ||
         s_metadata_layer_height <= 0.0) {
         return false;

@@ -293,7 +293,8 @@ static esp_err_t persist_profile(
                 ? 1
                 : 0);
 
-    if (error != ESP_OK || !profile || !profile->configured) {
+    if (error != ESP_OK) return error;
+    if (!profile || !profile->configured) {
         profile_key(key, sizeof(key), profile_index, "key");
         esp_err_t erase_error = nvs_erase_key(handle, key);
         if (erase_error != ESP_OK && erase_error != ESP_ERR_NVS_NOT_FOUND) {
@@ -547,8 +548,14 @@ static bool load_profile(
 
     uint8_t secure_transport = 0;
     profile_key(key, sizeof(key), profile_index, "tls");
-    if (nvs_get_u8(handle, key, &secure_transport) == ESP_OK) {
-        loaded.secure_transport = secure_transport == 1;
+    esp_err_t security_error = nvs_get_u8(handle, key, &secure_transport);
+    /* Missing TLS fields belong to older HTTP-only profiles. An unreadable
+     * or malformed stored field must never silently enable plaintext. */
+    loaded.secure_transport = security_error != ESP_ERR_NVS_NOT_FOUND &&
+        (security_error != ESP_OK || secure_transport != 0);
+    if (security_error != ESP_ERR_NVS_NOT_FOUND &&
+        (security_error != ESP_OK || secure_transport > 1)) {
+        ESP_LOGW(TAG, "Profile %d TLS setting invalid; requiring secure transport", profile_index);
     }
 
     if (!profile_valid(&loaded)) {
@@ -646,13 +653,17 @@ bool moonraker_config_load(void)
             MOONRAKER_SCHEMA_KEY,
             &schema);
 
-    if (error != ESP_OK ||
-        schema != MOONRAKER_SCHEMA_VALUE) {
+    if (error == ESP_ERR_NVS_NOT_FOUND) {
         bool migrated =
             migrate_legacy_config(handle);
 
         nvs_close(handle);
         return migrated;
+    }
+    if (error != ESP_OK || schema != MOONRAKER_SCHEMA_VALUE) {
+        nvs_close(handle);
+        ESP_LOGE(TAG, "Profile schema unreadable or unsupported; saved profiles preserved");
+        return false;
     }
 
     for (int index = 0;
@@ -691,7 +702,9 @@ bool moonraker_config_load(void)
             "No valid profiles found; restoring default");
 
         install_default_profile();
-        return persist_collection();
+        /* Preserve the unreadable collection for recovery instead of saving
+         * defaults over it during a load. */
+        return false;
     }
 
     ESP_LOGI(
@@ -863,6 +876,8 @@ bool moonraker_config_save_profile(
         updated.api_key,
         sizeof(updated.api_key),
         api_key);
+    copy_text(updated.camera_stream_url, sizeof(updated.camera_stream_url),
+        previous.camera_stream_url);
 
     s_profiles[profile_index] =
         updated;

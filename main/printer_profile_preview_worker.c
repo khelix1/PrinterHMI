@@ -1,3 +1,4 @@
+#include "thumbnail_path.h"
 #include "printer_profile_preview_worker.h"
 
 #include <stdbool.h>
@@ -275,7 +276,7 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         return;
     }
 
-    char encoded_file[384];
+    char encoded_file[sizeof(file) * 3];
     url_encode(file, encoded_file, sizeof(encoded_file));
 
     char *metadata = heap_caps_calloc(
@@ -310,7 +311,8 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         json_find_best_thumbnail_path(
             metadata,
             thumbnail_path,
-            sizeof(thumbnail_path));
+            sizeof(thumbnail_path)) && thumbnail_path_resolve(
+                file, thumbnail_path, thumbnail_path, sizeof(thumbnail_path));
 
     heap_caps_free(metadata);
 

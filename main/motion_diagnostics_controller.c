@@ -103,7 +103,7 @@ void motion_diagnostics_controller_update_config(const struct cJSON *config)
 static bool flag(const cJSON *status, const char *name)
 {
     const cJSON *value = cJSON_GetObjectItemCaseSensitive(status, name);
-    return cJSON_IsTrue(value) || (cJSON_IsNumber(value) && value->valuedouble != 0);
+    return cJSON_IsTrue(value) || (cJSON_IsNumber(value) && isfinite(value->valuedouble) && value->valuedouble != 0);
 }
 
 static void update_driver(motion_driver_snapshot_t *driver, const cJSON *object)

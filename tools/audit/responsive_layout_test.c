@@ -570,7 +570,7 @@ static bool send_macro(const char *command){macro_sends++;snprintf(sent_macro,si
 void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=true;s->count=s->total_count=64;s->generation=gen;}
 bool macro_controller_get(size_t i,char *o,size_t n){if(i>=64)return false;snprintf(o,n,"MACRO_%02u_WITH_A_VERY_LONG_OPERATOR_ACTION_NAME",(unsigned)i);return true;}
 bool macro_controller_is_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);return i<64 && fav[i];}
-bool macro_controller_toggle_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);if(i>=64)return false;fav[i]=!fav[i];gen++;return true;}
+bool macro_controller_set_favorite(const char *n,bool favorite){unsigned i=0;sscanf(n,"MACRO_%u",&i);if(i>=64)return false;fav[i]=favorite;gen++;return true;}
 bool macro_controller_parameters(const char *n,macro_parameter_catalog_t *p){snprintf(selected,sizeof(selected),"%s",n);memset(p,0,sizeof(*p));p->count=8;for(int i=0;i<8;i++)snprintf(p->names[i],sizeof(p->names[i]),"PARAM_%d",i);return true;}
 
 #include "ui_macros.c"
@@ -652,7 +652,7 @@ static void run(int width){
  assert(lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED));
  assert(!lv_obj_has_flag(s_macros->rows[0],LV_OBJ_FLAG_HIDDEN));
  clear_search_cb(NULL);lv_obj_update_layout(s_root);
- lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);assert(s_confirm);
  macro_popup_bounds(s_confirm,width);
  for(size_t i=0;i<MACRO_PARAMETER_MAX+MACRO_PARAMETER_EXTRA;i++)assert(lv_obj_get_height(s_macros->parameter_fields[i])>=48);
  assert(lv_obj_get_height(lv_obj_get_child(s_confirm,0))==UI_FONT_TITLE->line_height+12);
@@ -668,7 +668,7 @@ static void run(int width){
  assert(macro_sends==before && s_confirm);close_confirm();
  /* Simulate the page rebuild after changing the selected printer. */
  ui_macros_hide();ui_macros_show(send_macro);
- lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);assert(s_confirm);
  lv_textarea_set_text(s_macros->parameter_fields[0],"205");review_macro_cb(NULL);
  connected=false;refresh_timer_cb(NULL);assert(lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED));macro_popup_bounds(s_confirm,width);run_macro_cb(NULL);assert(macro_sends==before);
  connected=true;refresh_timer_cb(NULL);assert(!lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED));
@@ -677,16 +677,16 @@ static void run(int width){
  snapshot(s_root);
  for(unsigned i=0;i<10;i++){
   search_cb(NULL);lv_obj_delete(s_macros->editor);assert(!s_macros->editor&&!s_macros->editor_value&&!s_macros->editor_target);editor_done_cb(NULL);
-  lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);assert(s_confirm);lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);assert(s_macros->editor);lv_obj_delete(s_confirm);assert(!s_confirm&&!s_macros->editor&&!s_macros->parameter_fields[0]&&!s_pending_macro[0]);review_macro_cb(NULL);run_macro_cb(NULL);editor_done_cb(NULL);
+  lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);assert(s_confirm);lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);assert(s_macros->editor);lv_obj_delete(s_confirm);assert(!s_confirm&&!s_macros->editor&&!s_macros->parameter_fields[0]&&!s_pending_macro[0]);review_macro_cb(NULL);run_macro_cb(NULL);editor_done_cb(NULL);
  }
- lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);lv_textarea_set_text(s_macros->editor_value,"draft-value");config_generation++;editor_done_cb(NULL);assert(s_macros->editor&&!lv_textarea_get_text(s_macros->parameter_fields[0])[0]);review_macro_cb(NULL);assert(!s_macros->reviewed);close_confirm();
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);lv_obj_send_event(s_macros->parameter_fields[0],LV_EVENT_CLICKED,NULL);lv_textarea_set_text(s_macros->editor_value,"draft-value");config_generation++;editor_done_cb(NULL);assert(s_macros->editor&&!lv_textarea_get_text(s_macros->parameter_fields[0])[0]);review_macro_cb(NULL);assert(!s_macros->reviewed);close_confirm();
  ui_macros_hide();ui_macros_show(send_macro);
- lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);review_macro_cb(NULL);lv_obj_t*reviewed=s_confirm;char saved[MACRO_COMMAND_MAX];snprintf(saved,sizeof(saved),"%s",s_macros->pending_command);review_macro_cb(NULL);assert(s_confirm==reviewed&&!strcmp(saved,s_macros->pending_command));
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);review_macro_cb(NULL);lv_obj_t*reviewed=s_confirm;char saved[MACRO_COMMAND_MAX];snprintf(saved,sizeof(saved),"%s",s_macros->pending_command);review_macro_cb(NULL);assert(s_confirm==reviewed&&!strcmp(saved,s_macros->pending_command));
  before=macro_sends;macro_send_hook=macro_retire;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&!s_confirm&&!s_macros->run_action);
  lv_tick_inc(5001); /* A separate dispatch case, outside accepted-command suppression. */
- lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);review_macro_cb(NULL);before=macro_sends;macro_send_hook=macro_switch;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&s_confirm);run_macro_cb(NULL);assert(macro_sends==before+1);close_confirm();
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);review_macro_cb(NULL);before=macro_sends;macro_send_hook=macro_switch;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&s_confirm);run_macro_cb(NULL);assert(macro_sends==before+1);close_confirm();
  ui_macros_hide();ui_macros_show(send_macro);
- lv_obj_send_event(s_macros->rows[0],LV_EVENT_CLICKED,NULL);review_macro_cb(NULL);before=macro_sends;macro_send_hook=macro_retire_root;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&!s_root&&!s_list&&!s_status&&!s_confirm&&!s_refresh_timer&&macro_timer_count()==baseline_timers);
+ lv_obj_send_event(s_macros->rows[0],LV_EVENT_SHORT_CLICKED,NULL);review_macro_cb(NULL);before=macro_sends;macro_send_hook=macro_retire_root;run_macro_cb(NULL);macro_send_hook=NULL;assert(macro_sends==before+1&&!s_root&&!s_list&&!s_status&&!s_confirm&&!s_refresh_timer&&macro_timer_count()==baseline_timers);
  editor_done_cb(NULL);review_macro_cb(NULL);run_macro_cb(NULL);refresh_timer_cb(NULL);clear_search_cb(NULL);field_cb(NULL);
  for(unsigned i=0;i<5;i++){
   ui_macros_show(send_macro);search_cb(NULL);lv_obj_delete(s_root);assert(!s_root&&!s_macros->editor&&!s_refresh_timer&&macro_timer_count()==baseline_timers);ui_macros_hide();

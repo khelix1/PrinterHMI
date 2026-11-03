@@ -16,6 +16,8 @@ typedef struct {
     bool modified;
 } firmware_identity_t;
 
+/* Parse a stable X.Y.Z identity (optional v prefix), with bounded components. */
+bool firmware_identity_parse_stable_version(const char *version, int *major, int *minor, int *patch);
 void firmware_identity_get(firmware_identity_t *identity);
 const char *firmware_identity_channel_name(firmware_channel_t channel);
 void firmware_identity_format(char *out, size_t capacity);

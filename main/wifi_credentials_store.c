@@ -1,5 +1,7 @@
 #include "wifi_credentials_store.h"
 
+#include <string.h>
+
 #include "nvs.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -9,6 +11,9 @@ static const char *TAG = "PrinterHMI";
 bool wifi_credentials_store_load(char *ssid, size_t ssid_size,
                                  char *password, size_t password_size)
 {
+    /* Never leave a previous printer network or password in caller buffers. */
+    if (ssid && ssid_size) memset(ssid, 0, ssid_size);
+    if (password && password_size) memset(password, 0, password_size);
     if (!ssid || ssid_size == 0 || !password || password_size == 0) {
         return false;
     }
@@ -24,23 +29,29 @@ bool wifi_credentials_store_load(char *ssid, size_t ssid_size,
     size_t pass_len = password_size;
     err = nvs_get_str(h, "ssid", ssid, &ssid_len);
     if (err != ESP_OK || ssid[0] == 0) {
+        memset(ssid, 0, ssid_size);
         nvs_close(h);
         ESP_LOGW(TAG, "NVS WiFi load: no saved SSID");
         return false;
     }
 
     err = nvs_get_str(h, "pass", password, &pass_len);
-    if (err != ESP_OK) {
-        password[0] = 0;
-    }
     nvs_close(h);
+    if (err != ESP_OK) {
+        memset(ssid, 0, ssid_size);
+        memset(password, 0, password_size);
+        ESP_LOGW(TAG, "NVS WiFi load: saved password unavailable");
+        return false;
+    }
     ESP_LOGI(TAG, "NVS WiFi load: saved credentials available");
     return true;
 }
 
 bool wifi_credentials_store_save(const char *ssid, const char *password)
 {
-    if (!ssid || !ssid[0]) return false;
+    if (!ssid || !ssid[0] ||
+        strnlen(ssid, 33) > 32 ||
+        (password && strnlen(password, 65) > 64)) return false;
     if (!password) password = "";
 
     nvs_handle_t h;

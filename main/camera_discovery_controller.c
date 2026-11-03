@@ -58,7 +58,9 @@ bool camera_discovery_start_for_profile(int profile, const char *host, int port,
     if (demo_mode_enabled()) return demo_camera_discovery_start(profile, host, port);
 #endif
     if (profile < 0 || profile >= MOONRAKER_CONFIG_MAX_PROFILES ||
-        !host || !host[0] || port <= 0 || port >= 65536 || s_task) {
+        !host || !host[0] || strlen(host) >= sizeof(s_host) ||
+        (api_key && strlen(api_key) >= sizeof(s_api_key)) ||
+        port <= 0 || port >= 65536 || s_task) {
         return false;
     }
 

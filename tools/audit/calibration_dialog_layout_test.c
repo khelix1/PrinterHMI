@@ -66,7 +66,7 @@ void accept_event(lv_event_t *e){(void)e;steps++;}
 static void inside(lv_obj_t *c,lv_obj_t *p){lv_area_t a,b;lv_obj_get_coords(c,&a);lv_obj_get_coords(p,&b);if(a.x1<b.x1||a.x2>b.x2||a.y1<b.y1||a.y2>b.y2){fprintf(stderr,"outside %d,%d..%d,%d vs %d,%d..%d,%d\n",a.x1,a.y1,a.x2,a.y2,b.x1,b.y1,b.x2,b.y2);abort();}}
 static void buttons(lv_obj_t *row){for(uint32_t i=0;i<lv_obj_get_child_count(row);i++){lv_obj_t *b=lv_obj_get_child(row,i);if(lv_obj_has_flag(b,LV_OBJ_FLAG_HIDDEN))continue;if(lv_obj_check_type(b,&lv_button_class)){inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(b)>=48);lv_area_t a,r;lv_obj_get_coords(b,&a);lv_obj_get_coords(row,&r);assert(a.x1>=r.x1&&a.x2<=r.x2);}else buttons(b);}}
 static inline void layout(lv_obj_t *popup){assert(popup);lv_obj_update_layout(popup);inside(popup,lv_screen_active());for(unsigned i=0;i<3;i++)inside(lv_obj_get_child(popup,i),popup);lv_obj_t *body=ui_cal_dialog_body(popup),*footer=lv_obj_get_child(popup,2);buttons(body);buttons(footer);lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,lv_obj_get_scroll_y(body)+lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);lv_obj_update_layout(popup);assert(lv_obj_get_scroll_bottom(body)<=1);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);capture();}
-static inline void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
+static inline void click(lv_obj_t *o){lv_obj_send_event(o,LV_EVENT_SHORT_CLICKED,NULL);if(lv_obj_is_valid(o))lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
 static inline unsigned diagnostic_timers(void){unsigned n=0;lv_timer_t *t=NULL;while((t=lv_timer_get_next(t)))n++;return n;}
 static inline lv_obj_t *action(lv_obj_t *p,unsigned i){return lv_obj_get_child(lv_obj_get_child(p,2),i);}
 static inline lv_obj_t *choice(lv_obj_t *p,unsigned i){return lv_obj_get_child(lv_obj_get_user_data(ui_cal_dialog_body(p)),i);}
@@ -221,7 +221,7 @@ static void run(void){
 #elif defined(TEST_FEEDBACK)
 const char *moonraker_config_active_profile_name(void){return "Printer A";}
 bool macro_controller_is_favorite(const char *name){(void)name;return false;}
-bool macro_controller_toggle_favorite(const char *name){(void)name;return true;}
+bool macro_controller_set_favorite(const char *name,bool favorite){(void)favorite;(void)name;return true;}
 bool macro_controller_parameters(const char *name,macro_parameter_catalog_t *out){(void)name;memset(out,0,sizeof(*out));out->count=1;strcpy(out->names[0],"TEMP");return true;}
 void console_controller_add(console_entry_type_t kind,const char *format,...){(void)kind;(void)format;}
 #include "ui_macros.c"

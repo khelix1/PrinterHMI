@@ -57,6 +57,18 @@ static bool semver(const char *version, unsigned long parts[3], bool *developmen
     }
     return true;
 }
+bool firmware_identity_parse_stable_version(const char *version,
+    int *major, int *minor, int *patch)
+{
+    if (!major || !minor || !patch) return false;
+    unsigned long parts[3];
+    bool development;
+    if (!semver(version, parts, &development) || development) return false;
+    *major = (int)parts[0];
+    *minor = (int)parts[1];
+    *patch = (int)parts[2];
+    return true;
+}
 static bool nightly_date(const char *version, char out[11])
 {
     if (!version || strncmp(version,"nightly-",8) || strlen(version)<20) return false;

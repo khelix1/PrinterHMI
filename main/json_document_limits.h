@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Preflight recursive JSON parsers before they see untrusted SD-card data.
+/* Preflight recursive JSON parsers before they see untrusted input.
  * Braces in quoted strings do not contribute to nesting. Syntax validation
  * and rejection of trailing data remain the parser's responsibility. */
 static inline bool json_document_within_limits(const char *document, size_t size,

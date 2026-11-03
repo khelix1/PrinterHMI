@@ -70,6 +70,58 @@ static void set_status(
 }
 
 
+/* Keep rotation and recovery identical for plain and encrypted backups. */
+static bool promote_backup_file(
+    const char *temporary, const char *path, const char *previous,
+    char *status, size_t status_size)
+{
+    struct stat info;
+    if (stat(path, &info) != 0) {
+        if (errno != ENOENT) {
+            unlink(temporary);
+            set_status(status, status_size, "Existing backup could not be inspected.");
+            return false;
+        }
+        /* A failed rollback or interrupted rotation may leave only .previous.
+         * Restore it before clearing any recovery copy on this save attempt. */
+        if (rename(previous, path) != 0 && errno != ENOENT) {
+            unlink(temporary);
+            set_status(status, status_size,
+                "Backup recovery failed; recovery copy was preserved.");
+            return false;
+        }
+    }
+
+    if (unlink(previous) != 0 && errno != ENOENT) {
+        unlink(temporary);
+        set_status(status, status_size,
+            "Backup rotation could not clear its previous recovery copy.");
+        return false;
+    }
+    bool had_previous = rename(path, previous) == 0;
+    if (!had_previous && errno != ENOENT) {
+        unlink(temporary);
+        set_status(status, status_size,
+            "Existing backup could not be prepared for replacement.");
+        return false;
+    }
+    if (rename(temporary, path) != 0) {
+        bool restored = had_previous && rename(previous, path) == 0;
+        unlink(temporary);
+        set_status(status, status_size, restored
+            ? "Backup replacement failed; previous backup was restored."
+            : had_previous
+                ? "Backup replacement and recovery failed; recovery copy was preserved."
+                : "Backup replacement failed; no previous backup was available.");
+        return false;
+    }
+    if (had_previous) {
+        (void)unlink(previous);
+    }
+    return true;
+}
+
+
 static bool valid_sleep_timeout(int value)
 {
     return value == 0 ||
@@ -763,48 +815,9 @@ bool settings_backup_export_with_progress(
         return false;
     }
 
-    /*
-     * FATFS rename does not reliably replace an existing destination. Rotate
-     * the known-good backup out of the way first, then restore it if promotion
-     * of the fully written temporary file fails.
-     */
-    if (unlink(SETTINGS_BACKUP_PREVIOUS_PATH) != 0 && errno != ENOENT) {
-        unlink(SETTINGS_BACKUP_TEMP_PATH);
-        set_status(
-            status,
-            status_size,
-            "Backup rotation could not clear its previous recovery copy.");
+    if (!promote_backup_file(SETTINGS_BACKUP_TEMP_PATH, SETTINGS_BACKUP_PATH,
+            SETTINGS_BACKUP_PREVIOUS_PATH, status, status_size)) {
         return false;
-    }
-
-    bool previous_backup = false;
-    if (rename(SETTINGS_BACKUP_PATH, SETTINGS_BACKUP_PREVIOUS_PATH) == 0) {
-        previous_backup = true;
-    } else if (errno != ENOENT) {
-        unlink(SETTINGS_BACKUP_TEMP_PATH);
-        set_status(
-            status,
-            status_size,
-            "Existing backup could not be prepared for replacement.");
-        return false;
-    }
-
-    if (rename(SETTINGS_BACKUP_TEMP_PATH, SETTINGS_BACKUP_PATH) != 0) {
-        if (previous_backup) {
-            (void)rename(
-                SETTINGS_BACKUP_PREVIOUS_PATH,
-                SETTINGS_BACKUP_PATH);
-        }
-        unlink(SETTINGS_BACKUP_TEMP_PATH);
-        set_status(
-            status,
-            status_size,
-            "Backup replacement failed; the previous backup was restored.");
-        return false;
-    }
-
-    if (previous_backup) {
-        (void)unlink(SETTINGS_BACKUP_PREVIOUS_PATH);
     }
 
     set_status(
@@ -943,36 +956,9 @@ static bool write_encrypted_backup_file(
         return false;
     }
 
-    if (unlink(SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH) != 0 && errno != ENOENT) {
-        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
-        set_status(status, status_size, "Encrypted backup rotation could not clear recovery copy.");
-        return false;
-    }
-
-    bool previous_backup = false;
-    if (rename(SETTINGS_BACKUP_ENCRYPTED_PATH,
-               SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH) == 0) {
-        previous_backup = true;
-    } else if (errno != ENOENT) {
-        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
-        set_status(status, status_size, "Existing encrypted backup could not be replaced.");
-        return false;
-    }
-
-    if (rename(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH,
-               SETTINGS_BACKUP_ENCRYPTED_PATH) != 0) {
-        if (previous_backup) {
-            (void)rename(SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH,
-                         SETTINGS_BACKUP_ENCRYPTED_PATH);
-        }
-        unlink(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH);
-        set_status(status, status_size, "Encrypted backup replacement failed; previous backup was restored.");
-        return false;
-    }
-    if (previous_backup) {
-        (void)unlink(SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH);
-    }
-    return true;
+    return promote_backup_file(SETTINGS_BACKUP_ENCRYPTED_TEMP_PATH,
+        SETTINGS_BACKUP_ENCRYPTED_PATH, SETTINGS_BACKUP_ENCRYPTED_PREVIOUS_PATH,
+        status, status_size);
 }
 
 bool settings_backup_export_encrypted_with_progress(
@@ -1148,9 +1134,10 @@ bool settings_backup_restore_encrypted_with_progress(
     if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
         if(progress)progress(SETTINGS_BACKUP_STAGE_ROLLING_BACK,user_data);
-        (void)apply_snapshot(&previous);
-        set_status(status, status_size,
-            "Encrypted restore failed; previous settings were reapplied.");
+        bool rolled_back = apply_snapshot(&previous);
+        set_status(status, status_size, rolled_back
+            ? "Encrypted restore failed; previous settings were reapplied."
+            : "Encrypted restore failed; previous settings could not be fully reapplied. Check settings before rebooting.");
         operator_event_log_add(OPERATOR_EVENT_ERROR,
             "Encrypted configuration restore failed");
         return false;
@@ -1178,7 +1165,7 @@ bool settings_backup_remove_all(char *status, size_t status_size)
             ++removed;
         } else if (errno != ENOENT) {
             set_status(status, status_size,
-                "Could not remove every backup; existing files were preserved.");
+                "Could not remove every backup; some files may already have been removed.");
             return false;
         }
     }
@@ -1247,12 +1234,11 @@ bool settings_backup_restore_with_progress(
     if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
         if(progress)progress(SETTINGS_BACKUP_STAGE_ROLLING_BACK,user_data);
-        (void)apply_snapshot(&previous);
+        bool rolled_back = apply_snapshot(&previous);
 
-        set_status(
-            status,
-            status_size,
-            "Restore failed; previous settings were reapplied.");
+        set_status(status, status_size, rolled_back
+            ? "Restore failed; previous settings were reapplied."
+            : "Restore failed; previous settings could not be fully reapplied. Check settings before rebooting.");
 
         operator_event_log_add(
             OPERATOR_EVENT_ERROR,

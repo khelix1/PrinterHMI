@@ -37,5 +37,12 @@ int main(void)
  setup(true,1,9);status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.004}}}}",9);
  assert(case_lighting_begin(9,0,0,cmd,sizeof(cmd)));status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.004}}}}",9);case_lighting_snapshot(&s,1);assert(s.pending);
  status("{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0}}}}",9);case_lighting_snapshot(&s,2);assert(!s.pending);
+ setup(true,1,10);id=case_lighting_begin(10,50,0,cmd,sizeof(cmd));assert(id);
+ const char *good="{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.5}}}}";
+ char trailing[256];snprintf(trailing,sizeof(trailing),"%s{}",good);status(trailing,10);
+ case_lighting_snapshot(&s,1);assert(s.pending&&s.value==.25);
+ snprintf(trailing,sizeof(trailing),"%sjunk",good);status(trailing,10);case_lighting_snapshot(&s,1);assert(s.pending);
+ char raw[256];size_t len=strlen(good);memcpy(raw,good,len);case_lighting_status_json(raw,len,10);
+ case_lighting_snapshot(&s,2);assert(!s.pending&&s.value==.5);
  puts("PASS: exact output discovery, normalized/scaled PWM, digital guards, malformed config/status, pending serialization, stale generation/error rejection, timeout/retry and reset");
 }

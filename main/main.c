@@ -193,6 +193,7 @@ static void sntp_wait_task(void *arg);
 #include "moonraker_probe.h"
 #include "network_wifi_scan.h"
 #include "wifi_credentials_store.h"
+#include "wifi_station_config.h"
 #include "ui_drybox.h"
 #include "ui_files.h"
 #include "ui_thumbnail.h"
@@ -431,8 +432,6 @@ static double printer_live_flow = 0.0;
 static double printer_current_z = -1.0;
 static int printer_current_layer = -1;
 static int printer_total_layer = -1;
-static double printer_meta_object_height = 0.0;
-static double printer_meta_layer_height = 0.0;
 
 static bool live_heater_power = false;
 static bool s_live_data_ok = false;
@@ -524,8 +523,6 @@ static void reset_active_printer_runtime_state(void)
     printer_current_z = -1.0;
     printer_current_layer = -1;
     printer_total_layer = -1;
-    printer_meta_object_height = 0.0;
-    printer_meta_layer_height = 0.0;
 
     s_drybox_selected_program =
         UI_DRYBOX_PROGRAM_NONE;
@@ -747,8 +744,10 @@ static void wifi_init_sta(void)
     wifi_config_t wifi_config = { 0 };
 
     if (s_wifi_credentials_configured) {
-        strlcpy((char *)wifi_config.sta.ssid, saved_wifi_ssid, sizeof(wifi_config.sta.ssid));
-        strlcpy((char *)wifi_config.sta.password, saved_wifi_password, sizeof(wifi_config.sta.password));
+        s_wifi_credentials_configured = wifi_station_config_build(
+            &wifi_config, saved_wifi_ssid, saved_wifi_password);
+    }
+    if (s_wifi_credentials_configured) {
         snprintf(wifi_status, sizeof(wifi_status), "Network: using saved WiFi %.24s", saved_wifi_ssid);
     } else {
         safe_copy(
@@ -1071,8 +1070,6 @@ static bool moonraker_get_live_objects(void)
     cJSON_Delete(layer_root);
 
     /* Estimates are resolved at display time, never cached as Klipper reports. */
-    thumbnail_session_get_layer_metadata(
-        &printer_meta_object_height, &printer_meta_layer_height);
 
     json_find_number_after(s_moonraker_objects, "\"extruder\"", "temperature", &printer_nozzle_temp);
     json_find_number_after(s_moonraker_objects, "\"extruder\"", "target", &printer_nozzle_target);
@@ -1702,8 +1699,7 @@ static bool setup_connect_wifi(const char *ssid, const char *password)
     }
 
     wifi_config_t config = {0};
-    strlcpy((char *)config.sta.ssid, ssid, sizeof(config.sta.ssid));
-    strlcpy((char *)config.sta.password, password ? password : "", sizeof(config.sta.password));
+    if (!wifi_station_config_build(&config, ssid, password)) return false;
     (void)esp_wifi_disconnect();
     if (esp_wifi_set_config(WIFI_IF_STA, &config) != ESP_OK ||
         !wifi_credentials_store_save(ssid, password ? password : "")) {
@@ -1887,6 +1883,10 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     moonraker_filament_state_t filament_state;
     moonraker_filament_state_snapshot(
         &filament_state);
+
+    double printer_meta_object_height = 0, printer_meta_layer_height = 0;
+    (void)thumbnail_session_get_layer_metadata(telemetry_state.printer_file,
+        &printer_meta_object_height, &printer_meta_layer_height);
 
     printer_layer_result_t resolved_layers =
         printer_layer_resolver_resolve(
@@ -2216,13 +2216,13 @@ static bool connect_selected_wifi(void)
 
     wifi_config_t cfg = {0};
 
-    strlcpy((char *)cfg.sta.ssid,
+    if (!wifi_station_config_build(&cfg,
             ui_network_tools_selected_wifi_ssid,
-            sizeof(cfg.sta.ssid));
-
-    strlcpy((char *)cfg.sta.password,
-            ui_network_tools_selected_wifi_password,
-            sizeof(cfg.sta.password));
+            ui_network_tools_selected_wifi_password)) {
+        safe_copy(ui_network_tools_network_scan_status,
+            sizeof(ui_network_tools_network_scan_status), "Invalid WiFi credentials");
+        return false;
+    }
 
     safe_copy(wifi_status, sizeof(wifi_status), "Network: connecting...");
     snprintf(ui_network_tools_network_scan_status,
@@ -2730,10 +2730,8 @@ static void printer_build_metadata_text(
     char *out,
     size_t out_size)
 {
-    printer_meta_object_height = 0.0;
-    printer_meta_layer_height = 0.0;
 
-    bool metadata_ok = thumbnail_session_build_metadata(
+    (void)thumbnail_session_build_metadata(
         moonraker_config_host(),
         moonraker_config_port(),
         moonraker_config_api_key(),
@@ -2741,11 +2739,6 @@ static void printer_build_metadata_text(
         out,
         out_size);
 
-    if (metadata_ok) {
-        (void)thumbnail_session_get_layer_metadata(
-            &printer_meta_object_height,
-            &printer_meta_layer_height);
-    }
 }
 
 static void printer_thumb_set_label(const char *txt)
@@ -3640,6 +3633,11 @@ static void hmi_runtime_task(void *arg)
                 s_wifi_signal_dirty = false;
             }
 
+            double printer_meta_object_height = 0, printer_meta_layer_height = 0;
+            moonraker_state_t layer_state;
+            moonraker_state_snapshot(&layer_state);
+            (void)thumbnail_session_get_layer_metadata(layer_state.printer_file,
+                &printer_meta_object_height, &printer_meta_layer_height);
             dashboard_runtime_controller_tick(
         &(dashboard_runtime_context_t) {
             .meta_object_height = printer_meta_object_height,

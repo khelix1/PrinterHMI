@@ -1,3 +1,4 @@
+#include "thumbnail_path.h"
 #include "ui_preview_lightbox.h"
 #include "misc/cache/instance/lv_image_cache.h"
 
@@ -287,7 +288,8 @@ static void fullscreen_preview_worker(void *arg)
             bool fetched = metadata && moonraker_fetch_file_metadata(
                 job.host, job.port, job.api_key, encoded_file,
                 metadata, FULLSCREEN_METADATA_SIZE, &http_code, &error) &&
-                json_find_best_thumbnail_path(metadata, thumbnail_path, sizeof(thumbnail_path));
+                json_find_best_thumbnail_path(metadata, thumbnail_path, sizeof(thumbnail_path)) &&
+                thumbnail_path_resolve(job.file, thumbnail_path, thumbnail_path, sizeof(thumbnail_path));
             heap_caps_free(metadata);
             if (fetched) {
                 char encoded_thumbnail[768];

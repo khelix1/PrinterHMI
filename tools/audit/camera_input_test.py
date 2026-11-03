@@ -79,6 +79,10 @@ int xTaskCreatePinnedToCoreWithCaps(void(*fn)(void*),const char*n,unsigned stack
 }
 void vTaskDelete(void *p){assert(!p);}
 int main(int argc,char **argv){
+ unsigned char malformed[sizeof(jpeg)];int mw=0,mh=0;
+ memcpy(malformed,jpeg,sizeof(jpeg));malformed[5]=2;assert(!jpeg_dimensions(malformed,sizeof(malformed),&mw,&mh));
+ malformed[5]=7;assert(!jpeg_dimensions(malformed,sizeof(malformed),&mw,&mh));
+ assert(jpeg_dimensions(jpeg,sizeof(jpeg),&mw,&mh)&&mw==32&&mh==16);
  scenario=argc>1?atoi(argv[1]):0;
  char long_url[sizeof(s_url)+1];memset(long_url,'a',sizeof(long_url)-1);long_url[sizeof(long_url)-1]=0;
  if(scenario==11){assert(!camera_test_start(long_url)&&!creates);puts("PASS: long URL rejected without truncating endpoint");return 0;}

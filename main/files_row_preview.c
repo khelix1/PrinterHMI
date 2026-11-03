@@ -1,3 +1,4 @@
+#include "thumbnail_path.h"
 #include "files_row_preview.h"
 #include "files_row_rgb_cache.h"
 #include "moonraker_config_controller.h"
@@ -170,7 +171,8 @@ static bool fetch_preview_png(
 
     heap_caps_free(metadata);
 
-    if (!has_thumbnail) return false;
+    if (!has_thumbnail || !thumbnail_path_resolve(
+            file, thumbnail_path, thumbnail_path, sizeof(thumbnail_path))) return false;
 
     char encoded_thumbnail[768];
     thumbnail_manager_url_encode(

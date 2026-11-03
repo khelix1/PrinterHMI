@@ -1,5 +1,92 @@
 # Changelog
 
+## [7.3.13-dev] - 2026-11-02
+
+- Use the bounded firmware-identity version parser for OTA stable release tags and retire the duplicate sscanf parser.
+- Require bounded, complete JSON release catalogs.
+- Reject invalid, fractional or out-of-range asset sizes before integer conversion.
+
+## [7.3.12-dev] - 2026-11-02
+
+- Resolve metadata thumbnail paths against the G-code parent directory before encoding.
+- Apply the same folder-aware resolution to rows, details, fullscreen and inactive-printer previews.
+- Increase selected-preview encoding capacity for resolved paths.
+- Add nested-folder metadata and real row-fetch regressions.
+
+## [7.3.11-dev] - 2026-11-02
+
+- Carry supported filenames through URL encoding, metadata HTTP requests and JSON print-start requests without truncation.
+- Strictly parse bounded file lists, skip overlong paths and malformed entries, and report invalid responses locally.
+- Remove the obsolete path-scraping fallback and its public interface.
+- Bound numeric metadata before integer conversion and ignore non-finite/negative file statistics.
+
+## [7.3.10-dev] - 2026-11-02
+
+- Reject stale live device updates if the catalog is replaced during formatting.
+- Ignore non-finite device readings and driver fault flags.
+- Reject fractional or non-finite endstop request IDs before conversion.
+- Share strict bounded JSON parsing between Console and Lighting.
+- Keep malformed Lighting documents from acknowledging pending changes.
+
+## [7.3.9-dev] - 2026-11-02
+
+- Open macro run dialogs only on short taps, so releasing a Favorite long press does not open a dialog.
+- Keep Favorite feedback inline after the row list refresh.
+- Reject Favorite gestures behind an open macro dialog or from a stale printer page.
+- Exercise real LVGL press/hold/release sequences for Favorite add and remove.
+
+## [7.3.8-dev] - 2026-11-02
+
+- Bound Console notification scanning to the supplied frame length and validate complete, bounded JSON.
+- Validate stored macro favorites before string comparisons and retry failed loads.
+- Keep Favorites unchanged on save failures and show local failure feedback instead of success.
+- Replace the ambiguous favorite-toggle API with an explicit desired-state setter.
+- Omit overlong macro names instead of turning them into truncated commands.
+- Keep catalog generations nonzero on wrap and remove duplicate legacy favorite entries together.
+
+## [7.3.7-dev] - 2026-11-03
+
+- Reject camera names and URLs that cannot round-trip through catalog fields before saving.
+- Clear camera lookup outputs on invalid input and distinguish missing slots from URL read errors.
+- Strictly validate SD preview metadata, including ports, line lengths and trailing data.
+- Reject ambiguous metadata filenames before preview persistence.
+- Lock preview-cache reads, retain newer live previews during SD restore and reject stale profile loads.
+- Retry transient display-lock failures instead of permanently skipping restoration.
+
+## [7.3.6-dev] - 2026-11-03
+
+- Stop profile persistence immediately on a failed configured-flag write instead of erasing its API key.
+- Preserve stored profiles when schema reads fail, schemas are unsupported, or no valid saved profiles load.
+- Require TLS for unreadable or malformed saved TLS fields; retain HTTP compatibility for missing legacy fields.
+- Preserve camera URLs during basic profile edits and clarify persistence guarantees.
+
+## [7.3.5-dev] - 2026-11-03
+
+- Reject failed Wi-Fi password reads and clear both credential outputs on load failure.
+- Preserve maximum-length SSIDs and passwords in all three station configuration paths.
+- Share fixed-width station field construction; reject oversized credentials before saving.
+
+## [7.3.4-dev] - 2026-11-03
+
+- Preserve the only recovery backup after interrupted rotation or failed rollback, for plain and encrypted exports.
+- Share backup promotion logic within the backup module.
+- Report failed settings rollback and partial backup deletion accurately.
+
+## [7.3.3-dev] - 2026-11-02
+
+- Reject undersized JPEG frame headers in camera connection tests.
+- Reject oversized camera discovery hosts and API keys rather than silently truncating them.
+
+## [7.3.2-dev] - 2026-11-02
+
+- Preserve supported API keys and long encoded filenames in file-detail loads.
+- Reject invalid ports and oversized job fields before launching the worker.
+
+## [7.3.1-dev] - 2026-11-02
+
+- Bind layer metadata to its file and printer generation; remove duplicated metadata storage from main.
+- Preserve full URL encoding for long filenames in metadata requests.
+
 ## [7.3.0] - 2026-11-01
 
 - Add a tablet offline demo and refresh Theme Maker tablet simulation.

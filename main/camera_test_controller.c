@@ -43,6 +43,9 @@ static bool jpeg_dimensions(const uint8_t *data, size_t length,
                    (marker >= 0xc9 && marker <= 0xcb) ||
                    (marker >= 0xcd && marker <= 0xcf);
         if (sof) {
+            /* Length includes the two length bytes, precision, dimensions and
+             * component count. Never borrow dimensions from the next segment. */
+            if (segment < 8) return false;
             *height = ((int)data[pos + 5] << 8) | data[pos + 6];
             *width = ((int)data[pos + 7] << 8) | data[pos + 8];
             return *width > 0 && *height > 0;

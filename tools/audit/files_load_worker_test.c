@@ -5,7 +5,7 @@
 #include "files_page_controller.c"
 static bool in_worker,success=true,detail,embedded,task_fail,body_fail;
 static unsigned allocations,frees,http_calls,delays,rendered,preview_begin,cleared;
-static bool empty_list;
+static bool empty_list,invalid_list;
 static uint32_t generation=1;
 static lv_obj_t *page=(void*)1;
 static char status[160],last_path[160];
@@ -38,8 +38,7 @@ void ui_files_add_file_entry(const char *p,double size,double modified,int y){(v
 void ui_files_add_folder_button(const char *n,const char *p,int y){(void)n;(void)p;(void)y;assert(!in_worker);}
 int32_t ui_theme_density_metric(int32_t a,int32_t b,int32_t c){(void)b;(void)c;return a;}
 void files_row_preview_begin(const char *h,int p,const char *k,bool sd,const printer_file_entry_t *entries,size_t count,files_row_preview_ready_cb_t cb){(void)h;(void)p;(void)k;(void)sd;(void)cb;assert(!in_worker&&entries&&count<=64);preview_begin++;}
-int printer_files_parse_entries(const char *body,printer_file_entry_t *entries,size_t capacity){assert(!in_worker && capacity);if(empty_list)return 0;snprintf(entries[0].path,sizeof(entries[0].path),"%s.gcode",body);return 1;}
-int printer_files_for_each_path(const char *body,void (*cb)(const char*,void*),void *arg){(void)body;(void)cb;(void)arg;return 0;}
+int printer_files_parse_entries(const char *body,printer_file_entry_t *entries,size_t capacity){assert(!in_worker && capacity);if(invalid_list)return -1;if(empty_list)return 0;snprintf(entries[0].path,sizeof(entries[0].path),"%s.gcode",body);return 1;}
 static void run_worker(void){assert(worker_arg);void *arg=worker_arg;worker_arg=NULL;in_worker=true;worker_fn(arg);in_worker=false;}
 static void poll(void){assert(s_load_timer);files_load_poll(s_load_timer);}
 static void load(const char *host){files_page_controller_reload(true,true,true,host,7125,"key");}
@@ -54,6 +53,7 @@ int main(void){
  body_fail=true;load("no_memory");run_worker();poll();assert(strstr(status,"allocate"));body_fail=false;
  load("pending");unsigned rows=rendered;files_page_controller_set_search("unlikely");files_page_controller_cycle_sort();assert(rendered==rows&&strstr(status,"Loading"));run_worker();poll();assert(strstr(status,"current search"));
  empty_list=true;load("empty");run_worker();poll();assert(!s_entry_count&&s_index_ready&&strstr(status,"current search"));files_page_controller_set_search("");assert(strstr(status,"gcodes root"));files_page_controller_open_folder("subfolder");assert(strstr(status,"this folder"));empty_list=false;
+ invalid_list=true;unsigned valid_previews=preview_begin;load("invalid");run_worker();poll();assert(!s_index_ready&&preview_begin==valid_previews&&strstr(status,"Invalid file list"));invalid_list=false;
  generation++;load("new-printer");assert(!s_folder[0]&&!s_search[0]);run_worker();poll();assert(!strcmp(last_path,"new-printer.gcode")&&cleared);
  unsigned stable_rows=rendered,stable_clears=cleared;
  files_page_controller_set_search("  ");files_page_controller_open_folder("");files_page_controller_up_folder();assert(!s_folder[0]);

@@ -49,17 +49,17 @@ static uint32_t gen=1;static bool fav[64];static char selected[64];
 void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=true;s->count=s->total_count=64;s->generation=gen;}
 bool macro_controller_get(size_t i,char *o,size_t n){if(i>=64)return false;snprintf(o,n,"MACRO_%02u",(unsigned)i);return true;}
 bool macro_controller_is_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);return i<64 && fav[i];}
-bool macro_controller_toggle_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);if(i>=64)return false;fav[i]=!fav[i];gen++;return true;}
+bool macro_controller_set_favorite(const char *n,bool favorite){unsigned i=0;sscanf(n,"MACRO_%u",&i);if(i>=64)return false;fav[i]=favorite;gen++;return true;}
 bool macro_controller_parameters(const char *n,macro_parameter_catalog_t *p){snprintf(selected,sizeof(selected),"%s",n);memset(p,0,sizeof(*p));p->count=8;for(int i=0;i<8;i++)snprintf(p->names[i],sizeof(p->names[i]),"PARAM_%d",i);return true;}
 #include "ui_macros.c"
 static void run(void){
  ui_macros_show(NULL);lv_obj_t *first=s_macros->rows[0];assert(first && s_macros->rows[63]);
  fav[63]=true;gen++;rebuild_macro_list();assert(s_macros->rows[0]==first && (uintptr_t)lv_obj_get_user_data(first)==64);
- lv_obj_send_event(first,LV_EVENT_CLICKED,NULL);assert(!strcmp(selected,"MACRO_63"));assert(s_confirm);
+ lv_obj_send_event(first,LV_EVENT_SHORT_CLICKED,NULL);assert(!strcmp(selected,"MACRO_63"));assert(s_confirm);
  lv_obj_update_layout(s_confirm);for(int i=0;i<10;i++)assert(s_macros->parameter_fields[i]);
  for(int i=1;i<10;i++){lv_obj_t *a=lv_obj_get_parent(s_macros->parameter_fields[i-1]),*b=lv_obj_get_parent(s_macros->parameter_fields[i]);lv_area_t aa,bb;lv_obj_get_coords(a,&aa);lv_obj_get_coords(b,&bb);assert(aa.y2<bb.y1);assert(aa.x1==bb.x1);}
 
- close_confirm();gen++;selected[0]=0;lv_obj_send_event(first,LV_EVENT_CLICKED,NULL);assert(!s_confirm && !selected[0]);
+ close_confirm();gen++;selected[0]=0;lv_obj_send_event(first,LV_EVENT_SHORT_CLICKED,NULL);assert(!s_confirm && !selected[0]);
  strcpy(s_macros->query,"MACRO_12");rebuild_macro_list();assert(first==s_macros->rows[0] && (uintptr_t)lv_obj_get_user_data(first)==13);assert(lv_obj_has_flag(s_macros->rows[1],LV_OBJ_FLAG_HIDDEN));
  lv_obj_send_event(first,LV_EVENT_LONG_PRESSED,NULL);assert(fav[12]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));assert(lv_obj_get_child_count(s_list)==65);

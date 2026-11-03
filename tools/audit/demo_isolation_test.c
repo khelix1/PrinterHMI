@@ -423,7 +423,7 @@ static void services(void){
  assert(demo_printer_command("DRY_HOLD"));assert(!published.heater_on && published.drybox_fan_speed==40);
  assert(demo_printer_command("DRY_RESUME"));assert(published.heater_on && published.heater_target==55);
  assert(demo_printer_light(moonraker_config_generation(),53));bool found=false;for(size_t i=0;i<devices.stored_count;i++){device_descriptor_t item;assert(device_catalog_controller_get(i,&item));if(!strcmp(item.object_name,"output_pin case_led")){found=true;assert(item.live_value_valid && strstr(item.live_value,"53"));}}assert(found);
- assert(macro_controller_toggle_favorite("CLEAN_NOZZLE"));assert(macro_controller_is_favorite("CLEAN_NOZZLE"));
+ assert(macro_controller_set_favorite("CLEAN_NOZZLE",true));assert(macro_controller_is_favorite("CLEAN_NOZZLE"));
  assert(moonraker_config_select_profile(1));demo_printer_tick();device_catalog_controller_status(&devices);macro_controller_status(&macros);assert(devices.stored_count==4 && macros.count==3);assert(!demo_printer_command("DRY_PLA"));assert(!published.capabilities.has_drybox_heater && !published.heater_on);
  assert(demo_printer_scenario("offline"));device_catalog_controller_status(&devices);macro_controller_status(&macros);assert(!devices.stored_count && !macros.count && !moonraker_live_websocket_request_endstops(request));
  assert(moonraker_config_select_profile(0));demo_printer_tick();assert(published.heater_on && published.heater_target==55);assert(macro_controller_is_favorite("CLEAN_NOZZLE"));

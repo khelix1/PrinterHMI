@@ -254,20 +254,27 @@ static void rebuild_macro_list(void);
 
 static void macro_favorite_cb(lv_event_t *event)
 {
-    if (!event || !s_macros || !s_root || s_macro_dispatching) return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_LONG_PRESSED ||
+        !s_macros || !s_root || s_macro_dispatching || s_confirm ||
+        s_macros->root_owner != moonraker_config_generation()) return;
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
     macro_controller_status(&status);
     if (!encoded || status.generation != s_rendered_generation) { rebuild_macro_list(); return; }
     char name[MACRO_CONTROLLER_NAME_MAX];
     if (!macro_controller_get((size_t)(encoded - 1), name, sizeof(name))) return;
-    bool favorite = macro_controller_toggle_favorite(name);
+    bool favorite = !macro_controller_is_favorite(name);
+    if (!macro_controller_set_favorite(name, favorite)) {
+        macro_feedback(UI_STATUS_WARNING, "Favorite not changed",
+            "Storage is unavailable or the Favorites list is full. Retry after checking settings.");
+        return;
+    }
+    rebuild_macro_list();
     macro_feedback(
         UI_STATUS_OK,
         favorite ? "Favorite saved" : "Favorite removed",
         favorite ? "Long-press any macro to change Favorites."
                  : "The macro remains available in the full list.");
-    rebuild_macro_list();
 }
 
 static void editor_done_cb(lv_event_t *event)
@@ -473,7 +480,7 @@ static void review_macro_cb(lv_event_t *event)
 
 static void macro_button_cb(lv_event_t *event)
 {
-    if (!event || lv_event_get_code(event)!=LV_EVENT_CLICKED || !s_macros || !s_root || s_macro_dispatching || s_macros->root_owner!=moonraker_config_generation()) return;
+    if (!event || lv_event_get_code(event)!=LV_EVENT_SHORT_CLICKED || !s_macros || !s_root || s_macro_dispatching || s_macros->root_owner!=moonraker_config_generation()) return;
     if (s_confirm) { lv_obj_move_foreground(s_confirm); if(s_macros->editor)lv_obj_move_foreground(s_macros->editor); return; }
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
@@ -614,7 +621,7 @@ static void rebuild_macro_list(void)
             if(ui_theme_is_studio())ui_apply_flat_entry(button);
             else ui_apply_card_style(button);
             s_macros->rows[displayed] = button;
-            lv_obj_add_event_cb(button, macro_button_cb, LV_EVENT_CLICKED, NULL);
+            lv_obj_add_event_cb(button, macro_button_cb, LV_EVENT_SHORT_CLICKED, NULL);
             lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
         lv_obj_remove_flag(button, LV_OBJ_FLAG_HIDDEN);

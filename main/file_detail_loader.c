@@ -18,9 +18,9 @@
 #define DETAIL_METADATA_BODY_SIZE 8192
 
 typedef struct {
-    char host[128];
-    char api_key[128];
-    char file[160];
+    char host[MOONRAKER_CONFIG_HOST_LENGTH];
+    char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
+    char file[PRINTER_FILES_MAX_PATH];
     int port;
     uint32_t generation;
     uint32_t profile_generation;
@@ -75,7 +75,7 @@ static void detail_task(void *argument)
     }
 
     if (job && body) {
-        char encoded[256];
+        char encoded[PRINTER_FILES_MAX_PATH * 3];
         thumbnail_manager_url_encode(job->file, encoded, sizeof(encoded));
         int http_code = 0;
         esp_err_t error = ESP_FAIL;
@@ -125,7 +125,10 @@ bool file_detail_loader_start(
     const char *file,
     file_detail_loader_ready_cb_t ready_cb)
 {
-    if (!host || !host[0] || port <= 0 || !file || !file[0] || !ready_cb) {
+    if (!host || !host[0] || strlen(host) >= MOONRAKER_CONFIG_HOST_LENGTH ||
+        port <= 0 || port >= 65536 || !file || !file[0] ||
+        strlen(file) >= PRINTER_FILES_MAX_PATH ||
+        (api_key && strlen(api_key) >= MOONRAKER_CONFIG_API_KEY_LENGTH) || !ready_cb) {
         return false;
     }
 

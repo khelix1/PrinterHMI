@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define FILES_PAGE_LIST_CAPACITY 16384
+#define FILES_PAGE_LIST_CAPACITY PRINTER_FILES_LIST_CAPACITY
 #define FILES_PAGE_ENTRY_CAPACITY 64
 
 static const char *TAG = "files_page_controller";
@@ -244,13 +244,6 @@ static bool ensure_entries(void)
     return s_entries != NULL;
 }
 
-static void fallback_add_path(const char *path, void *user)
-{
-    size_t *count = user;
-    if (!path || !count || *count >= FILES_PAGE_ENTRY_CAPACITY) return;
-    snprintf(s_entries[*count].path, sizeof(s_entries[*count].path), "%s", path);
-    (*count)++;
-}
 
 typedef struct {
     char host[MOONRAKER_CONFIG_HOST_LENGTH];
@@ -337,12 +330,9 @@ static void files_load_publish(files_load_job_t *job)
         job->body,
         s_entries,
         FILES_PAGE_ENTRY_CAPACITY);
-    if (count == 0) {
-        size_t fallback_count = 0;
-        printer_files_for_each_path(job->body,
-                                    fallback_add_path,
-                                    &fallback_count);
-        count = (int)fallback_count;
+    if (count < 0) {
+        ui_files_set_status("Invalid file list received. Refresh to retry.");
+        return;
     }
     s_entry_count = count > 0 ? (size_t)count : 0;
     files_row_preview_begin(job->host, job->port, job->api_key,

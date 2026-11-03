@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Test the actual file parser and metadata formatter with malformed input."""
+from pathlib import Path
+import argparse
+import os
+import subprocess
+import tempfile
+
+root = Path(__file__).resolve().parents[2]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--source', type=Path, default=root / 'main/printer_files.c')
+args = parser.parse_args()
+http = (root / 'main/moonraker.c').read_text()
+def function(name):
+    pos = http.index(name + '(')
+    return http[http.rfind('\n', 0, pos)+1:http.index('\n}\n', pos)+3]
+helpers = '\n'.join(function(n) for n in ['json_find_number_after_key', 'json_find_best_thumbnail_path'])
+fixture = r'''
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include "cJSON.h"
+#include "printer_files.h"
+'''
+checks = r'''
+int main(void){
+ char out[1024],thumb[192];
+ double bad[]={INFINITY,NAN,1e100,-1};for(unsigned i=0;i<4;i++){printer_files_seconds_to_hhmm(bad[i],out,sizeof(out));assert(!strcmp(out,"--:--"));}
+ printer_files_seconds_to_hhmm(3661,out,sizeof(out));assert(!strcmp(out,"1:01"));
+ assert(printer_files_build_metadata_text("test.gcode","{\"estimated_time\":1e999,\"filament_total\":1e999,\"layer_height\":1e100,\"object_height\":-1,\"size\":1e100}",thumb,sizeof(thumb),out,sizeof(out)));
+ assert(strstr(out,"ETA: --:--")&&!strstr(out,"inf")&&!strstr(out,"nan"));
+ assert(printer_files_build_metadata_text("folder/sub/part.gcode","{\"result\":{\"estimated_time\":3600,\"thumbnails\":[{\"relative_path\":\".thumbs/part.png\",\"width\":300,\"height\":300}]}}",thumb,sizeof(thumb),out,sizeof(out)));
+ assert(!strcmp(thumb,"folder/sub/.thumbs/part.png")&&strstr(out,"ETA: 1:00")&&strstr(out,"Thumbnail: metadata found"));
+ printer_file_entry_t entries[3];memset(entries,0,sizeof(entries));
+ assert(printer_files_parse_entries("{\"result\":[7,{\"path\":\"quote\\\"back\\\\slash.gcode\",\"size\":1e999,\"modified\":-1}]}",entries,3)==1);
+ assert(!strcmp(entries[0].path,"quote\"back\\slash.gcode")&&entries[0].size==0&&entries[0].modified==0);
+ const char *bad_lists[]={"{\"result\":[]}{\"path\":\"fake.gcode\"}","{\"result\":[{\"path\":\"fake.gcode\"}]", "{\"error\":{\"path\":\"fake.gcode\"}}","{}","[]junk"};
+ for(unsigned i=0;i<sizeof(bad_lists)/sizeof(bad_lists[0]);i++)assert(printer_files_parse_entries(bad_lists[i],entries,3)==-1);
+ assert(printer_files_parse_entries("[]",entries,3)==0);
+ char path[161];memset(path,'f',160);path[160]=0;cJSON *array=cJSON_CreateArray();assert(array);cJSON *item=cJSON_CreateObject();cJSON_AddStringToObject(item,"path",path);cJSON_AddItemToArray(array,item);
+ item=cJSON_CreateObject();path[159]=0;cJSON_AddStringToObject(item,"path",path);cJSON_AddItemToArray(array,item);
+ char *json=cJSON_PrintUnformatted(array);assert(json);assert(printer_files_parse_entries(json,entries,3)==1&&strlen(entries[0].path)==159);free(json);cJSON_Delete(array);
+ char deep[64];memset(deep,'[',17);memset(deep+17,']',17);deep[34]=0;assert(printer_files_parse_entries(deep,entries,3)==-1);
+ char *huge=malloc(PRINTER_FILES_LIST_CAPACITY+1);assert(huge);memset(huge,' ',PRINTER_FILES_LIST_CAPACITY);huge[0]='[';huge[1]=']';huge[PRINTER_FILES_LIST_CAPACITY]=0;assert(printer_files_parse_entries(huge,entries,3)==-1);free(huge);
+ puts("PASS: file list strict JSON, escaped and full-width names, overlong omission, invalid row skipping, bounded numeric metadata and hostile size/depth rejection");
+}
+'''
+with tempfile.TemporaryDirectory(prefix='printer-files-') as directory:
+    p = Path(directory)
+    (p / 'esp_err.h').write_text('#pragma once\ntypedef int esp_err_t;\n')
+    (p / 'esp_http_client.h').write_text('#pragma once\ntypedef struct {int unused;} esp_http_client_event_t;\n')
+    (p / 'test.c').write_text(fixture + helpers + checks)
+    cjson = root / 'tools/theme-maker/linux/native/vendor/cjson'
+    subprocess.run(['cc', '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Wall', '-Wextra', '-Werror',
+                    '-fsanitize=address,undefined,float-cast-overflow', '-fno-pie', '-no-pie',
+                    '-I', str(p), '-I', str(root / 'main'), '-I', str(cjson),
+                    str(p / 'test.c'), str(args.source), str(cjson / 'cJSON.c'), '-lm', '-o', str(p / 'test')], check=True)
+    subprocess.run([str(p / 'test')], check=True,
+                   env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=0', 'UBSAN_OPTIONS': 'halt_on_error=1'})

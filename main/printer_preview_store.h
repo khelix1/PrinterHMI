@@ -10,6 +10,8 @@
  * PSRAM remains the live authority. This module stores one compressed PNG
  * plus endpoint/file identity per profile and restores one slot per call from
  * the existing runtime worker. It creates no task or timer.
+ * Restore owns its display locking, keeps SD I/O outside that lock and never
+ * replaces a newer cached image published while the SD read was in progress.
  */
 bool printer_preview_store_store_png(
     int profile_index,

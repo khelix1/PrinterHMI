@@ -7,6 +7,7 @@
 #include "moonraker_transport_security_controller.h"
 #include "moonraker_tls_trust_store.h"
 #include "json_document_limits.h"
+#include "printer_files.h"
 
 static moonraker_profile_t profiles[MOONRAKER_CONFIG_MAX_PROFILES];
 static int active;
@@ -55,10 +56,10 @@ typedef struct {const char *url,*cert_pem;int method,timeout_ms;
 static void *moonraker_http_event_handler;
 static int requests,initializations,status=200;
 static bool shared=true,init_ok=true;
-static char wire[300];
+static char wire[1024];
 static void *esp_http_client_init(const esp_http_client_config_t *c){assert(c->url&&c->method==1&&c->disable_auto_redirect);initializations++;return init_ok?(void*)1:NULL;}
 static int esp_http_client_set_header(void *c,const char *k,const char *v){assert(c&&k&&v);return 0;}
-static int esp_http_client_set_post_field(void *c,const char *b,int n){assert(c&&n<300);memcpy(wire,b,n);wire[n]=0;return 0;}
+static int esp_http_client_set_post_field(void *c,const char *b,int n){assert(c&&n<(int)sizeof(wire));memcpy(wire,b,n);wire[n]=0;return 0;}
 static bool network_activity_controller_try_begin_shared(void){return shared;}
 static void network_activity_controller_end_shared(void){}
 static int esp_http_client_perform(void *c){assert(c);requests++;return 0;}

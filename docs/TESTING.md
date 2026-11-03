@@ -3311,3 +3311,55 @@ real connection and saved settings.
 ### Demo end-to-end journey (v7.2.19-dev)
 
 Run `python3 tools/theme-maker/linux/demo-journey-test.py --helper /path/to/firmware-demo-ui/printerhmi-ui-host` to check file selection, print start, pause, resume and object exclusion across both themes. The host uses local fixtures and does not replace tablet verification. Run `demo_isolation_test.py --cjson-dir /path/to/cJSON` for the SDK-spy boundary tests.
+
+### Layer metadata ownership (v7.3.1-dev)
+
+Run `python3 tools/audit/layer_metadata_ownership_test.py --lvgl-dir /path/to/lvgl`. The actual thumbnail-session module is tested for file and printer ownership, failed fetch invalidation, printer changes during fetch, and full encoding of a long filename. On hardware, start a print externally, switch printers, and check that browsing a different file does not give the active print another file's layer dimensions.
+
+### File detail job bounds (v7.3.2-dev)
+
+Run `python3 tools/audit/file_detail_ownership_test.py --lvgl-dir /path/to/lvgl`. It exercises the real worker and encoder with deferred task completion, full supported API keys, long escaped names, cancellation, printer changes, invalid job inputs and task creation failure.
+
+### Camera input bounds (v7.3.3-dev)
+
+`python3 tools/audit/camera_input_test.py` checks short JPEG frame headers alongside bounded reads and cleanup. `discovery_states_test.py --lvgl-dir /path/to/lvgl` checks oversized discovery fields and the existing retry, profile ownership and cancellation paths.
+
+### Backup recovery (v7.3.4-dev)
+
+`python3 tools/audit/backup_rotation_test.py` fault-injects the actual shared promotion function against host files, including interrupted rotation, replacement failure, failed rollback and repeated retries. AddressSanitizer and UndefinedBehaviorSanitizer are enabled. `notification_backup_test.py` covers both settings rollback outcomes and existing parser/progress behavior. Hardware SD-card errors and power loss remain separate verification.
+
+### Wi-Fi credential boundaries (v7.3.5-dev)
+
+`python3 tools/audit/wifi_credentials_store_test.py` compiles the real credential store and station builder with fault-injected NVS calls under AddressSanitizer and UndefinedBehaviorSanitizer. It checks cleared failure outputs, missing/unreadable passwords, explicit empty passwords, maximum field widths, oversized rejection, and save failures. `wifi_connect_dispatch_test.py` exercises actual Network and Setup Center dispatch, while `demo_isolation_test.py --cjson-dir /path/to/cJSON` checks demo guards. Hardware checks remain: Setup Center connect, Network connect, reboot reconnect, and disposable maximum-length credentials.
+
+### Profile storage failures (v7.3.6-dev)
+
+`python3 tools/audit/profile_storage_test.py` runs the actual configuration controller against typed NVS fault injection under AddressSanitizer and UndefinedBehaviorSanitizer. It checks configured-flag failure without API-key erasure, RAM rollback, generation ownership, camera preservation, schema read/type/version failures without writes, invalid collections, missing legacy TLS fields, secure handling of TLS errors and legacy migration. The fixture treats successful individual setters as visible rather than assuming close rolls them back. `security_boundaries_test.py`, `demo_isolation_test.py` and `profiles_layout_test.py` cover related validation and UI paths. Verify profile edit/switch/reboot and camera/TLS retention on hardware.
+
+### Camera catalog and preview restore (v7.3.7-dev)
+
+Run `camera_catalog_storage_test.py`, `preview_metadata_test.py` and `preview_store_restore_test.py` under `tools/audit/`. They compile production code with AddressSanitizer and UndefinedBehaviorSanitizer. Catalog cases cover exact-limit values, oversized input before writes, cleared outputs, missing slots and storage errors. Metadata cases cover ports, full field widths, truncation, embedded NUL, CRLF and trailing data. Full-module restore fixtures enforce display locking, simulate a newer live image and profile changes during SD reads, and check retry/resource cleanup. The store fixture changes only its directory constant to a temporary host path. Related regressions: `camera_pipeline_test.py`, `dashboard_camera_safety_test.py`, `preview_cache_ownership_test.py` and `demo_isolation_test.py`. Hardware checks: camera edit/default/view/fullscreen, reboot previews, SD availability and printer switching.
+
+### Console and Macro boundaries (v7.3.8-dev)
+
+`console_frame_input_test.py` compiles the production Console controller with real cJSON under AddressSanitizer/UndefinedBehaviorSanitizer; it checks nonterminated buffers, exact lengths, malformed/deep/oversized JSON, embedded NUL and trailing data. `macro_catalog_storage_test.py` exercises the actual macro controller with typed NVS faults, malformed/short favorite blobs, capacity, no-op and duplicate removal, save failures without RAM changes, retries, overlong catalog names and generation wrap. Both support released-source comparisons; use `--read-only` for the favorite-blob-only check. `command_surfaces_safety_test.py` checks favorite failure feedback/retry alongside command and printer ownership. Related regressions cover responsive/modernization Macros, calibration caller fixtures, Console transport and demo isolation. On hardware verify response display, Favorites persistence and profile switching with dialogs open.
+
+### Macro Favorite gestures (v7.3.9-dev)
+
+`command_surfaces_safety_test.py --lvgl-dir /path/to/lvgl --lvgl-lib /path/to/liblvgl.a` drives a real LVGL pointer through press/hold/release for Favorite add/remove, checks zero run dialogs/commands, persistent inline feedback, storage failure feedback/retry, and subsequent short activation. Existing command ownership checks run across all themes/densities/text sizes. Modernization, responsive Macros and calibration caller fixtures use short-click events for row activation. Verify the same hold/release and short-tap behavior on hardware.
+
+### Live device and Lighting input (v7.3.10-dev)
+
+`device_live_input_test.py` compiles actual device, motion and endstop controllers with AddressSanitizer, UndefinedBehaviorSanitizer and float-cast-overflow instrumentation. It injects a catalog replacement at a lock boundary, non-finite readings/flags, malformed request IDs, stale owners/responses and a timeout. `case_lighting_test.py --cjson-dir /path/to/cJSON` checks complete-document confirmation alongside transport and lock/revision behavior; optional `--source` allows released-source comparison. `console_frame_input_test.py` checks the shared JSON parser through Console. Related UI checks: Devices, motion diagnostics and Lighting; demo isolation covers simulated services. On hardware exercise Lighting, live Devices, endstops and profile switching.
+
+### Files request and parser bounds (v7.3.11-dev)
+
+`file_request_bounds_test.py` exercises production raw/text HTTP, metadata and print-start functions with real cJSON, full-width URL encoding, worst-case JSON escaping and failure cleanup. `printer_files_input_test.py` compiles the actual parser/formatter with sanitizers including float-cast-overflow; cases include invalid lists, mixed rows, escaped/max-width names, overlong omission, hostile numeric fields and size/depth limits. Both support `--source` for released-source comparisons. `files_load_worker_test.py` checks invalid-list feedback without preview publication alongside existing worker/page/profile ownership. Responsive Files, security boundaries and demo isolation cover related paths. Hardware checks remain: folders/search/refresh, details/thumbnails, long/non-ASCII names and print confirmation.
+
+### Folder thumbnails (v7.3.12-dev)
+
+`thumbnail_path_test.py` checks the shared resolver under AddressSanitizer/UndefinedBehaviorSanitizer, including root/nested folders, spaces, Unicode, reserved characters, in-place output, boundaries and unsafe paths. `printer_files_input_test.py` checks actual nested-file metadata formatting and resolved thumbnail output. The ROWS variant of `preview_cache_ownership_test.py` checks the real row downloader requests the folder-qualified PNG; its other variants exercise lightbox/worker ownership. `file_detail_ownership_test.py` and demo isolation cover related worker behavior. Hardware verification remains nested-file row/details/fullscreen previews and metadata, root files and inactive-printer previews.
+
+### OTA catalog inputs (v7.3.13-dev)
+
+`ota_catalog_input_test.py` compiles actual catalog parsing with real cJSON and firmware identity under AddressSanitizer, UndefinedBehaviorSanitizer and float-cast-overflow instrumentation. It covers valid Stable/Nightly entries, shared strict version parsing, malformed/trailing/deep documents, invalid asset sizes and the int64 conversion boundary. `--source` supports released-parser comparisons. Run `firmware_identity_test.py`, `ota_transfer_test.py`, OTA-related calibration dialog fixtures and demo isolation for related channel, transfer, UI and simulation behavior. Verify Remote Builds and installed channel labels on hardware.

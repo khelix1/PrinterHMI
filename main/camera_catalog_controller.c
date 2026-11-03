@@ -19,8 +19,10 @@ static bool valid_profile(int profile_index)
 
 static bool valid_url(const char *url)
 {
-    return !url || !url[0] ||
-           strncmp(url, "http://", 7) == 0 ||
+    if (!url || !url[0]) return true;
+    if (strnlen(url, MOONRAKER_CONFIG_CAMERA_URL_LENGTH) >=
+        MOONRAKER_CONFIG_CAMERA_URL_LENGTH) return false;
+    return strncmp(url, "http://", 7) == 0 ||
            strncmp(url, "https://", 8) == 0;
 }
 
@@ -85,11 +87,11 @@ static void load_view(int profile_index, size_t camera_index,
 bool camera_catalog_get(int profile_index, size_t camera_index,
                         camera_catalog_entry_t *entry)
 {
+    if (entry) memset(entry, 0, sizeof(*entry));
     if (!entry || !valid_profile(profile_index) ||
         camera_index >= CAMERA_CATALOG_MAX_CAMERAS) {
         return false;
     }
-    memset(entry, 0, sizeof(*entry));
     if (camera_index == 0) {
         const char *url = moonraker_config_camera_stream_url(profile_index);
         if (!url || !url[0]) return true;
@@ -100,19 +102,20 @@ bool camera_catalog_get(int profile_index, size_t camera_index,
         return true;
     }
     nvs_handle_t handle;
-    if (nvs_open(CAMERA_NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
-        return true;
+    esp_err_t opened = nvs_open(CAMERA_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (opened != ESP_OK) {
+        return opened == ESP_ERR_NVS_NOT_FOUND;
     }
     char key[16];
     slot_key(key, sizeof(key), profile_index, camera_index);
     size_t length = sizeof(entry->stream_url);
     esp_err_t error = nvs_get_str(handle, key, entry->stream_url, &length);
     nvs_close(handle);
-    if (error != ESP_OK || !valid_url(entry->stream_url) ||
-        !entry->stream_url[0]) {
-        entry->stream_url[0] = '\0';
-        return true;
+    if (error != ESP_OK || !valid_url(entry->stream_url)) {
+        memset(entry->stream_url, 0, sizeof(entry->stream_url));
+        return error == ESP_ERR_NVS_NOT_FOUND;
     }
+    if (!entry->stream_url[0]) return true;
     load_camera_name(profile_index, camera_index,
                      entry->name, sizeof(entry->name));
     entry->configured = true;
@@ -125,7 +128,9 @@ bool camera_catalog_set(int profile_index, size_t camera_index,
 {
     if (!valid_profile(profile_index) ||
         camera_index >= CAMERA_CATALOG_MAX_CAMERAS ||
-        !valid_url(stream_url)) {
+        !valid_url(stream_url) ||
+        (name && strnlen(name, CAMERA_CATALOG_NAME_LENGTH) >=
+            CAMERA_CATALOG_NAME_LENGTH)) {
         return false;
     }
     if (camera_index == 0 &&

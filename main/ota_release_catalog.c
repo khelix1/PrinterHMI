@@ -3,6 +3,7 @@
 #include "demo_ota.h"
 #endif
 #include "ota_release_catalog.h"
+#include "json_document_parse.h"
 #include "firmware_identity.h"
 #include "network_activity_controller.h"
 
@@ -20,6 +21,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -119,38 +121,6 @@ static void catalog_fail(const char *message)
         message ? message : "unknown error");
 
 }
-
-
-static bool parse_semver(
-    const char *text,
-    int *major,
-    int *minor,
-    int *patch)
-{
-    if (!text || !major || !minor || !patch) {
-        return false;
-    }
-
-    const char *version = text[0] == 'v' ? text + 1 : text;
-    int consumed = 0;
-
-    if (sscanf(
-            version,
-            "%d.%d.%d%n",
-            major,
-            minor,
-            patch,
-            &consumed) != 3) {
-        return false;
-    }
-
-    return version[consumed] == '\0' &&
-           *major >= 0 &&
-           *minor >= 0 &&
-           *patch >= 0;
-}
-
-
 
 
 static void copy_json_string(
@@ -258,7 +228,8 @@ static bool parse_releases(
         return false;
     }
 
-    cJSON *root = cJSON_Parse(json);
+    size_t length = strnlen(json, RELEASE_RESPONSE_MAX);
+    cJSON *root = json_document_parse_bounded(json, length, RELEASE_RESPONSE_MAX - 1, 16);
     if (!cJSON_IsArray(root)) {
         cJSON_Delete(root);
         return false;
@@ -310,7 +281,7 @@ static bool parse_releases(
         bool stable =
             !prerelease &&
             tag->valuestring[0] == 'v' &&
-            parse_semver(
+            firmware_identity_parse_stable_version(
                 tag->valuestring,
                 &major,
                 &minor,
@@ -378,8 +349,14 @@ static bool parse_releases(
             continue;
         }
 
-        ota_release_entry_t *entry =
-            &catalog->entries[catalog->count];
+        cJSON *size = cJSON_GetObjectItemCaseSensitive(matched_asset, "size");
+        if (size && (!cJSON_IsNumber(size) || !isfinite(size->valuedouble) ||
+            size->valuedouble < 0 || size->valuedouble >= 9223372036854775808.0 ||
+            floor(size->valuedouble) != size->valuedouble)) continue;
+
+        ota_release_entry_t *entry = &catalog->entries[catalog->count];
+        memset(entry, 0, sizeof(*entry));
+        if (size) entry->asset_size = (int64_t)size->valuedouble;
 
         copy_json_string(
             entry->version,
@@ -412,12 +389,6 @@ static bool parse_releases(
                 "%.10s %.5s UTC",
                 published->valuestring,
                 published->valuestring + 11);
-        }
-
-        cJSON *size = cJSON_GetObjectItemCaseSensitive(
-            matched_asset, "size");
-        if (cJSON_IsNumber(size)) {
-            entry->asset_size = (int64_t)size->valuedouble;
         }
 
         if (stable) {

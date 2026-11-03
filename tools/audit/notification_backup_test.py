@@ -51,7 +51,7 @@ source=(root/'main/settings_backup.c').read_text()
 def function(name):
     a=source.index('bool '+name+'(')
     return source[a:source.index('\n}',a)+3]
-functions='\n'.join(function(name) for name in [
+functions=function('promote_backup_file')+'\n'+'\n'.join(function(name) for name in [
     'settings_backup_export_with_progress','settings_backup_restore_with_progress',
     'settings_backup_restore_encrypted_with_progress'])
 preamble=r'''
@@ -74,7 +74,7 @@ static char directory[512],backup[512],temporary[512],previous[512];
 #define SETTINGS_BACKUP_PREVIOUS_PATH previous
 #define OPERATOR_EVENT_ERROR 1
 #define OPERATOR_EVENT_INFO 2
-static bool load_ok=true,apply_ok=true;
+static bool load_ok=true,apply_ok=true,rollback_ok=false;
 static unsigned applies,captures,loads,phase_count;
 static settings_backup_stage_t phases[8];
 static void set_status(char *out,size_t n,const char *message){snprintf(out,n,"%s",message);}
@@ -83,13 +83,13 @@ static void capture_current(settings_backup_snapshot_t *s){captures++;s->value=7
 static bool load_backup_snapshot(settings_backup_snapshot_t *s,char *out,size_t n){loads++;s->value=42;if(!load_ok)set_status(out,n,"Invalid backup");return load_ok;}
 static bool load_encrypted_backup_snapshot(const char *p,settings_backup_snapshot_t *s,char *out,size_t n){
  loads++;s->value=42;if(strcmp(p,"correct-passphrase")){set_status(out,n,"Passphrase is incorrect or the encrypted backup was changed.");return false;}return load_ok;}
-static bool apply_snapshot(const settings_backup_snapshot_t *s){applies++;assert(s->value==(applies%2==0&&!apply_ok?7:42));return apply_ok;}
+static bool apply_snapshot(const settings_backup_snapshot_t *s){applies++;assert(s->value==(applies%2==0&&!apply_ok?7:42));return applies==2?rollback_ok:apply_ok;}
 static cJSON *snapshot_to_json(const settings_backup_snapshot_t *s,bool keys){assert(s->value==7&&!keys);static cJSON json;return &json;}
 static char *cJSON_PrintBuffered(cJSON *s,int n,bool pretty){(void)s;(void)n;(void)pretty;return strdup("{\"backup\":true}");}
 static void cJSON_Delete(cJSON *s){(void)s;}
 static void cJSON_free(void *s){free(s);}
 static void progress(settings_backup_stage_t phase,void *context){assert(context==phases);assert(phase_count<8);phases[phase_count++]=phase;}
-static void reset(void){applies=captures=loads=phase_count=0;load_ok=apply_ok=true;}
+static void reset(void){applies=captures=loads=phase_count=0;load_ok=apply_ok=true;rollback_ok=false;}
 '''
 checks=r'''
 int main(int argc,char **argv){
@@ -107,11 +107,13 @@ int main(int argc,char **argv){
  reset();assert(settings_backup_restore_with_progress(progress,phases,status,sizeof(status)));
  assert(applies==1&&captures==1&&loads==1&&phase_count==2&&phases[1]==SETTINGS_BACKUP_STAGE_APPLYING&&strstr(status,"Reboot"));
  reset();apply_ok=false;assert(!settings_backup_restore_with_progress(progress,phases,status,sizeof(status)));
- assert(applies==2&&phase_count==3&&phases[2]==SETTINGS_BACKUP_STAGE_ROLLING_BACK&&strstr(status,"previous settings"));
+ assert(applies==2&&phase_count==3&&phases[2]==SETTINGS_BACKUP_STAGE_ROLLING_BACK&&strstr(status,"could not be fully reapplied"));
  reset();assert(settings_backup_restore_encrypted_with_progress("correct-passphrase",progress,phases,status,sizeof(status)));
  assert(applies==1&&captures==1&&phase_count==2&&phases[0]==SETTINGS_BACKUP_STAGE_AUTHENTICATING&&phases[1]==SETTINGS_BACKUP_STAGE_APPLYING&&strstr(status,"Reboot"));
  reset();apply_ok=false;assert(!settings_backup_restore_encrypted_with_progress("correct-passphrase",progress,phases,status,sizeof(status)));
- assert(applies==2&&phase_count==3&&phases[2]==SETTINGS_BACKUP_STAGE_ROLLING_BACK);
+ assert(applies==2&&phase_count==3&&phases[2]==SETTINGS_BACKUP_STAGE_ROLLING_BACK&&strstr(status,"could not be fully reapplied"));
+ reset();apply_ok=false;rollback_ok=true;assert(!settings_backup_restore_encrypted_with_progress("correct-passphrase",NULL,NULL,status,sizeof(status)));assert(applies==2&&strstr(status,"were reapplied"));
+ reset();apply_ok=false;rollback_ok=true;assert(!settings_backup_restore_with_progress(NULL,NULL,status,sizeof(status)));assert(applies==2&&strstr(status,"were reapplied"));
  reset();assert(settings_backup_restore_with_progress(NULL,NULL,status,sizeof(status))&&applies==1&&!phase_count);
  reset();assert(settings_backup_restore_encrypted_with_progress("correct-passphrase",NULL,NULL,status,sizeof(status))&&applies==1&&!phase_count);
  puts("PASS: actual plain export and plain/encrypted restore stage order, validation/authentication rejection before settings changes, rollback, NULL callback callers and real temporary-file promotion");

@@ -9,6 +9,7 @@ bool printer_simulation_start_file(moonraker_state_t *s,const char *path)
  if(strcmp(s->printer_state,"standby") && strcmp(s->printer_state,"ready") && strcmp(s->printer_state,"complete") && strcmp(s->printer_state,"cancelled"))return false;
  for(const unsigned char *p=(const unsigned char *)path;*p;p++)if(*p<32 || *p==127 || *p=='"')return false;
  snprintf(s->printer_file,sizeof(s->printer_file),"%s",path);strcpy(s->printer_state,"printing");
+ ++s->print_job_revision;
  s->progress=s->print_duration=0;s->current_layer=0;s->total_layer=100;s->current_gcode_z=s->toolhead_z=.2;
  s->nozzle_target=210;s->bed_target=60;s->part_fan_speed=65;return true;
 }
@@ -43,9 +44,9 @@ bool printer_simulation_apply(moonraker_state_t *state,bool excluded[2],bool *se
  else if(sscanf(command,"SET_GCODE_OFFSET Z_ADJUST=%lf",&v)==1){if(!isfinite(v)||v<-10||v>10)return false;state->z_offset+=v;}
  else if(!strcmp(command,"SET_GCODE_OFFSET Z=0 MOVE=1"))state->z_offset=0;
  else if(strstr(command,"G91\nG1 ")){char axis;if(sscanf(command,"G91\nG1 %c%lf",&axis,&v)==2){double *position=axis=='X'?&state->toolhead_x:axis=='Y'?&state->toolhead_y:axis=='Z'?&state->toolhead_z:NULL;if(!isfinite(v)||fabs(v)>1000)return false;if(position)*position+=v;}}
- else if(!strcmp(command,"M112")){strcpy(state->printer_state,"shutdown");state->nozzle_target=state->bed_target=state->part_fan_speed=state->heater_target=0;state->heater_on=false;state->drybox_active_program=0;state->drybox_fan_speed=0;}
- else if(!strcmp(command,"FIRMWARE_RESTART"))strcpy(state->printer_state,"standby");
- else if(!strcmp(command,"CANCEL_PRINT")){if(!state->moonraker_ok || !state->live_data_ok || (strcmp(state->printer_state,"printing") && strcmp(state->printer_state,"paused")))return false;snprintf(state->printer_state,sizeof(state->printer_state),"cancelled");state->nozzle_target=state->bed_target=state->part_fan_speed=0;}
+ else if(!strcmp(command,"M112")){++state->print_job_revision;strcpy(state->printer_state,"shutdown");state->nozzle_target=state->bed_target=state->part_fan_speed=state->heater_target=0;state->heater_on=false;state->drybox_active_program=0;state->drybox_fan_speed=0;}
+ else if(!strcmp(command,"FIRMWARE_RESTART")){++state->print_job_revision;strcpy(state->printer_state,"standby");}
+ else if(!strcmp(command,"CANCEL_PRINT")){if(!state->moonraker_ok || !state->live_data_ok || (strcmp(state->printer_state,"printing") && strcmp(state->printer_state,"paused")))return false;++state->print_job_revision;snprintf(state->printer_state,sizeof(state->printer_state),"cancelled");state->nozzle_target=state->bed_target=state->part_fan_speed=0;}
  else return false;
  return true;
 }
@@ -56,6 +57,7 @@ bool printer_simulation_scenario(moonraker_state_t *s,const char *scenario)
  const char *names[]={"idle","printing","paused","complete","offline","error"};
  int index=-1;for(unsigned i=0;i<6;i++)if(!strcmp(scenario,names[i]))index=(int)i;
  if(index<0)return false;
+ ++s->print_job_revision;
  s->moonraker_ok=s->live_data_ok=index!=4;
  snprintf(s->printer_state,sizeof(s->printer_state),"%s",index==0?"standby":index==4?"offline":scenario);
  if(index==1||index==2){
@@ -89,7 +91,7 @@ void printer_simulation_advance(moonraker_state_t *s,double seconds)
   s->current_layer=(int)ceil(s->progress*s->total_layer);
   s->current_gcode_z=s->toolhead_z=s->current_layer*.2;
   s->live_velocity=85*factor;s->live_flow=8.4*s->flow_factor/100.;
-  if(s->progress>=1){snprintf(s->printer_state,sizeof(s->printer_state),"complete");s->live_velocity=s->live_flow=0;s->nozzle_target=s->bed_target=s->part_fan_speed=0;}
+  if(s->progress>=1){++s->print_job_revision;snprintf(s->printer_state,sizeof(s->printer_state),"complete");s->live_velocity=s->live_flow=0;s->nozzle_target=s->bed_target=s->part_fan_speed=0;}
  }else s->live_velocity=s->live_flow=0;
 }
 

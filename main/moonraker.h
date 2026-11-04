@@ -124,6 +124,7 @@ typedef struct {
     bool live_data_ok;
     bool moonraker_ok;
 
+    uint32_t print_job_revision; /* Changes when the observed job context is invalidated. */
     char printer_state[32];
     char printer_file[256];
 } moonraker_state_t;
@@ -199,6 +200,7 @@ typedef struct {
     char *buf;
     int len;
     int cap;
+    bool overflowed;
 } http_capture_t;
 
 void moonraker_module_init(void);
@@ -263,9 +265,6 @@ void moonraker_state_publish_http_fallback(
 
 esp_err_t moonraker_http_event_handler(esp_http_client_event_t *evt);
 
-const char *json_find_string(const char *json, const char *key, char *out, size_t out_len);
-bool json_find_number_after(const char *json, const char *anchor, const char *key, double *out);
-bool json_find_number_after_key(const char *json, const char *key, double *out);
 bool json_find_best_thumbnail_path(const char *json, char *out, size_t out_sz);
 
 bool moonraker_test_connection(const char *host,

@@ -1,6 +1,6 @@
 #include "thumbnail_path.h"
 #include "printer_files.h"
-#include "moonraker.h"
+#include "moonraker_file_metadata.h"
 
 #include <stdio.h>
 #include <limits.h>
@@ -42,17 +42,16 @@ bool printer_files_build_metadata_text(const char *file,
         return false;
     }
 
-    double est = 0.0;
-    double filament = 0.0;
-    double layer_height = 0.0;
-    double object_height = 0.0;
-    double size = 0.0;
+    if (thumbnail_path && thumbnail_path_sz) thumbnail_path[0] = 0;
+    const cJSON *result;
+    cJSON *root = moonraker_metadata_parse(metadata_json, &result);
+    if (!root) return false;
 
-    json_find_number_after_key(metadata_json, "\"estimated_time\"", &est);
-    json_find_number_after_key(metadata_json, "\"filament_total\"", &filament);
-    json_find_number_after_key(metadata_json, "\"layer_height\"", &layer_height);
-    json_find_number_after_key(metadata_json, "\"object_height\"", &object_height);
-    json_find_number_after_key(metadata_json, "\"size\"", &size);
+    double est = moonraker_metadata_number(result, "estimated_time");
+    double filament = moonraker_metadata_number(result, "filament_total");
+    double layer_height = moonraker_metadata_number(result, "layer_height");
+    double object_height = moonraker_metadata_number(result, "object_height");
+    double size = moonraker_metadata_number(result, "size");
 
     char eta[32];
     printer_files_seconds_to_hhmm(est, eta, sizeof(eta));
@@ -60,12 +59,13 @@ bool printer_files_build_metadata_text(const char *file,
     bool has_thumb = false;
     if (thumbnail_path && thumbnail_path_sz > 0) {
         thumbnail_path[0] = 0;
-        has_thumb = json_find_best_thumbnail_path(metadata_json,
-                                                  thumbnail_path,
-                                                  thumbnail_path_sz);
+        has_thumb = moonraker_metadata_best_thumbnail(result,
+                                                        thumbnail_path, thumbnail_path_sz);
         if (has_thumb) has_thumb = thumbnail_path_resolve(
             file, thumbnail_path, thumbnail_path, thumbnail_path_sz);
     }
+
+    cJSON_Delete(root);
 
     int filament_m = metadata_integer(filament, 1.0 / 1000.0);
     int layer_x100 = metadata_integer(layer_height, 100);

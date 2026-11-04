@@ -74,8 +74,10 @@ bool moonraker_live_transport_fetch(
     const char *api_key,
     char *response_buffer,
     size_t buffer_size,
+    size_t *response_length_out,
     int *http_status_out)
 {
+    if (response_length_out) *response_length_out = 0;
     if (http_status_out) {
         *http_status_out = 0;
     }
@@ -175,5 +177,6 @@ bool moonraker_live_transport_fetch(
         return false;
     }
 
+    if (response_length_out) *response_length_out = capture.length;
     return true;
 }

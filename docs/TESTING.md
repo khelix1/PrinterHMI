@@ -3363,3 +3363,69 @@ Run `camera_catalog_storage_test.py`, `preview_metadata_test.py` and `preview_st
 ### OTA catalog inputs (v7.3.13-dev)
 
 `ota_catalog_input_test.py` compiles actual catalog parsing with real cJSON and firmware identity under AddressSanitizer, UndefinedBehaviorSanitizer and float-cast-overflow instrumentation. It covers valid Stable/Nightly entries, shared strict version parsing, malformed/trailing/deep documents, invalid asset sizes and the int64 conversion boundary. `--source` supports released-parser comparisons. Run `firmware_identity_test.py`, `ota_transfer_test.py`, OTA-related calibration dialog fixtures and demo isolation for related channel, transfer, UI and simulation behavior. Verify Remote Builds and installed channel labels on hardware.
+
+
+### v7.3.14-dev command preservation
+
+Run `python3 tools/audit/printer_action_resolver_test.py` and
+`python3 tools/audit/estop_transport_test.py`. The first links the actual macro
+builder and action resolver with a catalog fixture under ASan/UBSan. It verifies
+a full 639-byte parameterized command, no partial result for oversized input,
+empty/null arguments, macro aliases, confirmation classes and G28 fallback.
+`--source` can select an older resolver to reproduce its silent truncation.
+
+The transport test executes the actual WebSocket and HTTP builders with typed
+SDK fixtures. It checks both maximum-length plain commands and worst-case
+supported JSON escaping, rejected control bytes, dedicated emergency/restart
+endpoints, selected host/port, TLS/API authentication, arbitration and failures.
+The Console transport regression separately checks literal commands and inline
+feedback ownership. Build and exercise the tablet with
+`./tools/build_idf6_hosted3.sh`; host tests do not establish target stack headroom.
+
+
+### v7.3.15-dev saved CA recovery
+
+Run `python3 tools/audit/tls_trust_store_test.py` and
+`python3 tools/audit/security_boundaries_test.py`. The first compiles the actual
+CA store and HTTPS/WSS policy with typed NVS and allocation fixtures under
+AddressSanitizer/UndefinedBehaviorSanitizer. It covers transient open/read retry,
+missing namespace/key caching, PSRAM/internal-RAM allocation paths, malformed
+returned lengths and strings, per-profile ownership, import/write failures,
+embedded NUL rejection, maximum file length and recovery without plaintext
+fallback. `--source` selects an older trust store to reproduce the sticky load
+failure. Fixtures implement NVS's returned string length including its NUL.
+
+The existing security suite also verifies backup TLS/camera compatibility,
+URL validation, duplicate-endpoint TLS policy and import rollback. Host PEM
+fixtures test ownership and policy, not real X.509 signatures or TLS handshakes.
+Build and validate firmware locally with `./tools/build_idf6_hosted3.sh`.
+
+### v7.3.16-dev WebSocket response validation
+
+Run `python3 tools/audit/websocket_response_test.py` for the actual response
+router and discovery handlers under ASan/UBSan. It checks exact-length input,
+invalid framing and IDs, and preservation of discovered controls and
+configuration after invalid replies. The existing fragment and readiness tests
+cover assembly and readiness independently.
+
+### v7.3.17-dev HTTP response boundaries
+
+`printer_files_input_test.py` checks structured status and metadata lookups,
+including missing fields that must not be borrowed from adjacent objects.
+`file_request_bounds_test.py` feeds the real HTTP capture callback and checks
+overflow, exact-fit replies, embedded NUL rejection, and the status-only probe.
+The layer and preview ownership suites exercise the affected display paths.
+
+### v7.3.18-dev live number and map bounds
+
+The connection refresh race suite exercises actual WebSocket publication with
+invalid positions, scaled fan speeds, heater targets and Drybox codes.
+The printer file input suite exercises the shared numeric guard on HTTP data.
+The object layout suite checks that outlying map points stay inside the
+drawable rectangle.
+
+### v7.3.19-dev object names on the wire
+
+The WebSocket response suite verifies escaped subscription keys using cJSON
+and tests rollback on an undersized buffer. The object layout suite checks
+that delimiter and quoting characters are rejected before G-code dispatch.

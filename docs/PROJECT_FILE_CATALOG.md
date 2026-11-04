@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.3.13-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.3.25-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -59,6 +59,7 @@ when ownership or build membership changes.
 | `ui_probe_accuracy` | Repeated-sample probe checks and final statistics |
 | `ui_motion_diagnostics`, `motion_diagnostics_controller` | Runtime motion limits, geometry calculator and TMC status snapshots |
 | `ui_endstop_status`, `endstop_status_controller` | Idle-only live endstop requests, response ownership and timeout handling |
+| `printer_command_limits.h` | Shared macro/action capacity and escaped HTTP/WebSocket request envelope bounds |
 | `macro_parameter_utils` | Bounded parameter detection, search matching and validated command construction |
 | `ui_calibration_pressure_advance` | Pressure Advance workflow |
 | `ui_calibration_manual_probe` | Shared guided Probe/Z and Axis Twist TESTZ controls, including 0.005 mm fine steps |

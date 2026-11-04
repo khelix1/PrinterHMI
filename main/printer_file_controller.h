@@ -17,12 +17,3 @@ bool printer_file_controller_start_file(
     const char *filename,
     char *status_text,
     size_t status_text_size);
-
-bool printer_file_controller_start_selected_file(
-    bool network_ready,
-    const char *host,
-    int port,
-    const char *api_key,
-    char *status_text,
-    size_t status_text_size,
-    printer_file_controller_popup_cb_t close_detail_popup);

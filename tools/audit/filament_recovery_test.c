@@ -65,6 +65,11 @@ static void lifetime_checks(void){
  command_ok=false;click(buttons[0]);assert(send_count==1&&!action_pending&&strstr(lv_label_get_text(message_label),"retry")&&selected_temperature==235);
  command_ok=true;send_mode=1;click(buttons[0]);assert(send_count==2&&!strcmp(sent,"HMI_FILAMENT_HEAT TEMP=235")&&action_pending);
  click(buttons[0]);assert(send_count==2);ui_filament_recovery_close();ui_filament_recovery_show(send);click(buttons[0]);assert(send_count==2);lv_tick_inc(3000);click(buttons[0]);assert(send_count==3);ui_filament_recovery_close();
+ fixture_reset();ui_filament_recovery_show(send);
+ click(buttons[0]);fixture.print_job_revision++;click(buttons[0]);
+ assert(send_count==1&&strstr(lv_label_get_text(status_label),"Print changed"));
+ ui_filament_recovery_show(send);click(buttons[0]);assert(send_count==2);
+ ui_filament_recovery_close();
  for(int mode=2;mode<=6;mode++){
   fixture_reset();ui_filament_recovery_show(send);send_mode=mode;click(buttons[0]);assert(send_count==1&&!dispatching);
   if(mode==2)assert(!popup&&!refresh_timer&&!status_label&&!sensor_label&&!message_label&&!temperature_label&&!buttons[0]);

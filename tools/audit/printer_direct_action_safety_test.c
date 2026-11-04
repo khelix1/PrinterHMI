@@ -50,6 +50,9 @@ static void checks(void){
  accept=true;click(actions.home);assert(sends==before+2&&!strcmp(sent,"HOME_ALL"));click(actions.home);assert(sends==before+2);refresh();assert(lv_obj_has_state(actions.home,LV_STATE_DISABLED));
  close();open();refresh();click(actions.home);assert(sends==before+2);lv_tick_inc(5000);refresh();click(actions.home);assert(sends==before+3);
  reset();strcpy(live.printer_state,"printing");refresh();before=sends;click(actions.home);assert(sends==before);accept=false;click(actions.pause);assert(sends==before+1&&strstr(notice,"Send failed"));accept=true;click(actions.pause);click(actions.pause);assert(sends==before+2&&!strcmp(sent,"PAUSE"));refresh();assert(lv_obj_has_state(actions.pause,LV_STATE_DISABLED));
+ printer_ui_controller_pause(send);assert(sends==before+2);
+ live.print_job_revision++;printer_ui_controller_pause(send);assert(sends==before+3);
+ before++;
  strcpy(live.printer_state,"paused");refresh();assert(!s_direct_requests[ACTION_PAUSE].pending);unsigned r=recoveries;click(actions.resume);assert(recoveries==r+1);strcpy(live.printer_state,"printing");refresh();click(actions.pause);assert(sends==before+3);
  unsigned c=cancels,o=objects,m=motions;click(actions.cancel);click(actions.object);click(actions.motion);assert(cancels==c+1&&objects==o+1&&motions==m+1);
  for(unsigned during=1;during<=5;during++){reset();before=sends;nt=notes;mode=during;click(actions.home);assert(sends==before+1&&!s_action_dispatching);

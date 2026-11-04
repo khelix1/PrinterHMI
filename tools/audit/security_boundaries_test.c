@@ -17,7 +17,7 @@ static int open_error,set_error,commit_error,writes;
 static char stored[4][4096],pending[4096];
 static int pending_index;
 int nvs_open(const char *n,int mode,int *h){(void)n;(void)mode;*h=1;return open_error;}
-int nvs_get_str(int h,const char *k,char *out,size_t *n){(void)h;int index=-1;assert(sscanf(k,"ca_pem_%d",&index)==1&&index>=0&&index<4);strlcpy(out,stored[index],*n);return 0;}
+int nvs_get_str(int h,const char *k,char *out,size_t *n){(void)h;int index=-1;assert(sscanf(k,"ca_pem_%d",&index)==1&&index>=0&&index<4);strlcpy(out,stored[index],*n);*n=strlen(stored[index])+1;return 0;}
 int nvs_set_str(int h,const char *k,const char *s){(void)h;assert(sscanf(k,"ca_pem_%d",&pending_index)==1);writes++;strlcpy(pending,s,sizeof(pending));return set_error;}
 int nvs_commit(int h){(void)h;if(!commit_error)strcpy(stored[pending_index],pending);return commit_error;}
 void nvs_close(int h){(void)h;}

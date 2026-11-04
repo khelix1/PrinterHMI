@@ -189,7 +189,7 @@ lv_obj_t *ui_command_bar_create(lv_obj_t *parent, int x, int y, int w, int h)
     s_object_button = make_cmd(
         bar,
         LV_SYMBOL_LIST,
-        "Cancel object",
+        "Cancel Object",
         "CANCEL_OBJECT",
         269,
         244,

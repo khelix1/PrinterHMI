@@ -15,6 +15,7 @@
 #include "printer_connection_policy.h"
 #include "esp_heap_caps.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,9 +23,9 @@
 static lv_obj_t *s_cancel_confirm_popup = NULL;
 static lv_obj_t *s_cancel_status;
 static ui_printer_popups_send_gcode_cb_t s_cancel_send;
-static uint32_t s_cancel_owner, s_cancel_epoch;
+static uint32_t s_cancel_owner, s_cancel_epoch, s_cancel_job;
 static bool s_cancel_dispatching, s_cancel_pending;
-static uint32_t s_cancel_sent_owner, s_cancel_sent_at;
+static uint32_t s_cancel_sent_owner, s_cancel_sent_at, s_cancel_sent_job;
 static lv_obj_t *s_object_list_popup = NULL;
 static lv_obj_t *s_object_confirm_popup = NULL;
 static ui_printer_popups_send_gcode_cb_t s_send_gcode_cb = NULL;
@@ -34,11 +35,11 @@ static lv_obj_t *s_object_map = NULL;
 static lv_obj_t *s_object_rows[MOONRAKER_EXCLUDE_MAX_OBJECTS];
 static lv_obj_t *s_exclude_action_button = NULL;
 static int s_selected_object_index = -1;
-static uint32_t s_object_owner, s_object_epoch;
+static uint32_t s_object_owner, s_object_epoch, s_object_job;
 static ui_printer_popups_send_gcode_cb_t s_object_send;
 static lv_obj_t *s_object_status;
 static bool s_object_dispatching, s_object_pending;
-static uint32_t s_object_sent_owner, s_object_sent_at;
+static uint32_t s_object_sent_owner, s_object_sent_at, s_object_sent_job;
 static char s_object_sent_name[MOONRAKER_EXCLUDE_NAME_MAX];
 static char s_confirm_object[MOONRAKER_EXCLUDE_NAME_MAX];
 static lv_obj_t *control_layout(lv_obj_t *popup, const char *title);
@@ -46,7 +47,7 @@ static lv_obj_t *control_footer(lv_obj_t *popup);
 static int32_t control_width(int32_t preferred);
 static int32_t control_height(int32_t preferred);
 static lv_obj_t *s_control_popup = NULL;
-static uint32_t s_control_owner;
+static uint32_t s_control_owner, s_control_job;
 static uint32_t s_control_epoch;
 static bool s_control_dispatching;
 static ui_printer_popups_send_gcode_cb_t s_control_legacy_send;
@@ -126,7 +127,11 @@ static void confirm_cancel_cb(lv_event_t *event)
     if (strcmp(state.printer_state,"printing") && strcmp(state.printer_state,"paused")) {
         cancel_feedback("No active print to cancel. Back out and check the printer.");return;
     }
+    if (state.print_job_revision != s_cancel_job) {
+        cancel_feedback("Print changed. Back out and reopen this control.");return;
+    }
     if (s_cancel_pending && s_cancel_sent_owner == s_cancel_owner &&
+        s_cancel_sent_job == s_cancel_job &&
         lv_tick_elaps(s_cancel_sent_at) < 5000) {
         cancel_feedback("Cancel already sent. Check the printer before retrying.");return;
     }
@@ -134,14 +139,14 @@ static void confirm_cancel_cb(lv_event_t *event)
         cancel_feedback("Cancel unavailable. Back out and reopen this control.");return;
     }
     lv_obj_t *popup = s_cancel_confirm_popup;
-    uint32_t epoch = s_cancel_epoch, owner = s_cancel_owner;
+    uint32_t epoch = s_cancel_epoch, owner = s_cancel_owner, job = s_cancel_job;
     s_cancel_dispatching = true;
     bool accepted = false;
     if (s_control_send) accepted = s_control_send("CANCEL_PRINT");
     else { s_cancel_send("CANCEL_PRINT");accepted = true; }
     s_cancel_dispatching = false;
     if (accepted) {
-        s_cancel_pending = true;s_cancel_sent_owner = owner;s_cancel_sent_at = lv_tick_get();
+        s_cancel_pending = true;s_cancel_sent_owner = owner;s_cancel_sent_job = job;s_cancel_sent_at = lv_tick_get();
     }
     if (epoch != s_cancel_epoch || popup != s_cancel_confirm_popup ||
         owner != moonraker_config_generation()) return;
@@ -150,10 +155,14 @@ static void confirm_cancel_cb(lv_event_t *event)
 }
 static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
 {
-    if (s_cancel_confirm_popup && s_cancel_owner != moonraker_config_generation()) close_cancel_confirm_cb(NULL);
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    if (s_cancel_confirm_popup && (s_cancel_owner != moonraker_config_generation() ||
+        s_cancel_job != state.print_job_revision)) close_cancel_confirm_cb(NULL);
     if (s_cancel_confirm_popup) { lv_obj_move_foreground(s_cancel_confirm_popup); return; }
     s_cancel_send = send_cb;
     s_cancel_owner = moonraker_config_generation();
+    s_cancel_job = state.print_job_revision;
     s_cancel_confirm_popup = ui_popup_create(lv_layer_top(), control_width(620), control_height(320), UI_POPUP_DANGER);
     if (!s_cancel_confirm_popup) return;
     ++s_cancel_epoch;
@@ -168,7 +177,8 @@ static void show_cancel_print_confirm(ui_printer_popups_send_gcode_cb_t send_cb)
     ui_apply_custom_label_style(s_cancel_status, UI_FONT_BODY, UI_WARN);
     lv_obj_set_width(s_cancel_status, LV_PCT(100));
     lv_obj_add_event_cb(s_cancel_status, cancel_status_deleted, LV_EVENT_DELETE, NULL);
-    if (s_cancel_pending && s_cancel_sent_owner == s_cancel_owner && lv_tick_elaps(s_cancel_sent_at) < 5000)
+    if (s_cancel_pending && s_cancel_sent_owner == s_cancel_owner &&
+        s_cancel_sent_job == s_cancel_job && lv_tick_elaps(s_cancel_sent_at) < 5000)
         cancel_feedback("Cancel already sent. Check the printer before retrying.");
     lv_obj_t *footer = control_footer(s_cancel_confirm_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back",
@@ -219,7 +229,8 @@ static bool object_name_is_safe(const char *name)
              (const unsigned char *)name;
          *cursor;
          ++cursor) {
-        if (*cursor <= ' ' || *cursor == 0x7f) {
+        if (*cursor <= ' ' || *cursor == 0x7f ||
+            strchr(";#\"'\\=", *cursor)) {
             return false;
         }
     }
@@ -250,9 +261,13 @@ static void confirm_cancel_object_cb(lv_event_t *event)
         object_feedback("No active print. Close and check the printer.");return;
     }
     if (!object_name_is_safe(s_confirm_object)) return;
+    if (state.print_job_revision != s_object_job) {
+        object_feedback("Print changed. Back out and reopen this control.");return;
+    }
     if (s_object_pending && s_object_sent_owner == s_object_owner &&
+        s_object_sent_job == s_object_job &&
         !strcmp(s_object_sent_name,s_confirm_object) && lv_tick_elaps(s_object_sent_at) < 5000) {
-        object_feedback("Exclusion already sent. Check the printer before retrying.");return;
+        object_feedback("Cancel Object request already sent. Check the printer before retrying.");return;
     }
     /* Fresh validation must not overwrite the displayed list or its row data. */
     moonraker_exclude_state_t *live = heap_caps_calloc(1, sizeof(*live), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -266,26 +281,31 @@ static void confirm_cancel_object_cb(lv_event_t *event)
         if (live->available && !live->objects[i].excluded &&
             !strcmp(live->objects[i].name,s_confirm_object)) valid = true;
     heap_caps_free(live);
-    if (!valid) { object_feedback("Object unavailable or already excluded. Back out and refresh the list.");return; }
-    if (!s_control_send && !s_object_send) { object_feedback("Exclusion unavailable. Close and reopen the list.");return; }
+    moonraker_state_snapshot(&state);
+    if (s_object_owner != moonraker_config_generation() ||
+        state.print_job_revision != s_object_job) {
+        object_feedback("Printer or print changed. Back out and reopen this control.");return;
+    }
+    if (!valid) { object_feedback("Object unavailable or already canceled. Back out and refresh the list.");return; }
+    if (!s_control_send && !s_object_send) { object_feedback("Cancel Object unavailable. Close and reopen the list.");return; }
     char name[sizeof(s_confirm_object)], command[sizeof(s_confirm_object)+32];
     snprintf(name,sizeof(name),"%s",s_confirm_object);
     int written = snprintf(command,sizeof(command),"EXCLUDE_OBJECT NAME=%s",name);
     if (written <= 0 || (size_t)written >= sizeof(command)) return;
     lv_obj_t *list = s_object_list_popup, *confirm = s_object_confirm_popup;
-    uint32_t owner = s_object_owner, epoch = s_object_epoch;
+    uint32_t owner = s_object_owner, epoch = s_object_epoch, job = s_object_job;
     s_object_dispatching = true;
     bool accepted = false;
     if (s_control_send) accepted = s_control_send(command);
     else { s_object_send(command);accepted = true; }
     s_object_dispatching = false;
     if (accepted) {
-        s_object_pending = true;s_object_sent_owner = owner;s_object_sent_at = lv_tick_get();
+        s_object_pending = true;s_object_sent_owner = owner;s_object_sent_job = job;s_object_sent_at = lv_tick_get();
         snprintf(s_object_sent_name,sizeof(s_object_sent_name),"%s",name);
     }
     if (epoch != s_object_epoch || list != s_object_list_popup || confirm != s_object_confirm_popup ||
         owner != moonraker_config_generation()) return;
-    if (!accepted) { object_feedback("Exclusion not sent. Selection kept; check connection and retry.");return; }
+    if (!accepted) { object_feedback("Cancel Object request not sent. Selection kept; check connection and retry.");return; }
     close_object_list_cb(NULL);
 }
 static void show_object_confirm(const char *name)
@@ -298,7 +318,7 @@ static void show_object_confirm(const char *name)
     if (!s_object_confirm_popup) return;
     ++s_object_epoch;
     lv_obj_add_event_cb(s_object_confirm_popup, object_confirm_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_object_confirm_popup, ui_text("Cancel object?"));
+    lv_obj_t *body = control_layout(s_object_confirm_popup, ui_text("Cancel Object?"));
     lv_obj_t *message = lv_label_create(body);
     lv_label_set_text(message, "Stop printing only this object? The rest of the print continues.");
     ui_apply_custom_label_style(message, UI_FONT_BODY, UI_TEXT);
@@ -315,7 +335,7 @@ static void show_object_confirm(const char *name)
     lv_obj_t *footer = control_footer(s_object_confirm_popup);
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back",
         0, 0, 170, 48, close_object_confirm_cb, NULL, NULL);
-    lv_obj_t *exclude = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Exclude",
+    lv_obj_t *exclude = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Cancel Object",
         0, 0, 170, 48, confirm_cancel_object_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(exclude, 1);
 }
@@ -407,12 +427,14 @@ static lv_point_precise_t object_map_point(
         return result;
     }
 
-    result.x = area->x1 +
-        (lv_value_precise_t)((point->x - min_x) *
-            (double)lv_area_get_width(area) / width);
-    result.y = area->y2 -
-        (lv_value_precise_t)((point->y - min_y) *
-            (double)lv_area_get_height(area) / height);
+    /* Clamp before multiplying by the display size or casting. A polygon
+     * point outside the advertised bed must not overflow an LVGL coordinate. */
+    double x = (point->x - min_x) / width;
+    double y = (point->y - min_y) / height;
+    x = fmin(1.0, fmax(0.0, x));
+    y = fmin(1.0, fmax(0.0, y));
+    result.x = area->x1 + (lv_value_precise_t)(x * (area->x2 - area->x1));
+    result.y = area->y2 - (lv_value_precise_t)(y * (area->y2 - area->y1));
     return result;
 }
 
@@ -725,7 +747,7 @@ static void show_cancel_object_list(void)
         heap_caps_free(s_exclude_snapshot); s_exclude_snapshot = NULL; return;
     }
     lv_obj_add_event_cb(s_object_list_popup, object_list_deleted, LV_EVENT_DELETE, NULL);
-    lv_obj_t *body = control_layout(s_object_list_popup, ui_text("Cancel object"));
+    lv_obj_t *body = control_layout(s_object_list_popup, ui_text("Cancel Object"));
     char status[128];
     if (s_exclude_snapshot->truncated) snprintf(status, sizeof(status),
         "Select an object to stop. Showing the first %u objects.", (unsigned)MOONRAKER_EXCLUDE_MAX_OBJECTS);
@@ -770,7 +792,7 @@ static void show_cancel_object_list(void)
             lv_obj_set_style_pad_ver(row,10,0);
         }
         char text[MOONRAKER_EXCLUDE_NAME_MAX + 24];
-        snprintf(text, sizeof(text), object->excluded ? "[Excluded] %s" : object->current ? "[Current] %s" : "%s", object->name);
+        snprintf(text, sizeof(text), object->excluded ? "[Canceled] %s" : object->current ? "[Current] %s" : "%s", object->name);
         lv_obj_t *label = lv_label_create(row);
         lv_label_set_text(label, text);
         ui_apply_custom_label_style(label, UI_FONT_BODY, object->excluded ? UI_TEXT_DIM : UI_TEXT);
@@ -781,7 +803,7 @@ static void show_cancel_object_list(void)
     lv_obj_t *footer = control_footer(s_object_list_popup);
     lv_obj_t *close = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 160, 48, close_object_list_cb, NULL, NULL);
-    s_exclude_action_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Exclude",
+    s_exclude_action_button = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Cancel Object",
         0, 0, 230, 48, exclude_selected_cb, NULL, NULL);
     lv_obj_set_flex_grow(close, 1); lv_obj_set_flex_grow(s_exclude_action_button, 1);
     lv_obj_add_state(s_exclude_action_button, LV_STATE_DISABLED);
@@ -805,11 +827,15 @@ void ui_printer_popups_show_cancel(
 void ui_printer_popups_show_cancel_object(
     ui_printer_popups_send_gcode_cb_t send_cb)
 {
-    if (s_object_list_popup && s_object_owner != moonraker_config_generation()) close_object_list_cb(NULL);
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    if (s_object_list_popup && (s_object_owner != moonraker_config_generation() ||
+        s_object_job != state.print_job_revision)) close_object_list_cb(NULL);
     if (s_object_list_popup) { lv_obj_move_foreground(s_object_list_popup); return; }
     s_object_send = send_cb;
     s_send_gcode_cb = send_cb;
     s_object_owner = moonraker_config_generation();
+    s_object_job = state.print_job_revision;
 
     if (s_exclude_snapshot) {
         heap_caps_free(s_exclude_snapshot);
@@ -885,6 +911,9 @@ static bool control_send(const char *command,const char **error)
         *error="Printer changed. Cancel and reopen this control.";return false;
     }
     moonraker_state_t state;moonraker_state_snapshot(&state);
+    if (state.print_job_revision != s_control_job) {
+        *error="Print changed. Close and reopen this control.";return false;
+    }
     if (printer_connection_reason(&state)[0]) {
         *error="Printer is offline or Klipper is unavailable. Input kept.";return false;
     }
@@ -1217,10 +1246,13 @@ static void show_control_popup(const char *title, double current_value,
     ++s_control_epoch;
     s_control_legacy_send = s_send_gcode_cb;
     s_control_owner=moonraker_config_generation();
+    moonraker_state_t live;moonraker_state_snapshot(&live);
+    s_control_job=live.print_job_revision;
     s_custom_temp_title = custom_title;
     s_custom_temp_command_prefix = custom_command_prefix;
     s_custom_temp_max = custom_max;
-    s_custom_temp_initial = target_value > 0.0 ? (int)(target_value + 0.5) : 0;
+    s_custom_temp_initial = isfinite(target_value) && target_value > 0.0 && custom_max > 0
+        ? (int)(fmin(target_value, custom_max) + 0.5) : 0;
     lv_obj_add_event_cb(popup, control_popup_deleted_cb, LV_EVENT_DELETE, NULL);
     lv_obj_t *body = control_layout(popup, title);
     char current_text[32], target_text[32];

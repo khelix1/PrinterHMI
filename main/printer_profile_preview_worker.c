@@ -1,3 +1,4 @@
+#include "moonraker_http_objects.h"
 #include "thumbnail_path.h"
 #include "printer_profile_preview_worker.h"
 
@@ -226,22 +227,23 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     char state[32] = "";
     char file[160] = "";
 
-    const char *print_stats = strstr(stats, "\"print_stats\"");
-    if (!print_stats) print_stats = stats;
-
-    const char *webhooks = strstr(stats, "\"webhooks\"");
-    char klipper_state[32] = "";
-    if (webhooks) {
-        json_find_string(
-            webhooks, "state", klipper_state, sizeof(klipper_state));
-    }
+    const cJSON *status;
+    cJSON *root = moonraker_http_objects_parse(stats, strnlen(stats, sizeof(stats)),
+        sizeof(stats) - 1, &status);
+    const cJSON *hooks = cJSON_GetObjectItemCaseSensitive(status, "webhooks");
+    const char *klipper_state = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(hooks, "state"));
+    const bool ready = klipper_state && strcmp(klipper_state, "ready") == 0;
+    const cJSON *print_stats = cJSON_GetObjectItemCaseSensitive(status, "print_stats");
+    const char *parsed_state = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(print_stats, "state"));
+    const char *parsed_file = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(print_stats, "filename"));
+    if (parsed_state && strlen(parsed_state) < sizeof(state)) strlcpy(state, parsed_state, sizeof(state));
+    if (parsed_file && strlen(parsed_file) < sizeof(file)) strlcpy(file, parsed_file, sizeof(file));
 
     /* Moonraker can answer even when Klipper has no MCU, is starting,
      * or is shut down. That printer is not available to the operator. */
-    if (strcmp(klipper_state, "ready") != 0) {
-        bool fault =
-            strcmp(klipper_state, "shutdown") == 0 ||
-            strcmp(klipper_state, "error") == 0;
+    if (!ready) {
+        bool fault = klipper_state && (strcmp(klipper_state, "shutdown") == 0 ||
+            strcmp(klipper_state, "error") == 0);
 
         if (fault) {
             printer_profile_health_set_live_state(
@@ -258,13 +260,13 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
             TAG,
             "Profile %d Klipper is %s (%s)",
             index + 1,
-            klipper_state[0] ? klipper_state : "unavailable",
+            klipper_state && *klipper_state ? klipper_state : "unavailable",
             fault ? "offline" : "verifying");
+        cJSON_Delete(root);
         return;
     }
 
-    json_find_string(print_stats, "state", state, sizeof(state));
-    json_find_string(print_stats, "filename", file, sizeof(file));
+    cJSON_Delete(root);
 
     printer_profile_health_report_live_state(index, true, state);
 

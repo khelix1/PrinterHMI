@@ -1,3 +1,4 @@
+#include "moonraker_file_metadata.h"
 #include "moonraker.h"
 #include "printer_files.h"
 #include "moonraker_command_route.h"
@@ -10,7 +11,8 @@
 
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
-#include "cJSON.h"
+#include "moonraker_websocket_json.h"
+#include "moonraker_telemetry_number.h"
 #include "bed_mesh_controller.h"
 #include "calibration_capability_controller.h"
 #include "motion_diagnostics_controller.h"
@@ -184,11 +186,21 @@ bool moonraker_exclude_objects_available(void)
 }
 
 
+static bool print_state_is_active(const char *state)
+{
+    return state &&
+        (strcmp(state, "printing") == 0 ||
+         strcmp(state, "paused") == 0);
+}
+
+
 void moonraker_state_reset(void)
 {
     motion_diagnostics_controller_reset();
     state_lock();
+    uint32_t job_revision = g_moonraker_state.print_job_revision + 1;
     memset(&g_moonraker_state, 0, sizeof(g_moonraker_state));
+    g_moonraker_state.print_job_revision = job_revision;
     s_websocket_status_us = 0;
     klipper_readiness_set("--");
     if (g_moonraker_exclude_state) {
@@ -261,6 +273,8 @@ void moonraker_state_set_connection(
     bool moonraker_ok)
 {
     state_lock();
+    if (g_moonraker_state.live_data_ok && (!live_data_ok || !moonraker_ok))
+        ++g_moonraker_state.print_job_revision;
     g_moonraker_state.live_data_ok = live_data_ok;
     g_moonraker_state.moonraker_ok = moonraker_ok;
     if (!moonraker_ok) s_websocket_status_us = 0;
@@ -276,6 +290,7 @@ void moonraker_state_expire_websocket(int64_t maximum_age_us)
     int64_t now = esp_timer_get_time();
     if (maximum_age_us <= 0 || s_websocket_status_us <= 0 ||
         now < s_websocket_status_us || now - s_websocket_status_us > maximum_age_us) {
+        if (g_moonraker_state.live_data_ok) ++g_moonraker_state.print_job_revision;
         g_moonraker_state.live_data_ok = false;
         g_moonraker_state.moonraker_ok = false;
     }
@@ -468,6 +483,14 @@ void moonraker_state_publish_http_fallback(
     if (!update) return;
 
     state_lock();
+    bool was_active = print_state_is_active(g_moonraker_state.printer_state);
+    bool active = print_state_is_active(update->printer_state);
+    if (was_active != active ||
+        (active && update->printer_file &&
+         strcmp(update->printer_file, g_moonraker_state.printer_file)) ||
+        (g_moonraker_state.live_data_ok && !update->live_data_ok))
+        ++g_moonraker_state.print_job_revision;
+
     g_moonraker_state.chamber_temp = update->chamber_temp;
     g_moonraker_state.air_temp = update->air_temp;
     g_moonraker_state.humidity = update->humidity;
@@ -545,17 +568,7 @@ static bool json_number(
         ? cJSON_GetObjectItemCaseSensitive(object, name)
         : NULL;
 
-    if (!cJSON_IsNumber(item) || !out) return false;
-    *out = item->valuedouble;
-    return true;
-}
-
-
-static bool print_state_is_active(const char *state)
-{
-    return state &&
-        (strcmp(state, "printing") == 0 ||
-         strcmp(state, "paused") == 0);
+    return out && moonraker_telemetry_number(item, 1.0, out);
 }
 
 
@@ -581,7 +594,8 @@ static bool json_xy_array(
 
     cJSON *x = cJSON_GetArrayItem(array, 0);
     cJSON *y = cJSON_GetArrayItem(array, 1);
-    if (!cJSON_IsNumber(x) || !cJSON_IsNumber(y)) {
+    if (!moonraker_telemetry_number(x, 1.0, NULL) ||
+        !moonraker_telemetry_number(y, 1.0, NULL)) {
         return false;
     }
 
@@ -660,7 +674,8 @@ static void merge_exclude_object_locked(cJSON *exclude_object)
                 : NULL;
 
             if (!cJSON_IsString(name) || !name->valuestring ||
-                !name->valuestring[0]) {
+                !name->valuestring[0] ||
+                strlen(name->valuestring) >= MOONRAKER_EXCLUDE_NAME_MAX) {
                 continue;
             }
 
@@ -721,7 +736,8 @@ static void merge_exclude_object_locked(cJSON *exclude_object)
         for (int i = 0; i < count; ++i) {
             cJSON *name = cJSON_GetArrayItem(excluded, i);
             if (!cJSON_IsString(name) || !name->valuestring ||
-                !name->valuestring[0]) {
+                !name->valuestring[0] ||
+                strlen(name->valuestring) >= MOONRAKER_EXCLUDE_NAME_MAX) {
                 continue;
             }
 
@@ -756,7 +772,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         return MOONRAKER_WEBSOCKET_MESSAGE_IGNORED;
     }
 
-    cJSON *root = cJSON_ParseWithLength(json, length);
+    cJSON *root = moonraker_websocket_parse_object(json, length);
     if (!root) return MOONRAKER_WEBSOCKET_MESSAGE_IGNORED;
 
     cJSON *method = cJSON_GetObjectItemCaseSensitive(root, "method");
@@ -784,6 +800,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 
     if (lifecycle != MOONRAKER_WEBSOCKET_MESSAGE_IGNORED) {
         state_lock();
+        ++g_moonraker_state.print_job_revision;
         s_websocket_status_us = lifecycle == MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED
             ? 0 : esp_timer_get_time();
 
@@ -847,6 +864,8 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     cJSON *klipper_state = cJSON_GetObjectItemCaseSensitive(webhooks, "state");
     if (cJSON_IsString(klipper_state) && klipper_state->valuestring) {
         klipper_readiness_set(klipper_state->valuestring);
+        if (!s_klipper_ready && g_moonraker_state.live_data_ok)
+            ++g_moonraker_state.print_job_revision;
         ++updates;
     }
 
@@ -877,7 +896,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
             ? incoming_filename->valuestring
             : NULL;
 
-    bool next_active = print_state_is_active(next_state);
+    bool next_active = print_state_is_active(next_state ? next_state : g_moonraker_state.printer_state);
     bool previous_active = print_state_is_active(
         g_moonraker_state.printer_state);
     bool filename_changed =
@@ -889,6 +908,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         (!next_active && previous_active && next_state);
 
     if (job_context_changed) {
+        ++g_moonraker_state.print_job_revision;
         reset_print_job_locked();
     }
 
@@ -930,9 +950,9 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
             cJSON *y = cJSON_GetArrayItem(position, 1);
             cJSON *z = cJSON_GetArrayItem(position, 2);
 
-            if (cJSON_IsNumber(x) &&
-                cJSON_IsNumber(y) &&
-                cJSON_IsNumber(z)) {
+            if (moonraker_telemetry_number(x, 1.0, NULL) &&
+                moonraker_telemetry_number(y, 1.0, NULL) &&
+                moonraker_telemetry_number(z, 1.0, NULL)) {
                 g_moonraker_state.toolhead_x = x->valuedouble;
                 g_moonraker_state.toolhead_y = y->valuedouble;
                 g_moonraker_state.toolhead_z = z->valuedouble;
@@ -984,7 +1004,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         if (position) {
             cJSON *z = cJSON_GetArrayItem(position, 2);
             g_moonraker_state.current_gcode_z =
-                cJSON_IsNumber(z) && isfinite(z->valuedouble)
+                moonraker_telemetry_number(z, 1.0, NULL)
                     ? z->valuedouble : -1.0;
             ++updates;
         }
@@ -996,14 +1016,21 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
             cJSON_GetArraySize(homing_origin) >= 3) {
             cJSON *z_origin = cJSON_GetArrayItem(homing_origin, 2);
 
-            if (cJSON_IsNumber(z_origin)) {
+            if (moonraker_telemetry_number(z_origin, 1.0, NULL)) {
                 g_moonraker_state.z_offset = z_origin->valuedouble;
                 ++updates;
             }
         }
     }
 
-#define MERGE_NUMBER(object_name, field_name, destination, scale) do {     cJSON *object = cJSON_GetObjectItemCaseSensitive(status, object_name);     if (json_number(object, field_name, &value)) {         g_moonraker_state.destination = value * (scale);         ++updates;     } } while (0)
+#define MERGE_NUMBER(object_name, field_name, destination, scale) do { \
+    const cJSON *object = cJSON_GetObjectItemCaseSensitive(status, object_name); \
+    const cJSON *field = cJSON_GetObjectItemCaseSensitive(object, field_name); \
+    if (moonraker_telemetry_number(field, scale, &value)) { \
+        g_moonraker_state.destination = value; \
+        ++updates; \
+    } \
+} while (0)
 
     MERGE_NUMBER("temperature_sensor drybox_center", "temperature", chamber_temp, 1.0);
     MERGE_NUMBER("sht3x drybox_env", "temperature", air_temp, 1.0);
@@ -1027,19 +1054,10 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         status,
         "motion_report");
 
-    if (json_number(
-            motion_report,
-            "live_extruder_velocity",
-            &value)) {
-        static const double filament_area_mm2 = 2.405281875;
-
-        g_moonraker_state.live_flow =
-            fabs(value) * filament_area_mm2;
-
-        if (g_moonraker_state.live_flow < 0.01) {
-            g_moonraker_state.live_flow = 0.0;
-        }
-
+    const cJSON *extruder_velocity =
+        cJSON_GetObjectItemCaseSensitive(motion_report, "live_extruder_velocity");
+    if (moonraker_telemetry_number(extruder_velocity, 2.405281875, &value)) {
+        g_moonraker_state.live_flow = fabs(value) < 0.01 ? 0.0 : fabs(value);
         ++updates;
     }
 
@@ -1152,11 +1170,11 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 
     cJSON *macro = cJSON_GetObjectItemCaseSensitive(
         status, "gcode_macro DRYBOX_VARS");
-    if (json_number(macro, "selected_program", &value)) {
+    if (json_number(macro, "selected_program", &value) && moonraker_drybox_program(value, 2)) {
         g_moonraker_state.drybox_selected_program = (int)value;
         ++updates;
     }
-    if (json_number(macro, "active_program", &value)) {
+    if (json_number(macro, "active_program", &value) && moonraker_drybox_program(value, 3)) {
         g_moonraker_state.drybox_active_program = (int)value;
         ++updates;
     }
@@ -1225,112 +1243,13 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 }
 
 
-const char *json_find_string(const char *json, const char *key, char *out, size_t out_len)
-{
-    if (!json || !key || !out || out_len == 0) return NULL;
-
-    char pattern[64];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-
-    const char *p = strstr(json, pattern);
-    if (!p) return NULL;
-
-    p = strchr(p, ':');
-    if (!p) return NULL;
-    p++;
-
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
-    if (*p != '"') return NULL;
-    p++;
-
-    size_t i = 0;
-    while (*p && *p != '"' && i + 1 < out_len) {
-        out[i++] = *p++;
-    }
-    out[i] = 0;
-
-    return out;
-}
-
-bool json_find_number_after(const char *json, const char *anchor, const char *key, double *out)
-{
-    if (!json || !anchor || !key || !out) return false;
-
-    const char *a = strstr(json, anchor);
-    if (!a) return false;
-
-    char pattern[64];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-
-    const char *p = strstr(a, pattern);
-    if (!p) return false;
-
-    p = strchr(p, ':');
-    if (!p) return false;
-    p++;
-
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
-
-    char *end = NULL;
-    double val = strtod(p, &end);
-    if (end == p) return false;
-
-    *out = val;
-    return true;
-}
-
-bool json_find_number_after_key(const char *json, const char *key, double *out)
-{
-    if (!json || !key || !out) return false;
-
-    const char *p = strstr(json, key);
-    if (!p) return false;
-
-    p = strchr(p, ':');
-    if (!p) return false;
-    p++;
-
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
-
-    char *end = NULL;
-    double v = strtod(p, &end);
-    if (end == p) return false;
-
-    *out = v;
-    return true;
-}
-
 bool json_find_best_thumbnail_path(const char *json, char *out, size_t out_sz)
 {
-    if (!json || !out || out_sz == 0) return false;
-    out[0] = 0;
-
-    cJSON *root = cJSON_Parse(json);
-    cJSON *result = cJSON_GetObjectItemCaseSensitive(root, "result");
-    cJSON *thumbnails = cJSON_GetObjectItemCaseSensitive(result, "thumbnails");
-    const char *best_path = NULL;
-    double best_area = -1.0;
-    cJSON *thumbnail = NULL;
-    cJSON_ArrayForEach(thumbnail, thumbnails) {
-        cJSON *path = cJSON_GetObjectItemCaseSensitive(thumbnail, "relative_path");
-        if (!cJSON_IsString(path) || !path->valuestring || !path->valuestring[0] ||
-            strlen(path->valuestring) >= out_sz) continue;
-        cJSON *width = cJSON_GetObjectItemCaseSensitive(thumbnail, "width");
-        cJSON *height = cJSON_GetObjectItemCaseSensitive(thumbnail, "height");
-        double area = 0.0;
-        if (cJSON_IsNumber(width) && cJSON_IsNumber(height) &&
-            isfinite(width->valuedouble) && isfinite(height->valuedouble) &&
-            width->valuedouble > 0 && height->valuedouble > 0) {
-            area = width->valuedouble * height->valuedouble;
-        }
-        if (area > best_area) {
-            best_area = area;
-            best_path = path->valuestring;
-        }
-    }
-    if (best_path) snprintf(out, out_sz, "%s", best_path);
+    const cJSON *result;
+    cJSON *root = moonraker_metadata_parse(json, &result);
+    bool found = moonraker_metadata_best_thumbnail(result, out, out_sz);
     cJSON_Delete(root);
-    return out[0] != 0;
+    return found;
 }
 
 esp_err_t moonraker_http_event_handler(esp_http_client_event_t *evt)
@@ -1340,6 +1259,7 @@ esp_err_t moonraker_http_event_handler(esp_http_client_event_t *evt)
     if (evt->event_id == HTTP_EVENT_ON_DATA && cap && evt->data && evt->data_len > 0) {
         int room = cap->cap - cap->len - 1;
         int copy = evt->data_len < room ? evt->data_len : room;
+        if (copy < evt->data_len) cap->overflowed = true;
         if (copy > 0) {
             memcpy(cap->buf + cap->len, evt->data, copy);
             cap->len += copy;
@@ -1460,7 +1380,8 @@ static bool moonraker_http_get_raw(
     esp_http_client_cleanup(client);
 
     if (captured_size) {
-        *captured_size = (size_t)cap.len;
+        if (err == ESP_OK && code == 200 && cap.overflowed) err = ESP_ERR_INVALID_SIZE;
+        if (err == ESP_OK && code == 200) *captured_size = (size_t)cap.len;
     }
 
     if (http_code) {
@@ -1488,7 +1409,7 @@ static bool moonraker_http_get_text(
 {
     size_t captured_size = 0;
 
-    return moonraker_http_get_raw(
+    if (!moonraker_http_get_raw(
         host,
         port,
         api_key,
@@ -1499,7 +1420,12 @@ static bool moonraker_http_get_text(
         &captured_size,
         http_code,
         err_out,
-        false);
+        false)) return false;
+    if (!captured_size || memchr(body, 0, captured_size)) {
+        if (err_out) *err_out = ESP_ERR_INVALID_RESPONSE;
+        return false;
+    }
+    return true;
 }
 
 
@@ -1512,16 +1438,18 @@ bool moonraker_test_connection(const char *host,
 {
     char body[256];
 
-    return moonraker_http_get_text(
+    return moonraker_http_get_raw(
         host,
         port,
         NULL,
         "/server/info",
         1200,
-        body,
+        (uint8_t *)body,
         sizeof(body),
+        NULL, /* Status only: the response body is unused. */
         http_code,
-        err_out);
+        err_out,
+        false);
 }
 
 
@@ -1821,7 +1749,7 @@ bool moonraker_send_gcode_script(const char *host,
      * Build valid JSON in a bounded stack buffer instead of interpolating
      * the command directly into the request body.
      */
-    char body[640];
+    char body[GCODE_COMMAND_JSON_CAPACITY];
     if(admin_method) {
         memcpy(body,"{}",3);
     } else {

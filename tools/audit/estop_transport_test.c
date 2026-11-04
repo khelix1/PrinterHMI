@@ -18,7 +18,7 @@ static const char TAG[]="fixture";
 typedef int esp_err_t;
 typedef void *esp_http_client_handle_t;
 typedef struct {const char *url,*cert_pem;int method,timeout_ms;bool disable_auto_redirect;} esp_http_client_config_t;
-static char storage[1024],wire[1024],url[256],body[640];
+static char storage[GCODE_COMMAND_JSON_CAPACITY],wire[GCODE_COMMAND_JSON_CAPACITY],url[256],body[GCODE_COMMAND_JSON_CAPACITY];
 static char *s_command_buffer=storage;
 static size_t s_command_capacity=sizeof(storage);
 static void *s_client=(void*)1;
@@ -50,6 +50,25 @@ int main(void){
  }
  const char *ordinary[]={"G28","RESPOND MSG=\"M112\"",";M112","M1120","G28\n; M112"};
  shared=true;for(unsigned i=0;i<5;i++){assert(!moonraker_command_admin_method(ordinary[i]));assert(moonraker_live_websocket_send_gcode(ordinary[i]));assert(strstr(wire,"printer.gcode.script")&&strstr(wire,"params"));assert(moonraker_send_gcode_script("p",7125,"test-key",ordinary[i],NULL,NULL));assert(strstr(url,"/printer/gcode/script")&&strstr(body,"script"));}
+ /* The macro builder permits 639 bytes. Both transports must retain every
+  * byte, including the worst supported JSON expansion (quotes/backslashes). */
+ char maximum[640];memset(maximum,'X',sizeof(maximum)-1);maximum[639]=0;
+ assert(moonraker_live_websocket_send_gcode(maximum));
+ assert(moonraker_send_gcode_script("p",7125,"test-key",maximum,NULL,NULL));
+ assert(strstr(body,maximum)&&strstr(wire,maximum));
+ memset(maximum,'"',639);
+ assert(moonraker_live_websocket_send_gcode(maximum));
+ assert(moonraker_send_gcode_script("p",7125,"test-key",maximum,NULL,NULL));
+ assert(strstr(wire,body));
+ assert(strlen(body)==1291); /* 639 two-byte escapes + JSON envelope. */
+ for(unsigned i=0;i<639;i++)assert(body[11+2*i]=='\\'&&body[12+2*i]=='"');
+ memset(maximum,'\\',639);
+ assert(moonraker_live_websocket_send_gcode(maximum));
+ assert(moonraker_send_gcode_script("p",7125,"test-key",maximum,NULL,NULL));
+ assert(strstr(wire,body));
+ for(unsigned i=0;i<639;i++)assert(body[11+2*i]=='\\'&&body[12+2*i]=='\\');
+ assert(!moonraker_live_websocket_send_gcode("G28\x01"));
+ assert(!moonraker_send_gcode_script("p",7125,"test-key","G28\x01",NULL,NULL));
  assert(moonraker_live_websocket_send_gcode("FIRMWARE_RESTART"));assert(strstr(wire,"printer.firmware_restart")&&!strstr(wire,"script"));
  assert(moonraker_send_gcode_script("p",7125,"test-key","FIRMWARE_RESTART",NULL,NULL));assert(strstr(url,"/printer/firmware_restart")&&!strcmp(body,"{}"));
  shared=false;int before=performs;assert(!moonraker_send_gcode_script("p",7125,"test-key","G28",NULL,NULL)&&performs==before);
@@ -57,5 +76,5 @@ int main(void){
  init_ok=false;assert(!moonraker_send_gcode_script("p",7125,"test-key","M112",NULL,NULL));init_ok=true;
  connected=false;assert(!moonraker_live_websocket_send_gcode("M112"));connected=true;short_write=true;assert(!moonraker_live_websocket_send_gcode("M112"));
  assert(!moonraker_send_gcode_script("",7125,"test-key","M112",NULL,NULL));assert(cleanups==performs+1);
- puts("PASS: actual WS/HTTP emergency/recovery endpoints, M112 console scripts, ordinary-command isolation, TLS/auth/selected port, busy-slot bypass and transport failures");return 0;
+ puts("PASS: actual WS/HTTP emergency/recovery endpoints, M112 console scripts, ordinary-command isolation, maximum-length escaped commands on both transports, TLS/auth/selected port, busy-slot bypass and transport failures");return 0;
 }

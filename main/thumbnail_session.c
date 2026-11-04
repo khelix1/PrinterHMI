@@ -1,3 +1,4 @@
+#include "moonraker_file_metadata.h"
 #include "thumbnail_session.h"
 
 #include <stdio.h>
@@ -192,14 +193,11 @@ bool thumbnail_session_build_metadata(
         return false;
     }
 
-    json_find_number_after_key(
-        s_metadata_body,
-        "\"object_height\"",
-        &s_metadata_object_height);
-    json_find_number_after_key(
-        s_metadata_body,
-        "\"layer_height\"",
-        &s_metadata_layer_height);
+    const cJSON *result;
+    cJSON *root = moonraker_metadata_parse(s_metadata_body, &result);
+    s_metadata_object_height = moonraker_metadata_number(result, "object_height");
+    s_metadata_layer_height = moonraker_metadata_number(result, "layer_height");
+    cJSON_Delete(root);
 
     if (generation != moonraker_config_generation()) {
         s_metadata_object_height = s_metadata_layer_height = 0;

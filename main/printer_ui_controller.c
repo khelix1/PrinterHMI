@@ -29,7 +29,7 @@ enum { ACTION_HOME, ACTION_PAUSE, ACTION_RESUME, ACTION_OBJECT, ACTION_CANCEL, A
 static lv_obj_t *s_action_buttons[ACTION_COUNT];
 static uint32_t s_action_owner, s_action_epoch;
 static bool s_action_dispatching;
-static struct { bool pending; uint32_t owner, sent_at; } s_direct_requests[2];
+static struct { bool pending; uint32_t owner, sent_at, job; } s_direct_requests[2];
 
 static void action_deleted(lv_event_t *event)
 {
@@ -61,7 +61,8 @@ static bool direct_pending(size_t index, const moonraker_state_t *live)
     if (!s_direct_requests[index].pending) return false;
     if (s_direct_requests[index].owner != moonraker_config_generation() ||
         lv_tick_elaps(s_direct_requests[index].sent_at) >= 5000 ||
-        (index == ACTION_PAUSE && !strcmp(live->printer_state, "paused"))) {
+        (index == ACTION_PAUSE && (s_direct_requests[index].job != live->print_job_revision ||
+         strcmp(live->printer_state, "printing")))) {
         s_direct_requests[index].pending = false;
         return false;
     }
@@ -89,6 +90,35 @@ void printer_ui_controller_init(
     s_show_cancel_cb = show_cancel_cb;
     s_show_object_cb = show_object_cb;
     s_show_motion_cb = show_motion_cb;
+}
+
+static void dispatch_direct(size_t index, const moonraker_state_t *live,
+                            printer_ui_controller_send_gcode_cb_t send)
+{
+    if (index > ACTION_PAUSE || !send || s_action_dispatching || direct_pending(index, live)) return;
+    uint32_t owner = moonraker_config_generation(), epoch = s_action_epoch;
+    s_action_dispatching = true;
+    bool accepted = send(index == ACTION_HOME ? "HOME_ALL" : "PAUSE");
+    s_action_dispatching = false;
+    if (accepted) {
+        s_direct_requests[index].pending = true;
+        s_direct_requests[index].owner = owner;
+        s_direct_requests[index].job = live->print_job_revision;
+        s_direct_requests[index].sent_at = lv_tick_get();
+    }
+    if (owner != moonraker_config_generation() || epoch != s_action_epoch) return;
+    ui_toast_show(accepted ? UI_STATUS_INFO : UI_STATUS_DANGER,
+        index == ACTION_HOME ? "HOME" : "PAUSE",
+        accepted ? (index == ACTION_HOME ? "Home sent. Wait for motion to finish." : "Pause sent. Waiting for printer status.") :
+            "Send failed. Check the connection and retry.");
+}
+
+void printer_ui_controller_pause(printer_ui_controller_send_gcode_cb_t send)
+{
+    moonraker_state_t live;
+    moonraker_state_snapshot(&live);
+    if (printer_connection_reason(&live)[0] || strcmp(live.printer_state, "printing")) return;
+    dispatch_direct(ACTION_PAUSE, &live, send);
 }
 
 void printer_ui_controller_command_event_cb(lv_event_t *event)
@@ -133,22 +163,7 @@ void printer_ui_controller_command_event_cb(lv_event_t *event)
         return;
     }
 
-    if (index > ACTION_PAUSE || !s_send_gcode_cb || direct_pending(index, &live)) return;
-    uint32_t owner = s_action_owner, epoch = s_action_epoch;
-    printer_ui_controller_send_gcode_cb_t send = s_send_gcode_cb;
-    s_action_dispatching = true;
-    bool accepted = send(command);
-    s_action_dispatching = false;
-    if (accepted) {
-        s_direct_requests[index].pending = true;
-        s_direct_requests[index].owner = owner;
-        s_direct_requests[index].sent_at = lv_tick_get();
-    }
-    if (owner != moonraker_config_generation() || epoch != s_action_epoch) return;
-    ui_toast_show(accepted ? UI_STATUS_INFO : UI_STATUS_DANGER,
-        index == ACTION_HOME ? "HOME" : "PAUSE",
-        accepted ? (index == ACTION_HOME ? "Home sent. Wait for motion to finish." : "Pause sent. Waiting for printer status.") :
-            "Send failed. Check the connection and retry.");
+    dispatch_direct(index, &live, s_send_gcode_cb);
 }
 
 void printer_ui_controller_motion_event_cb(lv_event_t *event)

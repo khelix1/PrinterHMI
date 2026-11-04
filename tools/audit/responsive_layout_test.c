@@ -18,7 +18,8 @@ bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(voi
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
 static bool connected=true,klipper_ready=true;static const char *test_printer_state="ready";
-void moonraker_state_snapshot(moonraker_state_t *s){memset(s,0,sizeof(*s));s->moonraker_ok=connected;s->live_data_ok=klipper_ready;snprintf(s->printer_state,sizeof(s->printer_state),"%s",test_printer_state);}
+static uint32_t test_job_revision;
+void moonraker_state_snapshot(moonraker_state_t *s){memset(s,0,sizeof(*s));s->print_job_revision=test_job_revision;s->moonraker_ok=connected;s->live_data_ok=klipper_ready;snprintf(s->printer_state,sizeof(s->printer_state),"%s",test_printer_state);}
 static uint32_t config_generation=1;
 uint32_t moonraker_config_generation(void){return config_generation;}
 void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void)t;(void)d;}
@@ -158,7 +159,7 @@ static void refresh_files(void){refreshes++;}
 static bool print_accept=true;
 static unsigned start_attempts;
 static void (*start_hook)(void);
-static void start_job(void){start_attempts++;if(start_hook)start_hook();if(print_accept){starts++;print_confirm_cancel(NULL);}else ui_files_print_feedback("Moonraker rejected the start request. Check connection and retry.");}
+static bool start_job(const char *filename){assert(filename&&s_detail_filename&&!strcmp(filename,s_detail_filename));char expected[256];snprintf(expected,sizeof(expected),"%s",filename);start_attempts++;if(start_hook)start_hook();assert(!strcmp(filename,expected));if(print_accept){starts++;print_confirm_cancel(NULL);}else ui_files_print_feedback("Moonraker rejected the start request. Check connection and retry.");return print_accept;}
 static void cancel_job(void){cancels++;ui_files_close_detail_popup();}
 static lv_point_t files_touch;
 static bool files_touch_down;
@@ -272,6 +273,7 @@ static void files_scroll_damage_check(void)
  ui_files_hide();assert(!s_file_rows && !s_printer_file_list && !s_files_refresh_timer);
 }
 static void run(int width){
+ lv_tick_inc(FILES_START_ACK_WAIT_MS);
  ui_files_show();ui_files_set_browser_callbacks(NULL,NULL,NULL,up_fixture);ui_files_set_breadcrumb(NULL);ui_files_set_search_text("");assert(s_up_button&&lv_obj_has_state(s_up_button,LV_STATE_DISABLED));unsigned before_up=up_calls;lv_obj_send_event(s_up_button,LV_EVENT_CLICKED,NULL);assert(up_calls==before_up);
  ui_files_set_breadcrumb("parts/subfolder");assert(!lv_obj_has_state(s_up_button,LV_STATE_DISABLED));lv_obj_send_event(s_up_button,LV_EVENT_CLICKED,NULL);assert(up_calls==before_up+1);ui_files_set_breadcrumb(NULL);ui_files_set_search_text("needle");assert(!lv_obj_has_state(s_up_button,LV_STATE_DISABLED));
  assert(lv_obj_has_state(s_search_button,LV_STATE_CHECKED));
@@ -328,6 +330,9 @@ static void run(int width){
  detail_start_event_cb(NULL);print_accept=false;print_confirm_accept(NULL);assert(s_print_confirm_popup&&starts==prior);
  print_accept=true;unsigned attempts=start_attempts;start_hook=reenter_start;print_confirm_accept(NULL);start_hook=NULL;assert(start_attempts==attempts+1&&!s_print_confirm_popup && starts==prior+1);
  print_confirm_accept(NULL);assert(starts==prior+1);
+ detail_start_event_cb(NULL);assert(!s_print_confirm_popup&&starts==prior+1);
+ lv_tick_inc(FILES_START_ACK_WAIT_MS);detail_connection_refresh(NULL);
+ assert(!lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
  if(ui_theme_is_studio()) {
   assert(ui_files_can_refresh_rows());
   lv_obj_t *owner=s_printer_file_popup,*detail=s_file_detail_popup;
@@ -409,6 +414,11 @@ static void run(int width){
  prior=cancels;detail_cancel_event_cb(NULL);assert(cancels==prior+1 && !s_file_detail_popup && !s_detail_start_button && !s_print_confirm_popup);
  ui_files_show_detail_popup("Another_file.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
  detail_start_event_cb(NULL);assert(s_print_confirm_popup);prior=starts;
+ test_job_revision++;detail_connection_refresh(NULL);
+ assert(lv_obj_has_state(s_print_accept_button,LV_STATE_DISABLED));
+ print_confirm_accept(NULL);assert(starts==prior&&s_print_confirm_popup);
+ print_confirm_cancel(NULL);detail_start_event_cb(NULL);assert(s_print_confirm_popup);
+
  connected=false;detail_connection_refresh(NULL);assert(lv_obj_has_state(s_print_accept_button,LV_STATE_DISABLED)&&strstr(lv_label_get_text(s_print_connection_label),"Offline"));print_confirm_accept(NULL);assert(starts==prior);
  connected=true;detail_connection_refresh(NULL);assert(!lv_obj_has_state(s_print_accept_button,LV_STATE_DISABLED));config_generation++;
  print_confirm_accept(NULL);assert(starts==prior && s_print_confirm_popup && s_file_detail_popup);
@@ -419,6 +429,7 @@ static void run(int width){
  ui_files_show_detail_popup("External_delete.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);detail_start_event_cb(NULL);assert(s_print_confirm_popup);lv_obj_delete(s_file_detail_popup);assert(!s_print_confirm_popup && !s_detail_connection_timer && !s_detail_filename);
 
  for(unsigned i=0;i<5;i++){
+  lv_tick_inc(FILES_START_ACK_WAIT_MS);
   ui_files_show_detail_popup("retire-during-print.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);detail_start_event_cb(NULL);attempts=start_attempts;start_hook=retire_print;print_confirm_accept(NULL);start_hook=NULL;assert(start_attempts==attempts+1&&!s_file_detail_popup&&!s_print_confirm_popup&&!s_detail_start_cb&&!s_detail_connection_timer);detail_connection_refresh(NULL);print_confirm_accept(NULL);detail_start_event_cb(NULL);
  }
  lv_obj_t *event_source=s_search_button;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);assert(!s_search_popup); /* Old printer page cannot launch an editor. */
@@ -426,6 +437,7 @@ static void run(int width){
  assert(s_search_popup);files_search_layout_check();snapshot(s_search_popup);
  lv_textarea_set_text(s_search_textarea,"test query");lv_obj_t*search_owner=s_search_popup;lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);assert(s_search_popup==search_owner&&!strcmp(lv_textarea_get_text(s_search_textarea),"test query"));lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_CANCEL,NULL);lv_timer_handler();assert(!s_search_popup);
  lv_obj_send_event(event_source,LV_EVENT_CLICKED,NULL);lv_obj_send_event(lv_obj_get_child(s_search_popup,2),LV_EVENT_READY,NULL);lv_timer_handler();assert(!s_search_popup);
+ lv_tick_inc(FILES_START_ACK_WAIT_MS);
  char very_long_name[187];memset(very_long_name,'W',180);memcpy(very_long_name+180,".gcode",7);
  ui_files_show_detail_popup(very_long_name,"Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);
  attempts=start_attempts;detail_start_event_cb(NULL);assert(s_print_confirm_popup);
@@ -437,6 +449,7 @@ static void run(int width){
  unsigned objects_before=live_objects(lv_screen_active())+live_objects(lv_layer_top()),timers_before=live_timers();
  for(unsigned repeat=0;repeat<4;repeat++){ui_files_show();ui_files_add_file_entry("cycle.gcode",100,0,0);ui_files_hide();assert(!s_file_rows && !s_files_refresh_timer && !s_files_refresh_pending);assert(live_objects(lv_screen_active())+live_objects(lv_layer_top())==objects_before && live_timers()==timers_before);}
  for(unsigned repeat=0;repeat<5;repeat++){
+  lv_tick_inc(FILES_START_ACK_WAIT_MS);
   ui_files_show();ui_files_add_file_entry("external-root.gcode",100,0,0);ui_files_show_detail_popup("external-root.gcode","Ready",NULL,NULL,cancel_job,start_job);ui_files_update_detail_metadata("Ready",true);detail_start_event_cb(NULL);if(ui_theme_is_studio())studio_metadata_open(NULL);
   attempts=start_attempts;start_hook=retire_files_page;print_confirm_accept(NULL);start_hook=NULL;assert(start_attempts==attempts+1&&!s_printer_file_popup&&!s_file_detail_popup&&!s_print_confirm_popup&&!s_studio_metadata_popup&&!s_studio_metadata_label&&!s_files_refresh_timer&&!s_detail_connection_timer&&!s_file_rows);
   unsigned before_refresh=refreshes;ui_files_refresh();files_refresh_deferred_cb(NULL);apply_search_and_close(false);search_button_cb(NULL);search_apply_button_cb(NULL);search_cancel_button_cb(NULL);sort_button_cb(NULL);up_button_cb(NULL);print_confirm_accept(NULL);detail_connection_refresh(NULL);ui_files_update_detail_metadata("late result",true);assert(refreshes==before_refresh);

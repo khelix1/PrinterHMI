@@ -18,7 +18,7 @@ static lv_timer_t *refresh_timer;
 static bool (*send_command)(const char *);
 static uint32_t endpoint_generation, last_action_tick, action_wait_ms;
 static bool action_pending, dispatching;
-static uint32_t popup_epoch, pending_generation;
+static uint32_t popup_epoch, pending_generation, recovery_job, pending_job;
 static const char *commands[] = {
     "HMI_FILAMENT_HEAT", "HMI_FILAMENT_UNLOAD", "HMI_FILAMENT_LOAD",
     "HMI_FILAMENT_PURGE", "RESUME"
@@ -41,6 +41,7 @@ static bool paused_here(moonraker_state_t *state)
 {
     moonraker_state_snapshot(state);
     return endpoint_generation == moonraker_config_generation() &&
+        state->print_job_revision == recovery_job &&
         state->moonraker_ok && state->live_data_ok &&
         strcmp(state->printer_state, "paused") == 0;
 }
@@ -66,6 +67,8 @@ static void refresh(lv_timer_t *timer)
     char text[192];
     if (endpoint_generation != moonraker_config_generation()) {
         snprintf(text, sizeof(text), "Printer changed. Close and reopen recovery.");
+    } else if (state.print_job_revision != recovery_job) {
+        snprintf(text, sizeof(text), "Print changed. Close and reopen recovery.");
     } else if (!state.moonraker_ok || !state.live_data_ok) {
         snprintf(text, sizeof(text), "Printer offline. Recovery actions unavailable.");
     } else {
@@ -90,6 +93,7 @@ static void refresh(lv_timer_t *timer)
     bool homed = strchr(state.homed_axes, 'x') && strchr(state.homed_axes, 'y') &&
         strchr(state.homed_axes, 'z');
     bool cooldown = action_pending && pending_generation == endpoint_generation &&
+        pending_job == recovery_job &&
         lv_tick_elaps(last_action_tick) < action_wait_ms;
     for (size_t i = 0; i < 5; ++i) {
         if (!buttons[i]) continue;
@@ -107,7 +111,7 @@ static void action(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || !popup || dispatching) return;
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
-    if (index >= 5) return;
+    if (index >= 5 || lv_event_get_target_obj(event) != buttons[index]) return;
     /* Recheck telemetry and endpoint on the click, not just on the timer. */
     refresh(NULL);
     if (!buttons[index] || lv_obj_has_state(buttons[index], LV_STATE_DISABLED) || !send_command) return;
@@ -115,7 +119,7 @@ static void action(lv_event_t *event)
     if (index == 0) snprintf(command, sizeof(command), "HMI_FILAMENT_HEAT TEMP=%d", selected_temperature);
     else snprintf(command, sizeof(command), "%s", commands[index]);
     lv_obj_t *owner_popup = popup;
-    uint32_t epoch = popup_epoch, owner = endpoint_generation;
+    uint32_t epoch = popup_epoch, owner = endpoint_generation, job = recovery_job;
     dispatching = true;
     refresh(NULL);
     bool sent = send_command(command);
@@ -124,6 +128,7 @@ static void action(lv_event_t *event)
     if (sent) {
         action_pending = true;
         pending_generation = owner;
+        pending_job = job;
         last_action_tick = lv_tick_get();
         action_wait_ms = index == 1 || index == 2 ? 8000 : index == 3 ? 5000 : 2500;
     }
@@ -183,12 +188,15 @@ static void temperature_change(lv_event_t *event)
 
 void ui_filament_recovery_show(bool (*send)(const char *))
 {
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    if (popup && (endpoint_generation != moonraker_config_generation() ||
+        recovery_job != state.print_job_revision)) ui_filament_recovery_close();
     if (popup) { lv_obj_move_foreground(popup); return; }
+    recovery_job = state.print_job_revision;
     endpoint_generation = moonraker_config_generation();
     send_command = send;
 
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
     selected_temperature = state.nozzle_target >= 170 && state.nozzle_target <= 255
         ? (int)state.nozzle_target : 205;
     popup = ui_form_dialog("Filament recovery", 840, 568, UI_POPUP_STANDARD);

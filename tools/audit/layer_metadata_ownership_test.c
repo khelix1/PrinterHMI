@@ -7,14 +7,13 @@ static char requested[512];
 uint32_t moonraker_config_generation(void){return generation;}
 bool moonraker_fetch_file_metadata(const char *host,int port,const char *key,const char *file,char *body,size_t size,int *code,esp_err_t *err){
  (void)host;(void)port;(void)key;snprintf(requested,sizeof(requested),"%s",file);
- snprintf(body,size,"{\"object_height\":20,\"layer_height\":0.2}");*code=200;*err=ESP_OK;
+ snprintf(body,size,"{\"result\":{\"object_height\":20,\"layer_height\":0.2}}");*code=200;*err=ESP_OK;
  if(change_owner)generation++;
  return !fail_fetch;
 }
 bool printer_files_build_metadata_text(const char *file,const char *json,char *path,size_t path_size,char *out,size_t size){
  (void)file;(void)json;snprintf(path,path_size,"preview.png");snprintf(out,size,"metadata");return true;
 }
-bool json_find_number_after_key(const char *json,const char *key,double *out){const char *p=strstr(json,key);if(!p)return false;*out=strtod(strchr(p,':')+1,NULL);return true;}
 int main(void){
  char out[256],name[160];double height,layer;
  assert(thumbnail_session_build_metadata("host",7125,"","first.gcode",out,sizeof(out)));

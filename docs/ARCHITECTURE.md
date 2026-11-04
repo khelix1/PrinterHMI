@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.3.13-dev is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.3.25-dev is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -121,7 +121,10 @@ flat values. These helpers do not own timers, transport or detached value caches
   `moonraker_config_controller`, TLS policy and no-downgrade resolution in
   `moonraker_transport_security_controller`, and per-profile PSRAM-first CA
   trust material in `moonraker_tls_trust_store`; endpoint consumers share that
-  policy.
+  policy. Missing CA storage may be cached; failed or malformed reads remain
+  retryable and cannot publish partial trust material or authorize plaintext
+  fallback. Certificate shape/length checks belong to the trust store; actual
+  X.509 parsing and peer verification remain transport responsibilities.
 - File, metadata, thumbnail, G-code and print-start requests are implemented by
   `moonraker` and consumed through controllers. `printer_files` owns bounded
   file-list parsing and metadata formatting; `files_page_controller` owns list
@@ -350,3 +353,9 @@ Moonraker snapshot boundary; no live polling/status worker starts in demo.
 OTA stable-tag parsing is owned by `firmware_identity`; `ota_release_catalog`
 uses that parser and validates complete bounded JSON and asset sizes before
 publishing entries. Transfer/cancellation state remains in `ota_manager`.
+
+
+The stateless `printer_command_limits.h` owns the supported macro/action command
+capacity and JSON request envelope sizing. Macro construction and semantic
+action resolution share that capacity; transport adapters reserve the escaped
+wire size. The Console editor retains its smaller independent input limit.

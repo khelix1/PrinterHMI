@@ -1,5 +1,67 @@
 # Changelog
 
+## [7.3.25-dev] - 2026-11-03
+
+- Drop speed and flow gestures and pending values when the observed print job changes.
+- Require a fresh temperature or fan dialog after a job change, and bound displayed inputs before integer conversion.
+
+## [7.3.24-dev] - 2026-11-03
+
+- Share Pause dispatch and duplicate suppression between Dashboard and Printer, scoped to the observed print job.
+- Require a fresh Filament Recovery dialog after a job or printer change.
+- Advance the demo job revision on simulated job changes so those guards also work in demo mode.
+
+## [7.3.23-dev] - 2026-11-03
+
+- Suppress duplicate Start Print requests while an accepted request is waiting for live status.
+- Require a fresh print review after the observed job changes.
+
+## [7.3.22-dev] - 2026-11-03
+
+- Start the exact G-code path shown in print review instead of reading the shared preview selection at dispatch time.
+
+## [7.3.21-dev] - 2026-11-03
+
+- Bind Stop Print and Cancel Object confirmations and duplicate-send guards to the observed print job.
+
+## [7.3.20-dev] - 2026-11-03
+
+- Use Cancel Object consistently in the object list, confirmation, and command feedback.
+
+## [7.3.19-dev] - 2026-11-03
+
+- Escape discovered object names when building Moonraker WebSocket subscriptions.
+- Reject object exclusion names containing G-code delimiters or quoting characters.
+
+## [7.3.18-dev] - 2026-11-03
+
+- Reject out-of-range live measurements and invalid Drybox program codes before publishing them.
+- Validate toolhead and object map coordinates and bound the map projection to the display area.
+
+## [7.3.17-dev] - 2026-11-03
+
+- Decode live HTTP telemetry and inactive printer status from their exact Moonraker objects.
+- Validate metadata before using file details, layer estimates, or thumbnail paths.
+- Reject truncated downloads and HTTP text with embedded NUL bytes; keep the status-only connection probe independent of response size.
+
+## [7.3.16-dev] - 2026-11-03
+
+- Require complete, bounded WebSocket JSON objects and exact numeric response IDs.
+- Keep discovered controls and configuration intact when a discovery reply is malformed or reports an error.
+- Parse WebSocket response routing once before handing the result to its owner.
+
+## [7.3.15-dev] - 2026-11-03
+
+- Retry saved CA certificate reads after temporary NVS failures instead of caching the failure until reboot.
+- Reject incomplete or malformed stored CA strings before publishing trust material.
+- Exercise actual CA storage, import preservation and HTTPS/WSS recovery under storage/allocation faults.
+
+## [7.3.14-dev] - 2026-11-03
+
+- Preserve the full supported macro command through WebSocket and HTTP JSON escaping.
+- Reject oversized semantic actions instead of silently dispatching a shortened command.
+- Share command capacity between the macro builder, action resolver and transport envelopes.
+
 ## [7.3.13-dev] - 2026-11-02
 
 - Use the bounded firmware-identity version parser for OTA stable release tags and retire the duplicate sscanf parser.

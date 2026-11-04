@@ -1,4 +1,5 @@
 #pragma once
+#include "printer_command_limits.h"
 #include <ctype.h>
 #include <stddef.h>
 #include <string.h>

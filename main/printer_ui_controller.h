@@ -10,6 +10,8 @@
 typedef bool (*printer_ui_controller_send_gcode_cb_t)(
     const char *command);
 
+void printer_ui_controller_pause(printer_ui_controller_send_gcode_cb_t send);
+
 typedef void (*printer_ui_controller_action_cb_t)(void);
 
 typedef struct {

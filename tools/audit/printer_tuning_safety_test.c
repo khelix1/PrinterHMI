@@ -20,7 +20,7 @@ moonraker_filament_status_t moonraker_filament_state_status(const moonraker_fila
 static void close_page(void){if(page){lv_obj_delete(page);page=NULL;}}
 void ui_toast_show(ui_status_kind_t kind,const char*title,const char*detail){(void)kind;assert(title&&detail);notes++;snprintf(notice,sizeof(notice),"%s",detail);if(notice_mode){notice_mode=0;close_page();}}
 static void open_page(void);
-static void release(lv_obj_t*slider,int value){assert(slider);lv_slider_set_value(slider,value,LV_ANIM_OFF);lv_obj_send_event(slider,LV_EVENT_RELEASED,NULL);}
+static void release(lv_obj_t*slider,int value){assert(slider);lv_obj_send_event(slider,LV_EVENT_PRESSED,NULL);lv_slider_set_value(slider,value,LV_ANIM_OFF);lv_obj_send_event(slider,LV_EVENT_RELEASED,NULL);}
 static bool send(const char *command){
  sends++;snprintf(sent,sizeof(sent),"%s",command);unsigned during=mode;mode=0;
  if(during==1)release(s_speed_factor_slider,120);
@@ -58,7 +58,10 @@ static void checks(void){
  reset();mode=2;before=sends;release(s_speed_factor_slider,120);assert(!page&&s_pending_speed_factor==120&&s_factor_accepted[0]);open_page();release(s_speed_factor_slider,120);assert(sends==before+1);
  if(ui_theme_is_studio()){reset();mode=7;before=sends;release(s_speed_factor_slider,120);assert(!s_studio_tuning_popup&&!s_speed_factor_slider);studio_tuning_open(NULL);release(s_speed_factor_slider,120);assert(sends==before+1);}
  reset();before=sends;live.live_data_ok=false;release(s_speed_factor_slider,120);assert(sends==before);refresh();assert(lv_obj_has_state(s_speed_factor_slider,LV_STATE_DISABLED));live.live_data_ok=true;live.moonraker_ok=false;release(s_speed_factor_slider,120);assert(sends==before);live.moonraker_ok=true;refresh();assert(!lv_obj_has_state(s_speed_factor_slider,LV_STATE_DISABLED));
- reset();before=sends;lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before&&!strcmp(lv_label_get_text(s_speed_factor_value),"120%"));
+ reset();before=sends;lv_obj_send_event(s_speed_factor_slider,LV_EVENT_PRESSED,NULL);lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before&&!strcmp(lv_label_get_text(s_speed_factor_value),"120%"));
+ live.print_job_revision++;lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(sends==before);
+ release(s_speed_factor_slider,120);assert(sends==++before);
+ live.print_job_revision++;refresh();assert(s_pending_speed_factor==-1&&lv_slider_get_value(s_speed_factor_slider)==100);
  lv_obj_t*unowned=lv_slider_create(page);lv_obj_add_event_cb(unowned,tuning_slider_event_cb,LV_EVENT_RELEASED,(void*)PRINTER_TUNING_SPEED);release(unowned,90);assert(sends==before);
  lv_obj_add_event_cb(s_flow_factor_slider,tuning_slider_event_cb,LV_EVENT_RELEASED,(void*)99);release(s_flow_factor_slider,110);assert(sends==before+1);
  reset();accepted=false;notice_mode=1;release(s_speed_factor_slider,120);assert(!page&&!s_tuning_owner);open_page();accepted=true;release(s_speed_factor_slider,120);live.speed_factor=100;lv_tick_inc(5000);notice_mode=1;refresh();assert(!page&&!s_tuning_owner);

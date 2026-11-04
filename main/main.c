@@ -13,7 +13,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdbool.h>
-#include "cJSON.h"
+#include "moonraker_http_objects.h"
 #include "ui_button.h"
 
 #include "freertos/FreeRTOS.h"
@@ -800,6 +800,7 @@ static bool moonraker_get_live_objects(void)
     }
 
     int live_http_status = 0;
+    size_t response_length = 0;
 
     uint32_t request_generation =
         moonraker_config_generation();
@@ -821,6 +822,7 @@ static bool moonraker_get_live_objects(void)
         moonraker_config_api_key(),
         s_moonraker_objects,
         MOONRAKER_OBJECTS_CAPACITY,
+        &response_length,
         &live_http_status);
 
     if (request_generation !=
@@ -844,10 +846,10 @@ static bool moonraker_get_live_objects(void)
 
     /* A reachable Moonraker may expose stale print/temperature objects while
      * Klipper is shut down. Confirm webhooks readiness before publication. */
-    cJSON *ready_root = cJSON_Parse(s_moonraker_objects);
-    cJSON *ready_result = cJSON_GetObjectItemCaseSensitive(ready_root, "result");
-    cJSON *ready_status = cJSON_GetObjectItemCaseSensitive(ready_result, "status");
-    cJSON *ready_hooks = cJSON_GetObjectItemCaseSensitive(ready_status, "webhooks");
+    const cJSON *status;
+    cJSON *root = moonraker_http_objects_parse(s_moonraker_objects,
+        response_length, MOONRAKER_OBJECTS_CAPACITY - 1, &status);
+    cJSON *ready_hooks = cJSON_GetObjectItemCaseSensitive(status, "webhooks");
     cJSON *ready_state = cJSON_GetObjectItemCaseSensitive(ready_hooks, "state");
     bool klipper_ready = cJSON_IsString(ready_state) && ready_state->valuestring &&
         strcmp(ready_state->valuestring, "ready") == 0;
@@ -867,48 +869,47 @@ static bool moonraker_get_live_objects(void)
                 .progress = -1.0, .current_gcode_z = -1.0,
                 .current_layer = -1, .total_layer = -1,
             });
-        cJSON_Delete(ready_root);
+        cJSON_Delete(root);
         return true; /* Transport succeeded; the printer remains unavailable. */
     }
-    cJSON_Delete(ready_root);
 
     double val = 0.0;
 
-    if (json_find_number_after(s_moonraker_objects, "\"temperature_sensor drybox_center\"", "temperature", &val)) {
+    if (moonraker_http_object_number(status, "temperature_sensor drybox_center", "temperature", 1.0, &val)) {
         live_chamber_temp = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"sht3x drybox_env\"", "temperature", &val)) {
+    if (moonraker_http_object_number(status, "sht3x drybox_env", "temperature", 1.0, &val)) {
         live_air_temp = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"sht3x drybox_env\"", "humidity", &val)) {
+    if (moonraker_http_object_number(status, "sht3x drybox_env", "humidity", 1.0, &val)) {
         live_humidity = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"heater_generic drybox_heater\"", "target", &val)) {
+    if (moonraker_http_object_number(status, "heater_generic drybox_heater", "target", 1.0, &val)) {
         live_heater_target = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"heater_generic drybox_heater\"", "power", &val)) {
+    if (moonraker_http_object_number(status, "heater_generic drybox_heater", "power", 1.0, &val)) {
         live_heater_power = val > 0.01;
     }
 
     
-    if (json_find_number_after(s_moonraker_objects, "\"fan\"", "speed", &val)) {
-        printer_part_fan_speed = val * 100.0;
+    if (moonraker_http_object_number(status, "fan", "speed", 100.0, &val)) {
+        printer_part_fan_speed = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"gcode_move\"", "speed_factor", &val)) {
-        printer_speed_factor = val * 100.0;
+    if (moonraker_http_object_number(status, "gcode_move", "speed_factor", 100.0, &val)) {
+        printer_speed_factor = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"gcode_move\"", "extrude_factor", &val)) {
-        printer_flow_factor = val * 100.0;
+    if (moonraker_http_object_number(status, "gcode_move", "extrude_factor", 100.0, &val)) {
+        printer_flow_factor = val;
     }
 
-    if (json_find_number_after(s_moonraker_objects, "\"fan_generic drybox_fan\"", "speed", &val)) {
-        live_fan_speed = val * 100.0;
+    if (moonraker_http_object_number(status, "fan_generic drybox_fan", "speed", 100.0, &val)) {
+        live_fan_speed = val;
     }
 
     /*
@@ -920,11 +921,8 @@ static bool moonraker_get_live_objects(void)
      *   2 = PETG
      *   3 = hold
      */
-    if (json_find_number_after(
-            s_moonraker_objects,
-            "\"gcode_macro DRYBOX_VARS\"",
-            "selected_program",
-            &val)) {
+    if (moonraker_http_object_number(status, "gcode_macro DRYBOX_VARS", "selected_program", 1.0, &val) &&
+        moonraker_drybox_program(val, 2)) {
         int program_code = (int)val;
 
         switch (program_code) {
@@ -946,11 +944,8 @@ static bool moonraker_get_live_objects(void)
         }
     }
 
-    if (json_find_number_after(
-            s_moonraker_objects,
-            "\"gcode_macro DRYBOX_VARS\"",
-            "active_program",
-            &val)) {
+    if (moonraker_http_object_number(status, "gcode_macro DRYBOX_VARS", "active_program", 1.0, &val) &&
+        moonraker_drybox_program(val, 3)) {
         int program_code = (int)val;
 
         switch (program_code) {
@@ -977,42 +972,24 @@ static bool moonraker_get_live_objects(void)
         }
     }
 
-//             live_chamber_temp, live_humidity, live_heater_target,
-//             live_fan_speed, live_heater_power ? 1 : 0);
-
-    json_find_string(strstr(s_moonraker_objects, "\"print_stats\"") ? strstr(s_moonraker_objects, "\"print_stats\"") : s_moonraker_objects,
-                     "state", printer_state, sizeof(s_app_buffers->printer_state));
-
-    json_find_string(strstr(s_moonraker_objects, "\"print_stats\"") ? strstr(s_moonraker_objects, "\"print_stats\"") : s_moonraker_objects,
-                     "filename", printer_file, sizeof(s_app_buffers->printer_file));
-
-    if (strlen(printer_state) == 0) {
-        safe_copy(printer_state, sizeof(s_app_buffers->printer_state), "--");
-    }
-
-    if (strlen(printer_file) == 0) {
-        safe_copy(printer_file, sizeof(s_app_buffers->printer_file), "No file");
-    }
+    const cJSON *stats = cJSON_GetObjectItemCaseSensitive(status, "print_stats");
+    const char *state = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(stats, "state"));
+    const char *file = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(stats, "filename"));
+    safe_copy(printer_state, sizeof(s_app_buffers->printer_state), state && *state ? state : "--");
+    safe_copy(printer_file, sizeof(s_app_buffers->printer_file), file && *file ? file : "No file");
     bool progress_from_virtual_sdcard = false;
     printer_progress = -1.0;
 
-    json_find_number_after(
-        s_moonraker_objects,
-        "\"print_stats\"",
-        "print_duration",
-        &printer_print_duration);
+    moonraker_http_object_number(status, "print_stats", "print_duration", 1.0, &printer_print_duration);
 
     double lv = 0.0;
-    if (json_find_number_after(s_moonraker_objects, "\"motion_report\"", "live_velocity", &lv)) {
+    if (moonraker_http_object_number(status, "motion_report", "live_velocity", 1.0, &lv)) {
         printer_live_velocity = lv;
     }
 
+    static const double filament_area_mm2 = 2.405281875;
     double lf = 0.0;
-    if (json_find_number_after(
-            s_moonraker_objects,
-            "\"motion_report\"",
-            "live_extruder_velocity",
-            &lf)) {
+    if (moonraker_http_object_number(status, "motion_report", "live_extruder_velocity", filament_area_mm2, &lf)) {
         /*
          * Klipper motion_report.live_extruder_velocity is linear
          * filament speed in mm/s. Moonraker frontends normally show
@@ -1021,8 +998,7 @@ static bool moonraker_get_live_objects(void)
          * For standard 1.75 mm filament:
          *     area = pi * (1.75 / 2)^2 = 2.40528 mm^2
          */
-        static const double filament_area_mm2 = 2.405281875;
-        printer_live_flow = fabs(lf) * filament_area_mm2;
+        printer_live_flow = fabs(lf);
 
         /* Suppress tiny interpolation noise while the extruder is idle. */
         if (printer_live_flow < 0.01) {
@@ -1035,22 +1011,18 @@ static bool moonraker_get_live_objects(void)
     printer_current_layer = -1;
     printer_total_layer = -1;
     printer_current_z = -1.0;
-    cJSON *layer_root = cJSON_Parse(s_moonraker_objects);
-    cJSON *layer_result = cJSON_GetObjectItemCaseSensitive(layer_root, "result");
-    cJSON *layer_status = cJSON_GetObjectItemCaseSensitive(layer_result, "status");
-    cJSON *progress_sd = cJSON_GetObjectItemCaseSensitive(layer_status, "virtual_sdcard");
+    cJSON *progress_sd = cJSON_GetObjectItemCaseSensitive(status, "virtual_sdcard");
     cJSON *progress_value = cJSON_GetObjectItemCaseSensitive(progress_sd, "progress");
     progress_from_virtual_sdcard = cJSON_IsNumber(progress_value) &&
         isfinite(progress_value->valuedouble);
     if (!progress_from_virtual_sdcard) {
-        cJSON *progress_display = cJSON_GetObjectItemCaseSensitive(layer_status, "display_status");
+        cJSON *progress_display = cJSON_GetObjectItemCaseSensitive(status, "display_status");
         progress_value = cJSON_GetObjectItemCaseSensitive(progress_display, "progress");
     }
     if (cJSON_IsNumber(progress_value) && isfinite(progress_value->valuedouble)) {
         printer_progress = fmin(1.0, fmax(0.0, progress_value->valuedouble));
     }
-    cJSON *layer_stats = cJSON_GetObjectItemCaseSensitive(layer_status, "print_stats");
-    cJSON *layer_info = cJSON_GetObjectItemCaseSensitive(layer_stats, "info");
+    cJSON *layer_info = cJSON_GetObjectItemCaseSensitive(stats, "info");
     cJSON *layer_current = cJSON_GetObjectItemCaseSensitive(layer_info, "current_layer");
     cJSON *layer_total = cJSON_GetObjectItemCaseSensitive(layer_info, "total_layer");
     if (cJSON_IsNumber(layer_current) && layer_current->valuedouble >= 0.0 &&
@@ -1061,21 +1033,19 @@ static bool moonraker_get_live_objects(void)
         layer_total->valuedouble <= 2147483646.0) {
         printer_total_layer = (int)(layer_total->valuedouble + 0.5);
     }
-    cJSON *layer_move = cJSON_GetObjectItemCaseSensitive(layer_status, "gcode_move");
+    cJSON *layer_move = cJSON_GetObjectItemCaseSensitive(status, "gcode_move");
     cJSON *layer_position = cJSON_GetObjectItemCaseSensitive(layer_move, "gcode_position");
     cJSON *layer_z = cJSON_GetArrayItem(layer_position, 2);
-    if (cJSON_IsNumber(layer_z)) {
-        printer_current_z = layer_z->valuedouble;
-    }
-    cJSON_Delete(layer_root);
+    moonraker_telemetry_number(layer_z, 1.0, &printer_current_z);
 
     /* Estimates are resolved at display time, never cached as Klipper reports. */
 
-    json_find_number_after(s_moonraker_objects, "\"extruder\"", "temperature", &printer_nozzle_temp);
-    json_find_number_after(s_moonraker_objects, "\"extruder\"", "target", &printer_nozzle_target);
-    json_find_number_after(s_moonraker_objects, "\"heater_bed\"", "temperature", &printer_bed_temp);
-    json_find_number_after(s_moonraker_objects, "\"heater_bed\"", "target", &printer_bed_target);
+    moonraker_http_object_number(status, "extruder", "temperature", 1.0, &printer_nozzle_temp);
+    moonraker_http_object_number(status, "extruder", "target", 1.0, &printer_nozzle_target);
+    moonraker_http_object_number(status, "heater_bed", "temperature", 1.0, &printer_bed_temp);
+    moonraker_http_object_number(status, "heater_bed", "target", 1.0, &printer_bed_target);
 
+    cJSON_Delete(root);
     s_live_data_ok = true;
     
     moonraker_state_publish_http_fallback(
@@ -1111,7 +1081,7 @@ static bool moonraker_get_live_objects(void)
         (int)s_drybox_selected_program,
         (int)s_drybox_active_program);
 
-return true;
+    return true;
 }
 
 static void printer_thumb_start_delayed(void);
@@ -1249,7 +1219,7 @@ static bool moonraker_send_gcode_http(const char *cmd, bool notify_failure)
             char notice[128];
             snprintf(notice,
                      sizeof(notice),
-                     "Excluded object: %.96s",
+                     "Cancel Object request sent: %.96s",
                      excluded + strlen("EXCLUDE_OBJECT NAME="));
             ui_printer_banner_show_notice(notice,
                                            UI_STATUS_OK,
@@ -1552,6 +1522,11 @@ void ui_command_bar_action(const char *action)
 {
     if (!action) return;
 
+
+    if (strcmp(action, "PAUSE") == 0) {
+        printer_ui_controller_pause(action_send_gcode_inline);
+        return;
+    }
 
     if (strcmp(action, "RESUME") == 0) {
         ui_filament_recovery_show(action_send_gcode_inline);
@@ -2707,21 +2682,23 @@ static void close_printer_file_detail_popup(void)
 }
 
 
-static void printer_file_detail_start_bridge(void)
+static bool printer_file_detail_start_bridge(const char *filename)
 {
-    bool started=printer_file_controller_start_selected_file(
+    bool started=printer_file_controller_start_file(
         s_got_ip,
         moonraker_config_host(),
         moonraker_config_port(),
         moonraker_config_api_key(),
+        filename,
         moonraker_status,
-        sizeof(moonraker_status),
-        close_printer_file_detail_popup);
+        sizeof(moonraker_status));
     if(!started) {
         ui_files_print_feedback(moonraker_status);
-        return;
+        return false;
     }
+    close_printer_file_detail_popup();
     ui_shell_page_action(UI_SHELL_PAGE_DASHBOARD);
+    return true;
 }
 
 

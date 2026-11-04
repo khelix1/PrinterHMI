@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory(prefix='printerhmi-security-') as tmp:
 typedef int nvs_handle_t;
 typedef int esp_err_t;
 #define ESP_OK 0
+#define ESP_ERR_NVS_NOT_FOUND -1
 #define NVS_READONLY 0
 #define NVS_READWRITE 1
 int nvs_open(const char *,int,nvs_handle_t *);

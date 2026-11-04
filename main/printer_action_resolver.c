@@ -202,16 +202,13 @@ bool printer_action_resolver_resolve(
     const char *requested,
     printer_action_resolution_t *output)
 {
-    if (!requested || !requested[0] || !output) {
-        return false;
-    }
-
+    if (!output) return false;
     memset(output, 0, sizeof(*output));
-    snprintf(
-        output->command,
-        sizeof(output->command),
-        "%s",
-        requested);
+    if (!requested || !requested[0]) return false;
+
+    size_t length = strlen(requested);
+    if (length >= sizeof(output->command)) return false;
+    memcpy(output->command, requested, length + 1);
 
     /*
      * A literal command that is itself a detected macro already has the

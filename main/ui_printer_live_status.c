@@ -9,6 +9,7 @@
 #include "printer_connection_policy.h"
 #include "ui_toast.h"
 #include <string.h>
+#include <math.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -31,7 +32,8 @@ static lv_obj_t *s_tuning_owner;
 static lv_obj_t *s_studio_position, *s_studio_motion_owner, *s_studio_tuning_popup, *s_studio_tune_button;
 static uint32_t s_tuning_generation, s_tuning_epoch;
 static bool s_tuning_dispatching;
-static uint32_t s_factor_owner[2], s_factor_sent_at[2];
+static uint32_t s_factor_owner[2], s_factor_sent_at[2], s_factor_job[2];
+static struct { bool active; uint32_t epoch, job; } s_factor_gesture[2];
 static bool s_factor_accepted[2];
 static void studio_tuning_close(lv_event_t *event);
 static void tuning_field_deleted(lv_event_t *event)
@@ -104,19 +106,32 @@ static void tuning_slider_event_cb(lv_event_t *event)
     if (!event || s_tuning_dispatching || !s_tuning_owner ||
         s_tuning_generation != moonraker_config_generation()) return;
     lv_event_code_t code = lv_event_get_code(event);
-    if (code != LV_EVENT_VALUE_CHANGED && code != LV_EVENT_RELEASED) return;
+    if (code != LV_EVENT_VALUE_CHANGED && code != LV_EVENT_RELEASED &&
+        code != LV_EVENT_PRESSED && code != LV_EVENT_PRESS_LOST) return;
     printer_tuning_kind_t kind = (printer_tuning_kind_t)(intptr_t)lv_event_get_user_data(event);
     if (kind != PRINTER_TUNING_SPEED && kind != PRINTER_TUNING_FLOW) return;
     lv_obj_t *slider = kind == PRINTER_TUNING_SPEED ? s_speed_factor_slider : s_flow_factor_slider;
-    if (!slider || lv_event_get_target(event) != slider || lv_obj_has_state(slider, LV_STATE_DISABLED)) return;
+    if (!slider || lv_event_get_target(event) != slider) return;
+    bool started = s_factor_gesture[kind].active;
+    if (code != LV_EVENT_VALUE_CHANGED) s_factor_gesture[kind].active = false;
+    if (code == LV_EVENT_PRESS_LOST || lv_obj_has_state(slider, LV_STATE_DISABLED)) return;
     moonraker_state_t live;
     moonraker_state_snapshot(&live);
     if (printer_connection_reason(&live)[0]) return;
+    if (code == LV_EVENT_PRESSED) {
+        s_factor_gesture[kind].active = true;
+        s_factor_gesture[kind].epoch = s_tuning_epoch;
+        s_factor_gesture[kind].job = live.print_job_revision;
+        return;
+    }
+    if (!started || s_factor_gesture[kind].epoch != s_tuning_epoch ||
+        s_factor_gesture[kind].job != live.print_job_revision) return;
     int value = clamp_factor(lv_slider_get_value(slider));
     set_factor_value_text(kind == PRINTER_TUNING_SPEED ? s_speed_factor_value : s_flow_factor_value, value);
     if (code != LV_EVENT_RELEASED) return;
     int *pending = kind == PRINTER_TUNING_SPEED ? &s_pending_speed_factor : &s_pending_flow_factor;
     if (*pending == value && s_factor_owner[kind] == s_tuning_generation &&
+        s_factor_job[kind] == live.print_job_revision &&
         s_factor_accepted[kind] && lv_tick_elaps(s_factor_sent_at[kind]) < 5000) return;
     uint32_t owner = s_tuning_generation, epoch = s_tuning_epoch;
     ui_printer_live_status_send_gcode_cb_t send = s_send_gcode_cb;
@@ -129,6 +144,7 @@ static void tuning_slider_event_cb(lv_event_t *event)
     /* Keep the selected input on rejection; accepted state awaits telemetry. */
     *pending = value;
     s_factor_owner[kind] = owner;
+    s_factor_job[kind] = live.print_job_revision;
     s_factor_accepted[kind] = accepted;
     s_factor_sent_at[kind] = lv_tick_get();
     if (!s_tuning_owner || epoch != s_tuning_epoch) return;
@@ -252,6 +268,9 @@ static lv_obj_t *create_tuning_slider(
         LV_EVENT_RELEASED,
         (void *)(intptr_t)kind);
 
+    lv_obj_add_event_cb(slider, tuning_slider_event_cb, LV_EVENT_PRESSED, (void *)(intptr_t)kind);
+    lv_obj_add_event_cb(slider, tuning_slider_event_cb, LV_EVENT_PRESS_LOST, (void *)(intptr_t)kind);
+
     return slider;
 }
 
@@ -372,13 +391,15 @@ static void refresh_factor_slider(
     bool ready = s_tuning_generation == owner && !printer_connection_reason(&live)[0] && s_send_gcode_cb;
     if (ready && !s_tuning_dispatching) lv_obj_remove_state(slider, LV_STATE_DISABLED);
     else lv_obj_add_state(slider, LV_STATE_DISABLED);
-    int reported = clamp_factor((int)(reported_factor + 0.5));
+    double bounded = isfinite(reported_factor) ? fmin(150, fmax(50, reported_factor)) : 100;
+    int reported = (int)(bounded + 0.5);
     int displayed = reported;
     bool timed_out = false;
     if (*pending_factor >= 0) {
         int difference = reported - *pending_factor;
         if (difference < 0) difference = -difference;
-        if (s_factor_owner[kind] != owner || (ready && difference <= 1)) {
+        if (s_factor_owner[kind] != owner || s_factor_job[kind] != live.print_job_revision ||
+            (ready && difference <= 1)) {
             *pending_factor = -1;
             s_factor_accepted[kind] = false;
         } else if (s_factor_accepted[kind] && lv_tick_elaps(s_factor_sent_at[kind]) >= 5000) {

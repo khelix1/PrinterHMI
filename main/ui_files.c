@@ -65,6 +65,9 @@ static void update_up_button(void)
 static lv_timer_t *s_files_refresh_timer = NULL;
 static bool s_files_refresh_pending = false;
 static bool s_files_print_dispatching;
+#define FILES_START_ACK_WAIT_MS 5000U
+static bool s_files_start_pending;
+static uint32_t s_files_start_owner, s_files_start_job, s_files_start_tick;
 static void files_page_deleted(lv_event_t *event);
 
 static bool files_browser_ready(void)
@@ -1152,7 +1155,7 @@ static lv_obj_t *s_file_detail_popup = NULL;
 static lv_obj_t *s_studio_metadata_popup = NULL;
 static lv_obj_t *s_studio_metadata_label = NULL;
 static ui_files_detail_cb_t s_detail_cancel_cb = NULL;
-static ui_files_detail_cb_t s_detail_start_cb = NULL;
+static ui_files_start_cb_t s_detail_start_cb = NULL;
 static lv_obj_t *s_detail_info_label = NULL;
 static lv_obj_t *s_detail_start_button = NULL;
 static lv_obj_t *s_detail_more_button, *s_detail_cancel_button;
@@ -1162,7 +1165,7 @@ static lv_obj_t *s_print_accept_button;
 static lv_obj_t *s_print_connection_label;
 static void print_confirm_cancel(lv_event_t *event);
 static char *s_detail_filename;
-static uint32_t s_print_confirm_generation;
+static uint32_t s_print_confirm_generation, s_print_confirm_job;
 static int s_print_confirm_profile;
 static bool s_detail_metadata_ready;
 static uint32_t s_detail_generation;
@@ -1178,12 +1181,19 @@ static void detail_connection_refresh(lv_timer_t *timer)
         if(!state.moonraker_ok)reason="Offline - reconnect before printing.";
         else if(!state.live_data_ok)reason="Waiting for Klipper before printing.";
     }
+    if(!reason[0] && s_files_start_pending &&
+       s_files_start_owner==s_detail_generation &&
+       s_files_start_job==state.print_job_revision &&
+       lv_tick_elaps(s_files_start_tick)<FILES_START_ACK_WAIT_MS)
+        reason="Start request sent - waiting for printer status.";
     if(!reason[0] && !s_detail_metadata_ready)reason="Loading file details - Print unavailable.";
     if(!reason[0] && !s_detail_start_cb)reason="Print action unavailable.";
     if(s_detail_start_button) {
         if(reason[0] || !s_detail_start_cb || s_files_print_dispatching)lv_obj_add_state(s_detail_start_button,LV_STATE_DISABLED);
         else lv_obj_remove_state(s_detail_start_button,LV_STATE_DISABLED);
     }
+    if(s_print_confirm_popup && !reason[0] && s_print_confirm_job!=state.print_job_revision)
+        reason="Print activity changed - review the file again.";
     if(s_print_accept_button) {
         if(reason[0] || !s_detail_start_cb || s_files_print_dispatching)lv_obj_add_state(s_print_accept_button,LV_STATE_DISABLED);
         else lv_obj_remove_state(s_print_accept_button,LV_STATE_DISABLED);
@@ -1247,7 +1257,8 @@ void ui_files_close_detail_popup(void)
     s_detail_more_button=s_detail_cancel_button=NULL;
     s_detail_preview_box=s_detail_filename_label=NULL;
     s_detail_connection_timer=NULL;s_detail_connection_label=NULL;s_detail_metadata_ready=false;
-    s_detail_cancel_cb=s_detail_start_cb=NULL;
+    s_detail_cancel_cb=NULL;
+    s_detail_start_cb=NULL;
     free(s_detail_filename);s_detail_filename=NULL;
     print_confirm_cancel(NULL);
     if(timer)lv_timer_delete(timer);
@@ -1286,7 +1297,7 @@ static void print_confirm_accept(lv_event_t *event)
     (void)event;
     if(!s_print_confirm_popup || s_files_print_dispatching)return;
     detail_connection_refresh(NULL);
-    bool ready=s_detail_start_cb && s_detail_start_button &&
+    bool ready=s_detail_filename && s_detail_start_cb && s_detail_start_button &&
         !lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED);
     bool same_printer=s_print_confirm_profile==moonraker_config_active_profile_index() &&
         s_print_confirm_generation==moonraker_config_generation();
@@ -1294,18 +1305,36 @@ static void print_confirm_accept(lv_event_t *event)
         ui_files_print_feedback("Printer changed. Cancel and select the file again before starting a print.");
         return;
     }
-    if(!ready) {
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    if(state.print_job_revision!=s_print_confirm_job) {
+        ui_files_print_feedback("Print activity changed. Close this confirmation and review the file again.");
+        return;
+    }
+    if(!ready || !state.moonraker_ok || !state.live_data_ok || printer_idle_reason(&state)[0]) {
         ui_files_print_feedback("Print not ready. Wait for the file details, then try again.");
         return;
     }
-    lv_obj_t *popup=s_print_confirm_popup;
     uint32_t owner=s_print_confirm_generation;
-    ui_files_detail_cb_t start=s_detail_start_cb;
+    /* A callback may close the detail view and free its filename. */
+    size_t length=strlen(s_detail_filename)+1;
+    char *reviewed_file=malloc(length);
+    if(!reviewed_file) {
+        ui_files_print_feedback("Not enough memory to start this print. Try again.");
+        return;
+    }
+    memcpy(reviewed_file,s_detail_filename,length);
+    ui_files_start_cb_t start=s_detail_start_cb;
     s_files_print_dispatching=true;
     detail_connection_refresh(NULL);
-    start();
+    if(start(reviewed_file)) {
+        s_files_start_pending=true;
+        s_files_start_owner=owner;
+        s_files_start_job=state.print_job_revision;
+        s_files_start_tick=lv_tick_get();
+    }
+    free(reviewed_file);
     s_files_print_dispatching=false;
-    if(s_print_confirm_popup==popup && owner==moonraker_config_generation())detail_connection_refresh(NULL);
+    detail_connection_refresh(NULL);
 }
 
 static void detail_start_event_cb(lv_event_t *event)
@@ -1323,6 +1352,8 @@ static void detail_start_event_cb(lv_event_t *event)
     lv_obj_add_event_cb(s_print_confirm_popup,print_confirm_deleted,LV_EVENT_DELETE,NULL);
     s_print_confirm_profile=moonraker_config_active_profile_index();
     s_print_confirm_generation=moonraker_config_generation();
+    moonraker_state_t state;moonraker_state_snapshot(&state);
+    s_print_confirm_job=state.print_job_revision;
     lv_obj_set_flex_flow(s_print_confirm_popup,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_print_confirm_popup,UI_PAD_POPUP,0);
     lv_obj_set_style_pad_row(s_print_confirm_popup,UI_GAP_ROW,0);
@@ -1529,7 +1560,7 @@ void ui_files_show_detail_popup(const char *filename_text,
                                     lv_obj_t **thumb_box_out,
                                     ui_thumbnail_t **thumb_view_out,
                                     ui_files_detail_cb_t cancel_cb,
-                                    ui_files_detail_cb_t start_cb)
+                                    ui_files_start_cb_t start_cb)
 {
     ui_files_close_detail_popup();
     const char *selected_name=filename_text && filename_text[0]?filename_text:"Unnamed file";

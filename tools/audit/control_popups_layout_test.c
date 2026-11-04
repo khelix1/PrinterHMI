@@ -15,7 +15,8 @@ static bool linked=true,accept_send=true;
 static const char *printer_state="ready";
 static void (*send_hook)(void);
 static unsigned attempts;
-void moonraker_state_snapshot(moonraker_state_t *out){memset(out,0,sizeof(*out));out->moonraker_ok=out->live_data_ok=linked;snprintf(out->printer_state,sizeof(out->printer_state),"%s",printer_state);}
+static uint32_t job_revision;
+void moonraker_state_snapshot(moonraker_state_t *out){memset(out,0,sizeof(*out));out->print_job_revision=job_revision;out->moonraker_ok=out->live_data_ok=linked;snprintf(out->printer_state,sizeof(out->printer_state),"%s",printer_state);}
 static char sent[128];static unsigned sends;
 static void send(const char *s){snprintf(sent,sizeof(sent),"%s",s);sends++;}
 static bool checked_send(const char *s){attempts++;if(send_hook)send_hook();if(!accept_send)return false;send(s);return true;}
@@ -90,6 +91,8 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
  keyboard=lv_obj_get_child(s_custom_temp_popup,2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);
  assert(s_custom_temp_popup&&sends==before&&!strcmp(lv_textarea_get_text(s_custom_temp_textarea),"80")&&strstr(lv_label_get_text(s_custom_temp_status),"Send failed"));
  accept_send=true;linked=false;lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before&&s_custom_temp_popup);
+ linked=true;job_revision++;lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);
+ assert(sends==before&&strstr(lv_label_get_text(s_custom_temp_status),"Print changed"));
  linked=true;generation++;lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before&&strstr(lv_label_get_text(s_custom_temp_status),"Printer changed"));
  lv_obj_send_event(keyboard,LV_EVENT_CANCEL,NULL);assert(!s_custom_temp_popup&&s_control_popup);lv_obj_delete(s_control_popup);
  ui_printer_popups_show_bed(send,60,60);open_custom();lv_textarea_set_text(s_custom_temp_textarea,"80");keyboard=lv_obj_get_child(s_custom_temp_popup,2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before+1&&!s_custom_temp_popup&&!s_control_popup);

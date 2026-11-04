@@ -18,7 +18,7 @@
 #include "esp_timer.h"
 #include "esp_websocket_client.h"
 #include "freertos/FreeRTOS.h"
-#include "cJSON.h"
+#include "moonraker_websocket_json.h"
 #include "moonraker.h"
 #include "operator_event_log.h"
 #include "console_controller.h"
@@ -37,9 +37,9 @@
  * the new generation, retire and reopen during the same pass as v5.0 did.
  * v6.0.0 generation fencing still rejects every event from the old client.
  */
-#define WS_MESSAGE_MAX_BYTES (128 * 1024)
+#define WS_MESSAGE_MAX_BYTES MOONRAKER_WS_MESSAGE_CAPACITY
 #define WS_SUBSCRIPTION_CAPACITY (16 * 1024)
-#define WS_COMMAND_CAPACITY 1024
+#define WS_COMMAND_CAPACITY GCODE_COMMAND_JSON_CAPACITY
 #define WS_COMMAND_ID_FIRST 2000U
 
 
@@ -286,21 +286,35 @@ static bool append_subscription_object(
         return false;
     }
 
-    int written = snprintf(
-        s_subscription + *used,
-        s_subscription_capacity - *used,
-        "\"%s\":%s,",
-        object_name,
-        fields ? fields : "null");
-
-    if (written < 0 ||
-        (size_t)written >=
-            s_subscription_capacity - *used) {
-        return false;
+    size_t start = *used;
+    if (!append_subscription_text(used, "\"")) goto overflow;
+    for (const unsigned char *p = (const unsigned char *)object_name; *p; ++p) {
+        static const char hex[] = "0123456789abcdef";
+        char escaped[7] = {(char)*p, 0};
+        if (*p == '"' || *p == '\\') {
+            escaped[0] = '\\';
+            escaped[1] = (char)*p;
+        } else if (*p < 0x20) {
+            escaped[0] = '\\';
+            escaped[1] = 'u';
+            escaped[2] = '0';
+            escaped[3] = '0';
+            escaped[4] = hex[*p >> 4];
+            escaped[5] = hex[*p & 15];
+        }
+        if (!append_subscription_text(used, escaped)) goto overflow;
     }
 
-    *used += (size_t)written;
-    return true;
+    if (append_subscription_text(used, "\":") &&
+        append_subscription_text(used, fields ? fields : "null") &&
+        append_subscription_text(used, ",")) {
+        return true;
+    }
+
+overflow:
+    *used = start;
+    s_subscription[start] = '\0';
+    return false;
 }
 
 
@@ -674,48 +688,38 @@ bool moonraker_live_websocket_request_endstops(uint32_t request_id)
         esp_websocket_client_send_text(s_client, request, length, 0) == length;
 }
 
-static bool handle_tools_response(const char *json, size_t length)
+static bool handle_tools_response(const cJSON *root)
 {
-    /* Notifications dominate live traffic and never carry response IDs. */
-    if (!strstr(json, "\"id\"")) return false;
-    cJSON *root = cJSON_ParseWithLength(json, length);
-    if (!root) return false;
     cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "id");
-    bool consumed = cJSON_IsNumber(id) && id->valueint == 1003;
+    bool consumed = cJSON_IsNumber(id) && id->valuedouble == 1003;
     if (consumed) {
         cJSON *result = cJSON_GetObjectItemCaseSensitive(root, "result");
         cJSON *status = cJSON_GetObjectItemCaseSensitive(result, "status");
         cJSON *configfile = cJSON_GetObjectItemCaseSensitive(status, "configfile");
         cJSON *config = cJSON_GetObjectItemCaseSensitive(configfile, "config");
-        macro_controller_update_parameters(config);
-        motion_diagnostics_controller_update_config(config);
-        case_lighting_config(config,s_generation);
+        if (cJSON_IsObject(config)) {
+            macro_controller_update_parameters(config);
+            motion_diagnostics_controller_update_config(config);
+            case_lighting_config(config,s_generation);
+        }
     } else {
         consumed = case_lighting_response(root,s_generation) || endstop_status_controller_merge(root, s_generation);
     }
-    cJSON_Delete(root);
     return consumed;
 }
 
 
-static bool handle_command_response(
-    const char *json,
-    size_t length)
+static bool handle_command_response(const cJSON *root)
 {
-    cJSON *root =
-        cJSON_ParseWithLength(json, length);
-    if (!root) {
-        return false;
-    }
-
     cJSON *id =
         cJSON_GetObjectItemCaseSensitive(
             root,
             "id");
 
     if (!cJSON_IsNumber(id) ||
-        id->valuedouble < WS_COMMAND_ID_FIRST) {
-        cJSON_Delete(root);
+        !(id->valuedouble >= WS_COMMAND_ID_FIRST &&
+          id->valuedouble <= UINT32_MAX) ||
+        id->valuedouble != (uint32_t)id->valuedouble) {
         return false;
     }
 
@@ -739,21 +743,14 @@ static bool handle_command_response(
                 : "Unknown JSON-RPC error");
     }
 
-    cJSON_Delete(root);
     return true;
 }
 
 
-static bool handle_object_list_response(
-    const char *json,
-    size_t length)
+static bool handle_object_list_response(const cJSON *root)
 {
-    cJSON *root = cJSON_ParseWithLength(json, length);
-    if (!root) return false;
-
     cJSON *id = cJSON_GetObjectItemCaseSensitive(root, "id");
-    if (!cJSON_IsNumber(id) || id->valueint != 1001) {
-        cJSON_Delete(root);
+    if (!cJSON_IsNumber(id) || id->valuedouble != 1001) {
         return false;
     }
 
@@ -762,9 +759,19 @@ static bool handle_object_list_response(
         ? cJSON_GetObjectItemCaseSensitive(result, "objects")
         : NULL;
 
+    if (!cJSON_IsArray(objects)) {
+        return true;
+    }
+    const cJSON *object = NULL;
+    cJSON_ArrayForEach(object, objects) {
+        if (!cJSON_IsString(object) || !object->valuestring || !object->valuestring[0]) {
+            return true;
+        }
+    }
+
     macro_controller_update_from_objects(objects);
     motion_diagnostics_controller_update_objects(objects);
-    s_macro_config_pending = cJSON_IsArray(objects);
+    s_macro_config_pending = true;
     device_catalog_controller_update_from_objects(objects);
 
     static const char *candidates[MOONRAKER_MAX_HOTENDS] = {
@@ -860,7 +867,6 @@ static bool handle_object_list_response(
         ESP_LOGW(TAG, "WS object discovery found no standard hotends");
         s_subscription_ready = false;
         s_subscribe_pending = false;
-        cJSON_Delete(root);
         return true;
     }
 
@@ -882,7 +888,6 @@ static bool handle_object_list_response(
         ESP_LOGE(TAG, "WS dynamic subscription overflow");
         s_subscription_ready = false;
         s_subscribe_pending = false;
-        cJSON_Delete(root);
         return true;
     }
 
@@ -920,8 +925,18 @@ static bool handle_object_list_response(
             : "no",
         (unsigned)capabilities.filament_sensor_count);
 
-    cJSON_Delete(root);
     return true;
+}
+
+
+static bool handle_websocket_response(const char *json, size_t length)
+{
+    cJSON *root = moonraker_websocket_parse_object(json, length);
+    if (!root) return false;
+    bool consumed = handle_tools_response(root) ||
+        handle_object_list_response(root) || handle_command_response(root);
+    cJSON_Delete(root);
+    return consumed;
 }
 
 
@@ -970,21 +985,9 @@ static void handle_websocket_data(esp_websocket_event_data_t *data)
     if (payload_length <= 0) return;
 
     case_lighting_status_json(s_message_buffer,(size_t)payload_length,s_generation);
-    if (handle_tools_response(s_message_buffer, (size_t)payload_length)) return;
-
-    if (handle_object_list_response(
-            s_message_buffer,
-            (size_t)payload_length)) {
-        return;
-    }
+    if (handle_websocket_response(s_message_buffer, (size_t)payload_length)) return;
 
     if (console_controller_ingest_websocket_json(
-            s_message_buffer,
-            (size_t)payload_length)) {
-        return;
-    }
-
-    if (handle_command_response(
             s_message_buffer,
             (size_t)payload_length)) {
         return;

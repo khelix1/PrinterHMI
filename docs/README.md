@@ -1,6 +1,6 @@
 # PrinterHMI documentation
 
-Operator/build guides describe current v7.3.13-dev behavior. `releases/`,
+Operator/build guides describe current v7.3.25-dev behavior. `releases/`,
 `history/`, the changelog and the engineering records identified below describe
 their own checkpoints; they are not automatically current procedures.
 
@@ -58,7 +58,7 @@ Historical Settings and large-text source closeout: [validation and pending foll
 - [Console layouts, command feedback and pressed button frames](CONSOLE.md)
 - [Notification policy and remaining migration](NOTIFICATIONS.md)
 
-See [v7.3.13-dev release notes](releases/v7.3.13-dev.md) for the current release scope and [Code cleanup](CODE_CLEANUP.md) for development history.
+See [v7.3.25-dev release notes](releases/v7.3.25-dev.md) for the current release scope and [Code cleanup](CODE_CLEANUP.md) for development history.
 
 - [Lighting](LIGHTING.md) — Tools case-light control and PWM brightness.
 

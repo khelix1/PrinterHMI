@@ -15,7 +15,7 @@ def function(name):
     at = source.index(name + '(')
     start = source.rfind('\n', 0, at) + 1
     return source[start:source.index('\n}\n', at) + 3]
-production = '\n'.join(function(n) for n in ['moonraker_http_get_raw', 'moonraker_http_get_text', 'moonraker_fetch_file_metadata', 'moonraker_start_print_file'])
+production = '\n'.join(function(n) for n in ['moonraker_http_event_handler', 'moonraker_http_get_raw', 'moonraker_http_get_text', 'moonraker_test_connection', 'moonraker_fetch_file_metadata', 'moonraker_start_print_file'])
 fixture = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -31,13 +31,18 @@ typedef int esp_err_t;
 #define ESP_FAIL -1
 #define ESP_ERR_INVALID_ARG -2
 #define ESP_ERR_INVALID_SIZE -3
+#define ESP_ERR_INVALID_RESPONSE -5
 #define ESP_ERR_INVALID_STATE -4
 #define HTTP_METHOD_GET 0
 #define HTTP_METHOD_POST 1
-typedef struct {char *buf;int len,cap;} http_capture_t;
+typedef struct {char *buf;int len,cap;bool overflowed;} http_capture_t;
+#define HTTP_EVENT_ON_DATA 1
+typedef struct {void *user_data;int event_id;const char *data;int data_len;} esp_http_client_event_t;
+esp_err_t moonraker_http_event_handler(esp_http_client_event_t *);
+static const char *reply="{}";
+static int reply_length=2;
 typedef void *esp_http_client_handle_t;
 typedef struct {const char *url,*cert_pem;int method,timeout_ms;void *event_handler,*user_data;bool disable_auto_redirect;} esp_http_client_config_t;
-static void *moonraker_http_event_handler;
 static char url[2048],wire[2048];static unsigned created,cleaned,begun,ended,performed;
 static bool shared=true;static int status=200,perform_error;static void *capture;
 static bool moonraker_transport_security_build_http_url_for_endpoint(const char *host,int port,const char *path,char *out,size_t size,const char **ca){*ca=NULL;int n=snprintf(out,size,"https://%s:%d%s",host,port,path);return n>0&&(size_t)n<size;}
@@ -46,7 +51,7 @@ static int esp_http_client_set_header(void *c,const char *key,const char *value)
 static int esp_http_client_set_post_field(void *c,const char *data,int size){assert(c&&size>0&&(size_t)size<sizeof(wire));memcpy(wire,data,(size_t)size);wire[size]=0;return 0;}
 static bool network_activity_controller_try_begin_shared(void){if(!shared)return false;begun++;return true;}
 static void network_activity_controller_end_shared(void){ended++;}
-static int esp_http_client_perform(void *c){assert(c);performed++;if(capture){http_capture_t *cap=capture;assert(cap->cap>=3);strcpy(cap->buf,"{}");cap->len=2;}return perform_error;}
+static int esp_http_client_perform(void *c){assert(c);performed++;if(capture){esp_http_client_event_t e={capture,HTTP_EVENT_ON_DATA,reply,reply_length};assert(moonraker_http_event_handler(&e)==ESP_OK);}return perform_error;}
 static int esp_http_client_get_status_code(void *c){assert(c);return status;}
 static int esp_http_client_cleanup(void *c){assert(c);cleaned++;return 0;}
 '''
@@ -69,6 +74,14 @@ int main(void){
  assert(!moonraker_fetch_file_metadata(host,7125,"key",encoded,body,sizeof(body),&code,&error)&&performed==before);
  shared=true;status=401;assert(!moonraker_start_print_file(host,7125,"key","test",&code,&error));
  status=200;perform_error=-9;assert(!moonraker_fetch_file_metadata(host,7125,"key",encoded,body,sizeof(body),&code,&error));
+ perform_error=0;
+ char large[300];memset(large,' ',sizeof(large));memcpy(large,"{}",2);reply=large;reply_length=sizeof(large);
+ assert(!moonraker_fetch_file_metadata(host,7125,"key",encoded,body,sizeof(body),&code,&error)&&error==ESP_ERR_INVALID_SIZE);
+ assert(moonraker_test_connection(host,7125,&code,&error)&&code==200);
+ reply_length=sizeof(body)-1;
+ assert(moonraker_fetch_file_metadata(host,7125,"key",encoded,body,sizeof(body),&code,&error)&&strlen(body)==sizeof(body)-1);
+ reply="{}\0junk";reply_length=7;
+ assert(!moonraker_fetch_file_metadata(host,7125,"key",encoded,body,sizeof(body),&code,&error)&&error==ESP_ERR_INVALID_RESPONSE);
  assert(created==cleaned&&begun==ended);
  puts("PASS: maximum encoded metadata names and JSON-escaped print filenames survive complete request construction; oversized, busy and failed paths clean up");
 }

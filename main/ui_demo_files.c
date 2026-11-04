@@ -18,7 +18,7 @@ static bool files_open;
 static lv_obj_t *files_root;
 static uint32_t profile_owner;
 static bool (*files_send)(const char *);
-static char folder[64], query[64], selected[256];
+static char folder[64], query[64];
 static unsigned sort_kind;
 static ui_thumbnail_t *detail_thumbnail;
 const lv_image_dsc_t *ui_demo_files_image(const char *path) {
@@ -56,7 +56,6 @@ static void root_deleted(lv_event_t *event) {
     files_root = NULL;
     files_open = false;
     files_send = NULL;
-    selected[0] = 0;
   }
 }
 static bool contains(const char *text, const char *needle) {
@@ -122,33 +121,32 @@ static void refresh(void) {
                                  : "No files in this folder");
 }
 static void cancel_detail(void) {
-  selected[0] = 0;
   ui_files_close_detail_popup();
 }
-static void start(void) {
+static bool start(const char *filename) {
   moonraker_state_t m;
   moonraker_state_snapshot(&m);
-  if (!current() || !selected[0] || !demo_files_find(selected) || !files_send ||
+  if (!current() || !filename || !demo_files_find(filename) || !files_send ||
       printer_idle_reason(&m)[0])
-    return;
+    return false;
   char command[320];
   snprintf(command, sizeof(command), "SDCARD_PRINT_FILE FILENAME=\"%s\"",
-           selected);
+           filename);
   lv_obj_t *root=files_root;uint32_t owner=profile_owner;
   bool sent=files_send(command);
-  if(!current() || files_root!=root || profile_owner!=owner)return;
+  if(!current() || files_root!=root || profile_owner!=owner)return sent;
   if (!sent) {
     ui_files_print_feedback("Simulated command was not accepted.");
-    return;
+    return false;
   }
   cancel_detail();
   ui_shell_page_action(UI_SHELL_PAGE_DASHBOARD);
+  return true;
 }
 static void select_file(const char *path) {
   const demo_file_t *file = demo_files_find(path);
   if (!current() || !file)
     return;
-  snprintf(selected, sizeof(selected), "%s", path);
   char metadata[1600];
   if (!demo_files_metadata_text(path, metadata, sizeof(metadata)))
     return;
@@ -190,7 +188,6 @@ void ui_demo_files_close(void) {
   files_open = false;
   files_root = NULL;
   files_send = NULL;
-  selected[0] = 0;
   ui_preview_lightbox_close();
   ui_files_hide();
   ui_files_set_callbacks(NULL, NULL, NULL);
@@ -201,7 +198,7 @@ void ui_demo_files_show(bool (*send)(const char *)) {
   files_open = true;
   profile_owner = moonraker_config_generation();
   files_send = send;
-  folder[0] = query[0] = selected[0] = 0;
+  folder[0] = query[0] = 0;
   sort_kind = 0;
   ui_files_set_callbacks(refresh, select_file, preview);
   ui_files_set_browser_callbacks(search, sort, choose_folder, up);

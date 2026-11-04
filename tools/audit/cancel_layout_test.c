@@ -46,6 +46,11 @@ static void lifetime_checks(void)
   if(during==5){assert(s_cancel_confirm_popup);confirm_cancel_cb(NULL);assert(sends==before+2&&!s_cancel_confirm_popup);}
   close_cancel_confirm_cb(NULL);assert(!s_cancel_status&&!s_cancel_send);
  }
+ reset();ui_printer_popups_show_cancel(send);before=sends;fixture.print_job_revision++;
+ confirm_cancel_cb(NULL);assert(sends==before&&strstr(lv_label_get_text(s_cancel_status),"Print changed"));
+ ui_printer_popups_show_cancel(send);confirm_cancel_cb(NULL);assert(sends==before+1);
+ fixture.print_job_revision++;
+ ui_printer_popups_show_cancel(send);confirm_cancel_cb(NULL);assert(sends==before+2);
  const char *states[]={"standby","complete","error","shutdown","startup","disconnected"};
  for(unsigned i=0;i<6;i++){
   reset();ui_printer_popups_show_cancel(send);strcpy(fixture.printer_state,states[i]);before=sends;confirm_cancel_cb(NULL);assert(sends==before&&s_cancel_confirm_popup);close_cancel_confirm_cb(NULL);

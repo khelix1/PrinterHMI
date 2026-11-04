@@ -7,7 +7,8 @@
 extern "C" {
 #endif
 
-#define PRINTER_ACTION_COMMAND_MAX 640
+#include "printer_command_limits.h"
+#define PRINTER_ACTION_COMMAND_MAX GCODE_COMMAND_CAPACITY
 
 typedef enum {
     PRINTER_ACTION_CONFIRM_NONE = 0,
@@ -26,7 +27,8 @@ typedef struct {
 /*
  * Resolve one semantic HMI command. A detected public printer macro is
  * preferred when a known workflow alias exists. Unknown and parameterized
- * commands pass through unchanged.
+ * commands pass through unchanged. Empty or oversized commands fail with a
+ * cleared output; no shortened command is dispatched.
  */
 bool printer_action_resolver_resolve(
     const char *requested,

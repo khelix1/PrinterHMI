@@ -38,13 +38,15 @@ void ui_files_set_browser_callbacks(
     ui_files_action_cb_t up_cb);
 
 typedef void (*ui_files_detail_cb_t)(void);
+/* Return true if accepted. The path remains valid until the callback returns. */
+typedef bool (*ui_files_start_cb_t)(const char *filename);
 
 void ui_files_show_detail_popup(const char *filename_text,
                                     const char *metadata_text,
                                     lv_obj_t **thumb_box_out,
                                     ui_thumbnail_t **thumb_view_out,
                                     ui_files_detail_cb_t cancel_cb,
-                                    ui_files_detail_cb_t start_cb);
+                                    ui_files_start_cb_t start_cb);
 void ui_files_close_detail_popup(void);
 bool ui_files_detail_is_open(void);
 /* Embedded Studio previews allow row updates; modal dialogs defer them. */

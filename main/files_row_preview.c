@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 #include <math.h>
-#include "cJSON.h"
+#include "moonraker_file_metadata.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -101,9 +101,10 @@ static bool row_thumbnail_path(const char *metadata,char *out,size_t size)
 {
     if(!out||!size)return false;
     out[0]=0;if(!metadata)return false;
-    cJSON *root=cJSON_Parse(metadata);
-    cJSON *result=cJSON_GetObjectItemCaseSensitive(root,"result");
+    const cJSON *result;
+    cJSON *root=moonraker_metadata_parse(metadata,&result);
     cJSON *items=cJSON_GetObjectItemCaseSensitive(result,"thumbnails");
+    if (!cJSON_IsArray(items)) { cJSON_Delete(root); return false; }
     const char *best=NULL,*fallback=NULL;double best_area=INFINITY,fallback_area=-1;
     cJSON *item=NULL;
     cJSON_ArrayForEach(item,items){

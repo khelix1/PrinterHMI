@@ -5,7 +5,8 @@
 #define MACRO_PARAMETER_NAME_MAX 32
 #define MACRO_PARAMETER_VALUE_MAX 64
 #define MACRO_PARAMETER_EXTRA 2
-#define MACRO_COMMAND_MAX 640
+#include "printer_command_limits.h"
+#define MACRO_COMMAND_MAX GCODE_COMMAND_CAPACITY
 
 typedef struct {
     size_t count;

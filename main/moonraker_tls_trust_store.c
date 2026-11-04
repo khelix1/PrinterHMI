@@ -23,7 +23,8 @@ static bool valid_index(int profile_index)
 
 static bool key_for_profile(int profile_index, char *key, size_t key_size)
 {
-    return snprintf(key, key_size, "ca_pem_%d", profile_index) > 0;
+    int written = snprintf(key, key_size, "ca_pem_%d", profile_index);
+    return written > 0 && (size_t)written < key_size;
 }
 
 static bool ensure_profile_buffer(int profile_index)
@@ -43,20 +44,44 @@ static bool ensure_profile_buffer(int profile_index)
     return true;
 }
 
+static bool pem_valid(const char *pem)
+{
+    return pem && strnlen(pem, MOONRAKER_TLS_CA_PEM_MAX) < MOONRAKER_TLS_CA_PEM_MAX &&
+        strstr(pem, "-----BEGIN CERTIFICATE-----") &&
+        strstr(pem, "-----END CERTIFICATE-----");
+}
+
 static bool load_profile(int profile_index)
 {
     if (!ensure_profile_buffer(profile_index)) return false;
     if (s_loaded[profile_index]) return true;
-    s_loaded[profile_index] = true;
     char key[16];
     if (!key_for_profile(profile_index, key, sizeof(key))) return false;
+    s_pem[profile_index][0] = '\0';
     nvs_handle_t handle;
-    if (nvs_open(TLS_NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) return true;
-    size_t length = MOONRAKER_TLS_CA_PEM_MAX;
-    if (nvs_get_str(handle, key, s_pem[profile_index], &length) != ESP_OK) {
-        s_pem[profile_index][0] = '\0';
+    esp_err_t err = nvs_open(TLS_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        s_loaded[profile_index] = true;
+        return true; /* A genuinely absent namespace has no certificate. */
     }
+    if (err != ESP_OK) return false;
+    size_t length = MOONRAKER_TLS_CA_PEM_MAX;
+    err = nvs_get_str(handle, key, s_pem[profile_index], &length);
     nvs_close(handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        s_pem[profile_index][0] = '\0';
+        s_loaded[profile_index] = true;
+        return true;
+    }
+    /* Publish only a complete string. Failed/partial reads stay retryable;
+     * an error must not permanently cache an empty certificate until reboot. */
+    if (err != ESP_OK || length == 0 || length > MOONRAKER_TLS_CA_PEM_MAX ||
+        memchr(s_pem[profile_index], '\0', length) != s_pem[profile_index] + length - 1 ||
+        !pem_valid(s_pem[profile_index])) {
+        s_pem[profile_index][0] = '\0';
+        return false;
+    }
+    s_loaded[profile_index] = true;
     return true;
 }
 
@@ -67,10 +92,7 @@ bool moonraker_tls_trust_store_init(void)
 
 bool moonraker_tls_trust_store_set_pem_for_profile(int profile_index, const char *pem)
 {
-    if (!valid_index(profile_index) || !pem ||
-        strnlen(pem, MOONRAKER_TLS_CA_PEM_MAX) >= MOONRAKER_TLS_CA_PEM_MAX ||
-        !strstr(pem, "-----BEGIN CERTIFICATE-----") ||
-        !strstr(pem, "-----END CERTIFICATE-----") ||
+    if (!valid_index(profile_index) || !pem_valid(pem) ||
         !ensure_profile_buffer(profile_index)) return false;
     char key[16];
     if (!key_for_profile(profile_index, key, sizeof(key))) return false;

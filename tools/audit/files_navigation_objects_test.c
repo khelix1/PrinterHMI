@@ -18,10 +18,10 @@ static void ui_files_print_feedback(const char *text){assert(text && text[0]);++
 void ui_shell_set_active_nav(int index){nav=index;}
 static void ui_dashboard_create(void){++created;}
 static void dashboard_restore_active_profile_preview(void){++restored;}
-bool printer_file_controller_start_selected_file(bool network,const char *host,int port,const char *key,char *status,size_t size,printer_file_controller_popup_cb_t close_cb){
- ++submitted;assert(!strcmp(host,"test.invalid") && port==7125 && !strcmp(key,"test-key"));
+bool printer_file_controller_start_file(bool network,const char *host,int port,const char *key,const char *filename,char *status,size_t size){
+ assert(!strcmp(filename,"folder/reviewed.gcode"));++submitted;assert(!strcmp(host,"test.invalid") && port==7125 && !strcmp(key,"test-key"));
  if(!network || !accept_start){snprintf(status,size,"Print not started");return false;}
- close_cb();return true;
+ return true;
 }
 #include "dashboard_route.inc"
 #include "live_start.inc"
@@ -37,9 +37,9 @@ static void state_unlock(void){assert(locked);locked=0;}
 static int64_t esp_timer_get_time(void){return 1234;}
 #include "demo_publish.inc"
 int main(void){
- nav=UI_SHELL_PAGE_FILES;accept_start=false;printer_file_detail_start_bridge();assert(nav==UI_SHELL_PAGE_FILES && !created && !closed && feedback==1);
- accept_start=true;s_got_ip=false;printer_file_detail_start_bridge();assert(nav==UI_SHELL_PAGE_FILES && !created && !closed && feedback==2);
- s_got_ip=true;printer_file_detail_start_bridge();assert(nav==UI_SHELL_PAGE_DASHBOARD && created==1 && restored==1 && closed==1 && submitted==3);
+ nav=UI_SHELL_PAGE_FILES;accept_start=false;printer_file_detail_start_bridge("folder/reviewed.gcode");assert(nav==UI_SHELL_PAGE_FILES && !created && !closed && feedback==1);
+ accept_start=true;s_got_ip=false;printer_file_detail_start_bridge("folder/reviewed.gcode");assert(nav==UI_SHELL_PAGE_FILES && !created && !closed && feedback==2);
+ s_got_ip=true;printer_file_detail_start_bridge("folder/reviewed.gcode");assert(nav==UI_SHELL_PAGE_DASHBOARD && created==1 && restored==1 && closed==1 && submitted==3);
  g_moonraker_filament_state=calloc(1,sizeof(*g_moonraker_filament_state));g_moonraker_exclude_state=calloc(1,sizeof(*g_moonraker_exclude_state));assert(g_moonraker_filament_state&&g_moonraker_exclude_state);
  moonraker_state_t state={.moonraker_ok=true,.live_data_ok=true,.capabilities={.has_exclude_object=true}};
  moonraker_filament_state_t filament={0};bool excluded[2]={false,false};

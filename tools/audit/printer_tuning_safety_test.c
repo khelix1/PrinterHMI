@@ -57,6 +57,14 @@ static void checks(void){
  }
  reset();mode=2;before=sends;release(s_speed_factor_slider,120);assert(!page&&s_pending_speed_factor==120&&s_factor_accepted[0]);open_page();release(s_speed_factor_slider,120);assert(sends==before+1);
  if(ui_theme_is_studio()){reset();mode=7;before=sends;release(s_speed_factor_slider,120);assert(!s_studio_tuning_popup&&!s_speed_factor_slider);studio_tuning_open(NULL);release(s_speed_factor_slider,120);assert(sends==before+1);}
+ reset();release(s_speed_factor_slider,101);refresh();assert(s_pending_speed_factor==101);
+ live.speed_factor=101;refresh();assert(s_pending_speed_factor==-1);
+ release(s_speed_factor_slider,100);live.speed_factor=NAN;refresh();assert(s_pending_speed_factor==100);
+ live.speed_factor=100;refresh();assert(s_pending_speed_factor==-1);
+ release(s_flow_factor_slider,150);live.flow_factor=180;refresh();assert(s_pending_flow_factor==150);
+ reset();before=sends;lv_obj_send_event(s_speed_factor_slider,LV_EVENT_PRESSED,NULL);
+ live.live_data_ok=false;refresh();live.live_data_ok=true;refresh();
+ lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(sends==before);
  reset();before=sends;live.live_data_ok=false;release(s_speed_factor_slider,120);assert(sends==before);refresh();assert(lv_obj_has_state(s_speed_factor_slider,LV_STATE_DISABLED));live.live_data_ok=true;live.moonraker_ok=false;release(s_speed_factor_slider,120);assert(sends==before);live.moonraker_ok=true;refresh();assert(!lv_obj_has_state(s_speed_factor_slider,LV_STATE_DISABLED));
  reset();before=sends;lv_obj_send_event(s_speed_factor_slider,LV_EVENT_PRESSED,NULL);lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before&&!strcmp(lv_label_get_text(s_speed_factor_value),"120%"));
  live.print_job_revision++;lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(sends==before);

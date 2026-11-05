@@ -1,14 +1,59 @@
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
 #include "dashboard_live_controller.c"
 #include "ui_theme.h"
+static time_t eta_now;
+time_t time(time_t *out) { if (out) *out = eta_now; return eta_now; }
+
+static void check_eta(void)
+{
+ char clock[32], small[9];
+ assert(setenv("TZ","UTC0",1)==0);tzset();
+ eta_now=1798759800; /* December 31, 23:30 UTC. */
+ printer_controller_format_eta_seconds(clock,sizeof(clock),900);assert(!strcmp(clock,"11:45 PM"));
+ printer_controller_format_eta_seconds(clock,sizeof(clock),3600);assert(!strcmp(clock,"12:30 AM +1d"));
+ printer_controller_format_eta_seconds(clock,sizeof(clock),90000);assert(!strcmp(clock,"12:30 AM +2d"));
+ printer_controller_format_eta_seconds(small,sizeof(small),3600);assert(!strcmp(small,"--:--"));
+ assert(setenv("TZ","CST6CDT,M3.2.0,M11.1.0",1)==0);tzset();
+ eta_now=1772951400; /* March 8, 00:30 CST, before the clocks advance. */
+ printer_controller_format_eta_seconds(clock,sizeof(clock),23*3600);assert(!strcmp(clock,"12:30 AM +1d"));
+ eta_now=0;
+ printer_controller_format_eta_seconds(clock,sizeof(clock),3600);assert(!strcmp(clock,"--:--"));
+}
 static moonraker_state_t snapshot;
-static char banner[64],file_text[160],progress_text[24],readings[7][64];
+static char banner[64],file_text[160],progress_text[24],eta_text[48],readings[7][64];
+static void check_paused_eta(void)
+{
+ assert(setenv("TZ","UTC0",1)==0);tzset();
+ eta_now=1798759800;
+ snapshot=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true,.print_job_revision=42};
+ strcpy(snapshot.printer_state,"paused");
+ print_estimate_result_t estimate={.progress=.5,.remaining=3600,.eta_remaining=3600};
+ dashboard_live_controller_push_banner_estimate(true,&estimate,42);
+ assert(!strcmp(eta_text,"ETA paused")&&!strcmp(progress_text,"50%"));
+ eta_now+=60;
+ dashboard_live_controller_push_banner_estimate(true,&estimate,42);
+ assert(!strcmp(eta_text,"ETA paused"));
+ dashboard_live_controller_push_banner_estimate(true,&estimate,41);
+ assert(!strcmp(eta_text,"ETA --:--"));
+ dashboard_live_controller_push_banner_estimate(false,&estimate,42);
+ assert(!strcmp(eta_text,"ETA --:--"));
+ strcpy(snapshot.printer_state,"printing");
+ dashboard_live_controller_push_banner_estimate(true,&estimate,42);
+ assert(!strcmp(eta_text,"ETA 12:31 AM +1d"));
+ estimate.eta_remaining=-1;
+ strcpy(snapshot.printer_state,"paused");
+ dashboard_live_controller_push_banner_estimate(true,&estimate,42);
+ assert(!strcmp(eta_text,"ETA --:--"));
+}
 static bool machine_online,filament_online;
 void moonraker_state_snapshot(moonraker_state_t *out){*out=snapshot;}
 void moonraker_filament_state_snapshot(moonraker_filament_state_t *out){memset(out,0,sizeof(*out));}
-void ui_dashboard_set_banner(const char *s,const char*f,const char*e,const char*p){(void)e;snprintf(banner,sizeof(banner),"%s",s);snprintf(file_text,sizeof(file_text),"%s",f);snprintf(progress_text,sizeof(progress_text),"%s",p);}
+void ui_dashboard_set_banner(const char *s,const char*f,const char*e,const char*p){snprintf(eta_text,sizeof(eta_text),"%s",e);snprintf(banner,sizeof(banner),"%s",s);snprintf(file_text,sizeof(file_text),"%s",f);snprintf(progress_text,sizeof(progress_text),"%s",p);}
 void ui_dashboard_set_machine(const char*n,const char*b,const char*c,const char*h,const char*s,const char*f,const char*fan){const char*values[]={n,b,c,h,s,f,fan};for(unsigned i=0;i<7;i++)snprintf(readings[i],sizeof(readings[i]),"%s",values[i]);}
 void ui_dashboard_set_active_hotend(const char*n,const char*v){(void)n;assert(!strcmp(v,readings[0]));}
 void ui_dashboard_set_machine_connection(bool online){machine_online=online;}
@@ -30,7 +75,26 @@ int main(void){lv_init();
   snapshot.moonraker_ok=snapshot.live_data_ok=true;strcpy(snapshot.printer_state,"printing");
   dashboard_live_controller_push_banner(true);dashboard_live_controller_push_machine();
   assert(strstr(banner,"PRINTING")&&strstr(readings[0],"205")&&machine_online&&filament_online&&!strcmp(progress_text,"72%"));
+  dashboard_live_controller_push_banner(false);
+  assert(strstr(banner,"OFFLINE")&&!strcmp(file_text,"No active print")&&!strcmp(progress_text,"--%"));
+  const double invalid[]={-1.0,1.01,1e300,INFINITY,NAN};
+  for(unsigned j=0;j<sizeof(invalid)/sizeof(*invalid);++j){
+   snapshot.progress=invalid[j];dashboard_live_controller_push_banner(true);
+   assert(!strcmp(progress_text,"--%"));
+  }
+  snapshot.progress=.999;dashboard_live_controller_push_banner(true);assert(!strcmp(progress_text,"99%"));
+  snapshot.progress=1;dashboard_live_controller_push_banner(true);assert(!strcmp(progress_text,"100%"));
+
  }
+ char duration[32];
+ printer_controller_format_hhmm(duration,sizeof(duration),3660);assert(!strcmp(duration,"01:01"));
+ printer_controller_format_hhmm(duration,sizeof(duration),INFINITY);assert(!strcmp(duration,"--:--"));
+ printer_controller_format_remaining(duration,sizeof(duration),.5,3600);assert(!strcmp(duration,"1:00"));
+ printer_controller_format_remaining(duration,sizeof(duration),NAN,3600);assert(!strcmp(duration,"--:--"));
+ printer_controller_format_remaining(duration,sizeof(duration),.02,1e9);assert(!strcmp(duration,"--:--"));
+ printer_controller_format_eta_clock(duration,sizeof(duration),.5,1e300);assert(!strcmp(duration,"--:--"));
+ check_eta();
+ check_paused_eta();
  lv_deinit();
  puts("PASS: actual Dashboard banner/machine writers in all five themes; unavailable stale temperatures/job hidden, shutdown stays shutdown, transport-only readiness blocked, reconnect restores readings");
 }

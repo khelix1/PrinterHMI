@@ -1,4 +1,5 @@
 #include "thumbnail_session.c"
+#include "encoder.inc"
 #include <assert.h>
 #include <stdlib.h>
 static uint32_t generation=1;

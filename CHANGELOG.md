@@ -1,5 +1,82 @@
 # Changelog
 
+## [7.3.41-dev] - 2026-11-05
+
+- Clear stale Wi-Fi scan rows on rescan and keep result status across Network refreshes.
+- Make unnamed scan results non-selectable and keep inline rows out of popup selection state.
+
+## [7.3.40-dev] - 2026-11-04
+
+- Show “ETA paused” on Dashboard instead of a finish time that assumes immediate resume.
+
+## [7.3.39-dev] - 2026-11-04
+
+- Mark Dashboard ETAs after local midnight with a day offset, including across daylight-saving changes.
+
+## [7.3.38-dev] - 2026-11-04
+
+- Theme the Print progress & time fields and expanded option lists using the shared selector styles.
+- Give the Cancel Object confirmation button room for its label at larger text sizes.
+
+## [7.3.37-dev] - 2026-11-04
+
+- Load active-job estimate metadata independently of thumbnail previews and retry temporarily unavailable metadata in the background.
+
+## [7.3.36-dev] - 2026-11-04
+
+- Add four print progress modes and independent time-remaining and ETA source selections in Settings.
+- Read file position, slicer progress, and filament usage through WebSocket and HTTP fallback. Match file metadata to the current job before using it.
+
+## [7.3.35-dev] - 2026-11-04
+
+- Keep Dashboard and Printer progress consistent and hide stale Dashboard print details when the connection is offline.
+- Show placeholders for invalid elapsed and remaining times instead of converting them to integers.
+
+## [7.3.34-dev] - 2026-11-04
+
+- Keep demo commands from changing simulated hardware while offline or after shutdown.
+- Reject malformed demo heater, fan, motion, offset, and filament sensor commands.
+
+## [7.3.33-dev] - 2026-11-04
+
+- Honor OTA cancellation up to the start of firmware validation and keep overlapping starts out of the progress dialog.
+- Reject short reads and trailing data if a plain or encrypted backup changes size during restore.
+
+## [7.3.32-dev] - 2026-11-04
+
+- Reject oversized Console commands without changing or sending the input, and preserve complete commands in history.
+
+## [7.3.31-dev] - 2026-11-04
+
+- Discard thumbnail downloads invalidated by printer or preview changes before the display adopts the image.
+- Give Files detail priority over background live thumbnail refresh while the dialog is open.
+
+## [7.3.30-dev] - 2026-11-04
+
+- Key SD thumbnail PNGs by printer endpoint and both paths to keep unrelated previews separate.
+- Reject oversized thumbnail requests before allocating a transfer buffer, and use the shared encoder for live metadata.
+
+## [7.3.29-dev] - 2026-11-04
+
+- Stop retired Files row and fullscreen preview jobs before downloading the image if metadata returns after a printer switch or view change.
+- Preserve Files preview slots and cache revisions when a queue submission needs a retry.
+
+## [7.3.28-dev] - 2026-11-04
+
+- Skip invalid or oversized thumbnail paths before selecting a preview. Files rows still prefer smaller suitable images; other previews use the largest usable original.
+- Share thumbnail selection and URL encoding across preview consumers. Reject a path that cannot be encoded in full.
+
+## [7.3.27-dev] - 2026-11-04
+
+- Discard Lighting slider gestures interrupted by reconnects or canceled touches, and remember brightness when reopening Lighting on the same printer.
+- Clear pending Lighting controls when the printer no longer reports the light.
+- Require matching live Speed/Flow readings to confirm a change and discard gestures interrupted by an observed disconnect.
+
+## [7.3.26-dev] - 2026-11-04
+
+- Retire Toolhead controls and hotend activation confirmations when the observed print job changes.
+- Reject invalid or truncated jog, extrusion, and runtime Z offset commands.
+
 ## [7.3.25-dev] - 2026-11-03
 
 - Drop speed and flow gestures and pending values when the observed print job changes.

@@ -273,8 +273,10 @@ void moonraker_state_set_connection(
     bool moonraker_ok)
 {
     state_lock();
-    if (g_moonraker_state.live_data_ok && (!live_data_ok || !moonraker_ok))
+    if (g_moonraker_state.live_data_ok && (!live_data_ok || !moonraker_ok)) {
         ++g_moonraker_state.print_job_revision;
+        g_moonraker_state.estimate_sample = (print_estimate_sample_t){0};
+    }
     g_moonraker_state.live_data_ok = live_data_ok;
     g_moonraker_state.moonraker_ok = moonraker_ok;
     if (!moonraker_ok) s_websocket_status_us = 0;
@@ -291,6 +293,7 @@ void moonraker_state_expire_websocket(int64_t maximum_age_us)
     if (maximum_age_us <= 0 || s_websocket_status_us <= 0 ||
         now < s_websocket_status_us || now - s_websocket_status_us > maximum_age_us) {
         if (g_moonraker_state.live_data_ok) ++g_moonraker_state.print_job_revision;
+        g_moonraker_state.estimate_sample = (print_estimate_sample_t){0};
         g_moonraker_state.live_data_ok = false;
         g_moonraker_state.moonraker_ok = false;
     }
@@ -519,6 +522,7 @@ void moonraker_state_publish_http_fallback(
     g_moonraker_state.bed_temp = update->bed_temp;
     g_moonraker_state.bed_target = update->bed_target;
     g_moonraker_state.progress = update->progress;
+    g_moonraker_state.estimate_sample = update->estimate_sample;
     g_moonraker_state.current_gcode_z = update->current_gcode_z;
     s_virtual_sd_progress_known = update->progress_from_virtual_sdcard;
     g_moonraker_state.print_duration = update->print_duration;
@@ -576,6 +580,7 @@ static bool json_number(
 static void reset_print_job_locked(void)
 {
     g_moonraker_state.progress = 0.0;
+    g_moonraker_state.estimate_sample = (print_estimate_sample_t){0};
     g_moonraker_state.current_gcode_z = -1.0;
     g_moonraker_state.print_duration = 0.0;
     g_moonraker_state.current_layer = -1;
@@ -801,6 +806,7 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
     if (lifecycle != MOONRAKER_WEBSOCKET_MESSAGE_IGNORED) {
         state_lock();
         ++g_moonraker_state.print_job_revision;
+        g_moonraker_state.estimate_sample = (print_estimate_sample_t){0};
         s_websocket_status_us = lifecycle == MOONRAKER_WEBSOCKET_MESSAGE_KLIPPY_DISCONNECTED
             ? 0 : esp_timer_get_time();
 
@@ -1069,12 +1075,31 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
      * can retain the previous job's percentage at a new print start. */
     cJSON *virtual_sdcard = cJSON_GetObjectItemCaseSensitive(
         status, "virtual_sdcard");
+    print_estimate_sample_t *sample = &g_moonraker_state.estimate_sample;
+    cJSON *display_status = cJSON_GetObjectItemCaseSensitive(status, "display_status");
+    cJSON *estimate_stats = cJSON_GetObjectItemCaseSensitive(status, "print_stats");
+    if (json_number(virtual_sdcard, "file_position", &value) && value >= 0) {
+        sample->file_position = value;
+        sample->position_valid = true;
+        ++updates;
+    }
+    if (json_number(estimate_stats, "filament_used", &value) && value >= 0) {
+        sample->filament_used = value;
+        sample->filament_valid = true;
+        ++updates;
+    }
+    if (json_number(display_status, "progress", &value) && value >= 0 && value <= 1) {
+        sample->slicer_progress = value;
+        sample->slicer_valid = true;
+        ++updates;
+    }
     if (json_number(virtual_sdcard, "progress", &value) && isfinite(value)) {
         g_moonraker_state.progress = fmin(1.0, fmax(0.0, value));
+        sample->file_progress = value;
+        sample->file_valid = value >= 0 && value <= 1;
         s_virtual_sd_progress_known = true;
         ++updates;
     } else if (!s_virtual_sd_progress_known) {
-        cJSON *display_status = cJSON_GetObjectItemCaseSensitive(status, "display_status");
         if (json_number(display_status, "progress", &value) && isfinite(value)) {
             g_moonraker_state.progress = fmin(1.0, fmax(0.0, value));
             ++updates;
@@ -1243,13 +1268,9 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
 }
 
 
-bool json_find_best_thumbnail_path(const char *json, char *out, size_t out_sz)
+bool moonraker_find_thumbnail_path(const char *json, const char *file, char *out, size_t out_sz)
 {
-    const cJSON *result;
-    cJSON *root = moonraker_metadata_parse(json, &result);
-    bool found = moonraker_metadata_best_thumbnail(result, out, out_sz);
-    cJSON_Delete(root);
-    return found;
+    return moonraker_metadata_thumbnail_path(json, file, 0, out, out_sz);
 }
 
 esp_err_t moonraker_http_event_handler(esp_http_client_event_t *evt)
@@ -1527,19 +1548,9 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
 
     if (!host ||
         !host[0] ||
-        port <= 0 ||
+        port <= 0 || port > 65535 ||
         !encoded_thumb_path ||
         !encoded_thumb_path[0]) {
-        return false;
-    }
-
-    const size_t max_len = 512 * 1024;
-
-    uint8_t *buf = heap_caps_malloc(
-        max_len,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
-    if (!buf) {
         return false;
     }
 
@@ -1553,7 +1564,16 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
 
     if (path_len < 0 ||
         (size_t)path_len >= sizeof(path)) {
-        heap_caps_free(buf);
+        return false;
+    }
+
+    const size_t max_len = 512 * 1024;
+
+    uint8_t *buf = heap_caps_malloc(
+        max_len,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+    if (!buf) {
         return false;
     }
 
@@ -1574,7 +1594,7 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
         &err,
         exclusive_owned);
 
-    if (!ok || captured_size < 16) {
+    if (!ok || captured_size < 16 || captured_size > max_len) {
         heap_caps_free(buf);
         return false;
     }
@@ -1678,7 +1698,7 @@ bool moonraker_fetch_file_metadata(const char *host,
         return false;
     }
 
-    char path[PRINTER_FILES_MAX_PATH * 3 + 64];
+    char path[sizeof(((moonraker_state_t *)0)->printer_file) * 3 + 64];
 
     int path_len = snprintf(
         path,

@@ -10,12 +10,14 @@
 
 static lv_obj_t *s_popup,*s_status,*s_switch,*s_slider,*s_value;
 static lv_timer_t *s_timer;
-static uint32_t s_owner,s_epoch;
+static uint32_t s_owner,s_epoch,s_drag_session;
+static bool s_dragging;
 static int s_last_on=100;
 static bool s_dispatching;
 static void retire(void)
 {
     ++s_epoch;
+    s_dragging=false;
     if(s_timer)lv_timer_delete(s_timer);
     s_timer=NULL;s_popup=s_status=s_switch=s_slider=s_value=NULL;
 }
@@ -23,6 +25,7 @@ static void deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
     if(target==s_popup){retire();return;}
+    if(target==s_slider)s_dragging=false;
     lv_obj_t **fields[]={&s_status,&s_switch,&s_slider,&s_value};
     for(unsigned i=0;i<4;i++)if(target==*fields[i])*fields[i]=NULL;
 }
@@ -54,6 +57,7 @@ static void refresh(lv_timer_t *timer)
 {
     if(!s_popup||s_dispatching||(timer&&timer!=s_timer))return;
     case_lighting_snapshot_t light={0};const char *reason=ready(&light);
+    if(*reason||!light.pwm||light.session!=s_drag_session)s_dragging=false;
     enabled(s_switch,!*reason);enabled(s_slider,!*reason&&light.pwm);
     if(light.known){
         int value=(int)lround(light.value*100);
@@ -87,17 +91,34 @@ static void switch_cb(lv_event_t *event)
 }
 static void slider_cb(lv_event_t *event)
 {
-    if(lv_event_get_target_obj(event)!=s_slider||lv_obj_has_state(s_slider,LV_STATE_DISABLED))return;
+    if(!s_slider||lv_event_get_target_obj(event)!=s_slider)return;
+    lv_event_code_t code=lv_event_get_code(event);
+    if(code==LV_EVENT_PRESS_LOST){s_dragging=false;refresh(NULL);return;}
+    if(lv_obj_has_state(s_slider,LV_STATE_DISABLED)||s_dispatching){s_dragging=false;return;}
+    if(code==LV_EVENT_PRESSED){
+        case_lighting_snapshot_t light={0};
+        s_dragging=!*ready(&light)&&light.pwm;
+        s_drag_session=light.session;
+        return;
+    }
+    if(!s_dragging)return;
     int percent=lv_slider_get_value(s_slider);
-    if(lv_event_get_code(event)==LV_EVENT_VALUE_CHANGED){
+    if(code==LV_EVENT_VALUE_CHANGED){
         if(s_value){char text[48];snprintf(text,sizeof(text),"Brightness: %d%%",percent);ui_value_set_text(s_value,text);}
-    }else if(lv_event_get_code(event)==LV_EVENT_RELEASED)apply(percent);
+    }else if(code==LV_EVENT_RELEASED){
+        s_dragging=false;
+        case_lighting_snapshot_t light={0};
+        if(!*ready(&light)&&light.pwm&&light.session==s_drag_session)apply(percent);
+        else refresh(NULL);
+    }
 }
 static void watch(lv_obj_t *object){lv_obj_add_event_cb(object,deleted,LV_EVENT_DELETE,NULL);}
 void ui_case_lighting_show(void)
 {
     if(s_popup){lv_obj_move_foreground(s_popup);return;}
-    s_owner=moonraker_config_generation();s_last_on=100;
+    uint32_t owner=moonraker_config_generation();
+    if(s_owner!=owner)s_last_on=100;
+    s_owner=owner;
     s_popup=ui_cal_dialog_create(lv_layer_top(),540,410,UI_POPUP_STANDARD);if(!s_popup)return;
     watch(s_popup);ui_cal_dialog_title_divided(s_popup,"Lighting");
     lv_obj_t *body=ui_cal_dialog_body(s_popup);
@@ -120,6 +141,8 @@ void ui_case_lighting_show(void)
     ui_apply_slider_style(s_slider);
     lv_obj_set_ext_click_area(s_slider,10);
     lv_obj_set_style_bg_color(s_switch,UI_ACCENT_BRIGHT,LV_PART_INDICATOR|LV_STATE_CHECKED);
+    lv_obj_add_event_cb(s_slider,slider_cb,LV_EVENT_PRESSED,NULL);
+    lv_obj_add_event_cb(s_slider,slider_cb,LV_EVENT_PRESS_LOST,NULL);
     lv_obj_add_event_cb(s_slider,slider_cb,LV_EVENT_VALUE_CHANGED,NULL);lv_obj_add_event_cb(s_slider,slider_cb,LV_EVENT_RELEASED,NULL);
     s_status=ui_cal_dialog_text(body,"Discovering printer lighting...");watch(s_status);
     ui_cal_dialog_action(s_popup,UI_POPUP_ACTION_CLOSE,"Close",close_cb,NULL,NULL);

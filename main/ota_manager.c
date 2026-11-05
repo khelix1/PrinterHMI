@@ -420,7 +420,11 @@ static void update_task(void *arg)
      * Cancellation ends here. Once finish begins it may validate the image
      * and switch the boot partition, so the UI must no longer offer CANCEL.
      */
+    portENTER_CRITICAL(&s_progress_lock);
+    bool cancelled_before_finish = s_cancel_requested;
     s_cancel_allowed = false;
+    portEXIT_CRITICAL(&s_progress_lock);
+    if (cancelled_before_finish) goto cancelled;
     transfer_end();
     set_state("Validating Firmware...", 99);
 
@@ -440,9 +444,13 @@ static void update_task(void *arg)
     }
 
 failed:
+    portENTER_CRITICAL(&s_progress_lock);
+    bool cancelled_before_failure = s_cancel_requested;
+    s_cancel_allowed = false;
+    portEXIT_CRITICAL(&s_progress_lock);
+    if (cancelled_before_failure) goto cancelled;
     s_worker_http = NULL;
     transfer_end();
-    s_cancel_allowed = false;
 
     if (ota_handle) {
         esp_err_t abort_result =
@@ -473,14 +481,18 @@ failed:
     if (network_owned) {
         network_activity_controller_release_exclusive();
     }
+    portENTER_CRITICAL(&s_progress_lock);
     s_task_running = false;
+    portEXIT_CRITICAL(&s_progress_lock);
     vTaskDelete(NULL);
     return;
 
 cancelled:
+    portENTER_CRITICAL(&s_progress_lock);
+    s_cancel_allowed = false;
+    portEXIT_CRITICAL(&s_progress_lock);
     s_worker_http = NULL;
     transfer_end();
-    s_cancel_allowed = false;
 
     if (ota_handle) {
         esp_err_t abort_result =
@@ -505,8 +517,10 @@ cancelled:
     if (network_owned) {
         network_activity_controller_release_exclusive();
     }
-    s_task_running = false;
+    portENTER_CRITICAL(&s_progress_lock);
     s_cancel_complete = true;
+    s_task_running = false;
+    portEXIT_CRITICAL(&s_progress_lock);
     vTaskDelete(NULL);
 }
 
@@ -515,26 +529,26 @@ bool ota_manager_start(const char *url)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return false;
 #endif
-    if (!url || !url[0] || strnlen(url, sizeof(s_task_url)) >= sizeof(s_task_url) || s_task_running) {
+    if (!url || !url[0] || strnlen(url, sizeof(s_task_url)) >= sizeof(s_task_url)) {
         return false;
     }
 
-    snprintf(s_task_url,
-             sizeof(s_task_url),
-             "%s",
-             url);
-
     int64_t now = esp_timer_get_time();
     portENTER_CRITICAL(&s_progress_lock);
+    if (s_task_running || s_cancel_complete) {
+        portEXIT_CRITICAL(&s_progress_lock);
+        return false;
+    }
+    s_task_running = true;
+    s_cancel_requested = false;
+    s_cancel_allowed = true;
     memset(&s_progress, 0, sizeof(s_progress));
     s_progress.started_us = now;
+    s_progress.percent = 5;
+    memcpy(s_progress.text, "Starting OTA...", sizeof("Starting OTA..."));
     portEXIT_CRITICAL(&s_progress_lock);
 
-    s_cancel_requested = false;
-    s_cancel_complete = false;
-    s_cancel_allowed = true;
-
-    set_state("Starting OTA...", 5);
+    snprintf(s_task_url, sizeof(s_task_url), "%s", url);
     ui_ota_progress_show(ota_manager_cancel);
 
     ESP_LOGI(TAG,
@@ -543,8 +557,6 @@ bool ota_manager_start(const char *url)
     operator_event_log_add(
         OPERATOR_EVENT_INFO,
         "Firmware update started");
-
-    s_task_running = true;
 
     BaseType_t result = xTaskCreate(
         update_task,
@@ -555,10 +567,14 @@ bool ota_manager_start(const char *url)
         NULL);
 
     if (result != pdPASS) {
-        s_task_running = false;
+        portENTER_CRITICAL(&s_progress_lock);
         s_cancel_allowed = false;
+        portEXIT_CRITICAL(&s_progress_lock);
         transfer_end();
         set_state("Unable to start OTA task.", 0);
+        portENTER_CRITICAL(&s_progress_lock);
+        s_task_running = false;
+        portEXIT_CRITICAL(&s_progress_lock);
         ESP_LOGE(TAG, "failed to create OTA task");
         operator_event_log_add(
             OPERATOR_EVENT_ERROR,
@@ -582,12 +598,14 @@ void ota_manager_cancel(void)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return;
 #endif
-    if (!s_task_running || !s_cancel_allowed) {
+    portENTER_CRITICAL(&s_progress_lock);
+    if (!s_task_running || !s_cancel_allowed || s_cancel_requested) {
+        portEXIT_CRITICAL(&s_progress_lock);
         return;
     }
-
     s_cancel_requested = true;
-    set_state("Cancelling OTA...", progress_snapshot().percent);
+    memcpy(s_progress.text, "Cancelling OTA...", sizeof("Cancelling OTA..."));
+    portEXIT_CRITICAL(&s_progress_lock);
 
     ESP_LOGI(TAG, "OTA cancellation requested");
 }
@@ -598,8 +616,10 @@ void ota_manager_pump_ui(void)
     if (demo_mode_enabled()) return;
 #endif
     if (s_cancel_complete) {
-        s_cancel_complete = false;
         ui_ota_progress_close();
+        portENTER_CRITICAL(&s_progress_lock);
+        s_cancel_complete = false;
+        portEXIT_CRITICAL(&s_progress_lock);
         return;
     }
 

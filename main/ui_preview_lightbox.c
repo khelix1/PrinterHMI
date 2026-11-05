@@ -1,4 +1,3 @@
-#include "thumbnail_path.h"
 #include "ui_preview_lightbox.h"
 #include "misc/cache/instance/lv_image_cache.h"
 
@@ -264,16 +263,22 @@ static bool fullscreen_publish(const fullscreen_job_t *job, uint16_t **pixels)
     return true;
 }
 
+static void fullscreen_clear_api_key(fullscreen_job_t *job)
+{
+    volatile char *key = job->api_key;
+    for (size_t i = 0; i < sizeof(job->api_key); ++i) key[i] = 0;
+}
+
 static void fullscreen_preview_worker(void *arg)
 {
     (void)arg;
     fullscreen_job_t job;
     while (true) {
         if (xQueueReceive(s_preview_queue, &job, portMAX_DELAY) != pdTRUE) continue;
-        if (!bsp_display_lock(1000)) {memset(job.api_key, 0, sizeof(job.api_key)); continue;}
+        if (!bsp_display_lock(1000)) {fullscreen_clear_api_key(&job); continue;}
         bool current = fullscreen_job_is_current(&job);
         bsp_display_unlock();
-        if (!current) {memset(job.api_key, 0, sizeof(job.api_key)); continue;}
+        if (!current) {fullscreen_clear_api_key(&job); continue;}
 
         for (unsigned attempt = 0; attempt < 3; ++attempt) {
             char *metadata = heap_caps_calloc(1, FULLSCREEN_METADATA_SIZE,
@@ -288,9 +293,14 @@ static void fullscreen_preview_worker(void *arg)
             bool fetched = metadata && moonraker_fetch_file_metadata(
                 job.host, job.port, job.api_key, encoded_file,
                 metadata, FULLSCREEN_METADATA_SIZE, &http_code, &error) &&
-                json_find_best_thumbnail_path(metadata, thumbnail_path, sizeof(thumbnail_path)) &&
-                thumbnail_path_resolve(job.file, thumbnail_path, thumbnail_path, sizeof(thumbnail_path));
+                moonraker_find_thumbnail_path(metadata, job.file, thumbnail_path, sizeof(thumbnail_path));
             heap_caps_free(metadata);
+            /* Metadata HTTP can outlive a closed overlay or printer switch.
+             * Check under the display lock before another network request. */
+            if (!bsp_display_lock(1000)) break;
+            current = fullscreen_job_is_current(&job);
+            bsp_display_unlock();
+            if (!current) break;
             if (fetched) {
                 char encoded_thumbnail[768];
                 thumbnail_manager_url_encode(thumbnail_path, encoded_thumbnail, sizeof(encoded_thumbnail));
@@ -341,7 +351,7 @@ static void fullscreen_preview_worker(void *arg)
                 if (!current) break;
             }
         }
-        memset(job.api_key, 0, sizeof(job.api_key));
+        fullscreen_clear_api_key(&job);
     }
 }
 
@@ -357,7 +367,7 @@ void ui_preview_lightbox_show_file_object(lv_obj_t *image_object, const char *fi
     job.profile_generation = moonraker_config_generation();
     const char *host = moonraker_config_host();
     snprintf(job.host, sizeof(job.host), "%s", host ? host : "");
-    if (!fullscreen_job_is_current(&job)) return;
+    if (!fullscreen_job_is_current(&job)) goto finished;
     const char *key = moonraker_config_api_key();
     snprintf(job.api_key, sizeof(job.api_key), "%s", key ? key : "");
     job.port = moonraker_config_port();
@@ -373,5 +383,5 @@ void ui_preview_lightbox_show_file_object(lv_obj_t *image_object, const char *fi
     if (s_preview_hint) lv_label_set_text(s_preview_hint, "LOADING HIGH-RES PREVIEW - TAP TO CLOSE");
     if (fullscreen_job_is_current(&job)) xQueueOverwrite(s_preview_queue, &job);
 finished:
-    memset(job.api_key, 0, sizeof(job.api_key));
+    fullscreen_clear_api_key(&job);
 }

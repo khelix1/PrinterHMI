@@ -49,6 +49,7 @@ typedef struct {
     double bed_target;
     double part_fan_speed;
     double print_duration;
+    const double *remaining_seconds;
 
     bool moonraker_ok;
     bool live_data_ok;

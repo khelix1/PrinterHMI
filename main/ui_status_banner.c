@@ -471,7 +471,10 @@ static void status_banner_set(
     } else {
         lv_obj_add_flag(ctx->file, LV_OBJ_FLAG_HIDDEN);
     }
+    bool eta_changed = ctx->eta && eta && *eta &&
+                       strcmp(lv_label_get_text(ctx->eta), eta) != 0;
     set_optional_label(ctx->eta, eta);
+    if (eta_changed) ui_text_fit_single_line(ctx->eta, UI_FONT_BODY);
     set_optional_label(ctx->progress, progress);
 
     ui_status_kind_t state_kind =

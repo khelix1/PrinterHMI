@@ -69,7 +69,13 @@ static void update_active_print(
         sizeof(elapsed),
         state->print_duration);
 
-    printer_controller_format_remaining(
+    if (context->remaining_seconds) {
+        bool current = context->estimate_job_revision == state->print_job_revision &&
+                       state->moonraker_ok && state->live_data_ok &&
+                       printer_controller_is_live_state(state->printer_state);
+        printer_controller_format_hhmm(remaining, sizeof(remaining),
+            current ? *context->remaining_seconds : -1);
+    } else printer_controller_format_remaining(
         remaining,
         sizeof(remaining),
         state->progress,

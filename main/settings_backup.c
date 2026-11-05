@@ -833,6 +833,16 @@ bool settings_backup_export_with_progress(
 }
 
 
+/* Verify EOF too: a file can grow after its length was measured. Never
+ * parse or authenticate only a prefix of the backup now on disk. */
+static bool read_backup_exact(FILE *file, void *buffer, size_t size)
+{
+    bool exact = fread(buffer, 1, size, file) == size &&
+                 fgetc(file) == EOF && !ferror(file);
+    bool closed = fclose(file) == 0;
+    return exact && closed;
+}
+
 static bool load_backup_snapshot(
     settings_backup_snapshot_t *snapshot,
     char *status,
@@ -894,16 +904,7 @@ static bool load_backup_snapshot(
         return false;
     }
 
-    size_t read_size = fread(
-        document,
-        1,
-        (size_t)file_size,
-        file);
-
-    bool closed = fclose(file) == 0;
-    document[read_size] = '\0';
-
-    if (read_size != (size_t)file_size || !closed) {
+    if (!read_backup_exact(file, document, (size_t)file_size)) {
         free(document);
         set_status(
             status,
@@ -912,7 +913,8 @@ static bool load_backup_snapshot(
         return false;
     }
 
-    cJSON *root = parse_backup_document(document, read_size);
+    document[file_size] = 0;
+    cJSON *root = parse_backup_document(document, (size_t)file_size);
     free(document);
 
     if (!root) {
@@ -1050,9 +1052,7 @@ static bool load_encrypted_backup_snapshot(
         set_status(status, status_size, "Not enough memory to read encrypted backup.");
         return false;
     }
-    size_t read_size = fread(encrypted, 1, (size_t)file_size, file);
-    bool closed = fclose(file) == 0;
-    if (read_size != (size_t)file_size || !closed) {
+    if (!read_backup_exact(file, encrypted, (size_t)file_size)) {
         settings_backup_crypto_free(encrypted, (size_t)file_size);
         set_status(status, status_size, "Encrypted backup file could not be read completely.");
         return false;

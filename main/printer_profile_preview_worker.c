@@ -1,5 +1,4 @@
 #include "moonraker_http_objects.h"
-#include "thumbnail_path.h"
 #include "printer_profile_preview_worker.h"
 
 #include <stdbool.h>
@@ -22,6 +21,7 @@
 #include "printer_profile_health.h"
 #include "printer_preview_cache.h"
 #include "printer_preview_store.h"
+#include "thumbnail_manager.h"
 
 #define PROFILE_PREVIEW_WIDTH  286
 #define PROFILE_PREVIEW_HEIGHT 215
@@ -41,39 +41,6 @@
 static TaskHandle_t s_preview_worker_task = NULL;
 static char s_preview_worker_api_key[PROFILE_PREVIEW_API_KEY_MAX];
 static int64_t s_preview_retry_after_us[MOONRAKER_CONFIG_MAX_PROFILES];
-
-
-static void url_encode(
-    const char *input,
-    char *output,
-    size_t output_size)
-{
-    static const char hex[] = "0123456789ABCDEF";
-
-    if (!output || output_size == 0) return;
-
-    size_t out = 0;
-
-    for (size_t in = 0;
-         input && input[in] && out + 4 < output_size;
-         ++in) {
-        unsigned char c = (unsigned char)input[in];
-
-        if ((c >= 'A' && c <= 'Z') ||
-            (c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') ||
-            c == '-' || c == '_' || c == '.' ||
-            c == '~' || c == '/') {
-            output[out++] = (char)c;
-        } else {
-            output[out++] = '%';
-            output[out++] = hex[(c >> 4) & 0x0f];
-            output[out++] = hex[c & 0x0f];
-        }
-    }
-
-    output[out] = '\0';
-}
 
 
 static bool state_has_current_print(const char *state)
@@ -279,7 +246,7 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     }
 
     char encoded_file[sizeof(file) * 3];
-    url_encode(file, encoded_file, sizeof(encoded_file));
+    thumbnail_manager_url_encode(file, encoded_file, sizeof(encoded_file));
 
     char *metadata = heap_caps_calloc(
         1,
@@ -310,11 +277,8 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     char thumbnail_path[256] = "";
 
     bool path_ok = metadata_ok &&
-        json_find_best_thumbnail_path(
-            metadata,
-            thumbnail_path,
-            sizeof(thumbnail_path)) && thumbnail_path_resolve(
-                file, thumbnail_path, thumbnail_path, sizeof(thumbnail_path));
+        moonraker_find_thumbnail_path(
+            metadata, file, thumbnail_path, sizeof(thumbnail_path));
 
     heap_caps_free(metadata);
 
@@ -323,8 +287,8 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         return;
     }
 
-    char encoded_thumbnail[512];
-    url_encode(
+    char encoded_thumbnail[sizeof(thumbnail_path) * 3];
+    thumbnail_manager_url_encode(
         thumbnail_path,
         encoded_thumbnail,
         sizeof(encoded_thumbnail));

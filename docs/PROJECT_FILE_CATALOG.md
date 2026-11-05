@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.3.25-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.3.41-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -104,7 +104,7 @@ when ownership or build membership changes.
 | `ui_printer_profiles`, `ui_printer_chooser` | Profile Add/Edit with discovery and startup chooser |
 | `printer_profile_health` | Per-profile reachability state |
 | `printer_preview_cache`, `printer_profile_preview_worker`, `printer_preview_store` | Per-profile preview lifecycle; the low-priority worker owns inactive-profile HTTP(S) health and preview requests |
-| `network_status_controller`, `network_wifi_scan` | Network state policy and scan service |
+| `network_status_controller`, `network_wifi_scan` | Network state policy and scan service; `wifi_scan_results.h` shares bounded SSID and result formatting |
 | `moonraker` | HTTP requests, response parsing and synchronized printer state |
 | `moonraker_config_controller` | Persistent multi-printer configuration |
 | `moonraker_transport_security_controller`, `moonraker_tls_trust_store` | Per-profile HTTPS/WSS policy, no-downgrade endpoint resolution, and PSRAM-first CA trust storage |

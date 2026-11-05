@@ -207,6 +207,16 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
 }
 int main(void)
 {
+    char command[96];
+    assert(ui_printer_toolhead_format_jog_command("Z-",25,command,sizeof(command)) &&
+           !strcmp(command,"G91\nG1 Z-25.000 F600\nG90"));
+    assert(!ui_printer_toolhead_format_jog_command("X?",10,command,sizeof(command)) && !command[0]);
+    assert(!ui_printer_toolhead_format_jog_command("X+",NAN,command,sizeof(command)));
+    assert(!ui_printer_toolhead_format_jog_command("X+",10,command,8) && !command[0]);
+    assert(!ui_printer_toolhead_format_z_offset_command("inf",command,sizeof(command)));
+    assert(!ui_printer_toolhead_format_z_offset_command("+0.11",command,sizeof(command)));
+    assert(!ui_printer_toolhead_format_z_offset_command("RESET",command,8) && !command[0]);
+    assert(!format_extrusion_distance("EXTRUDE",50,command,8) && !command[0]);
     lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buffer[1024*40*2];
     lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
     for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
@@ -222,6 +232,17 @@ int main(void)
         motion_open();lv_obj_delete(s_toolhead_popup);assert(!s_toolhead_popup&&!s_refresh_timer&&!s_send_gcode&&!s_xy_step1_btn&&timers()==baseline);
         motion_open();during_send=2;toolhead_send("G28");assert(!s_toolhead_popup&&!s_toolhead_dispatching&&timers()==baseline);
         motion_open();before=sends;toolhead_send("G28");assert(sends==before);lv_tick_inc(350);during_send=3;toolhead_send("G28");assert(!s_toolhead_popup&&!s_toolhead_dispatching&&timers()==baseline);
+        reset();motion_open();before=sends;toolhead_send("G28");assert(sends==before+1);
+        fixture.print_job_revision++;toolhead_send("G28");
+        assert(sends==before+1&&!s_toolhead_popup&&timers()==baseline);
+        motion_open();toolhead_send("G28");assert(sends==before+2);
+        ui_printer_toolhead_close();
+        reset();hotend_open();before=sends;fixture.print_job_revision++;
+        confirm_hotend_activate_cb(NULL);assert(sends==before&&!s_hotend_activate_popup);
+        click(s_hotend_activate_buttons[1]);assert(s_hotend_activate_popup);
+        confirm_hotend_activate_cb(NULL);assert(sends==before+1&&s_hotend_pending);
+        fixture.print_job_revision++;refresh_hotend_list(NULL);
+        assert(!s_hotend_pending&&!s_hotend_activate_popup);close_hotend_list_cb(NULL);
         reset();hotend_open();before=sends;accept=false;confirm_hotend_activate_cb(NULL);assert(sends==before+1&&s_hotend_activate_popup&&!s_hotend_pending&&!lv_obj_has_state(s_hotend_confirm_button,LV_STATE_DISABLED));
         accept=true;during_send=4;confirm_hotend_activate_cb(NULL);assert(sends==before+2&&s_hotend_pending);confirm_hotend_activate_cb(NULL);assert(sends==before+2);
         refresh_hotend_list(NULL);assert(lv_obj_has_state(s_hotend_confirm_button,LV_STATE_DISABLED));

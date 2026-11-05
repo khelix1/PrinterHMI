@@ -1,5 +1,6 @@
 #pragma once
 
+#include "print_estimates.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -115,6 +116,7 @@ typedef struct {
     double bed_target;
 
     double progress;
+    print_estimate_sample_t estimate_sample;
     double print_duration;
     double current_gcode_z;
 
@@ -152,6 +154,7 @@ typedef struct {
     double bed_temp;
     double bed_target;
     double progress;
+    print_estimate_sample_t estimate_sample;
     double print_duration;
     double current_gcode_z;
     bool progress_from_virtual_sdcard;
@@ -265,7 +268,7 @@ void moonraker_state_publish_http_fallback(
 
 esp_err_t moonraker_http_event_handler(esp_http_client_event_t *evt);
 
-bool json_find_best_thumbnail_path(const char *json, char *out, size_t out_sz);
+bool moonraker_find_thumbnail_path(const char *json, const char *file, char *out, size_t out_sz);
 
 bool moonraker_test_connection(const char *host,
                                 int port,

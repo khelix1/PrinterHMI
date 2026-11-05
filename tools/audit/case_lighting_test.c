@@ -44,5 +44,9 @@ int main(void)
  snprintf(trailing,sizeof(trailing),"%sjunk",good);status(trailing,10);case_lighting_snapshot(&s,1);assert(s.pending);
  char raw[256];size_t len=strlen(good);memcpy(raw,good,len);case_lighting_status_json(raw,len,10);
  case_lighting_snapshot(&s,2);assert(!s.pending&&s.value==.5);
+ id=case_lighting_begin(10,75,3,cmd,sizeof(cmd));assert(id);
+ objects("[]",10);status(good,10);objects("[\"output_pin case_led\"]",10);
+ case_lighting_snapshot(&s,4);assert(!s.pending&&!s.known&&!s.configured);
+ assert(!case_lighting_begin(10,75,4,cmd,sizeof(cmd)));
  puts("PASS: exact output discovery, normalized/scaled PWM, digital guards, malformed config/status, pending serialization, stale generation/error rejection, timeout/retry and reset");
 }

@@ -58,7 +58,7 @@ static bool bed_mesh_controller_merge_status(cJSON *s){(void)s;return false;}
 '''
 code += '\n'.join(function(state, name) for name in functions)
 start = state.index('static cJSON *json_status_object(')
-end = state.index('\n\nbool json_find_best_thumbnail_path(', start)
+end = state.index('\n\nbool moonraker_find_thumbnail_path(', start)
 code += state[start:end]
 code += r'''
 static bool s_got_ip=true,s_moonraker_ok,s_live_data_ok;
@@ -85,6 +85,10 @@ int main(void){
  static moonraker_exclude_state_t objects;
  g_moonraker_exclude_state=&objects;
  printing();
+ publish("{\"result\":{\"status\":{\"virtual_sdcard\":{\"progress\":0.4,\"file_position\":300},\"display_status\":{\"progress\":0.6},\"print_stats\":{\"filament_used\":50}}}}");
+ print_estimate_sample_t sample = g_moonraker_state.estimate_sample;
+ assert(sample.file_valid&&sample.file_progress==.4&&sample.position_valid&&sample.file_position==300);
+ assert(sample.slicer_valid&&sample.slicer_progress==.6&&sample.filament_valid&&sample.filament_used==50);
  uint32_t job=g_moonraker_state.print_job_revision;
  publish("{\"result\":{\"status\":{\"print_stats\":{\"state\":\"paused\"}}}}");
  assert(g_moonraker_state.print_job_revision==job);
@@ -92,7 +96,9 @@ int main(void){
  assert(g_moonraker_state.print_job_revision!=job);
  job=g_moonraker_state.print_job_revision;
  moonraker_http_fallback_update_t http={.live_data_ok=true,.moonraker_ok=true,.printer_state="printing",.printer_file="replacement.gcode"};
+ http.estimate_sample=(print_estimate_sample_t){.file_valid=true,.file_progress=.2};
  moonraker_state_publish_http_fallback(&http);assert(g_moonraker_state.print_job_revision==job);
+ assert(g_moonraker_state.estimate_sample.file_progress==.2&&!g_moonraker_state.estimate_sample.slicer_valid);
  http.printer_state="complete";moonraker_state_publish_http_fallback(&http);
  http.printer_state="printing";moonraker_state_publish_http_fallback(&http);
  assert(g_moonraker_state.print_job_revision!=job);

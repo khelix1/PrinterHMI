@@ -18,7 +18,8 @@ void case_lighting_reset(uint32_t generation)
 {
     portENTER_CRITICAL(&s_light_lock);
     ++s_revision;
-    memset(&s_light,0,sizeof(s_light));s_light.generation=generation;
+    uint32_t session=s_light.session+1;
+    memset(&s_light,0,sizeof(s_light));s_light.generation=generation;s_light.session=session;
     portEXIT_CRITICAL(&s_light_lock);
 }
 void case_lighting_objects(const cJSON *objects,uint32_t generation)
@@ -28,7 +29,13 @@ void case_lighting_objects(const cJSON *objects,uint32_t generation)
     cJSON_ArrayForEach(entry,objects)
         if(cJSON_IsString(entry)&&!strcmp(entry->valuestring,"output_pin case_led"))found=true;
     portENTER_CRITICAL(&s_light_lock);
-    if(s_light.generation==generation){++s_revision;s_light.discovered=true;s_light.available=found;}
+    if(s_light.generation==generation){
+        ++s_revision;s_light.discovered=true;s_light.available=found;
+        if(!found){
+            s_light.known=false;s_light.configured=false;s_light.pending=false;
+            s_light.error[0]=0;
+        }
+    }
     portEXIT_CRITICAL(&s_light_lock);
 }
 static bool config_number(const cJSON *entry,double *number)
@@ -87,7 +94,7 @@ void case_lighting_status_json(const char *json,size_t length,uint32_t generatio
     if(value){
         bool valid=cJSON_IsNumber(value)&&isfinite(value->valuedouble)&&value->valuedouble>=0&&value->valuedouble<=1;
         portENTER_CRITICAL(&s_light_lock);
-        if(s_light.generation==generation){
+        if(s_light.generation==generation&&(!s_light.discovered||s_light.available)){
             s_light.known=valid;
             if(valid){
                 s_light.value=value->valuedouble;

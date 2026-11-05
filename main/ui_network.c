@@ -1,4 +1,5 @@
 #include "ui_network.h"
+#include "wifi_scan_results.h"
 #include "ui_text.h"
 #include "ui_page_layout_profile.h"
 
@@ -717,6 +718,16 @@ void ui_network_set_scan_status(
 }
 
 
+void ui_network_begin_scan(const char *status_text)
+{
+    if (s_scan_rendering || !s_network.networks_list) return;
+    uint32_t epoch = s_network_epoch;
+    s_scan_rendering = true;
+    lv_obj_clean(s_network.networks_list);
+    if (network_current(epoch)) ui_network_set_scan_status(status_text);
+    s_scan_rendering = false;
+}
+
 static void network_render_scan_results_impl(
     const wifi_ap_record_t *aps,
     uint16_t count,
@@ -743,31 +754,14 @@ static void network_render_scan_results_impl(
 
     char status[72];
 
-    if (total_count > count) {
-        snprintf(
-            status,
-            sizeof(status),
-            "%u found - showing %u",
-            total_count,
-            (unsigned)count);
-    } else {
-        snprintf(
-            status,
-            sizeof(status),
-            "%u network%s found - tap to connect",
-            total_count,
-            total_count == 1 ? "" : "s");
-    }
+    wifi_scan_format_page_status(status, sizeof(status), count, total_count);
 
     ui_network_set_scan_status(status);
     if(!network_current(epoch) || !s_network.networks_list)return;
 
     for (uint16_t i = 0; i < count; i++) {
         char ssid[33];
-        size_t length=0;
-        while(length<32 && aps[i].ssid[length])length++;
-        if(length){memcpy(ssid,aps[i].ssid,length);ssid[length]='\0';}
-        else snprintf(ssid,sizeof(ssid),"(hidden network)");
+        const bool named = wifi_scan_copy_ssid(ssid, aps[i].ssid);
 
         lv_obj_t *button =
             ui_button_create_empty(
@@ -795,7 +789,7 @@ static void network_render_scan_results_impl(
             0);
 
         char *ssid_copy =
-            malloc(strlen(ssid) + 1);
+            named ? malloc(strlen(ssid) + 1) : NULL;
 
         if (ssid_copy) {
             strcpy(ssid_copy, ssid);
@@ -819,7 +813,7 @@ static void network_render_scan_results_impl(
             lv_label_create(button);
 
         if (name) {
-            lv_label_set_text(name, ssid);
+            lv_label_set_text(name, named ? ssid : ui_text("(hidden network)"));
             lv_obj_set_width(name, ui_theme_is_studio()
                 ? lv_obj_get_content_width(s_network.networks_list) - 88 - 2 * UI_PAD_CARD - 12 : 286);
 

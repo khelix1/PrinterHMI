@@ -515,9 +515,17 @@ static void network_lifecycle(void)
  lv_obj_t *row=lv_obj_get_child(s_network.networks_list,0);
  lv_obj_send_event(row,LV_EVENT_CLICKED,NULL);assert(strlen(picked)==32);
  for(unsigned i=0;i<32;i++)assert(picked[i]=='X');
- lv_obj_send_event(lv_obj_get_child(s_network.networks_list,1),LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,"(hidden network)"));
+ lv_obj_t *hidden=lv_obj_get_child(s_network.networks_list,1);
+ assert(lv_obj_has_state(hidden,LV_STATE_DISABLED));
+ assert(!strcmp(lv_label_get_text(lv_obj_get_child(hidden,0)),"(hidden network)"));
+ lv_obj_send_event(hidden,LV_EVENT_CLICKED,NULL);assert(strlen(picked)==32);
  lv_obj_add_event_cb(row,network_nested_scan,LV_EVENT_DELETE,NULL);
  ui_network_render_scan_results(aps,2,2,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==2);
+ ui_network_begin_scan("SCANNING...");
+ assert(lv_obj_get_child_count(s_network.networks_list)==0);
+ ui_network_set_scan_status("SCAN FAILED");
+ assert(lv_obj_get_child_count(s_network.networks_list)==0);
+ assert(!strcmp(lv_label_get_text(s_network.networks_status),"SCAN FAILED"));
  fail_ssid_allocation=true;ui_network_render_scan_results(aps,1,1,selected_cb);
  row=lv_obj_get_child(s_network.networks_list,0);assert(lv_obj_has_state(row,LV_STATE_DISABLED));
  snprintf(picked,sizeof(picked),"unchanged");lv_obj_send_event(row,LV_EVENT_CLICKED,NULL);assert(!strcmp(picked,"unchanged"));

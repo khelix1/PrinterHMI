@@ -50,7 +50,7 @@ static void run(void){
 #elif defined(TEST_ROWS)
 #include "files_row_preview.c"
 
-static bool metadata_fail,download_fail,bump_profile_in_fetch;
+static bool metadata_fail,download_fail,bump_profile_in_fetch,fail_send;
 static unsigned metadata_requests,thumbnail_requests;
 static char downloaded[768];
 static const char *metadata_reply;
@@ -69,28 +69,36 @@ bool moonraker_fetch_thumbnail_encoded(const char *host,int port,const char *pat
 static void source_checks(void){
  char path[192],tiny[4];
  metadata_reply="{\"result\":{\"thumbnails\":[{\"width\":900,\"height\":520,\"relative_path\":\"large.png\"},{\"width\":32,\"height\":32,\"relative_path\":\"tiny.png\"},{\"width\":96,\"height\":56,\"relative_path\":\"row.png\"},{\"width\":300,\"height\":175,\"relative_path\":\"medium.png\"}]}}";
- assert(row_thumbnail_path(metadata_reply,path,sizeof(path))&&!strcmp(path,"row.png"));
- assert(!row_thumbnail_path(metadata_reply,tiny,sizeof(tiny))&&!tiny[0]);
- assert(row_thumbnail_path("{\"result\":{\"thumbnails\":[{\"width\":32,\"height\":32,\"relative_path\":\"32.png\"},{\"width\":64,\"height\":64,\"relative_path\":\"64.png\"}]}}",path,sizeof(path))&&!strcmp(path,"64.png"));
- assert(row_thumbnail_path("{\"result\":{\"thumbnails\":[{\"relative_path\":\"unknown.png\"}]}}",path,sizeof(path))&&!strcmp(path,"unknown.png"));
- assert(row_thumbnail_path("{\"result\":{\"thumbnails\":[{\"width\":900,\"height\":520,\"relative_path\":\"only-large.png\"}]}}",path,sizeof(path))&&!strcmp(path,"only-large.png"));
- assert(row_thumbnail_path("{\"result\":{\"thumbnails\":[{\"width\":1e309,\"height\":999,\"relative_path\":\"invalid-size.png\"},{\"width\":0,\"height\":96,\"relative_path\":\"zero.png\"},{\"width\":56,\"height\":96,\"relative_path\":\"portrait.png\"}]}}",path,sizeof(path))&&!strcmp(path,"portrait.png"));
+ assert(moonraker_metadata_thumbnail_path(metadata_reply,"part.gcode",ROW_PREVIEW_WIDTH,path,sizeof(path))&&!strcmp(path,"row.png"));
+ assert(!moonraker_metadata_thumbnail_path(metadata_reply,"part.gcode",ROW_PREVIEW_WIDTH,tiny,sizeof(tiny))&&!tiny[0]);
+ assert(moonraker_metadata_thumbnail_path("{\"result\":{\"thumbnails\":[{\"width\":32,\"height\":32,\"relative_path\":\"32.png\"},{\"width\":64,\"height\":64,\"relative_path\":\"64.png\"}]}}","part.gcode",ROW_PREVIEW_WIDTH,path,sizeof(path))&&!strcmp(path,"64.png"));
+ assert(moonraker_metadata_thumbnail_path("{\"result\":{\"thumbnails\":[{\"relative_path\":\"unknown.png\"}]}}","part.gcode",ROW_PREVIEW_WIDTH,path,sizeof(path))&&!strcmp(path,"unknown.png"));
+ assert(moonraker_metadata_thumbnail_path("{\"result\":{\"thumbnails\":[{\"width\":900,\"height\":520,\"relative_path\":\"only-large.png\"}]}}","part.gcode",ROW_PREVIEW_WIDTH,path,sizeof(path))&&!strcmp(path,"only-large.png"));
+ assert(moonraker_metadata_thumbnail_path("{\"result\":{\"thumbnails\":[{\"width\":1e309,\"height\":999,\"relative_path\":\"invalid-size.png\"},{\"width\":0,\"height\":96,\"relative_path\":\"zero.png\"},{\"width\":56,\"height\":96,\"relative_path\":\"portrait.png\"}]}}","part.gcode",ROW_PREVIEW_WIDTH,path,sizeof(path))&&!strcmp(path,"portrait.png"));
  const char *bad[]={"bad json","{}","{\"result\":{\"thumbnails\":[]}}","{\"result\":{\"thumbnails\":[{\"relative_path\":\"\"},{\"relative_path\":42}]}}"};
- for(unsigned i=0;i<sizeof(bad)/sizeof(*bad);i++){assert(!row_thumbnail_path(bad[i],path,sizeof(path))&&!path[0]);}
+ for(unsigned i=0;i<sizeof(bad)/sizeof(*bad);i++){assert(!moonraker_metadata_thumbnail_path(bad[i],"part.gcode",ROW_PREVIEW_WIDTH,path,sizeof(path))&&!path[0]);}
+ row_preview_slot_t slot={.generation=s_generation,.state=ROW_PREVIEW_LOADING};
+ row_preview_job_t job={.slot=0,.generation=s_generation};
+ s_slots=&slot;s_lock=(void*)1;s_profile_generation=profile_generation;
+ strcpy(slot.file,"file.gcode");
  uint8_t *png=NULL;size_t size=0;
- assert(fetch_preview_png("printer.local",7125,"key","file.gcode",&png,&size));heap_caps_free(png);assert(metadata_requests==1&&thumbnail_requests==1&&!strcmp(downloaded,"row.png"));
- metadata_fail=true;assert(!fetch_preview_png("printer.local",7125,"key","file.gcode",&png,&size)&&!png&&!size);metadata_fail=false;
- download_fail=true;assert(!fetch_preview_png("printer.local",7125,"key","file.gcode",&png,&size)&&!png&&!size);download_fail=false;
- expected_metadata_file="folder/sub/file.gcode";
- assert(fetch_preview_png("printer.local",7125,"key",expected_metadata_file,&png,&size));heap_caps_free(png);
- assert(!strcmp(downloaded,"folder/sub/row.png"));expected_metadata_file="file.gcode";
+ assert(fetch_preview_png(&job,"printer.local",7125,"key","file.gcode",&png,&size));heap_caps_free(png);assert(metadata_requests==1&&thumbnail_requests==1&&!strcmp(downloaded,"row.png"));
+ metadata_fail=true;assert(!fetch_preview_png(&job,"printer.local",7125,"key","file.gcode",&png,&size)&&!png&&!size);metadata_fail=false;
+ download_fail=true;assert(!fetch_preview_png(&job,"printer.local",7125,"key","file.gcode",&png,&size)&&!png&&!size);download_fail=false;
+ metadata_reply="{\"result\":{\"thumbnails\":["
+    "{\"width\":96,\"height\":56,\"relative_path\":\"../row.png\"},"
+    "{\"width\":300,\"height\":175,\"relative_path\":\"medium.png\"}]}}";
+ expected_metadata_file="folder/sub/file.gcode";strcpy(slot.file,expected_metadata_file);
+ assert(fetch_preview_png(&job,"printer.local",7125,"key",expected_metadata_file,&png,&size));heap_caps_free(png);
+ assert(!strcmp(downloaded,"folder/sub/medium.png"));expected_metadata_file="file.gcode";
+ s_slots=NULL;s_lock=NULL;
  assert(!owned_bytes);assert(ROW_PREVIEW_SLOT_COUNT>=64&&ROW_PREVIEW_QUEUE_LENGTH>=64&&ROW_PREVIEW_WIDTH==96&&ROW_PREVIEW_HEIGHT==96);
  puts("PASS: smallest adequate source, portrait/missing/invalid dimensions, large-only fallback, malformed metadata and fresh fetch failure cleanup");
 }
 static row_preview_job_t queued[ROW_PREVIEW_QUEUE_LENGTH];static unsigned queued_count;static bool run_worker;static jmp_buf worker_end;
 QueueHandle_t xQueueCreate(unsigned count,size_t size){assert(count==64&&size==sizeof(row_preview_job_t));return queued;}
 int xQueueReset(QueueHandle_t q){assert(q==queued);queued_count=0;return pdTRUE;}
-int xQueueSend(QueueHandle_t q,const void *job,unsigned timeout){assert(q==queued&&timeout==0);if(queued_count==64)return 0;queued[queued_count++]=*(const row_preview_job_t *)job;return pdTRUE;}
+int xQueueSend(QueueHandle_t q,const void *job,unsigned timeout){assert(q==queued&&timeout==0);if(fail_send||queued_count==64)return 0;queued[queued_count++]=*(const row_preview_job_t *)job;return pdTRUE;}
 int xQueueReceive(QueueHandle_t q,void *job,unsigned timeout){assert(q==queued&&timeout==portMAX_DELAY);if(!queued_count){assert(run_worker);longjmp(worker_end,1);}*(row_preview_job_t *)job=queued[0];memmove(queued,queued+1,--queued_count*sizeof(*queued));return pdTRUE;}
 SemaphoreHandle_t xSemaphoreCreateMutex(void){return (void *)1;}
 int xTaskCreatePinnedToCore(void (*fn)(void*),const char *name,unsigned stack,void *arg,unsigned priority,void *task,int core){(void)name;(void)stack;(void)arg;(void)priority;(void)task;(void)core;assert(fn==preview_worker);return pdPASS;}
@@ -126,14 +134,18 @@ static void run(void){
  s_slots[0].state=ROW_PREVIEW_READY;profile_generation++;delivered_before=delivered;
  bsp_display_lock(0);files_row_preview_request(entry.path);bsp_display_unlock();assert(!queued_count&&delivered==delivered_before);
  bsp_display_lock(0);files_row_preview_begin("printer.local",7125,"different-key",true,&entry,1,ready);assert(s_slots[0].state==ROW_PREVIEW_IDLE);bsp_display_unlock();
- /* A profile change during HTTP retires the fetched PNG before decode/publish. */
+ /* A profile change during metadata must prevent the PNG request. */
  entry.modified+=100;bsp_display_lock(0);files_row_preview_begin("printer.local",7125,"key",true,&entry,1,ready);files_row_preview_request(entry.path);bsp_display_unlock();
- size_t stable_allocated=owned_bytes;delivered_before=delivered;bump_profile_in_fetch=true;drain_worker();
- assert(delivered==delivered_before&&owned_bytes==stable_allocated);
+ size_t stable_allocated=owned_bytes;delivered_before=delivered;bump_profile_in_fetch=true;unsigned images_before=thumbnail_requests;drain_worker();
+ assert(delivered==delivered_before&&owned_bytes==stable_allocated&&thumbnail_requests==images_before);
  /* Queueing the entire catalogue cannot strand later rows. */
  printer_file_entry_t *catalog=calloc(64,sizeof(*catalog));assert(catalog);
  for(unsigned i=0;i<64;i++){snprintf(catalog[i].path,sizeof(catalog[i].path),"job%u.gcode",i);catalog[i].size=100+i;catalog[i].modified=500+i;}
  bsp_display_lock(0);files_row_preview_begin("printer.local",7125,"key",false,catalog,64,ready);
+ fail_send=true;uint64_t revision=s_slots[0].revision;
+ files_row_preview_request(catalog[0].path);
+ assert(!queued_count&&s_slots[0].state==ROW_PREVIEW_IDLE&&s_slots[0].revision==revision);
+ fail_send=false;
  for(unsigned i=0;i<64;i++)files_row_preview_request(catalog[i].path);
  bsp_display_unlock();assert(queued_count==64);free(catalog);
  puts("PASS: decoded RAM reuse without allocations/HTTP/queue, file revision invalidation, actual RGB-hit worker, credential/profile fences and all 64 requests queued");

@@ -336,7 +336,7 @@ static void show_object_confirm(const char *name)
     lv_obj_t *back = ui_popup_add_action_at(footer, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back",
         0, 0, 170, 48, close_object_confirm_cb, NULL, NULL);
     lv_obj_t *exclude = ui_popup_add_action_at(footer, UI_POPUP_ACTION_DANGER, LV_SYMBOL_STOP " Cancel Object",
-        0, 0, 170, 48, confirm_cancel_object_cb, NULL, NULL);
+        0, 0, 170, 64, confirm_cancel_object_cb, NULL, NULL);
     lv_obj_set_flex_grow(back, 1); lv_obj_set_flex_grow(exclude, 1);
 }
 
@@ -1298,7 +1298,7 @@ static lv_obj_t *s_hotend_confirm_status;
 static uint32_t s_hotend_epoch;
 static bool s_hotend_dispatching, s_hotend_pending;
 static uint32_t s_hotend_sent_at;
-static uint32_t s_hotend_pending_owner;
+static uint32_t s_hotend_pending_owner, s_hotend_pending_job, s_hotend_confirm_job;
 static char s_hotend_pending_name[MOONRAKER_HOTEND_NAME_MAX];
 static bool (*s_hotend_send)(const char *command);
 
@@ -1347,6 +1347,10 @@ static void confirm_hotend_activate_cb(lv_event_t *event)
         return;
     }
     moonraker_state_snapshot(&s_hotend_list_state);
+    if (s_hotend_list_state.print_job_revision != s_hotend_confirm_job) {
+        close_hotend_activate_cb(NULL);
+        return;
+    }
     const moonraker_hotend_t *hotend = hotend_row(s_hotend_activate_index);
     if (!hotend_live_here() || printer_connection_reason(&s_hotend_list_state)[0] ||
         !hotend || !hotend_name_safe(hotend->object_name) ||
@@ -1361,7 +1365,7 @@ static void confirm_hotend_activate_cb(lv_event_t *event)
         "ACTIVATE_EXTRUDER EXTRUDER=%s", s_hotend_confirm_name);
     if (written <= 0 || (size_t)written >= sizeof(command)) return;
     lv_obj_t *popup = s_hotend_activate_popup;
-    uint32_t epoch = s_hotend_epoch, owner = s_hotend_owner;
+    uint32_t epoch = s_hotend_epoch, owner = s_hotend_owner, job = s_hotend_confirm_job;
     char selected_name[MOONRAKER_HOTEND_NAME_MAX];
     snprintf(selected_name, sizeof(selected_name), "%s", s_hotend_confirm_name);
     s_hotend_dispatching = true;
@@ -1373,6 +1377,7 @@ static void confirm_hotend_activate_cb(lv_event_t *event)
     if (accepted && owner == moonraker_config_generation()) {
         s_hotend_pending = true;
         s_hotend_pending_owner = owner;
+        s_hotend_pending_job = job;
         snprintf(s_hotend_pending_name, sizeof(s_hotend_pending_name), "%s", selected_name);
         s_hotend_sent_at = lv_tick_get();
     }
@@ -1396,6 +1401,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
         printer_controller_is_live_state(s_hotend_list_state.printer_state)) return;
     if (s_hotend_activate_popup) { lv_obj_move_foreground(s_hotend_activate_popup); return; }
     s_hotend_activate_index = index;
+    s_hotend_confirm_job = s_hotend_list_state.print_job_revision;
     snprintf(s_hotend_confirm_name, sizeof(s_hotend_confirm_name), "%s", hotend->object_name);
     s_hotend_activate_popup = ui_popup_create(lv_layer_top(), control_width(560),
         control_height(300), UI_POPUP_STANDARD);
@@ -1430,6 +1436,8 @@ static void refresh_hotend_list(lv_timer_t *timer)
         return;
     }
     moonraker_state_snapshot(&s_hotend_list_state);
+    if (s_hotend_activate_popup && s_hotend_list_state.print_job_revision != s_hotend_confirm_job)
+        close_hotend_activate_cb(NULL);
     bool live = hotend_live_here() && !printer_connection_reason(&s_hotend_list_state)[0];
     bool activation_locked = printer_controller_is_live_state(s_hotend_list_state.printer_state);
     if (s_hotend_pending) {
@@ -1440,7 +1448,8 @@ static void refresh_hotend_list(lv_timer_t *timer)
             if (s_hotend_list_state.hotends[i].active &&
                 !strcmp(s_hotend_list_state.hotends[i].object_name, s_hotend_pending_name))
                 confirmed = true;
-        if (s_hotend_pending_owner != moonraker_config_generation() || confirmed ||
+        if (s_hotend_pending_owner != moonraker_config_generation() ||
+            s_hotend_pending_job != s_hotend_list_state.print_job_revision || confirmed ||
             lv_tick_elaps(s_hotend_sent_at) >= 5000) {
             s_hotend_pending = false;
             s_hotend_pending_name[0] = 0;

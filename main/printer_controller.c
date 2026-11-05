@@ -1,6 +1,9 @@
 #include "printer_controller.h"
 
 #include <stdbool.h>
+#include <limits.h>
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -101,6 +104,17 @@ static void set_btn_enabled(lv_obj_t *btn, bool enabled)
     }
 }
 
+int printer_controller_progress_percent(double progress)
+{
+    if (!isfinite(progress) || progress < 0.0 || progress > 1.0) return -1;
+    return (int)(progress * 100.0);
+}
+
+static bool duration_valid(double seconds)
+{
+    return isfinite(seconds) && seconds >= 0.0 && seconds <= INT_MAX;
+}
+
 static bool printer_controller_remaining_seconds(
     double progress,
     double print_duration_seconds,
@@ -111,6 +125,8 @@ static bool printer_controller_remaining_seconds(
     }
 
     *remaining_seconds = 0.0;
+    if (printer_controller_progress_percent(progress) < 0 ||
+        !duration_valid(print_duration_seconds)) return false;
 
     if (progress >= 0.999) {
         return true;
@@ -121,51 +137,54 @@ static bool printer_controller_remaining_seconds(
         return false;
     }
 
-    *remaining_seconds =
-        print_duration_seconds *
-        (1.0 - progress) /
-        progress;
-
-    if (*remaining_seconds < 0.0) {
-        *remaining_seconds = 0.0;
-    }
-
+    double estimate = print_duration_seconds * (1.0 - progress) / progress;
+    if (!duration_valid(estimate)) return false;
+    *remaining_seconds = estimate;
     return true;
 }
 
 
-void printer_controller_format_eta_clock(char *out,
-                                         size_t out_len,
-                                         double progress,
-                                         double print_duration_seconds)
+void printer_controller_format_eta_seconds(char *out, size_t out_len, double remaining_seconds)
 {
-    if (!out || out_len == 0) return;
-
+    if (!out || !out_len) return;
     snprintf(out, out_len, "--:--");
+    if (!duration_valid(remaining_seconds)) return;
 
-    double remaining_seconds = 0.0;
+    time_t now = time(NULL);
+    struct tm today, finish;
+    if (now < 0 || !localtime_r(&now, &today) || today.tm_year < 2024 - 1900) return;
 
-    if (!printer_controller_remaining_seconds(
-            progress,
-            print_duration_seconds,
-            &remaining_seconds)) {
-        return;
+    int64_t rounded = (int64_t)(remaining_seconds + 0.5);
+    if ((int64_t)now > INT64_MAX - rounded) return;
+    int64_t future = (int64_t)now + rounded;
+    time_t finish_time = (time_t)future;
+    if ((int64_t)finish_time != future || !localtime_r(&finish_time, &finish)) return;
+
+    /* Compare calendar dates, not 24-hour intervals: a local day can be
+     * shorter or longer during a daylight-saving transition. */
+    int days = finish.tm_yday - today.tm_yday;
+    for (int year = today.tm_year; year < finish.tm_year; ++year) {
+        int64_t calendar_year = (int64_t)year + 1900;
+        bool leap = calendar_year % 4 == 0 &&
+                    (calendar_year % 100 != 0 || calendar_year % 400 == 0);
+        days += leap ? 366 : 365;
     }
+    char clock[24];
+    if (!strftime(clock, sizeof(clock), "%I:%M %p", &finish)) return;
+    const char *display_clock = clock + (clock[0] == '0');
+    int written = days > 0
+        ? snprintf(out, out_len, "%s +%dd", display_clock, days)
+        : snprintf(out, out_len, "%s", display_clock);
+    if (written < 0 || (size_t)written >= out_len) snprintf(out, out_len, "--:--");
+}
 
-    time_t now = 0;
-    struct tm ti = {0};
-
-    time(&now);
-    now += (time_t)(remaining_seconds + 0.5);
-    localtime_r(&now, &ti);
-
-    if (ti.tm_year >= (2024 - 1900)) {
-        strftime(out, out_len, "%I:%M %p", &ti);
-
-        if (out[0] == '0') {
-            memmove(out, out + 1, strlen(out));
-        }
-    }
+void printer_controller_format_eta_clock(char *out, size_t out_len,
+                                         double progress, double print_duration_seconds)
+{
+    double remaining;
+    if (!printer_controller_remaining_seconds(progress, print_duration_seconds, &remaining))
+        remaining = -1;
+    printer_controller_format_eta_seconds(out, out_len, remaining);
 }
 
 void printer_controller_format_hhmm(char *out,
@@ -174,7 +193,7 @@ void printer_controller_format_hhmm(char *out,
 {
     if (!out || out_len == 0) return;
 
-    if (seconds < 0.0) {
+    if (!duration_valid(seconds)) {
         snprintf(out, out_len, "--:--");
         return;
     }

@@ -119,6 +119,9 @@ void console_controller_add_command(const char *command)
         return;
     }
 
+    size_t length = strlen(command);
+    if (length > CONSOLE_COMMAND_MAX) return;
+
     console_controller_add(
         CONSOLE_ENTRY_COMMAND,
         "%s",
@@ -152,12 +155,7 @@ void console_controller_add_command(const char *command)
             ++s_store->history_count;
         }
 
-        snprintf(
-            s_store->history[write_index],
-            sizeof(s_store->history[write_index]),
-            "%.*s",
-            CONSOLE_COMMAND_MAX,
-            command);
+        memcpy(s_store->history[write_index], command, length + 1);
     }
 
     portEXIT_CRITICAL(&s_lock);
@@ -248,9 +246,9 @@ bool console_controller_history_get(
     char *output,
     size_t output_size)
 {
-    if (!s_store || !output || output_size == 0) {
-        return false;
-    }
+    if (!output || !output_size) return false;
+    output[0] = 0;
+    if (!s_store) return false;
 
     bool found = false;
     portENTER_CRITICAL(&s_lock);
@@ -263,12 +261,12 @@ bool console_controller_history_get(
             (s_store->history_head + chronological) %
             CONSOLE_HISTORY_CAPACITY;
 
-        snprintf(
-            output,
-            output_size,
-            "%s",
-            s_store->history[physical]);
-        found = true;
+        const char *command = s_store->history[physical];
+        size_t length = strlen(command);
+        if (length < output_size) {
+            memcpy(output, command, length + 1);
+            found = true;
+        }
     }
 
     portEXIT_CRITICAL(&s_lock);

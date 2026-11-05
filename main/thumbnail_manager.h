@@ -15,22 +15,19 @@ typedef enum {
 
 void thumbnail_manager_mark_pending(void);
 void thumbnail_manager_mark_failed(void);
-void thumbnail_manager_mark_result(bool ok);
 
 bool thumbnail_manager_task_running(void);
-void thumbnail_manager_set_task_running(bool running);
 
 thumbnail_manager_result_t
 thumbnail_manager_result(void);
+
+/* Display owner only: adopt the completed PNG for the current file. */
+bool thumbnail_manager_publish_download(const char *file);
 
 bool thumbnail_manager_force_refresh(void);
 void thumbnail_manager_set_force_refresh(bool force_refresh);
 
 void thumbnail_manager_url_encode(const char *in, char *out, size_t out_sz);
-
-bool thumbnail_manager_cache_path_for_file(const char *gcode_file,
-                                               char *out,
-                                               size_t out_sz);
 
 bool thumbnail_manager_load_cache_file(const char *path,
                                            uint8_t **out_buf,
@@ -44,26 +41,10 @@ uint8_t *thumbnail_manager_png_data(void);
 size_t thumbnail_manager_png_size(void);
 bool thumbnail_manager_has_png(void);
 void thumbnail_manager_clear_png(void);
-bool thumbnail_manager_load_selected_cache(const char *selected_file);
-bool thumbnail_manager_store_selected_cache(const char *selected_file);
 
 void thumbnail_manager_take_png(uint8_t *buf, size_t len);
 lv_image_dsc_t *thumbnail_manager_image_dsc(void);
 void thumbnail_manager_prepare_raw_image(void);
-
-bool thumbnail_manager_run_download_task(void *arg,
-                                             const char *host,
-                                             int port,
-                                             const char *selected_file,
-                                             bool force_refresh,
-                                             bool sd_ok);
-
-bool thumbnail_manager_download_ram(const char *host,
-                                       int port,
-                                       const char *selected_file,
-                                       const char *thumb_path,
-                                       bool force_refresh,
-                                       bool sd_ok);
 
 bool thumbnail_manager_start_download_task(
     const char *host,

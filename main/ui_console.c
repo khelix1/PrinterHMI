@@ -503,33 +503,25 @@ static void send_command_cb(lv_event_t *event)
         ++input;
     }
 
-    if (!input || !input[0]) {
-        ui_value_set_text(s_command_feedback,"Enter a command before sending.");
-        ui_value_set_color(s_command_feedback,UI_WARN,0);
-        if(s_command_feedback)lv_obj_scroll_to_view(s_command_feedback,LV_ANIM_OFF);
+    size_t length = input ? strlen(input) : 0;
+    while (length && (input[length - 1] == ' ' || input[length - 1] == '\t' ||
+                      input[length - 1] == '\r' || input[length - 1] == '\n')) {
+        --length;
+    }
+
+    if (!length || length > CONSOLE_COMMAND_MAX) {
+        char limit[72];
+        snprintf(limit, sizeof(limit), "Command is too long. Limit: %u bytes.",
+                 (unsigned)CONSOLE_COMMAND_MAX);
+        ui_value_set_text(s_command_feedback, length ? limit : "Enter a command before sending.");
+        ui_value_set_color(s_command_feedback, UI_WARN, 0);
+        if (s_command_feedback) lv_obj_scroll_to_view(s_command_feedback, LV_ANIM_OFF);
         return;
     }
 
     char command[CONSOLE_COMMAND_MAX + 1];
-    snprintf(
-        command,
-        sizeof(command),
-        "%.*s",
-        CONSOLE_COMMAND_MAX,
-        input);
-
-    size_t length = strlen(command);
-    while (length > 0 &&
-           (command[length - 1] == ' ' ||
-            command[length - 1] == '\t' ||
-            command[length - 1] == '\r' ||
-            command[length - 1] == '\n')) {
-        command[--length] = '\0';
-    }
-
-    if (length == 0) {
-        return;
-    }
+    memcpy(command, input, length);
+    command[length] = 0;
 
     uint32_t epoch = s_console_epoch, owner = s_command_owner;
     lv_obj_t *popup = s_command_popup;
@@ -592,7 +584,8 @@ static void open_command_cb(lv_event_t *event)
     s_history_cursor=SIZE_MAX;
     s_command_popup=editor_popup("Send command");if(!s_command_popup)return;
     lv_obj_add_event_cb(s_command_popup,command_deleted,LV_EVENT_DELETE,NULL);
-    s_command_input=editor_input(s_command_popup,CONSOLE_COMMAND_MAX,"G-code or macro, for example: STATUS","");
+    /* Let the send handler reject oversized input without clipping a paste. */
+    s_command_input=editor_input(s_command_popup,0,"G-code or macro, for example: STATUS","");
     lv_obj_add_event_cb(s_command_input,command_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
     s_command_actions=editor_actions(s_command_popup);
     console_action(s_command_actions,"Close",UI_BUTTON_CLOSE,96,close_command_cb);

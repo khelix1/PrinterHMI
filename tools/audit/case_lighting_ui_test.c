@@ -35,7 +35,7 @@ static void run(void)
  ui_case_lighting_show();lv_obj_t *popup=s_popup;assert(popup&&s_switch&&s_slider&&s_value&&s_status);ui_case_lighting_show();assert(s_popup==popup);
  lv_obj_update_layout(popup);inside(popup,lv_layer_top());inside(lv_obj_get_child(popup,2),popup);
  assert(!lv_obj_has_state(s_switch,LV_STATE_DISABLED)&&!lv_obj_has_state(s_slider,LV_STATE_DISABLED));
- unsigned before=sends;lv_slider_set_value(s_slider,35,LV_ANIM_OFF);lv_obj_send_event(s_slider,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before&&strstr(lv_label_get_text(s_value),"35%"));lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(sends==before+1&&sent_percent==35&&lv_obj_has_state(s_switch,LV_STATE_DISABLED));
+ unsigned before=sends;lv_obj_send_event(s_slider,LV_EVENT_PRESSED,NULL);lv_slider_set_value(s_slider,35,LV_ANIM_OFF);lv_obj_send_event(s_slider,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before&&strstr(lv_label_get_text(s_value),"35%"));lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(sends==before+1&&sent_percent==35&&lv_obj_has_state(s_switch,LV_STATE_DISABLED));
  assert(lv_slider_get_value(s_slider)==35&&strstr(lv_label_get_text(s_value),"35%"));
  for(unsigned poll=0;poll<4;poll++){refresh(NULL);assert(lv_slider_get_value(s_slider)==35);}
  lv_obj_update_layout(popup);assert(lv_obj_get_height(s_slider)<=14);inside(s_slider,lv_obj_get_parent(s_slider));
@@ -44,7 +44,7 @@ static void run(void)
  case_lighting_status_json(old,strlen(old),generation);refresh(NULL);assert(lv_slider_get_value(s_slider)==35);
  const char *echo="{\"method\":\"notify_status_update\",\"params\":[{\"output_pin case_led\":{\"value\":0.35}},1]}";
  case_lighting_status_json(echo,strlen(echo),generation);refresh(NULL);assert(lv_slider_get_value(s_slider)==35&&!lv_obj_has_state(s_slider,LV_STATE_DISABLED));
- lv_slider_set_value(s_slider,65,LV_ANIM_OFF);lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(lv_slider_get_value(s_slider)==65);
+ lv_obj_send_event(s_slider,LV_EVENT_PRESSED,NULL);lv_slider_set_value(s_slider,65,LV_ANIM_OFF);lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(lv_slider_get_value(s_slider)==65);
 
  clock_us+=5000001;refresh(NULL);assert(lv_slider_get_value(s_slider)==35);assert(strstr(lv_label_get_text(s_status),"confirmation")&&!lv_obj_has_state(s_switch,LV_STATE_DISABLED));
  send_ok=false;lv_obj_remove_state(s_switch,LV_STATE_CHECKED);lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);assert(strstr(lv_label_get_text(s_status),"Could not send"));send_ok=true;
@@ -63,7 +63,23 @@ static void run(void)
  prepare(true);ui_case_lighting_show();send_ok=false;send_hook=replace_during_send;
  lv_obj_add_state(s_switch,LV_STATE_CHECKED);lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);
  assert(s_popup&&s_owner==generation&&!strcmp(lv_label_get_text(s_status),"Discovering printer lighting..."));
- send_ok=true;refresh(NULL);ui_case_lighting_close();
+ send_ok=true;refresh(NULL);
+ before=sends;
+ lv_obj_send_event(s_slider,LV_EVENT_PRESSED,NULL);
+ lv_slider_set_value(s_slider,35,LV_ANIM_OFF);
+ lv_obj_send_event(s_slider,LV_EVENT_PRESS_LOST,NULL);
+ lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(sends==before);
+ lv_obj_send_event(s_slider,LV_EVENT_PRESSED,NULL);
+ prepare(true); /* Reconnect to the same printer before the next UI refresh. */
+ lv_slider_set_value(s_slider,45,LV_ANIM_OFF);
+ lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(sends==before);
+ case_lighting_status_json(echo,strlen(echo),generation);refresh(NULL);
+ case_lighting_status_json(old,strlen(old),generation);refresh(NULL);
+ ui_case_lighting_close();ui_case_lighting_show();
+ lv_obj_add_state(s_switch,LV_STATE_CHECKED);
+ lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);
+ assert(sends==before+1&&sent_percent==35);
+ ui_case_lighting_close();
 
 }
 int main(void)

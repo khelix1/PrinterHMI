@@ -49,8 +49,9 @@ int xTaskCreatePinnedToCore(void(*worker)(void*),const char*name,unsigned stack,
 void vTaskDelay(unsigned delay){assert(delay==500);delays++;}
 void thumbnail_manager_url_encode(const char *in,char *out,size_t n){snprintf(out,n,"%s",in);}
 bool moonraker_fetch_file_metadata(const char*host,int port,const char*key,const char*file,char*body,size_t n,int*code,esp_err_t*error){assert(!strcmp(host,"printer.local")&&port==7125&&!strcmp(key,"test-key")&&!strcmp(file,"part.gcode"));fetches++;snprintf(body,n,"metadata");*code=200;*error=ESP_OK;hook(&fetch_hook);return !fail_fetch;}
-bool json_find_best_thumbnail_path(const char *json,char *out,size_t n){assert(!strcmp(json,"metadata"));snprintf(out,n,"thumb.png");return true;}
-bool moonraker_fetch_thumbnail_encoded(const char*host,int port,const char*file,uint8_t**out,size_t*n){assert(!strcmp(host,"printer.local")&&port==7125&&!strcmp(file,"thumb.png"));*n=8;*out=heap_caps_calloc(1,*n,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);return *out!=NULL;}
+bool moonraker_find_thumbnail_path(const char *json,const char *file,char *out,size_t n){assert(!strcmp(json,"metadata")&&!strcmp(file,"part.gcode"));snprintf(out,n,"thumb.png");return true;}
+static unsigned png_fetches;
+bool moonraker_fetch_thumbnail_encoded(const char*host,int port,const char*file,uint8_t**out,size_t*n){assert(!strcmp(host,"printer.local")&&port==7125&&!strcmp(file,"thumb.png"));png_fetches++;*n=8;*out=heap_caps_calloc(1,*n,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);return *out!=NULL;}
 static bool test_render(const lv_image_dsc_t *image,uint16_t *out,int width,int height){bool ok;if(image->header.cf==LV_COLOR_FORMAT_RAW){for(int i=0;i<width*height;i++)out[i]=0xabcd;ok=true;}else ok=thumbnail_render_to_rgb565_fit(image,out,width,height);hook(&render_hook);return ok;}
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -99,7 +100,9 @@ static void checks(lv_indev_t *input)
  launch(image);fail_lock=true;reads=fetches;run_worker();assert(fetches==reads&&s_fallback_pixels);fail_lock=false;closed();
  launch(image);changed();reads=fetches;run_worker();assert(fetches==reads&&!s_fullscreen_pixels);closed();
  launch(image);ui_preview_lightbox_close();preview_lightbox_show_image(&source);request=s_request_id;reads=fetches;run_worker();assert(fetches==reads&&s_request_id==request&&owned_bytes==8);closed();
- launch(image);fetch_hook=reopen;run_worker();assert(s_preview_lightbox&&owned_bytes==8&&!s_fullscreen_pixels);closed();
+ launch(image);unsigned png_before=png_fetches;fetch_hook=reopen;run_worker();
+ assert(s_preview_lightbox&&owned_bytes==8&&!s_fullscreen_pixels&&png_fetches==png_before);closed();
+ launch(image);fetch_hook=changed;run_worker();assert(png_fetches==png_before&&!s_fullscreen_pixels);closed();
  launch(image);render_hook=reopen;run_worker();assert(s_preview_lightbox&&owned_bytes==8&&!s_fullscreen_pixels);closed();
  launch(image);render_hook=delete_image;run_worker();assert(s_preview_lightbox&&!s_preview_image&&!s_fullscreen_pixels&&owned_bytes==8);closed();
  launch(image);render_hook=delete_hint;run_worker();assert(s_fullscreen_pixels&&!s_preview_hint);closed();

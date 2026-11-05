@@ -14,6 +14,8 @@ typedef void (*dashboard_runtime_metadata_cb_t)(
 typedef struct {
     double meta_object_height;
     double meta_layer_height;
+    const double *remaining_seconds;
+    uint32_t estimate_job_revision;
 
 
     lv_obj_t **dashboard_canvas;

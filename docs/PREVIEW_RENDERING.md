@@ -64,8 +64,10 @@ loading placeholders, unavailable previews and tap-to-close behavior.
 
 ## SD cache retention and transfer buffers
 
-File-preview PNG directories (`/sdcard/hmi/thumbs` and the legacy `thumbs32`)
-retain at most 64 PNG files and 16 MiB each during normal writes. Cleanup evicts
+File-preview PNGs in `/sdcard/hmi/thumbs`
+use a cache key derived from the printer host and port, complete G-code path,
+and thumbnail path. Older filename-only entries are not reused and age out
+during normal cleanup. That directory and legacy `thumbs32` retain at most 64 PNG files and 16 MiB each during normal writes. Cleanup evicts
 older modification times, keeps the newly written PNG, and resolves equal times
 by filename. This is write-age retention, not an access-based LRU. Only immediate
 regular `.png` files participate; profile startup previews, metadata, nested

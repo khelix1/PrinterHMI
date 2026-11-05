@@ -1,4 +1,3 @@
-#include "thumbnail_path.h"
 #include "printer_files.h"
 #include "moonraker_file_metadata.h"
 
@@ -56,14 +55,8 @@ bool printer_files_build_metadata_text(const char *file,
     char eta[32];
     printer_files_seconds_to_hhmm(est, eta, sizeof(eta));
 
-    bool has_thumb = false;
-    if (thumbnail_path && thumbnail_path_sz > 0) {
-        thumbnail_path[0] = 0;
-        has_thumb = moonraker_metadata_best_thumbnail(result,
-                                                        thumbnail_path, thumbnail_path_sz);
-        if (has_thumb) has_thumb = thumbnail_path_resolve(
-            file, thumbnail_path, thumbnail_path, thumbnail_path_sz);
-    }
+    bool has_thumb = moonraker_metadata_select_thumbnail(result, file, 0,
+        thumbnail_path, thumbnail_path_sz);
 
     cJSON_Delete(root);
 

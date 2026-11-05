@@ -58,7 +58,10 @@ int main(void)
     response_size = 512 * 1024;
     assert(moonraker_fetch_thumbnail_encoded_internal("printer", 7125, "a.png", &buf, &len, false));
     assert(retained == response_size); heap_caps_free(buf);
-    char large[512]; memset(large, 'a', sizeof(large)); large[511] = 0;
+    char large[896]; memset(large, 'a', sizeof(large)); large[511] = 0;
+    assert(moonraker_fetch_thumbnail_encoded_internal("printer", 7125, large, &buf, &len, false));
+    heap_caps_free(buf);
+    large[511] = 'a'; large[sizeof(large)-1] = 0;
     assert(!moonraker_fetch_thumbnail_encoded_internal("printer", 7125, large, &buf, &len, false));
     assert(!live && !buf && !len);
     puts("PASS: actual downloader trims success, preserves realloc fallback and frees every failure");

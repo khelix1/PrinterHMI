@@ -391,15 +391,15 @@ static void refresh_factor_slider(
     bool ready = s_tuning_generation == owner && !printer_connection_reason(&live)[0] && s_send_gcode_cb;
     if (ready && !s_tuning_dispatching) lv_obj_remove_state(slider, LV_STATE_DISABLED);
     else lv_obj_add_state(slider, LV_STATE_DISABLED);
-    double bounded = isfinite(reported_factor) ? fmin(150, fmax(50, reported_factor)) : 100;
+    if (!ready) s_factor_gesture[kind].active = false;
+    bool reported_valid = isfinite(reported_factor) && reported_factor > 0;
+    double bounded = reported_valid ? fmin(150, fmax(50, reported_factor)) : 100;
     int reported = (int)(bounded + 0.5);
     int displayed = reported;
     bool timed_out = false;
     if (*pending_factor >= 0) {
-        int difference = reported - *pending_factor;
-        if (difference < 0) difference = -difference;
         if (s_factor_owner[kind] != owner || s_factor_job[kind] != live.print_job_revision ||
-            (ready && difference <= 1)) {
+            (ready && reported_valid && fabs(reported_factor - *pending_factor) < 0.5)) {
             *pending_factor = -1;
             s_factor_accepted[kind] = false;
         } else if (s_factor_accepted[kind] && lv_tick_elaps(s_factor_sent_at[kind]) >= 5000) {

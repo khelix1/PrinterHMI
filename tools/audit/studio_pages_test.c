@@ -119,7 +119,9 @@ static void run(void){
  ui_printer_preview_create(l.active_panel);
  lv_obj_update_layout(l.active_panel);
  assert(lv_obj_get_width(s_preview_box)==620 && lv_obj_get_height(s_preview_box)==240);
- ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,true,NULL);
+ ui_printer_info_cards_refresh_live(r,&cards,.999,205,210,60,60,80,3600,NULL,true,NULL);
+ assert(!strcmp(lv_label_get_text(cards.progress),"Progress 99%"));
+ ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,true,NULL);
  ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,215,336,true,NULL);
  children_inside(r);assert(!lv_obj_has_flag(r,LV_OBJ_FLAG_SCROLLABLE));snapshot("printer-native");
  assert(lv_obj_get_y(s_studio_position)>lv_obj_get_height(s_preview_box));
@@ -133,8 +135,8 @@ static void run(void){
  assert(s_preview_image && lv_obj_has_flag(s_preview_label,LV_OBJ_FLAG_HIDDEN));
  unsigned previews=preview_opens;lv_obj_send_event(s_preview_box,LV_EVENT_CLICKED,NULL);assert(preview_opens==previews+1);
  ui_printer_preview_destroy_refs();
- moonraker_capabilities_t caps={.discovered=true,.has_heated_bed=true,.has_part_fan=false};ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,0,3600,true,&caps);assert(!lv_obj_has_state(l.status_panel,LV_STATE_DISABLED));assert(!strcmp(lv_label_get_text(cards.part_fan),"N/A"));
- studio_tuning_open(NULL);assert(s_studio_tuning_popup);studio_tuning_close(NULL);assert(!s_speed_factor_slider && !s_flow_factor_slider);studio_tuning_open(NULL);assert(s_studio_tuning_popup);children_inside(s_studio_tuning_popup);lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(!strcmp(command,"M220 S120"));state.speed_factor=120;refresh_factor_slider(s_speed_factor_slider,s_speed_factor_value,120,&s_pending_speed_factor);lv_obj_delete(r);assert(!s_studio_position && !s_studio_tuning_popup && !s_speed_factor_slider);
+ moonraker_capabilities_t caps={.discovered=true,.has_heated_bed=true,.has_part_fan=false};ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,0,3600,NULL,true,&caps);assert(!lv_obj_has_state(l.status_panel,LV_STATE_DISABLED));assert(!strcmp(lv_label_get_text(cards.part_fan),"N/A"));
+ studio_tuning_open(NULL);assert(s_studio_tuning_popup);studio_tuning_close(NULL);assert(!s_speed_factor_slider && !s_flow_factor_slider);studio_tuning_open(NULL);assert(s_studio_tuning_popup);children_inside(s_studio_tuning_popup);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_PRESSED,NULL);lv_slider_set_value(s_speed_factor_slider,120,LV_ANIM_OFF);lv_obj_send_event(s_speed_factor_slider,LV_EVENT_RELEASED,NULL);assert(!strcmp(command,"M220 S120"));state.speed_factor=120;refresh_factor_slider(s_speed_factor_slider,s_speed_factor_value,120,&s_pending_speed_factor);lv_obj_delete(r);assert(!s_studio_position && !s_studio_tuning_popup && !s_speed_factor_slider);
  /* Render the real Operator body with its own layout and typography. The
   * application shell/header remain outside this fixture. */
  ui_theme_set_active(UI_THEME_OPERATOR);
@@ -144,7 +146,7 @@ static void run(void){
  ui_printer_info_cards_create(l.status_panel,&cards,clicked,clicked,clicked);
  ui_printer_actions_create(l.action_panel,&actions,clicked,open_toolhead);
  ui_printer_preview_create(l.active_panel);
- ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,true,NULL);
+ ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,true,NULL);
  ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,100,100,215,336,true,NULL);
  children_inside(r);
  snapshot("printer-operator-body-native");

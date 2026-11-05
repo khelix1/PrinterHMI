@@ -42,10 +42,10 @@ static lv_timer_t *s_refresh_timer = NULL;
 static ui_printer_toolhead_send_gcode_cb_t s_send_gcode = NULL;
 static bool (*s_checked_send)(const char *command);
 static lv_obj_t *s_toolhead_popup;
-static uint32_t s_toolhead_owner, s_toolhead_epoch;
+static uint32_t s_toolhead_owner, s_toolhead_epoch, s_toolhead_job;
 static bool s_toolhead_dispatching, s_toolhead_cooldown;
 static uint32_t s_toolhead_sent_at;
-static uint32_t s_toolhead_sent_owner;
+static uint32_t s_toolhead_sent_owner, s_toolhead_sent_job;
 static char s_toolhead_feedback[40];
 static uint32_t s_toolhead_feedback_at;
 
@@ -83,15 +83,19 @@ void ui_printer_toolhead_close(void)
 
 static void toolhead_send(const char *command)
 {
-    if (!s_toolhead_popup || s_toolhead_dispatching ||
-        (s_toolhead_cooldown && s_toolhead_sent_owner == moonraker_config_generation() &&
-         lv_tick_elaps(s_toolhead_sent_at) < 350)) return;
+    if (!s_toolhead_popup || s_toolhead_dispatching) return;
     if (s_toolhead_owner != moonraker_config_generation()) {
         ui_printer_toolhead_close();
         return;
     }
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
+    if (state.print_job_revision != s_toolhead_job) {
+        ui_printer_toolhead_close();
+        return;
+    }
+    if (s_toolhead_cooldown && s_toolhead_sent_owner == s_toolhead_owner &&
+        s_toolhead_sent_job == s_toolhead_job && lv_tick_elaps(s_toolhead_sent_at) < 350) return;
     const char *error = printer_connection_reason(&state);
     if (error[0]) {
         snprintf(s_toolhead_feedback, sizeof(s_toolhead_feedback), "Offline");
@@ -109,6 +113,7 @@ static void toolhead_send(const char *command)
     if (accepted && owner == moonraker_config_generation()) {
         s_toolhead_cooldown = true;
         s_toolhead_sent_owner = owner;
+        s_toolhead_sent_job = state.print_job_revision;
         s_toolhead_sent_at = lv_tick_get();
     }
     if (epoch != s_toolhead_epoch || popup != s_toolhead_popup ||
@@ -236,64 +241,60 @@ bool ui_printer_toolhead_format_jog_command(const char *axis,
                                           char *cmd,
                                           size_t cmd_size)
 {
-    if (!axis || !axis[0] || !cmd || cmd_size == 0) return false;
-
+    if (!cmd || !cmd_size) return false;
+    cmd[0] = '\0';
+    if (!axis || !axis[0]) return false;
+    int written;
     if (strcmp(axis, "HOME") == 0) {
-        snprintf(cmd, cmd_size, "G28");
-        return true;
-    }
-
-    if (jog_step <= 0.0) return false;
-
-    double distance = jog_step;
-    if (strcmp(axis, "X-") == 0 ||
-        strcmp(axis, "Y-") == 0 ||
-        strcmp(axis, "Z-") == 0) {
-        distance = -distance;
-    }
-
-    if (axis[0] == 'Z') {
-        snprintf(cmd, cmd_size, "G91\nG1 Z%.3f F600\nG90", distance);
-    } else if (axis[0] == 'X' || axis[0] == 'Y') {
-        snprintf(cmd, cmd_size, "G91\nG1 %c%.2f F6000\nG90", axis[0], distance);
+        written = snprintf(cmd, cmd_size, "G28");
     } else {
-        return false;
+        if (!strchr("XYZ", axis[0]) || (axis[1] != '+' && axis[1] != '-') ||
+            axis[2] || !isfinite(jog_step) || jog_step <= 0 ||
+            jog_step > (axis[0] == 'Z' ? 25.0 : 50.0)) return false;
+        double distance = axis[1] == '-' ? -jog_step : jog_step;
+        written = axis[0] == 'Z'
+            ? snprintf(cmd, cmd_size, "G91\nG1 Z%.3f F600\nG90", distance)
+            : snprintf(cmd, cmd_size, "G91\nG1 %c%.2f F6000\nG90", axis[0], distance);
     }
-
-    return true;
+    if (written >= 0 && (size_t)written < cmd_size) return true;
+    cmd[0] = '\0';
+    return false;
 }
 
 static bool format_extrusion_distance(const char *dir, double distance,
                                       char *cmd, size_t cmd_size)
 {
-    if (!dir || !cmd || cmd_size == 0 || !isfinite(distance) || distance <= 0.0) return false;
+    if (!cmd || !cmd_size) return false;
+    cmd[0] = '\0';
+    if (!dir || !isfinite(distance) || distance < 1.0 || distance > 50.0) return false;
     if (strcmp(dir, "RETRACT") == 0) distance = -distance;
     else if (strcmp(dir, "EXTRUDE") != 0) return false;
-    snprintf(cmd, cmd_size, "M83\nG1 E%.0f F300", distance);
-    return true;
+    int written = snprintf(cmd, cmd_size, "M83\nG1 E%.0f F300", distance);
+    if (written >= 0 && (size_t)written < cmd_size) return true;
+    cmd[0] = '\0';
+    return false;
 }
 
 bool ui_printer_toolhead_format_z_offset_command(const char *adjustment,
                                                char *cmd,
                                                size_t cmd_size)
 {
-    if (!adjustment || !cmd || cmd_size == 0) return false;
-
+    if (!cmd || !cmd_size) return false;
+    cmd[0] = '\0';
+    if (!adjustment) return false;
+    int written;
     if (strcmp(adjustment, "RESET") == 0) {
-        snprintf(cmd, cmd_size, "SET_GCODE_OFFSET Z=0 MOVE=1");
-        return true;
+        written = snprintf(cmd, cmd_size, "SET_GCODE_OFFSET Z=0 MOVE=1");
+    } else {
+        char *end = NULL;
+        double delta = strtod(adjustment, &end);
+        if (end == adjustment || *end || !isfinite(delta) || fabs(delta) < 0.005 ||
+            fabs(delta) > 0.10) return false;
+        written = snprintf(cmd, cmd_size, "SET_GCODE_OFFSET Z_ADJUST=%+.3f MOVE=1", delta);
     }
-
-    char *end = NULL;
-    double delta = strtod(adjustment, &end);
-    if (!end || end == adjustment || *end != '\0') return false;
-
-    snprintf(
-        cmd,
-        cmd_size,
-        "SET_GCODE_OFFSET Z_ADJUST=%+.3f MOVE=1",
-        delta);
-    return true;
+    if (written >= 0 && (size_t)written < cmd_size) return true;
+    cmd[0] = '\0';
+    return false;
 }
 
 static void refresh_live_labels(void)
@@ -305,6 +306,10 @@ static void refresh_live_labels(void)
     }
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
+    if (state.print_job_revision != s_toolhead_job) {
+        ui_printer_toolhead_close();
+        return;
+    }
 
     if (s_position_label) {
         if (state.toolhead_position_valid) {
@@ -443,7 +448,10 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
                             ui_printer_toolhead_send_gcode_cb_t send_gcode_cb)
 {
     if (s_toolhead_dispatching) return;
-    if (s_toolhead_popup && s_toolhead_owner != moonraker_config_generation())
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    if (s_toolhead_popup && (s_toolhead_owner != moonraker_config_generation() ||
+        s_toolhead_job != state.print_job_revision))
         ui_printer_toolhead_close();
     if (s_toolhead_popup) { lv_obj_move_foreground(s_toolhead_popup); return; }
     lv_obj_t *popup =
@@ -452,6 +460,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     ui_form_divide_title(popup);
     s_toolhead_popup = popup;
     s_toolhead_owner = moonraker_config_generation();
+    s_toolhead_job = state.print_job_revision;
     ++s_toolhead_epoch;
     lv_obj_add_event_cb(popup, toolhead_deleted, LV_EVENT_DELETE, NULL);
     s_xy_step1_btn = step1_btn;
@@ -541,9 +550,9 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
 
     apply_selected(s_tab_buttons[0], true);
     refresh_step_highlights();
-    refresh_live_labels();
     s_refresh_timer = lv_timer_create(refresh_timer_cb, 500, NULL);
 
     ui_form_action(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_CLOSE " Close", close_cb, NULL);
     ui_form_finish(popup);
+    refresh_live_labels();
 }

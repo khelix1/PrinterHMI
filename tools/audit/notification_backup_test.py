@@ -51,7 +51,7 @@ source=(root/'main/settings_backup.c').read_text()
 def function(name):
     a=source.index('bool '+name+'(')
     return source[a:source.index('\n}',a)+3]
-functions=function('promote_backup_file')+'\n'+'\n'.join(function(name) for name in [
+functions=function('read_backup_exact')+'\n'+function('promote_backup_file')+'\n'+'\n'.join(function(name) for name in [
     'settings_backup_export_with_progress','settings_backup_restore_with_progress',
     'settings_backup_restore_encrypted_with_progress'])
 preamble=r'''
@@ -95,6 +95,11 @@ checks=r'''
 int main(int argc,char **argv){
  assert(argc==2);snprintf(directory,sizeof(directory),"%s/data",argv[1]);
  snprintf(backup,sizeof(backup),"%s/data/backup.json",argv[1]);snprintf(temporary,sizeof(temporary),"%s/data/backup.tmp",argv[1]);snprintf(previous,sizeof(previous),"%s/data/previous.json",argv[1]);
+ for(size_t expected=2;expected<=4;expected++){
+  FILE *sample=tmpfile();assert(sample);assert(fwrite("abc",1,3,sample)==3);rewind(sample);
+  char readback[4];assert(read_backup_exact(sample,readback,expected)==(expected==3));
+  if(expected==3)assert(!memcmp(readback,"abc",3));
+ }
  char status[256];reset();
  assert(settings_backup_export_with_progress(progress,phases,status,sizeof(status)));
  assert(phase_count==2&&phases[0]==SETTINGS_BACKUP_STAGE_PREPARING&&phases[1]==SETTINGS_BACKUP_STAGE_WRITING);

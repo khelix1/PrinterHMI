@@ -30,6 +30,8 @@ void ui_network_set_port(int port);
 void ui_network_set_scan_status(
     const char *status_text);
 
+void ui_network_begin_scan(const char *status_text);
+
 void ui_network_render_scan_results(
     const wifi_ap_record_t *aps,
     uint16_t count,

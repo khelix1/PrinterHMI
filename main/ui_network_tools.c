@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "ui_network_tools.h"
+#include "wifi_scan_results.h"
 #include "ui_text.h"
 #include "ui_button.h"
 #include "ui_theme.h"
@@ -135,9 +136,11 @@ void ui_network_tools_wifi_select_owned(
     char *status_buf,
     size_t status_buf_size)
 {
+    /* The inline Network page owns its rows and can delete them on rescan. */
+    bool popup_row = btn && s_wifi_scan_list && lv_obj_get_parent(btn) == s_wifi_scan_list;
     ui_network_tools_select_wifi_ssid(
         btn,
-        &s_wifi_selected_btn,
+        popup_row ? &s_wifi_selected_btn : NULL,
         ssid,
         selected_ssid,
         selected_ssid_size,
@@ -336,8 +339,10 @@ void ui_network_tools_populate_wifi_scan_buttons(lv_obj_t *list,
     if (!parent) return;
 
     for (uint16_t i = 0; i < count; i++) {
-        const char *ssid = aps[i].ssid[0] ? (char *)aps[i].ssid : "(hidden)";
-        ui_network_tools_add_wifi_ssid_button(parent, ssid, aps[i].rssi, selected_cb);
+        char ssid[33];
+        if (wifi_scan_copy_ssid(ssid, aps[i].ssid)) {
+            ui_network_tools_add_wifi_ssid_button(parent, ssid, aps[i].rssi, selected_cb);
+        }
     }
 }
 

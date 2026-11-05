@@ -18,10 +18,15 @@ bool printer_controller_is_paused(const char *state);
 bool printer_controller_is_ready(const char *state);
 bool printer_controller_is_error(const char *state);
 bool printer_controller_is_live_state(const char *state);
+void printer_controller_format_eta_seconds(char *out, size_t out_len, double remaining_seconds);
+
 void printer_controller_format_eta_clock(char *out,
                                          size_t out_len,
                                          double progress,
                                          double print_duration_seconds);
+
+/* Returns -1 when the reported fraction is unavailable or invalid. */
+int printer_controller_progress_percent(double progress);
 
 void printer_controller_format_hhmm(char *out,
                                     size_t out_len,

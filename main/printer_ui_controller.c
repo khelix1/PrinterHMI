@@ -269,6 +269,7 @@ void printer_ui_controller_refresh(
         ctx->bed_target,
         ctx->part_fan_speed,
         ctx->print_duration,
+        ctx->remaining_seconds,
         ctx->moonraker_ok && ctx->live_data_ok,
         ctx->capabilities);
 

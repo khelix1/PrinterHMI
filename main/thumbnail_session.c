@@ -53,42 +53,6 @@ static bool ensure_metadata_body(void)
 }
 
 
-static void url_encode_filename(const char *input,
-                                char *output,
-                                size_t output_size)
-{
-    static const char hex[] = "0123456789ABCDEF";
-
-    if (!output || output_size == 0) {
-        return;
-    }
-
-    size_t j = 0;
-
-    for (size_t i = 0;
-         input && input[i] && j + 4 < output_size;
-         i++) {
-        unsigned char c = (unsigned char)input[i];
-
-        if ((c >= 'A' && c <= 'Z') ||
-            (c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') ||
-            c == '-' ||
-            c == '_' ||
-            c == '.' ||
-            c == '~' ||
-            c == '/') {
-            output[j++] = (char)c;
-        } else {
-            output[j++] = '%';
-            output[j++] = hex[(c >> 4) & 0x0f];
-            output[j++] = hex[c & 0x0f];
-        }
-    }
-
-    output[j] = '\0';
-}
-
 char *thumbnail_session_selected_file(void)
 {
     return s_selected_file;
@@ -148,7 +112,7 @@ bool thumbnail_session_build_metadata(
 
     uint32_t generation = moonraker_config_generation();
     char encoded[sizeof(s_metadata_file) * 3];
-    url_encode_filename(file, encoded, sizeof(encoded));
+    thumbnail_manager_url_encode(file, encoded, sizeof(encoded));
 
     if (!ensure_metadata_body()) {
         snprintf(out, out_size, "Metadata buffer unavailable");
@@ -231,6 +195,7 @@ bool thumbnail_session_get_layer_metadata(
 
 void thumbnail_session_clear_png_buffer(void)
 {
+    thumbnail_manager_mark_pending();
     thumbnail_manager_clear_png();
 
     memset(thumbnail_manager_image_dsc(),

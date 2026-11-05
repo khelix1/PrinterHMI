@@ -45,6 +45,12 @@ int main(void){
  assert(!console_controller_ingest_websocket_json(deep,at));assert(console_controller_count()==count);
  assert(ingest("{\"method\":\"notify_gcode_response\",\"params\":[\"fine\"]} \r\n"));
  assert(console_controller_count()==count+1);
+ char command[CONSOLE_COMMAND_MAX+2], history[CONSOLE_COMMAND_MAX+1], short_history[CONSOLE_COMMAND_MAX];
+ memset(command,'A',sizeof(command)-1);command[sizeof(command)-1]=0;
+ console_controller_add_command(command);assert(!console_controller_history_count());
+ command[CONSOLE_COMMAND_MAX]=0;console_controller_add_command(command);
+ assert(console_controller_history_count()==1&&console_controller_history_get(0,history,sizeof(history))&&!strcmp(history,command));
+ assert(!console_controller_history_get(0,short_history,sizeof(short_history))&&!short_history[0]);
  puts("PASS: Console respects exact buffer lengths, accepts nonterminated frames and rejects malformed/deep/oversized/trailing input without log changes");
 }
 '''

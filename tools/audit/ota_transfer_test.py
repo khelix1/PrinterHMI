@@ -54,7 +54,7 @@ bool network_activity_controller_request_exclusive(void){return exclusive;}
 bool network_activity_controller_exclusive_ready(void){return ready;}
 void network_activity_controller_release_exclusive(void){releases++;}
 void ota_release_catalog_snapshot(ota_release_catalog_snapshot_t *out){*out=(ota_release_catalog_snapshot_t){.state=OTA_RELEASE_CATALOG_READY};}
-void ui_ota_progress_show(ui_ota_cancel_cb_t f){assert(f==ota_manager_cancel);}
+void ui_ota_progress_show(ui_ota_cancel_cb_t f){assert(f==ota_manager_cancel&&!locked);assert(!ota_manager_start("https://fixture/reentrant.bin"));}
 void ui_ota_progress_close(void){closes++;}
 void ui_ota_progress_pump(const char *s,int p,int b,int t,bool cancel){(void)cancel;assert(!locked);pumps++;snprintf(status,sizeof(status),"%s",s);pumped_percent=p;pumped_bytes=b;pumped_total=t;}
 void ui_ota_progress_set_transfer(const char *s){assert(!locked);snprintf(transfer_text,sizeof(transfer_text),"%s",s);}
@@ -79,7 +79,7 @@ esp_err_t esp_https_ota_perform(esp_https_ota_handle_t h){assert(h==(void*)1&&!l
 }
 int esp_https_ota_get_image_len_read(esp_https_ota_handle_t h){assert(h==(void*)1&&!locked);return (mode==7||mode==9?1:mode==8?(reads<4?1:reads-2):reads)*4096;}
 int esp_https_ota_get_image_size(esp_https_ota_handle_t h){assert(h==(void*)1&&!locked);return mode==4?-1:16384;}
-bool esp_https_ota_is_complete_data_received(esp_https_ota_handle_t h){assert(h==(void*)1);return complete;}
+bool esp_https_ota_is_complete_data_received(esp_https_ota_handle_t h){assert(h==(void*)1);if(mode==11)ota_manager_cancel();return complete;}
 esp_err_t esp_https_ota_finish(esp_https_ota_handle_t h){assert(h==(void*)1&&!s_cancel_allowed);finishes++;ota_manager_cancel();assert(!s_cancel_requested);return mode==5?ESP_FAIL:ESP_OK;}
 esp_err_t esp_https_ota_abort(esp_https_ota_handle_t h){assert(h==(void*)1);aborts++;return ESP_OK;}
 void esp_restart(void){reboots++;longjmp(reboot,1);}
@@ -107,6 +107,8 @@ int main(void){
   char frozen[112];snprintf(frozen,sizeof(frozen),"%s",transfer_text);clock_us+=5000000;ota_manager_pump_ui();assert(!strcmp(frozen,transfer_text));
  }
  reset(7);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==2&&aborts==1&&!finishes&&s_cancel_complete&&releases==1&&s_worker_http==NULL);
+ reset(11);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==4&&aborts==1&&!finishes&&!reboots&&s_cancel_complete);
+ assert(!ota_manager_start("https://fixture/next.bin"));ota_manager_pump_ui();assert(closes==1);assert(ota_manager_start("https://fixture/next.bin"));
  reset(8);assert(ota_manager_start("https://fixture/fw.bin"));if(!setjmp(reboot))update_task(NULL);assert(reboots==1&&finishes==1&&reads==6&&!aborts&&s_worker_http==NULL);s_task_running=false;
  reset(10);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==1&&aborts==1&&!finishes&&!s_task_running&&releases==1&&s_worker_http==NULL);
  reset(9);assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(reads==16&&aborts==1&&!finishes&&!s_task_running&&releases==1&&s_worker_http==NULL);

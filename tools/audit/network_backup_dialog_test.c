@@ -116,6 +116,17 @@ static void network(void)
     network_wifi_scan_render_results(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,&s_wifi_selected_btn,scan_status,sizeof(scan_status),aps,2,2,noop,selected);
     lv_obj_send_event(lv_obj_get_child(s_wifi_scan_list,0),LV_EVENT_CLICKED,NULL);lv_obj_delete(s_wifi_selected_btn);assert(!s_wifi_selected_btn);
     lv_obj_delete(s_wifi_scan_status_label);assert(!s_wifi_scan_status_label);ui_network_tools_show_wifi_scan_popup(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,"retry",noop);ui_network_tools_wifi_scan_close_owned();
+    wifi_ap_record_t edge[2]={0};
+    memset(edge[1].ssid,'Z',sizeof(edge[1].ssid));
+    network_wifi_scan_render_results(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,&s_wifi_selected_btn,scan_status,sizeof(scan_status),edge,2,2,noop,selected);
+    assert(lv_obj_get_child_count(s_wifi_scan_list)==1);
+    lv_obj_send_event(lv_obj_get_child(s_wifi_scan_list,0),LV_EVENT_CLICKED,NULL);
+    assert(strlen(selected_ssid)==32 && strspn(selected_ssid,"Z")==32);
+    ui_network_tools_wifi_scan_close_owned();
+    lv_obj_t *inline_row=lv_button_create(lv_screen_active());
+    ui_network_tools_wifi_select_owned(inline_row,"Inline",selected_ssid,sizeof(selected_ssid),scan_status,sizeof(scan_status));
+    assert(!strcmp(selected_ssid,"Inline") && !s_wifi_selected_btn);
+    lv_obj_delete(inline_row);
     ui_network_tools_show_test_moonraker_popup("Moonraker failed","Complete connection error and troubleshooting details remain reachable with large text in a narrow viewport.",false);
     lv_obj_t *popup=lv_obj_get_child(lv_layer_top(),-1);layout(popup);
     lv_obj_send_event(lv_obj_get_child(lv_obj_get_child(popup,-1),0),LV_EVENT_CLICKED,NULL);

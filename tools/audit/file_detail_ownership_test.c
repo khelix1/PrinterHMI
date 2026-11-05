@@ -21,6 +21,11 @@ bool printer_files_build_metadata_text(const char*f,const char*b,char*t,size_t t
 static void ready(const char*f,bool ok,const char*m,const char*t){(void)f;assert(ok&&!strcmp(m,"ok")&&!strcmp(t,"thumb.png"));callbacks++;}
 static void work(void){void(*fn)(void*)=pending;pending=NULL;fn(argument);}
 int main(void){char file[160];memset(file,' ',150);strcpy(file+150,".gcode");memset(expected_key,'k',159);expected_key[159]=0;
+ char exact[7], too_short[6], untouched='z';
+ thumbnail_manager_url_encode(" #",exact,sizeof(exact));assert(!strcmp(exact,"%20%23"));
+ thumbnail_manager_url_encode(" #",too_short,sizeof(too_short));assert(!too_short[0]);
+ thumbnail_manager_url_encode("a",&untouched,0);assert(untouched=='z');
+ thumbnail_manager_url_encode("a",NULL,1);
  assert(file_detail_loader_start("printer.local",7125,expected_key,file,ready));work();assert(callbacks==1&&fetches==1);
  assert(file_detail_loader_start("printer.local",7125,expected_key,file,ready));file_detail_loader_cancel();work();assert(callbacks==1&&fetches==1);
  assert(file_detail_loader_start("printer.local",7125,expected_key,file,ready));change_profile=true;work();change_profile=false;assert(callbacks==1);

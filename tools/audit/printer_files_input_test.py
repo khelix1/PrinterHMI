@@ -30,6 +30,16 @@ int main(void){
  assert(strstr(out,"ETA: --:--")&&!strstr(out,"inf")&&!strstr(out,"nan"));
  assert(printer_files_build_metadata_text("folder/sub/part.gcode","{\"result\":{\"estimated_time\":3600,\"thumbnails\":[{\"relative_path\":\".thumbs/part.png\",\"width\":300,\"height\":300}]}}",thumb,sizeof(thumb),out,sizeof(out)));
  assert(!strcmp(thumb,"folder/sub/.thumbs/part.png")&&strstr(out,"ETA: 1:00")&&strstr(out,"Thumbnail: metadata found"));
+ const char mixed[]="{\"result\":{\"thumbnails\":["
+   "{\"relative_path\":\"../outside.png\",\"width\":999,\"height\":999},"
+   "{\"relative_path\":\".thumbs/long-name.png\",\"width\":900,\"height\":500},"
+   "{\"relative_path\":\"ok.png\",\"width\":300,\"height\":300}]}}";
+ char short_path[18];
+ assert(printer_files_build_metadata_text("folder/part.gcode",mixed,short_path,sizeof(short_path),out,sizeof(out)));
+ assert(!strcmp(short_path,"folder/ok.png")&&strstr(out,"Thumbnail: metadata found"));
+ assert(moonraker_metadata_thumbnail_path(mixed,"folder/part.gcode",0,thumb,sizeof(thumb)));
+ assert(!strcmp(thumb,"folder/.thumbs/long-name.png"));
+ assert(!moonraker_metadata_thumbnail_path(mixed,"../folder/part.gcode",0,thumb,sizeof(thumb))&&!thumb[0]);
  assert(printer_files_build_metadata_text("test.gcode","{\"estimated_time\":7200,\"result\":{\"other\":{\"estimated_time\":10800}}}",thumb,sizeof(thumb),out,sizeof(out)));
  assert(strstr(out,"ETA: --:--"));
  assert(!printer_files_build_metadata_text("test.gcode","{\"result\":{}}junk",thumb,sizeof(thumb),out,sizeof(out))&&!thumb[0]);

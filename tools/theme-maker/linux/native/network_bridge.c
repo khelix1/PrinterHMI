@@ -14,6 +14,7 @@
 #include "network_status_controller.h"
 #include "network_activity_controller.h"
 #include "wifi_credentials_store.h"
+#include "wifi_station_config.h"
 #include "moonraker_config_controller.h"
 #include "esp_netif_ip_addr.h"
 #include "esp_log.h"

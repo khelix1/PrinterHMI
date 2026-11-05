@@ -191,7 +191,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_network_tools.h"
 #include "moonraker_discovery.h"
 #include "moonraker_probe.h"
-#include "network_wifi_scan.h"
+#include "wifi_scan_results.h"
 #include "wifi_credentials_store.h"
 #include "wifi_station_config.h"
 #include "ui_drybox.h"
@@ -210,6 +210,7 @@ static void sntp_wait_task(void *arg);
 #include "thumbnail_preview_coordinator.h"
 
 #include "thumbnail_session.h"
+#include "print_estimate_metadata.h"
 
 #include "printer_ui_controller.h"
 #include "printer_file_controller.h"
@@ -1022,6 +1023,14 @@ static bool moonraker_get_live_objects(void)
     if (cJSON_IsNumber(progress_value) && isfinite(progress_value->valuedouble)) {
         printer_progress = fmin(1.0, fmax(0.0, progress_value->valuedouble));
     }
+    print_estimate_sample_t estimate_sample = {
+        .file_valid = progress_from_virtual_sdcard &&
+            progress_value->valuedouble >= 0 && progress_value->valuedouble <= 1,
+        .file_progress = printer_progress,
+    };
+    estimate_sample.slicer_valid = moonraker_http_object_number(status, "display_status", "progress", 1.0, &estimate_sample.slicer_progress);
+    estimate_sample.position_valid = moonraker_http_object_number(status, "virtual_sdcard", "file_position", 1.0, &estimate_sample.file_position);
+    estimate_sample.filament_valid = moonraker_http_object_number(status, "print_stats", "filament_used", 1.0, &estimate_sample.filament_used);
     cJSON *layer_info = cJSON_GetObjectItemCaseSensitive(stats, "info");
     cJSON *layer_current = cJSON_GetObjectItemCaseSensitive(layer_info, "current_layer");
     cJSON *layer_total = cJSON_GetObjectItemCaseSensitive(layer_info, "total_layer");
@@ -1068,6 +1077,7 @@ static bool moonraker_get_live_objects(void)
             .progress = printer_progress,
             .current_gcode_z = printer_current_z,
             .progress_from_virtual_sdcard = progress_from_virtual_sdcard,
+            .estimate_sample = estimate_sample,
             .print_duration = printer_print_duration,
             .current_layer = printer_current_layer,
             .total_layer = printer_total_layer,
@@ -1839,6 +1849,27 @@ static void ota_ui_timer_cb(lv_timer_t *timer)
 }
 
 
+static print_estimate_result_t active_print_estimate(const moonraker_state_t *state)
+{
+    if (!state->moonraker_ok || !state->live_data_ok)
+        return (print_estimate_result_t){-1, -1, -1};
+    print_estimate_metadata_t metadata;
+    bool known = print_estimate_metadata_get(state->printer_file,
+        state->print_job_revision, &metadata);
+    print_estimate_sample_t sample = state->estimate_sample;
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if (demo_mode_enabled()) {
+        sample.file_valid = sample.slicer_valid = true;
+        sample.file_progress = sample.slicer_progress = state->progress;
+    }
+#endif
+    print_estimate_result_t estimate = print_estimate_calculate(print_estimate_options_get(),
+        &sample, known ? &metadata : NULL, state->print_duration);
+    if (!printer_controller_is_live_state(state->printer_state))
+        estimate.remaining = estimate.eta_remaining = -1;
+    return estimate;
+}
+
 static void ui_refresh_timer_cb(lv_timer_t *timer)
 {
     int64_t ui_refresh_t0 = esp_timer_get_time();
@@ -1852,6 +1883,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 
     moonraker_state_t telemetry_state;
     moonraker_state_snapshot(&telemetry_state);
+    print_estimate_result_t estimate = active_print_estimate(&telemetry_state);
     ui_toast_observe_printer(&telemetry_state);
     ui_toast_observe_profiles(&telemetry_state);
 
@@ -1908,7 +1940,8 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         .flow_factor = telemetry_state.flow_factor,
         .current_layer = resolved_layers.current,
         .total_layer = resolved_layers.total,
-        .progress = telemetry_state.progress,
+        .progress = estimate.progress,
+        .remaining_seconds = &estimate.remaining,
         .nozzle_temp = telemetry_state.nozzle_temp,
         .nozzle_target = telemetry_state.nozzle_target,
         .bed_temp = telemetry_state.bed_temp,
@@ -1933,8 +1966,8 @@ ui_drybox_refresh();
     ui_settings_refresh();
 
 
-    dashboard_live_controller_push_banner(
-        telemetry_state.moonraker_ok);
+    dashboard_live_controller_push_banner_estimate(telemetry_state.moonraker_ok,
+        &estimate, telemetry_state.print_job_revision);
     dashboard_live_controller_push_machine();
     ui_command_bar_update(
         telemetry_state.printer_state,
@@ -2332,7 +2365,8 @@ static void ui_network_tools_wifi_scan_now(void)
     if(demo_mode_enabled()){
         wifi_ap_record_t sample={0};strlcpy((char *)sample.ssid,"Demo network",sizeof(sample.ssid));sample.rssi=-48;
         ui_network_render_scan_results(&sample,1,1,ui_network_tools_wifi_ssid_selected_cb);
-        safe_copy(ui_network_tools_network_scan_status,sizeof(ui_network_tools_network_scan_status),"One sample network found");
+        wifi_scan_format_page_status(ui_network_tools_network_scan_status,
+            sizeof(ui_network_tools_network_scan_status), 1, 1);
         return;
     }
 #endif
@@ -2351,8 +2385,7 @@ static void ui_network_tools_wifi_scan_now(void)
         sizeof(ui_network_tools_network_scan_status),
         "SCANNING...");
 
-    ui_network_set_scan_status(
-        ui_network_tools_network_scan_status);
+    ui_network_begin_scan(ui_network_tools_network_scan_status);
 
     /* Draw the state while the runtime retires WebSocket/background HTTP. */
     lv_refr_now(NULL);
@@ -2415,14 +2448,9 @@ static void ui_network_tools_wifi_scan_now(void)
     }
 
     if (ap_count == 0) {
-        safe_copy(
-            ui_network_tools_network_scan_status,
-            sizeof(ui_network_tools_network_scan_status),
-            "NO NETWORKS FOUND");
-
-        ui_network_set_scan_status(
-            ui_network_tools_network_scan_status);
-
+        wifi_scan_format_page_status(ui_network_tools_network_scan_status,
+            sizeof(ui_network_tools_network_scan_status), 0, 0);
+        ui_network_render_scan_results(NULL, 0, 0, ui_network_tools_wifi_ssid_selected_cb);
         goto scan_finished;
     }
 
@@ -2452,6 +2480,8 @@ static void ui_network_tools_wifi_scan_now(void)
         goto scan_finished;
     }
 
+    wifi_scan_format_page_status(ui_network_tools_network_scan_status,
+        sizeof(ui_network_tools_network_scan_status), visible_count, ap_count);
     ui_network_render_scan_results(
         aps,
         visible_count,
@@ -2947,6 +2977,7 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
         return;
 
     case THUMBNAIL_MANAGER_RESULT_READY:
+        if (!thumbnail_manager_publish_download(thumbnail_session_selected_file())) return;
         break;
 
     case THUMBNAIL_MANAGER_RESULT_LOADING:
@@ -3598,6 +3629,15 @@ static void hmi_runtime_task(void *arg)
          * printer profile happens to be active at boot.
          */
         printer_preview_store_restore_one(sd_card_ok);
+        if (s_got_ip && !exclusive_network) {
+            uint32_t generation = moonraker_config_generation();
+            moonraker_state_t job;
+            moonraker_state_snapshot(&job);
+            if (job.moonraker_ok && job.live_data_ok &&
+                printer_controller_is_live_state(job.printer_state))
+                print_estimate_metadata_poll(job.printer_file, job.print_job_revision,
+                    generation, esp_timer_get_time());
+        }
         if (bsp_display_lock(50)) {
             if (wifi_label) {
                 lv_label_set_text(wifi_label, wifi_status);
@@ -3613,12 +3653,15 @@ static void hmi_runtime_task(void *arg)
             double printer_meta_object_height = 0, printer_meta_layer_height = 0;
             moonraker_state_t layer_state;
             moonraker_state_snapshot(&layer_state);
+            print_estimate_result_t estimate = active_print_estimate(&layer_state);
             (void)thumbnail_session_get_layer_metadata(layer_state.printer_file,
                 &printer_meta_object_height, &printer_meta_layer_height);
             dashboard_runtime_controller_tick(
         &(dashboard_runtime_context_t) {
             .meta_object_height = printer_meta_object_height,
             .meta_layer_height = printer_meta_layer_height,
+            .remaining_seconds = &estimate.remaining,
+            .estimate_job_revision = layer_state.print_job_revision,
 
 
             .dashboard_canvas = &dash_thumb_canvas,
@@ -3629,7 +3672,8 @@ static void hmi_runtime_task(void *arg)
                 sizeof(last_dashboard_print_state),
 
             .preview_network_ready =
-                s_got_ip && s_moonraker_ok && !exclusive_network,
+                s_got_ip && s_moonraker_ok && !exclusive_network &&
+                !ui_files_detail_is_open(),
 
             .set_live_target =
                 thumbnail_preview_coordinator_set_live_target,

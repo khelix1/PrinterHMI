@@ -82,24 +82,6 @@ static lv_color_t fan_value_color(double fan)
     return UI_ACCENT_BRIGHT;
 }
 
-static void format_hhmm(char *out, size_t out_sz, double seconds)
-{
-    if (!out || out_sz == 0) return;
-
-    if (seconds < 0.0) {
-        snprintf(out, out_sz, "--:--");
-        return;
-    }
-
-    int total_minutes = (int)((seconds / 60.0) + 0.5);
-    int h = total_minutes / 60;
-    int m = total_minutes % 60;
-    snprintf(out, out_sz, "%02d:%02d", h, m);
-}
-
-
-
-
 void ui_printer_info_cards_create(
     lv_obj_t *parent,
     ui_printer_info_cards_t *cards,
@@ -327,25 +309,28 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
         printer_eta_text = NULL;
     }
 
-        if(cards->nozzle_target) {
+    int percent = printer_controller_progress_percent(printer_progress);
+    if(cards->nozzle_target) {
         char t[64];
         snprintf(t,sizeof(t),moonraker_ok && printer_nozzle_temp>-100 ? "%.0f°" : "--°",printer_nozzle_temp);ui_value_set_text(cards->nozzle,t);
         snprintf(t,sizeof(t),moonraker_ok ? "Target %.0f°  •  Tap to set" : "Target --°",printer_nozzle_target);ui_value_set_text(cards->nozzle_target,t);
         snprintf(t,sizeof(t),moonraker_ok && printer_bed_temp>-100 ? "%.0f°" : "--°",printer_bed_temp);ui_value_set_text(cards->bed,t);
         snprintf(t,sizeof(t),moonraker_ok ? "Target %.0f°  •  Tap to set" : "Target --°",printer_bed_target);ui_value_set_text(cards->bed_target,t);
         snprintf(t,sizeof(t),moonraker_ok ? "%.0f%%" : "--%%",printer_part_fan_speed);ui_value_set_text(cards->part_fan,t);
-        snprintf(t,sizeof(t),moonraker_ok ? "Progress %.0f%%" : "Offline",printer_progress*100);ui_value_set_text(cards->progress,t);
-        format_hhmm(t,sizeof(t),moonraker_ok?printer_print_duration:-1);ui_value_set_text(cards->elapsed,t);
+        if (percent >= 0) snprintf(t, sizeof(t), "Progress %d%%", percent);
+        else snprintf(t, sizeof(t), "%s", moonraker_ok ? "Progress --%" : "Offline");
+        ui_value_set_text(cards->progress,t);
+        printer_controller_format_hhmm(t,sizeof(t),moonraker_ok?printer_print_duration:-1);ui_value_set_text(cards->elapsed,t);
         ui_value_set_text(cards->remaining,printer_eta_text&&printer_eta_text[0]?printer_eta_text:"--:--");
         return;
     }
 
     if (cards->progress) {
     char pbuf[32];
-        if (printer_progress >= 0.0) snprintf(pbuf, sizeof(pbuf), "%d%%", (int)(printer_progress * 100.0));
+        if (percent >= 0) snprintf(pbuf, sizeof(pbuf), "%d%%", percent);
         else snprintf(pbuf, sizeof(pbuf), "--%%");
         ui_value_set_text(cards->progress, pbuf);
-        ui_value_set_color(cards->progress, progress_value_color(printer_progress), 0);
+        ui_value_set_color(cards->progress, progress_value_color(percent < 0 ? -1.0 : printer_progress), 0);
     }
 
     if (cards->nozzle) {
@@ -384,7 +369,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
 
     if (cards->elapsed) {
         char elapsed[32];
-        format_hhmm(elapsed, sizeof(elapsed), printer_print_duration);
+        printer_controller_format_hhmm(elapsed, sizeof(elapsed), printer_print_duration);
         ui_value_set_text(cards->elapsed, elapsed);
     }
 
@@ -488,6 +473,7 @@ void ui_printer_info_cards_refresh_live(
     double bed_target,
     double part_fan_speed,
     double print_duration,
+    const double *remaining_seconds,
     bool moonraker_ok,
     const moonraker_capabilities_t *capabilities)
 {
@@ -501,7 +487,8 @@ void ui_printer_info_cards_refresh_live(
 
     char remaining_buf[32];
 
-    printer_controller_format_remaining(
+    if (remaining_seconds) printer_controller_format_hhmm(remaining_buf, sizeof(remaining_buf), *remaining_seconds);
+    else printer_controller_format_remaining(
         remaining_buf,
         sizeof(remaining_buf),
         progress,

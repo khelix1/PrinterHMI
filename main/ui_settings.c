@@ -18,6 +18,9 @@
 #include "theme_manager.h"
 #include "ui_appearance_popups.h"
 #include "ui_value_update.h"
+#include "ui_form_dialog.h"
+#include "ui_selector_style.h"
+#include "print_estimates.h"
 
 #include "bsp/display.h"
 #include "esp_err.h"
@@ -62,6 +65,67 @@ static bool s_display_io_dispatching,s_wake_pending;
 static void settings_demo_cb(lv_event_t *event)
 { (void)event; ui_demo_mode_show(); }
 #endif
+static lv_obj_t *s_estimate_dialog, *s_estimate_progress, *s_estimate_remaining, *s_estimate_eta, *s_estimate_status;
+
+static void estimate_dialog_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) != s_estimate_dialog) return;
+    s_estimate_dialog = s_estimate_progress = s_estimate_remaining = s_estimate_eta = s_estimate_status = NULL;
+}
+
+static void estimate_dialog_close(lv_event_t *event)
+{
+    (void)event;
+    if (s_estimate_dialog) lv_obj_delete(s_estimate_dialog);
+}
+
+static void estimate_dialog_save(lv_event_t *event)
+{
+    (void)event;
+    if (!s_estimate_dialog) return;
+    print_estimate_options_t options = {
+        lv_dropdown_get_selected(s_estimate_progress),
+        lv_dropdown_get_selected(s_estimate_remaining),
+        lv_dropdown_get_selected(s_estimate_eta),
+    };
+    if (print_estimate_options_save(options)) estimate_dialog_close(NULL);
+    else lv_label_set_text(s_estimate_status, "Could not save. Try again.");
+}
+
+static lv_obj_t *estimate_dropdown(lv_obj_t *body, const char *label, const char *options, unsigned selected)
+{
+    ui_form_text(body, label, UI_FONT_BODY, UI_TEXT);
+    lv_obj_t *dropdown = lv_dropdown_create(body);
+    lv_dropdown_set_options_static(dropdown, options);
+    lv_dropdown_set_selected(dropdown, selected);
+    lv_obj_set_width(dropdown, LV_PCT(100));
+    ui_selector_style(dropdown, UI_FONT_BODY);
+    return dropdown;
+}
+
+static void settings_print_estimate_cb(lv_event_t *event)
+{
+    (void)event;
+    if (s_estimate_dialog) return;
+    lv_obj_t *dialog = ui_form_dialog("Print progress & time", 610, 490, UI_POPUP_STANDARD);
+    if (!dialog) return;
+    s_estimate_dialog = dialog;
+    lv_obj_add_event_cb(dialog, estimate_dialog_deleted, LV_EVENT_DELETE, NULL);
+    ui_form_divide_title(dialog);
+    lv_obj_t *body = ui_form_body(dialog);
+    print_estimate_options_t options = print_estimate_options_get();
+    static const char sources[] =
+        "Off\nFile\nFilament\nFile + Filament\nSlicer\nFile + Slicer\nFilament + Slicer\nFile + Filament + Slicer";
+    s_estimate_progress = estimate_dropdown(body, "Print progress",
+        "File position (relative)\nFile position (absolute)\nSlicer (M73)\nFilament", options.progress);
+    s_estimate_remaining = estimate_dropdown(body, "Estimated time remaining", sources, options.remaining_sources);
+    s_estimate_eta = estimate_dropdown(body, "ETA (finish time)", sources, options.eta_sources);
+    s_estimate_status = ui_form_text(body,
+        "Available sources are averaged. A missing source is skipped.", UI_FONT_BODY, UI_TEXT_DIM);
+    ui_form_action(dialog, UI_BUTTON_SECONDARY, "Cancel", estimate_dialog_close, NULL);
+    ui_form_action(dialog, UI_BUTTON_PRIMARY, "Save", estimate_dialog_save, NULL);
+    ui_form_finish(dialog);
+}
 static void settings_display_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
@@ -77,6 +141,7 @@ static void settings_page_retire(void)
     settings_sleep_label=s_timezone_label=s_theme_label=s_notifications_label=NULL;
     s_theme_rebuild_cb=NULL;
     settings_system_info_unbind();
+    estimate_dialog_close(NULL);
     ui_toast_preferences_close();ui_appearance_popups_close_all();ui_settings_popups_close_all();ui_settings_backup_popup_close();ui_about_popup_close();
 }
 static void settings_page_deleted(lv_event_t *event)
@@ -750,7 +815,8 @@ void ui_settings_show_page(
     /*
      * Time and region
      */
-    const int time_height = first_row_y + row_height + 6;
+    const int estimate_row_y = first_row_y + row_height + 1;
+    const int time_height = estimate_row_y + row_height + 6;
     lv_obj_t *time_region = ui_settings_section_create(
         content,
         "Time & region",
@@ -764,6 +830,11 @@ void ui_settings_show_page(
         timezone_config_selected_label(),
         first_row_y,
         settings_timezone_card_cb);
+
+    ui_settings_section_add_divider(time_region, estimate_row_y - 1);
+    ui_settings_section_add_action_row(time_region, "Print progress & time",
+        "Choose sources for progress, time remaining, and ETA", "Configure",
+        estimate_row_y, settings_print_estimate_cb, false);
 
     section_y += time_height + section_gap;
 

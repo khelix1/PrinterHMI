@@ -4,7 +4,7 @@
 #include <stdint.h>
 struct cJSON;
 typedef struct {
-    uint32_t generation;
+    uint32_t generation, session;
     bool discovered, available, configured, pwm, known, pending;
     double scale, value;
     int target;

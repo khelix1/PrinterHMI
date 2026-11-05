@@ -1,4 +1,3 @@
-#include "thumbnail_path.h"
 #include "files_row_preview.h"
 #include "files_row_rgb_cache.h"
 #include "moonraker_config_controller.h"
@@ -95,32 +94,16 @@ static bool ensure_runtime(void)
     return s_slots && s_lock && s_queue;
 }
 
-/* Row-only source selection: smallest adequate long edge, or largest available.
- * The Dashboard/Printer/lightbox continue to use the largest original. */
-static bool row_thumbnail_path(const char *metadata,char *out,size_t size)
-{
-    if(!out||!size)return false;
-    out[0]=0;if(!metadata)return false;
-    const cJSON *result;
-    cJSON *root=moonraker_metadata_parse(metadata,&result);
-    cJSON *items=cJSON_GetObjectItemCaseSensitive(result,"thumbnails");
-    if (!cJSON_IsArray(items)) { cJSON_Delete(root); return false; }
-    const char *best=NULL,*fallback=NULL;double best_area=INFINITY,fallback_area=-1;
-    cJSON *item=NULL;
-    cJSON_ArrayForEach(item,items){
-        cJSON *path=cJSON_GetObjectItemCaseSensitive(item,"relative_path");
-        if(!cJSON_IsString(path)||!path->valuestring||!path->valuestring[0]||strlen(path->valuestring)>=size)continue;
-        cJSON *w=cJSON_GetObjectItemCaseSensitive(item,"width"),*h=cJSON_GetObjectItemCaseSensitive(item,"height");
-        double width=cJSON_IsNumber(w)?w->valuedouble:0,height=cJSON_IsNumber(h)?h->valuedouble:0;
-        bool valid=isfinite(width)&&isfinite(height)&&width>0&&height>0&&width<=32768&&height<=32768;
-        double area=valid?width*height:0;
-        if(area>fallback_area){fallback=path->valuestring;fallback_area=area;}
-        if(valid&&fmax(width,height)>=ROW_PREVIEW_WIDTH&&area<best_area){best=path->valuestring;best_area=area;}
-    }
-    if(best||fallback)snprintf(out,size,"%s",best?best:fallback);
-    cJSON_Delete(root);return out[0]!=0;
+static bool preview_job_current(const row_preview_job_t *job,const char *file){
+    xSemaphoreTake(s_lock,portMAX_DELAY);
+    bool current=job->slot>=0&&job->slot<ROW_PREVIEW_SLOT_COUNT&&job->generation==s_generation&&
+        s_slots[job->slot].generation==job->generation&&s_slots[job->slot].state==ROW_PREVIEW_LOADING&&
+        !strcmp(s_slots[job->slot].file,file)&&s_profile_generation==moonraker_config_generation();
+    xSemaphoreGive(s_lock);return current;
 }
+
 static bool fetch_preview_png(
+    const row_preview_job_t *job,
     const char *host,
     int port,
     const char *api_key,
@@ -164,16 +147,15 @@ static bool fetch_preview_png(
         &error);
 
     char thumbnail_path[192] = "";
-    bool has_thumbnail = metadata_ok &&
-        row_thumbnail_path(
-            metadata,
+    bool has_thumbnail = metadata_ok && preview_job_current(job, file) &&
+        moonraker_metadata_thumbnail_path(
+            metadata, file, ROW_PREVIEW_WIDTH,
             thumbnail_path,
             sizeof(thumbnail_path));
 
     heap_caps_free(metadata);
 
-    if (!has_thumbnail || !thumbnail_path_resolve(
-            file, thumbnail_path, thumbnail_path, sizeof(thumbnail_path))) return false;
+    if (!has_thumbnail || !preview_job_current(job, file)) return false;
 
     char encoded_thumbnail[768];
     thumbnail_manager_url_encode(
@@ -236,14 +218,6 @@ static void publish_preview_result(const row_preview_job_t *job, const char *fil
     bsp_display_unlock();
 }
 
-static bool preview_job_current(const row_preview_job_t *job,const char *file){
-    xSemaphoreTake(s_lock,portMAX_DELAY);
-    bool current=job->slot>=0&&job->slot<ROW_PREVIEW_SLOT_COUNT&&job->generation==s_generation&&
-        s_slots[job->slot].generation==job->generation&&s_slots[job->slot].state==ROW_PREVIEW_LOADING&&
-        !strcmp(s_slots[job->slot].file,file)&&s_profile_generation==moonraker_config_generation();
-    xSemaphoreGive(s_lock);return current;
-}
-
 static void preview_worker(void *arg)
 {
     (void)arg;
@@ -288,7 +262,7 @@ static void preview_worker(void *arg)
             rendered_ok=files_row_rgb_load(revision,rendered,ROW_PREVIEW_WIDTH*ROW_PREVIEW_HEIGHT,&width,&height);
         uint8_t *png=NULL;size_t png_size=0;
         bool fetched=!rendered_ok&&rendered&&preview_job_current(&job,file)&&
-            fetch_preview_png(host,port,api_key,file,&png,&png_size);
+            fetch_preview_png(&job,host,port,api_key,file,&png,&png_size);
         if(fetched&&preview_job_current(&job,file)){
             lv_image_dsc_t raw_png;memset(&raw_png,0,sizeof(raw_png));
 #if defined(LV_IMAGE_HEADER_MAGIC)
@@ -373,7 +347,8 @@ void files_row_preview_begin(
 
 void files_row_preview_request(const char *file)
 {
-    if (!file || !file[0] || !ensure_runtime() || !s_worker_started) {
+    if (!file || !file[0] || strlen(file) >= sizeof(s_slots[0].file) ||
+        !ensure_runtime() || !s_worker_started) {
         return;
     }
 
@@ -419,16 +394,9 @@ void files_row_preview_request(const char *file)
         }
     }
 
+    /* Queue under the slot lock so begin() cannot reset the queue between
+     * reserving this slot and submitting its job. Preserve it for retry. */
+    if (job.slot >= 0 && xQueueSend(s_queue, &job, 0) != pdTRUE)
+        s_slots[job.slot].state = ROW_PREVIEW_IDLE;
     xSemaphoreGive(s_lock);
-
-    if (job.slot >= 0 &&
-        xQueueSend(s_queue, &job, 0) != pdTRUE) {
-        xSemaphoreTake(s_lock, portMAX_DELAY);
-        if (s_slots[job.slot].generation == job.generation &&
-            s_slots[job.slot].state == ROW_PREVIEW_QUEUED) {
-            s_slots[job.slot].file[0] = '\0';
-            s_slots[job.slot].state = ROW_PREVIEW_EMPTY;
-        }
-        xSemaphoreGive(s_lock);
-    }
 }

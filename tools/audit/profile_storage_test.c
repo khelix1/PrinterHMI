@@ -43,6 +43,10 @@ static void seed(void){
 int main(void){
     seed();assert(moonraker_config_load());assert(!writes&&!erases&&!commits&&opens==closes);
     moonraker_profile_t previous=*moonraker_config_profile(0);uint32_t generation=moonraker_config_generation();
+    unsigned unchanged_writes=writes,unchanged_opens=opens;
+    assert(moonraker_config_save_profile(0,previous.name,previous.host,previous.port,previous.api_key));
+    assert(moonraker_config_set_camera_stream_url(0,previous.camera_stream_url));
+    assert(writes==unchanged_writes&&opens==unchanged_opens&&moonraker_config_generation()==generation);
     write_failure="p0_used";
     assert(!moonraker_config_save_profile(0,"Renamed","printer.local",7125,"new-token"));
     assert(!erases&&!commits&&!strcmp(lookup("p0_key",false)->text,"secret-token"));

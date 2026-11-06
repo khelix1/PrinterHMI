@@ -879,6 +879,12 @@ bool moonraker_config_save_profile(
     copy_text(updated.camera_stream_url, sizeof(updated.camera_stream_url),
         previous.camera_stream_url);
 
+    if (previous.configured &&
+        previous.port == updated.port &&
+        !strcmp(previous.name, updated.name) &&
+        !strcmp(previous.host, updated.host) &&
+        !strcmp(previous.api_key, updated.api_key)) return true;
+
     s_profiles[profile_index] =
         updated;
 
@@ -1067,6 +1073,7 @@ const char *moonraker_config_camera_stream_url(int profile_index)
 bool moonraker_config_set_camera_stream_url(int profile_index, const char *url)
 {
     if (!valid_profile_index(profile_index) || !valid_camera_stream_url(url)) return false;
+    if (!strcmp(s_profiles[profile_index].camera_stream_url, url ? url : "")) return true;
     moonraker_profile_t previous = s_profiles[profile_index];
     copy_text(s_profiles[profile_index].camera_stream_url,
               sizeof(s_profiles[profile_index].camera_stream_url), url);

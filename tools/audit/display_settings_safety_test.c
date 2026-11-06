@@ -28,6 +28,59 @@ void ui_about_popup_close(void){}
 void settings_system_info_unbind(void){}
 void settings_system_info_refresh(void){}
 void ui_shell_raise(void){}
+static bool estimate_store_ok=true;
+static unsigned estimate_writes;
+static void (*estimate_store_hook)(void);
+static print_estimate_options_t captured_estimate;
+print_estimate_options_t print_estimate_options_get(void)
+{return (print_estimate_options_t){PRINT_PROGRESS_FILE_RELATIVE,1,1};}
+bool print_estimate_options_save(print_estimate_options_t options)
+{estimate_writes++;captured_estimate=options;hook(&estimate_store_hook);return estimate_store_ok;}
+static void estimate_fixture(void)
+{
+    assert(!s_estimate_dialog);
+    ++s_estimate_epoch;s_estimate_dialog=lv_obj_create(lv_layer_top());estimate_field_own(s_estimate_dialog);
+    lv_obj_t **fields[]={&s_estimate_progress,&s_estimate_remaining,&s_estimate_eta};
+    for(unsigned i=0;i<3;i++){
+        *fields[i]=lv_dropdown_create(s_estimate_dialog);
+        lv_dropdown_set_options_static(*fields[i],"Zero\nOne\nTwo\nThree");
+        lv_dropdown_set_selected(*fields[i],i+1);estimate_field_own(*fields[i]);
+    }
+    s_estimate_status=lv_label_create(s_estimate_dialog);lv_label_set_text(s_estimate_status,"Retained");estimate_field_own(s_estimate_status);
+    s_estimate_save=lv_button_create(s_estimate_dialog);estimate_field_own(s_estimate_save);
+    lv_obj_add_event_cb(s_estimate_save,estimate_dialog_save,LV_EVENT_CLICKED,NULL);
+}
+static void estimate_click(void){lv_obj_send_event(s_estimate_save,LV_EVENT_CLICKED,NULL);}
+static void estimate_replace(void){estimate_dialog_close(NULL);estimate_fixture();}
+static void estimate_reopen_deleted(lv_event_t *event){(void)event;estimate_fixture();}
+static void estimate_safety(void)
+{
+    estimate_fixture();unsigned before=estimate_writes;
+    lv_obj_add_state(s_estimate_save,LV_STATE_DISABLED);estimate_click();assert(estimate_writes==before);
+    lv_obj_remove_state(s_estimate_save,LV_STATE_DISABLED);
+    estimate_store_ok=false;estimate_click();
+    assert(estimate_writes==before+1&&s_estimate_dialog&&strstr(lv_label_get_text(s_estimate_status),"Could not save"));
+    assert(captured_estimate.progress==1&&captured_estimate.remaining_sources==2&&captured_estimate.eta_sources==3);
+    estimate_store_ok=true;estimate_store_hook=estimate_click;estimate_click();
+    assert(estimate_writes==before+2&&!s_estimate_dialog);
+    for(unsigned i=0;i<3;i++){
+        estimate_fixture();
+        lv_obj_t *fields[]={s_estimate_progress,s_estimate_remaining,s_estimate_eta};
+        before=estimate_writes;lv_obj_delete(fields[i]);estimate_click();
+        assert(estimate_writes==before&&lv_obj_has_state(s_estimate_save,LV_STATE_DISABLED));
+        estimate_dialog_close(NULL);
+    }
+    estimate_fixture();lv_obj_delete(s_estimate_status);assert(!s_estimate_status);
+    estimate_store_ok=false;estimate_click();assert(s_estimate_dialog);estimate_dialog_close(NULL);
+    estimate_fixture();estimate_store_ok=true;estimate_store_hook=estimate_replace;estimate_click();
+    assert(s_estimate_dialog&&!strcmp(lv_label_get_text(s_estimate_status),"Retained"));estimate_dialog_close(NULL);
+    estimate_fixture();estimate_store_ok=false;estimate_store_hook=estimate_replace;estimate_click();
+    assert(s_estimate_dialog&&!strcmp(lv_label_get_text(s_estimate_status),"Retained"));estimate_dialog_close(NULL);
+    estimate_fixture();lv_obj_add_event_cb(s_estimate_dialog,estimate_reopen_deleted,LV_EVENT_DELETE,NULL);
+    estimate_store_ok=true;estimate_click();assert(s_estimate_dialog);estimate_dialog_close(NULL);
+    estimate_fixture();lv_obj_delete(s_estimate_save);assert(!s_estimate_save);estimate_dialog_save(NULL);estimate_dialog_close(NULL);
+    assert(!s_estimate_dialog&&!s_estimate_progress&&!s_estimate_remaining&&!s_estimate_eta&&!s_estimate_status&&!s_estimate_save);
+}
 static void flush(lv_display_t *display,const lv_area_t *area,uint8_t *pixels){(void)area;(void)pixels;lv_display_flush_ready(display);}
 static void build_controls(void)
 {
@@ -93,6 +146,7 @@ int main(void)
         settings_enter_display_sleep();assert(ui_settings_restore_display_preferences(90,0));pump();assert(!s_display_sleeping&&!s_sleep_wake_overlay&&hardware_brightness==90);
         assert(!ui_settings_restore_display_preferences(9,0)&&!ui_settings_restore_display_preferences(100,1));
     }
+    estimate_safety();
     lv_timer_delete(s_sleep_timer);s_sleep_timer=NULL;lv_display_delete(display);lv_deinit();
-    puts("PASS: real Settings brightness/sleep callbacks, captured persistence, SDK/NVS faults, retry, nested dispatch, page/field replacement, owned timer, wake failure shield, external overlay deletion and restored sleep preferences at three viewports");
+    puts("PASS: real Settings brightness/sleep callbacks, captured persistence, SDK/NVS faults, retry, nested dispatch, page/field replacement, owned timer, wake failure shield, external overlay deletion and restored sleep preferences at three viewports plus estimate-dialog field retirement, save retries, duplicate actions and replacement-safe completion");
 }

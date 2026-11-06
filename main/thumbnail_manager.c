@@ -254,7 +254,7 @@ bool thumbnail_manager_store_cache_file(const char *path,
 }
 
 static bool download_thumbnail(const char *host,
-                                       int port,
+                                       int port, const char *api_key,
                                        const char *selected_file,
                                        const char *thumb_path,
                                        bool force_refresh,
@@ -279,9 +279,10 @@ static bool download_thumbnail(const char *host,
     uint8_t *buf = NULL;
     size_t len = 0;
 
-    if (!moonraker_fetch_thumbnail_encoded_quiet(
+    if (!moonraker_fetch_thumbnail_encoded_quiet_with_api_key(
             host,
             port,
+            api_key,
             enc,
             &buf,
             &len)) {
@@ -350,6 +351,7 @@ void thumbnail_manager_take_png(uint8_t *buf, size_t len)
 
 typedef struct {
     char host[128];
+    char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
     char selected_file[160];
     char thumb_path[192];
 
@@ -377,7 +379,7 @@ static void thumbnail_manager_download_task(void *arg)
         bool current = download_is_current(job);
         portEXIT_CRITICAL(&s_download_lock);
         if (!current) break;
-        ok = download_thumbnail(job->host, job->port, job->selected_file,
+        ok = download_thumbnail(job->host, job->port, job->api_key, job->selected_file,
             job->thumb_path, job->force_refresh, job->sd_ok, &png, &size);
         if (ok) break;
         portENTER_CRITICAL(&s_download_lock);
@@ -402,6 +404,7 @@ static void thumbnail_manager_download_task(void *arg)
     s_thumb_task_running = false;
     portEXIT_CRITICAL(&s_download_lock);
     if (png) heap_caps_free(png);
+    for (size_t i=0; i<sizeof(job->api_key); ++i) ((volatile char *)job->api_key)[i]=0;
     heap_caps_free(job);
     vTaskDelete(NULL);
 }
@@ -424,6 +427,7 @@ bool thumbnail_manager_start_download_task(
     if (thumbnail_manager_task_running()) {
         return false;
     }
+    uint32_t generation = moonraker_config_generation();
 
     thumbnail_download_job_t *job =
         heap_caps_calloc(
@@ -454,6 +458,19 @@ bool thumbnail_manager_start_download_task(
             thumb_path,
             sizeof(job->thumb_path));
 
+    /* This manager owns the active profile's selected-file preview only. */
+    if (strcmp(host, moonraker_config_host()) || port != moonraker_config_port()) {
+        for (size_t i=0; i<sizeof(job->api_key); ++i) ((volatile char *)job->api_key)[i]=0;
+        heap_caps_free(job);
+        return false;
+    }
+    const char *api_key = moonraker_config_api_key();
+    snprintf(job->api_key, sizeof(job->api_key), "%s", api_key ? api_key : "");
+    if (generation != moonraker_config_generation()) {
+        for (size_t i=0; i<sizeof(job->api_key); ++i) ((volatile char *)job->api_key)[i]=0;
+        heap_caps_free(job);
+        return false;
+    }
     job->port = port;
     job->force_refresh = force_refresh;
     job->sd_ok = sd_ok;
@@ -461,6 +478,7 @@ bool thumbnail_manager_start_download_task(
     portENTER_CRITICAL(&s_download_lock);
     if (s_thumb_task_running) {
         portEXIT_CRITICAL(&s_download_lock);
+        for (size_t i=0; i<sizeof(job->api_key); ++i) ((volatile char *)job->api_key)[i]=0;
         heap_caps_free(job);
         return false;
     }
@@ -468,7 +486,7 @@ bool thumbnail_manager_start_download_task(
     s_completed_png = NULL;
     s_thumb_ready = s_thumb_failed = false;
     job->revision = ++s_request_revision;
-    job->generation = moonraker_config_generation();
+    job->generation = generation;
     s_thumb_task_running = true;
     portEXIT_CRITICAL(&s_download_lock);
     if (discarded) heap_caps_free(discarded);
@@ -486,6 +504,7 @@ bool thumbnail_manager_start_download_task(
         portENTER_CRITICAL(&s_download_lock);
         s_thumb_task_running = false;
         portEXIT_CRITICAL(&s_download_lock);
+        for (size_t i=0; i<sizeof(job->api_key); ++i) ((volatile char *)job->api_key)[i]=0;
         heap_caps_free(job);
         return false;
     }

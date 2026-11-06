@@ -87,7 +87,9 @@ static void apply(int percent)
 static void switch_cb(lv_event_t *event)
 {
     if(lv_event_get_target_obj(event)!=s_switch||lv_obj_has_state(s_switch,LV_STATE_DISABLED))return;
-    apply(lv_obj_has_state(s_switch,LV_STATE_CHECKED)?s_last_on:0);
+    case_lighting_snapshot_t light={0};
+    if (*ready(&light)) { refresh(NULL); return; }
+    apply(lv_obj_has_state(s_switch,LV_STATE_CHECKED)?(light.pwm?s_last_on:100):0);
 }
 static void slider_cb(lv_event_t *event)
 {

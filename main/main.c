@@ -3172,9 +3172,8 @@ static void files_refresh_bridge(void)
 
 static void files_select_bridge(const char *path)
 {
-    printer_file_controller_select_file(
-        path,
-        show_printer_file_detail_popup);
+    if (!printer_file_controller_select_file(path, show_printer_file_detail_popup))
+        ui_files_set_status("File path is too long to select. Shorten the file or folder name and try again.");
 }
 
 static void files_preview_bridge(const char *path)
@@ -3798,8 +3797,7 @@ static void app_start_runtime_services(void)
         ESP_LOGE(TAG, "Failed to start hmi_runtime task");
     } else {
         /* Inactive-profile HTTP checks may wait for unreachable hosts. */
-        printer_profile_preview_worker_start(
-            moonraker_config_api_key());
+        printer_profile_preview_worker_start();
     }
 }
 

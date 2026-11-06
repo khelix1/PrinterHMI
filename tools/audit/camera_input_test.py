@@ -75,7 +75,7 @@ int esp_http_client_read(esp_http_client_handle_t c,char *out,int capacity){
 esp_err_t esp_http_client_close(esp_http_client_handle_t c){assert(c==(void*)1);closes++;return ESP_OK;}
 esp_err_t esp_http_client_cleanup(esp_http_client_handle_t c){assert(c==(void*)1);cleanups++;return ESP_OK;}
 int xTaskCreatePinnedToCoreWithCaps(void(*fn)(void*),const char*n,unsigned stack,void*a,unsigned p,TaskHandle_t*t,int core,unsigned caps){
- (void)n;(void)a;(void)p;(void)core;(void)caps;assert(stack==8192);creates++;worker=fn;*t=(void*)2;return pdPASS;
+ (void)n;(void)a;(void)p;(void)core;(void)caps;assert(stack==8192);creates++;worker=fn;if(scenario==13)return 0;if(scenario==12)fn(NULL);if(t)*t=(void*)2;return pdPASS;
 }
 void vTaskDelete(void *p){assert(!p);}
 int main(int argc,char **argv){
@@ -86,6 +86,16 @@ int main(int argc,char **argv){
  scenario=argc>1?atoi(argv[1]):0;
  char long_url[sizeof(s_url)+1];memset(long_url,'a',sizeof(long_url)-1);long_url[sizeof(long_url)-1]=0;
  if(scenario==11){assert(!camera_test_start(long_url)&&!creates);puts("PASS: long URL rejected without truncating endpoint");return 0;}
+ if(scenario==13){assert(!camera_test_start("http://camera/stream")&&!camera_test_busy());assert(!camera_test_start("http://camera/stream")&&creates==2);return 0;}
+ if(scenario==12){
+  assert(camera_test_start("http://camera/stream")&&!camera_test_busy());
+  assert(camera_test_take_result(NULL,NULL,NULL,NULL));
+  offset=0;
+  assert(camera_test_start("http://camera/stream")&&!camera_test_busy());
+  assert(camera_test_take_result(NULL,NULL,NULL,NULL));
+  assert(allocations==frees&&lanes==ends);
+  puts("PASS: camera worker can finish before task creation returns and restart");return 0;
+ }
  assert(camera_test_start("http://camera/stream")&&camera_test_busy());
  assert(!camera_test_start("http://camera/other"));worker(NULL);assert(!camera_test_busy());
  bool ok=true;int w=0,h=0;size_t bytes=0;assert(camera_test_take_result(&ok,&w,&h,&bytes));
@@ -108,5 +118,5 @@ with tempfile.TemporaryDirectory(prefix='camera-input-') as folder:
  (p/'test.c').write_text(fixture)
  exe=p/'test'
  subprocess.run(['cc','-std=c11','-D_POSIX_C_SOURCE=200809L','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-pie','-no-pie','-I',str(p),'-I',str(root/'main'),str(p/'test.c'),'-o',str(exe)],check=True)
- for scenario in range(12):
+ for scenario in range(14):
   subprocess.run([str(exe),str(scenario)],check=True,env={**os.environ,'ASAN_OPTIONS':'detect_leaks=0'})

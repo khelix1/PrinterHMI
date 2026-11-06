@@ -135,6 +135,19 @@ static void inactive_profile_checks(void){
  health_online[1]=true;health_fresh[1]=false;ui_toast_observe_profiles(&state);assert(!strcmp(s_notices[0].title,"PRINTER OFFLINE"));
  health_fresh[1]=true;ui_toast_observe_profiles(&state);assert(s_notice_count==1&&s_notices[0].essential&&!strcmp(s_notices[0].title,"PRINTER RECONNECTED"));
  ui_toast_set_printer_chooser_action(open_chooser);unsigned opened_before=chooser_opens;owner++;open_notice(NULL);assert(chooser_opens==opened_before+1&&active_profile==0&&!s_notice_count);
+ /* A brief active-selection gap must not create a false recovery when
+  * that same printer returns to inactive background monitoring. */
+ active_profile=1;owner++;state.moonraker_ok=state.live_data_ok=false;
+ ui_toast_observe_profiles(&state);lv_tick_inc(1000);ui_toast_observe_profiles(&state);
+ active_profile=0;owner++;state.moonraker_ok=state.live_data_ok=true;
+ ui_toast_observe_profiles(&state);assert(!s_notice_count);
+ /* A confirmed active loss becomes the baseline; background recovery
+  * remains a real notification after switching away. */
+ active_profile=1;owner++;state.moonraker_ok=state.live_data_ok=false;
+ ui_toast_observe_profiles(&state);lv_tick_inc(3000);ui_toast_observe_profiles(&state);
+ active_profile=0;owner++;state.moonraker_ok=state.live_data_ok=true;
+ ui_toast_observe_profiles(&state);assert(s_notice_count==1&&!strcmp(s_notices[0].title,"PRINTER RECONNECTED"));
+ ui_toast_close();
  /* Equal display names must not merge independent printers' notices. */
  profiles[2]=profiles[1];profiles[2].port=7127;
  health_known[2]=health_online[2]=health_fresh[2]=true;

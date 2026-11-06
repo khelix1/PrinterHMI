@@ -24,7 +24,7 @@ uint32_t moonraker_config_generation(void){return generation;}
 int moonraker_config_active_profile_index(void){return active_profile;}
 bool camera_catalog_set(int p,size_t i,const char *n,const char *u){assert(!in_worker&&p==expected_profile&&i<probe_count&&n[0]&&u[0]);saved++;if(p==active_profile&&i==0)generation++;return true;}
 size_t moonraker_probe_webcams_with_api_key(const char *h,int p,const char *k,moonraker_webcam_t *out,size_t cap){assert(in_worker&&!strcmp(h,"printer.local")&&p==7125&&!strcmp(k,"key")&&cap>=probe_count);for(size_t i=0;i<probe_count;i++){snprintf(out[i].name,sizeof(out[i].name),"Camera %zu",i);strcpy(out[i].stream_url,"http://fixture/stream");}return probe_count;}
-int xTaskCreatePinnedToCoreWithCaps(void(*f)(void*),const char*n,unsigned z,void*a,unsigned pr,TaskHandle_t*t,int c,unsigned caps){(void)n;(void)z;(void)a;(void)pr;(void)c;(void)caps;if(fail_task)return 0;*t=(void*)1;task_fn=f;return pdPASS;}
+int xTaskCreatePinnedToCoreWithCaps(void(*f)(void*),const char*n,unsigned z,void*a,unsigned pr,TaskHandle_t*t,int c,unsigned caps){(void)n;(void)z;(void)a;(void)pr;(void)c;(void)caps;if(fail_task)return 0;if(t)*t=(void*)1;task_fn=f;return pdPASS;}
 static void worker(void){in_worker=true;task_fn(NULL);in_worker=false;}
 int main(void){moonraker_webcam_t w;bool found;size_t count;
  char long_host[MOONRAKER_CONFIG_HOST_LENGTH+1],long_key[MOONRAKER_CONFIG_API_KEY_LENGTH+1];
@@ -39,6 +39,7 @@ int main(void){moonraker_webcam_t w;bool found;size_t count;
  fail_task=true;assert(!camera_discovery_start("printer.local",7125,"key")&&!camera_discovery_busy());fail_task=false;assert(camera_discovery_start("printer.local",7125,"key"));worker();assert(camera_discovery_take_result(NULL,NULL,NULL));
  puts("PASS: real camera discovery worker captures printer identity; stale results discarded; persistence only during current-owner consumption; empty/start-failure/retry states");return 0;}
 #else
+static bool immediate_task;
 #include "moonraker_discovery.c"
 static bool demo_active;
 bool demo_mode_enabled(void){return demo_active;}
@@ -53,7 +54,7 @@ static void read_touch(lv_indev_t*i,lv_indev_data_t*d){(void)i;d->point=touch;d-
 static void tap(lv_indev_t*i,lv_obj_t*b){lv_obj_update_layout(b);lv_area_t a;lv_obj_get_coords(b,&a);touch=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};pressed=true;lv_indev_read(i);pressed=false;lv_indev_read(i);}
 bool bsp_display_lock(unsigned n){if(lock_hook&&n==hook_lock_size){void(*hook)(void)=lock_hook;lock_hook=NULL;hook();}return true;}
 void bsp_display_unlock(void){}
-int xTaskCreate(void(*f)(void*),const char*n,unsigned z,void*a,unsigned pr,void*t){(void)n;(void)z;(void)a;(void)pr;if(fail_task)return 0;*(TaskHandle_t*)t=(void*)1;task_fn=f;return pdPASS;}
+int xTaskCreate(void(*f)(void*),const char*n,unsigned z,void*a,unsigned pr,void*t){(void)n;(void)z;(void)a;(void)pr;if(fail_task)return 0;task_fn=f;if(immediate_task){in_worker=true;f(NULL);in_worker=false;}if(t)*(TaskHandle_t*)t=(void*)1;return pdPASS;}
 size_t moonraker_probe_open_ports(const char*h,const int*p,size_t n,int ms,bool*out,size_t cap){(void)h;(void)p;(void)ms;assert(in_worker&&cap>=n);memset(out,0,cap*sizeof(*out));if(probe_found&&n){out[0]=true;return 1;}return 0;}
 bool moonraker_probe_endpoint(const char*h,int p,moonraker_probe_result_t*r){(void)h;if(probe_found&&p==7125){r->klippy_ready=true;strcpy(r->identity,"Verified fixture");return true;}return false;}
 static void on_close(void){closed++;if(close_hook)close_hook();}
@@ -81,9 +82,9 @@ static void safety_checks(const esp_ip4_addr_t *ip)
  unsigned closes=closed;moonraker_discovery_close();assert(closed==closes);
  moonraker_discovery_show("Controls",on_close,on_select);
  lv_obj_t *fake=lv_button_create(s_popup);lv_obj_add_event_cb(fake,discovery_retry_cb,LV_EVENT_CLICKED,NULL);
- lv_obj_add_event_cb(fake,close_event_cb,LV_EVENT_CLICKED,NULL);click(fake);assert(s_popup&&!s_scan_task_handle);lv_obj_delete(fake);
- lv_obj_add_state(s_retry_action,LV_STATE_DISABLED);discovery_retry_cb(NULL);assert(!s_scan_task_handle);
- lv_obj_delete(s_retry_action);assert(!s_retry_action);discovery_retry_cb(NULL);assert(!s_scan_task_handle);
+ lv_obj_add_event_cb(fake,close_event_cb,LV_EVENT_CLICKED,NULL);click(fake);assert(s_popup&&!moonraker_discovery_is_running());lv_obj_delete(fake);
+ lv_obj_add_state(s_retry_action,LV_STATE_DISABLED);discovery_retry_cb(NULL);assert(!moonraker_discovery_is_running());
+ lv_obj_delete(s_retry_action);assert(!s_retry_action);discovery_retry_cb(NULL);assert(!moonraker_discovery_is_running());
  lv_obj_delete(s_close_action);assert(!s_close_action);close_event_cb(NULL);assert(s_popup);moonraker_discovery_close();
  moonraker_discovery_show("Status",on_close,on_select);hook_lock_size=50;lock_hook=delete_locked_status;
  moonraker_discovery_set_status("No stale label");assert(!s_status_label&&!strcmp(s_status,"No stale label"));
@@ -92,14 +93,14 @@ static void safety_checks(const esp_ip4_addr_t *ip)
  assert(s_status_label&&!strcmp(s_status,"Keep new scan"));
  moonraker_discovery_close();moonraker_discovery_show("Old scan",on_close,on_select);
  assert(moonraker_discovery_start(ip));moonraker_discovery_close();moonraker_discovery_show("Keep new scan",on_close,on_select);
- worker();assert(!s_scan_task_handle&&!strcmp(s_status,"Keep new scan")&&!s_candidate_count);
+ worker();assert(!moonraker_discovery_is_running()&&!strcmp(s_status,"Keep new scan")&&!s_candidate_count);
  assert(moonraker_discovery_start(ip));hook_lock_size=100;lock_hook=replace_locked;probe_found=true;
- worker();probe_found=false;assert(!lock_hook&&!s_scan_task_handle&&!s_candidate_count&&!strcmp(s_status,"Keep new scan"));
+ worker();probe_found=false;assert(!lock_hook&&!moonraker_discovery_is_running()&&!s_candidate_count&&!strcmp(s_status,"Keep new scan"));
  assert(moonraker_discovery_add_candidate("192.0.2.126",7125,&probe));row=lv_obj_get_child(s_results_list,0);
  before=selected;printer_generation++;click(row);discovery_retry_cb(NULL);
- assert(selected==before&&!s_scan_task_handle&&strstr(s_status,"Printer changed"));moonraker_discovery_close();
+ assert(selected==before&&!moonraker_discovery_is_running()&&strstr(s_status,"Printer changed"));moonraker_discovery_close();
  moonraker_discovery_show("Delete list",on_close,on_select);assert(moonraker_discovery_start(ip));
- lv_obj_delete(s_results_list);assert(!s_results_list&&s_cancelled);worker();assert(!s_scan_task_handle);moonraker_discovery_close();
+ lv_obj_delete(s_results_list);assert(!s_results_list&&s_cancelled);worker();assert(!moonraker_discovery_is_running());moonraker_discovery_close();
  moonraker_discovery_show("Close replacement",on_close,on_select);close_hook=reopen_close;
  moonraker_discovery_close();close_hook=NULL;assert(s_popup&&s_status_label&&s_results_list&&!strcmp(s_status,"Replacement"));
  moonraker_discovery_close();moonraker_discovery_show("Delete replacement",on_close,on_select);
@@ -139,7 +140,7 @@ static void request_safety(const esp_ip4_addr_t *ip)
  assert(moonraker_discovery_show_for_request("Old worker",on_request_close,on_request_select,55));assert(moonraker_discovery_start(ip));
  assert(moonraker_discovery_show_for_request("Keep request 66",on_request_close,on_request_select,66));
  worker();assert(s_popup&&s_select_request==66&&!s_candidate_count&&!strcmp(s_status,"Keep request 66"));
- discovery_retry_cb(NULL);assert(s_scan_task_handle);worker();assert(!s_scan_task_handle&&s_select_request==66);moonraker_discovery_close_request(66);
+ discovery_retry_cb(NULL);assert(moonraker_discovery_is_running());worker();assert(!moonraker_discovery_is_running()&&s_select_request==66);moonraker_discovery_close_request(66);
 }
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){int w=lv_display_get_horizontal_resolution(d);uint16_t*v=(uint16_t*)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*w+x]=*v++;lv_display_flush_ready(d);}
 static void snapshot(unsigned theme,const char *state){const char*path=getenv("DISCOVERY_SCREENSHOT");const char*folder=getenv("DISCOVERY_SCREENSHOTS");char generated[512];if(folder){snprintf(generated,sizeof(generated),"%s/discovery-theme%u-%s.ppm",folder,theme,state);path=generated;}if(!path)return;lv_refr_now(NULL);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(unsigned i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
@@ -150,15 +151,15 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  for(unsigned theme=0;theme<5;theme++) {
   ui_theme_set_active(theme); demo_active=true; s_has_scan_ip=false;
   moonraker_discovery_show("Demo scan",on_close,on_select);
-  assert(moonraker_discovery_start(&ip));assert(s_has_scan_ip && s_candidate_count==1 && !s_scan_task_handle);
-  discovery_retry_cb(NULL);assert(s_candidate_count==1 && !s_scan_task_handle && strstr(s_status,"Sample printer found"));
+  assert(moonraker_discovery_start(&ip));assert(s_has_scan_ip && s_candidate_count==1 && !moonraker_discovery_is_running());
+  discovery_retry_cb(NULL);assert(s_candidate_count==1 && !moonraker_discovery_is_running() && strstr(s_status,"Sample printer found"));
   moonraker_discovery_close();demo_active=false;
  }
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned size=0;size<3;size++){
   lv_display_set_resolution(d,(unsigned[]){1024,640,480}[size],(unsigned[]){600,480,320}[size]);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   lv_obj_t*page=lv_obj_create(lv_screen_active());lv_obj_set_size(page,lv_display_get_horizontal_resolution(d)-16,lv_display_get_vertical_resolution(d)-16);lv_obj_set_pos(page,8,8);lv_obj_clear_flag(page,LV_OBJ_FLAG_SCROLLABLE);
   moonraker_discovery_show_in_parent(page,"Searching this network for printers...",on_close,on_select);assert(s_popup);lv_obj_update_layout(s_popup);inside(s_popup,lv_screen_active());lv_obj_t*footer=lv_obj_get_child(s_popup,-1);inside(footer,s_popup);for(unsigned i=0;i<2;i++)inside(lv_obj_get_child(footer,i),footer);
-  fail_task=true;assert(!moonraker_discovery_start(&ip)&&strstr(s_status,"Could not start"));fail_task=false;tap(pointer,lv_obj_get_child(footer,0));assert(s_scan_task_handle);discovery_retry_cb(NULL);assert(strstr(s_status,"still finishing"));in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle&&strstr(s_status,"No Moonraker"));if(density==1&&large&&!size)snapshot(theme,"empty");
+  fail_task=true;assert(!moonraker_discovery_start(&ip)&&strstr(s_status,"Could not start"));fail_task=false;tap(pointer,lv_obj_get_child(footer,0));assert(moonraker_discovery_is_running());discovery_retry_cb(NULL);assert(strstr(s_status,"still finishing"));in_worker=true;task_fn(NULL);in_worker=false;assert(!moonraker_discovery_is_running()&&strstr(s_status,"No Moonraker"));if(density==1&&large&&!size)snapshot(theme,"empty");
   moonraker_probe_result_t probe={.klippy_ready=true};strcpy(probe.identity,"Workshop printer with a long descriptive name");assert(moonraker_discovery_add_candidate("192.0.2.126",7125,&probe));lv_obj_update_layout(s_popup);lv_obj_t*row=lv_obj_get_child(s_results_list,0);lv_obj_scroll_to_view_recursive(row,LV_ANIM_OFF);lv_obj_update_layout(s_popup);unsigned selections=selected;tap(pointer,row);assert(selected==selections+1);
   if(!size) {
    lv_obj_t *body=ui_form_body(s_popup);lv_area_t content,list,before_footer,after_footer;
@@ -171,8 +172,13 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
    lv_obj_get_coords(footer,&before_footer);lv_obj_scroll_to_y(s_results_list,10000,LV_ANIM_OFF);lv_obj_update_layout(s_popup);
    assert(lv_obj_get_scroll_bottom(s_results_list)<=1);lv_obj_get_coords(footer,&after_footer);assert(!memcmp(&before_footer,&after_footer,sizeof(before_footer)));
   }
-  discovery_retry_cb(NULL);assert(!s_candidate_count&&!lv_obj_get_child_count(s_results_list));lv_obj_delete(page);assert(s_cancelled&&!s_popup&&!s_status_label&&!s_results_list);in_worker=true;task_fn(NULL);in_worker=false;assert(!s_scan_task_handle);
+  discovery_retry_cb(NULL);assert(!s_candidate_count&&!lv_obj_get_child_count(s_results_list));lv_obj_delete(page);assert(s_cancelled&&!s_popup&&!s_status_label&&!s_results_list);in_worker=true;task_fn(NULL);in_worker=false;assert(!moonraker_discovery_is_running());
   moonraker_discovery_show("Retry after cancellation",on_close,on_select);unsigned before=closed;tap(pointer,lv_obj_get_child(lv_obj_get_child(s_popup,-1),1));assert(closed==before+1&&!s_popup);safety_checks(&ip);request_safety(&ip);
  }
+ moonraker_discovery_show("Fast completion",on_close,on_select);
+ immediate_task=true;probe_found=false;
+ assert(moonraker_discovery_start(&ip)&&!moonraker_discovery_is_running());
+ discovery_retry_cb(NULL);assert(!moonraker_discovery_is_running());
+ immediate_task=false;moonraker_discovery_close();
  (void)saved;lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();puts("PASS: Moonraker discovery retry/select/close ownership, captured endpoint/callbacks, deleted fields, printer changes, late-worker/under-lock publication fences and replacement teardown across all themes/densities/text/viewports");return 0;}
 #endif

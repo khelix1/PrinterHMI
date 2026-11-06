@@ -163,9 +163,10 @@ static bool fetch_preview_png(
         encoded_thumbnail,
         sizeof(encoded_thumbnail));
 
-    if (!moonraker_fetch_thumbnail_encoded(
+    if (!moonraker_fetch_thumbnail_encoded_with_api_key(
             host,
             port,
+            api_key,
             encoded_thumbnail,
             png_out,
             png_size_out)) {

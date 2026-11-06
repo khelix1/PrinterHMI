@@ -3,6 +3,7 @@
 #include "demo_setup.h"
 #endif
 #include "ui_setup_wizard.h"
+#include "async_result_slot.h"
 #include "ui_text.h"
 #include "timezone_config.h"
 #include "theme_manager.h"
@@ -48,7 +49,8 @@ static lv_timer_t *s_poll;
 static ui_setup_wizard_wifi_connect_cb_t s_wifi_connect;
 static setup_wifi_ap_t s_wifi[SETUP_MAX_WIFI];
 static size_t s_wifi_count;
-static volatile bool s_wifi_scan_done;
+static async_result_slot_t s_wifi_scan_slot;
+static bool s_wifi_scan_failed;
 static lv_obj_t *s_wifi_list;
 static lv_obj_t *s_camera_list;
 static char s_selected_ssid[33];
@@ -77,7 +79,6 @@ static lv_obj_t *s_summary, *s_back_action, *s_options_list;
 static lv_obj_t *s_brightness_slider, *s_brightness_value;
 static void (*s_appearance_changed)(void);
 static unsigned s_appearance_choice;
-static volatile bool s_wifi_scan_busy;
 static uint32_t s_setup_epoch;
 static bool s_setup_dispatching, s_camera_verified;
 static bool s_appearance_pending;
@@ -813,7 +814,7 @@ static void wifi_scan_task(void *ignored)
 {
     (void)ignored;
     s_wifi_count = 0;
-    s_wifi_scan_done = false;
+    s_wifi_scan_failed = true;
 
     /* Do not disconnect the station here. The Network page scans while the
      * Wi-Fi state machine is running; setup must use the same path. */
@@ -826,10 +827,14 @@ static void wifi_scan_task(void *ignored)
 
     if (scan_error == ESP_OK) {
         uint16_t count = 0;
-        if (esp_wifi_scan_get_ap_num(&count) == ESP_OK && count) {
+        if (esp_wifi_scan_get_ap_num(&count) == ESP_OK) {
+            s_wifi_scan_failed = false;
+            if (!count) goto scan_complete;
+            s_wifi_scan_failed = true;
             wifi_ap_record_t records[SETUP_MAX_WIFI] = {0};
             if (count > SETUP_MAX_WIFI) count = SETUP_MAX_WIFI;
             if (esp_wifi_scan_get_ap_records(&count, records) == ESP_OK) {
+                s_wifi_scan_failed = false;
                 for (uint16_t i = 0; i < count; ++i) {
                     if (!records[i].ssid[0]) continue;
                     strlcpy(s_wifi[s_wifi_count].ssid,
@@ -841,8 +846,10 @@ static void wifi_scan_task(void *ignored)
         }
     }
 
-    s_wifi_scan_done = true;
-    s_wifi_scan_busy = false;
+scan_complete:
+    /* Publish the records and terminal state together; no later busy write
+     * may race with the UI starting its next scan. */
+    async_result_publish(&s_wifi_scan_slot);
     vTaskDelete(NULL);
 }
 
@@ -887,13 +894,20 @@ static void wifi_selected_cb(lv_event_t *event)
 static void wifi_scan_ready(lv_timer_t *timer)
 {
     if(!s_poll || (timer && timer!=s_poll) || !s_center || !s_wifi_list || s_setup_dispatching)return;
-    if (!s_wifi_scan_done) return;
+    if (!async_result_take(&s_wifi_scan_slot)) return;
+    /* Scans are started by LVGL only. No new worker can replace these
+     * records until this callback returns to that same LVGL task. */
+    async_result_release(&s_wifi_scan_slot);
     if (s_setup_step != SETUP_STEP_WIFI) {
         delete_poll();
         return;
     }
     delete_poll();
     if (!s_setup_content) return;
+    if (s_wifi_scan_failed) {
+        set_status("Wi-Fi scan failed. Tap Scan again to retry.");
+        return;
+    }
     if (!s_wifi_count) {
         set_status("No networks found. Tap Scan again to retry.");
         return;
@@ -925,17 +939,17 @@ static void wifi_scan_open(void)
     s_wifi_list=setup_results_list(s_stage);
     setup_watch(s_wifi_list);
     setup_action(s_actions,"Scan again",UI_POPUP_ACTION_SECONDARY,wifi_scan_open_cb);
-    if(s_wifi_scan_busy){s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;}
+    if(!async_result_start(&s_wifi_scan_slot)){s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;}
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if(demo_mode_enabled()) {
         s_wifi_count=1;strlcpy(s_wifi[0].ssid,"Demo network",sizeof(s_wifi[0].ssid));s_wifi[0].rssi=-48;
-        s_wifi_scan_done=true;s_wifi_scan_busy=false;s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;
+        s_wifi_scan_failed=false;async_result_publish(&s_wifi_scan_slot);s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;
     }
 #endif
-    s_wifi_scan_busy=true;
-    s_wifi_scan_done = false;
+    s_wifi_count = 0;
+    s_wifi_scan_failed = false;
     if (xTaskCreate(wifi_scan_task, "setup_wifi_scan", 4096, NULL, 4, NULL) != pdPASS) {
-        s_wifi_scan_busy=false;
+        async_result_release(&s_wifi_scan_slot);
         set_status("Unable to start Wi-Fi scan. Try again.");
         return;
     }

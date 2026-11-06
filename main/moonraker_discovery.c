@@ -39,8 +39,8 @@ typedef struct {
 
 static char s_status[512] = "Moonraker scan: not run";
 
-static volatile bool s_cancelled = false;
-static TaskHandle_t s_scan_task_handle = NULL;
+static bool s_cancelled;
+static bool s_scan_running;
 static esp_ip4_addr_t s_scan_ip, s_retry_ip;
 static bool s_has_scan_ip;
 
@@ -60,7 +60,7 @@ static void discovery_field_deleted(lv_event_t *event)
 {
     lv_obj_t *object=lv_event_get_target_obj(event);
     if(object==s_status_label)s_status_label=NULL;
-    if(object==s_results_list){s_results_list=NULL;s_candidate_count=0;s_cancelled=true;}
+    if(object==s_results_list){s_results_list=NULL;s_candidate_count=0;__atomic_store_n(&s_cancelled, true, __ATOMIC_RELEASE);}
     if(object==s_retry_action)s_retry_action=NULL;
     if(object==s_close_action)s_close_action=NULL;
 }
@@ -381,7 +381,7 @@ static void scan_task(void *arg)
         discovery_scan_set_status(msg);
     }
 
-    s_scan_task_handle = NULL;
+    __atomic_store_n(&s_scan_running, false, __ATOMIC_RELEASE);
     vTaskDelete(NULL);
 }
 
@@ -390,7 +390,7 @@ static void discovery_deleted(lv_event_t *event)
     if (lv_event_get_target_obj(event) != s_popup) return;
     moonraker_discovery_close_request_cb_t close_request=s_close_request_cb;
     uint32_t request=s_select_request;
-    s_cancelled = true;
+    __atomic_store_n(&s_cancelled, true, __ATOMIC_RELEASE);
     __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_popup = s_status_label = s_results_list = NULL;
     s_candidate_count = 0;
@@ -409,7 +409,7 @@ static void discovery_retry_cb(lv_event_t *event)
         moonraker_discovery_set_status("Connect to Wi-Fi and reopen discovery to scan this network.");
         return;
     }
-    if (s_scan_task_handle) {
+    if (moonraker_discovery_is_running()) {
         moonraker_discovery_set_status("Previous scan is still finishing. Tap Retry when it completes.");
         return;
     }
@@ -628,24 +628,27 @@ bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
 #endif
     s_has_scan_ip = ip != NULL;
     if (ip) s_retry_ip = *ip;
-    if (!ip || s_scan_task_handle) {
-        moonraker_discovery_set_status(s_scan_task_handle
+    if (!ip || moonraker_discovery_is_running()) {
+        moonraker_discovery_set_status(moonraker_discovery_is_running()
             ? "A discovery scan is already running. Wait for it to finish."
             : "No network address available. Connect Wi-Fi and reopen discovery.");
         return false;
     }
 
+    bool expected=false;
+    if (!__atomic_compare_exchange_n(&s_scan_running, &expected, true, false,
+                                     __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
     s_scan_ip = *ip;
     s_has_scan_ip = true;
-    s_cancelled = false;
+    __atomic_store_n(&s_cancelled, false, __ATOMIC_RELEASE);
     s_scan_epoch=__atomic_load_n(&s_discovery_epoch,__ATOMIC_ACQUIRE);
 
     uint32_t epoch=s_discovery_epoch;
     s_discovery_dispatching=true;
-    bool created=xTaskCreate(scan_task,"moon_scan",8192,NULL,4,&s_scan_task_handle)==pdPASS;
+    bool created=xTaskCreate(scan_task,"moon_scan",8192,NULL,4,NULL)==pdPASS;
     s_discovery_dispatching=false;
     if (!created) {
-        s_scan_task_handle = NULL;
+        __atomic_store_n(&s_scan_running, false, __ATOMIC_RELEASE);
         if(s_discovery_epoch==epoch && s_popup)
             moonraker_discovery_set_status("Could not start discovery. Tap Retry to try again.");
         return false;
@@ -656,12 +659,12 @@ bool moonraker_discovery_start(const esp_ip4_addr_t *ip)
 
 bool moonraker_discovery_is_running(void)
 {
-    return s_scan_task_handle != NULL;
+    return __atomic_load_n(&s_scan_running, __ATOMIC_ACQUIRE);
 }
 
 bool moonraker_discovery_is_cancelled(void)
 {
-    return s_cancelled || s_scan_epoch!=__atomic_load_n(&s_discovery_epoch,__ATOMIC_ACQUIRE) ||
+    return __atomic_load_n(&s_cancelled, __ATOMIC_ACQUIRE) || s_scan_epoch!=__atomic_load_n(&s_discovery_epoch,__ATOMIC_ACQUIRE) ||
         s_owner_generation!=moonraker_config_generation();
 }
 
@@ -680,7 +683,7 @@ void moonraker_discovery_close(void)
     moonraker_discovery_close_request_cb_t close_request=s_close_request_cb;
     uint32_t request=s_select_request;
     s_close_dispatching=true;
-    s_cancelled = true;
+    __atomic_store_n(&s_cancelled, true, __ATOMIC_RELEASE);
     __atomic_add_fetch(&s_discovery_epoch,1,__ATOMIC_RELEASE);
     s_popup=s_status_label=s_results_list=s_retry_action=s_close_action=NULL;
     s_candidate_count=0;s_close_cb=NULL;s_select_cb=NULL;s_select_request_cb=NULL;s_close_request_cb=NULL;s_select_request=0;

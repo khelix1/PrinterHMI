@@ -538,10 +538,10 @@ static void refresh_cards(void)
                 ? "VERIFYING..."
                 : (!online
                     ? "OFFLINE"
-                    : (has_live_state
-                        ? inactive_state
-                        : (verifying
-                            ? "VERIFYING..."
+                    : (verifying
+                        ? "VERIFYING..."
+                        : (has_live_state
+                            ? inactive_state
                             : "ONLINE")));
         }
 

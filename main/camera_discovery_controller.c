@@ -14,10 +14,11 @@
 #include "esp_heap_caps.h"
 
 #include <string.h>
+#include "async_result_slot.h"
 
 #define CAMERA_DISCOVERY_TASK_STACK_SIZE 12288
 
-static TaskHandle_t s_task = NULL;
+static async_result_slot_t s_result;
 static char s_host[MOONRAKER_CONFIG_HOST_LENGTH];
 static int s_port = 0;
 static char s_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
@@ -26,7 +27,6 @@ static int s_profile;
 static uint32_t s_generation;
 static bool s_found = false;
 static size_t s_count = 0;
-static volatile bool s_result_ready = false;
 
 
 static void camera_discovery_task(void *arg)
@@ -36,11 +36,12 @@ static void camera_discovery_task(void *arg)
     moonraker_webcam_t webcams[CAMERA_CATALOG_MAX_CAMERAS] = {0};
     size_t count = moonraker_probe_webcams_with_api_key(
         s_host, s_port, s_api_key, webcams, CAMERA_CATALOG_MAX_CAMERAS);
+    for (size_t i = 0; i < sizeof(s_api_key); ++i)
+        ((volatile char *)s_api_key)[i] = 0;
     memcpy(s_webcams, webcams, sizeof(s_webcams));
     s_count = count;
     s_found = count > 0;
-    __atomic_store_n(&s_result_ready, true, __ATOMIC_RELEASE);
-    s_task = NULL;
+    async_result_publish(&s_result);
     vTaskDelete(NULL);
 }
 
@@ -60,7 +61,7 @@ bool camera_discovery_start_for_profile(int profile, const char *host, int port,
     if (profile < 0 || profile >= MOONRAKER_CONFIG_MAX_PROFILES ||
         !host || !host[0] || strlen(host) >= sizeof(s_host) ||
         (api_key && strlen(api_key) >= sizeof(s_api_key)) ||
-        port <= 0 || port >= 65536 || s_task) {
+        port <= 0 || port >= 65536 || !async_result_start(&s_result)) {
         return false;
     }
 
@@ -72,7 +73,7 @@ bool camera_discovery_start_for_profile(int profile, const char *host, int port,
     memset(s_webcams, 0, sizeof(s_webcams));
     s_found = false;
     s_count = 0;
-    __atomic_store_n(&s_result_ready, false, __ATOMIC_RELEASE);
+
 
     if (xTaskCreatePinnedToCoreWithCaps(
             camera_discovery_task,
@@ -80,10 +81,12 @@ bool camera_discovery_start_for_profile(int profile, const char *host, int port,
             CAMERA_DISCOVERY_TASK_STACK_SIZE,
             NULL,
             4,
-            &s_task,
+            NULL,
             tskNO_AFFINITY,
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
-        s_task = NULL;
+        for (size_t i = 0; i < sizeof(s_api_key); ++i)
+            ((volatile char *)s_api_key)[i] = 0;
+        async_result_release(&s_result);
         return false;
     }
     return true;
@@ -95,7 +98,7 @@ bool camera_discovery_busy(void)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return false;
 #endif
-    return s_task != NULL;
+    return async_result_busy(&s_result);
 }
 
 
@@ -105,13 +108,13 @@ bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found,
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return demo_camera_discovery_take(webcam, found, count);
 #endif
-    if (!__atomic_exchange_n(
-            &s_result_ready,
-            false,
-            __ATOMIC_ACQ_REL)) {
+    if (!async_result_take(&s_result)) {
         return false;
     }
-    if (s_generation != moonraker_config_generation()) return false;
+    if (s_generation != moonraker_config_generation()) {
+        async_result_release(&s_result);
+        return false;
+    }
     for (size_t index = 0; index < s_count; ++index) {
         (void)camera_catalog_set(s_profile, index, s_webcams[index].name,
                                  s_webcams[index].stream_url);
@@ -125,5 +128,6 @@ bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found,
     if (count) {
         *count = s_count;
     }
+    async_result_release(&s_result);
     return true;
 }

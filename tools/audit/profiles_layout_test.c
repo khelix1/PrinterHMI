@@ -44,7 +44,9 @@ static int saves,deletes,changed,discovered;static bool storage_ok=true;
 static int fail_write_stage,last_delete_target;
 static unsigned base_writes,url_writes,catalog_writes,security_writes,select_writes;
 static void (*persist_hook)(void),(*url_hook)(void),(*select_hook)(void),(*remove_hook)(void);
-bool moonraker_config_save_profile(int i,const char*n,const char*h,int p,const char*k){base_writes++;if(persist_hook)persist_hook();if(!storage_ok||fail_write_stage==1)return false;saves++;profiles[i].configured=true;strlcpy(profiles[i].name,n,sizeof(profiles[i].name));strlcpy(profiles[i].host,h,sizeof(profiles[i].host));profiles[i].port=p;strlcpy(profiles[i].api_key,k,sizeof(profiles[i].api_key));return true;}
+static uint32_t config_generation=1;
+static bool storage_noop;
+bool moonraker_config_save_profile(int i,const char*n,const char*h,int p,const char*k){base_writes++;if(persist_hook)persist_hook();if(!storage_ok||fail_write_stage==1)return false;if(storage_noop)return true;if(i==active)config_generation++;saves++;profiles[i].configured=true;strlcpy(profiles[i].name,n,sizeof(profiles[i].name));strlcpy(profiles[i].host,h,sizeof(profiles[i].host));profiles[i].port=p;strlcpy(profiles[i].api_key,k,sizeof(profiles[i].api_key));return true;}
 bool moonraker_config_delete_profile(int i){if(remove_hook)remove_hook();if(!storage_ok)return false;last_delete_target=i;deletes++;profiles[i].configured=false;if(i==active)active=1;return true;}
 bool moonraker_config_set_camera_stream_url(int i,const char*u){(void)i;(void)u;url_writes++;if(url_hook)url_hook();return fail_write_stage!=2;}
 bool moonraker_config_select_profile(int i){select_writes++;if(select_hook)select_hook();if(!storage_ok)return false;active=i;return true;}
@@ -77,7 +79,6 @@ bool camera_test_start(const char*u){camera_test_starts++;char url[192];strlcpy(
 bool camera_test_busy(void){return false;}
 bool camera_test_take_result(bool*o,int*h,int*s,size_t*b){camera_test_polls++;if(camera_test_poll_hook)camera_test_poll_hook();if(!camera_test_ready)return false;camera_test_ready=false;*o=camera_test_ok;*h=640;*s=480;*b=4096;return true;}
 bool camera_discovery_start(const char*h,int p,const char*k){(void)p;camera_find_starts++;char host[64],key[160];strlcpy(host,h,sizeof(host));strlcpy(key,k,sizeof(key));if(camera_find_start_hook)camera_find_start_hook();assert(!strcmp(host,h)&&!strcmp(key,k));return camera_find_accept;}
-static uint32_t config_generation=1;
 static int discovered_profile=-1;
 uint32_t moonraker_config_generation(void){return config_generation;}
 bool camera_discovery_start_for_profile(int i,const char*h,int p,const char*k){assert(i>=0&&i<MOONRAKER_CONFIG_MAX_PROFILES);discovered_profile=i;return camera_discovery_start(h,p,k);}
@@ -367,6 +368,10 @@ static void profile_persistence_safety(void)
 {
  reset();ui_printer_profiles_show_for_slot(0,active_changed,discover);manager_edit_cb(NULL);
  ui_printer_profiles_show(wrong_changed,discover);assert(s_active_changed_cb==active_changed);
+ storage_noop=true;int unchanged_notifications=changed;
+ editor_save_cb(NULL);assert(!s_editor_popup&&changed==unchanged_notifications);
+ assert(!strstr(lv_label_get_text(s_manager_status),"Reconnecting"));
+ storage_noop=false;manager_edit_cb(NULL);
  unsigned writes=base_writes;persist_hook=persist_nested;editor_save_cb(NULL);persist_hook=NULL;
  assert(base_writes==writes+1&&!s_editor_popup);
  for(int stage=1;stage<=4;++stage){

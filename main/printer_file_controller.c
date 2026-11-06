@@ -1,6 +1,7 @@
 #include "printer_file_controller.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -29,19 +30,17 @@ static void set_status(
         text ? text : "");
 }
 
-void printer_file_controller_select_file(
+bool printer_file_controller_select_file(
     const char *path,
     printer_file_controller_popup_cb_t show_detail_popup)
 {
-    if (!path || !path[0]) {
-        return;
-    }
-
-    snprintf(
-        thumbnail_session_selected_file(),
-        thumbnail_session_selected_file_size(),
-        "%s",
-        path);
+    char *selected = thumbnail_session_selected_file();
+    size_t capacity = thumbnail_session_selected_file_size();
+    if (!path || !path[0] || !selected || !capacity) return false;
+    size_t length = strnlen(path, capacity);
+    if (length >= capacity) return false;
+    /* The request may already refer to the selected-file buffer. */
+    memmove(selected, path, length + 1);
 
     thumbnail_manager_set_force_refresh(true);
 
@@ -61,6 +60,7 @@ void printer_file_controller_select_file(
     if (show_detail_popup) {
         show_detail_popup();
     }
+    return true;
 }
 
 bool printer_file_controller_start_file(

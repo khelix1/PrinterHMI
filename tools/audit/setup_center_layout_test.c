@@ -84,12 +84,14 @@ static uint32_t config_generation=1;
 uint32_t moonraker_config_generation(void){return config_generation;}
 static bool wrong_ssid;
 esp_err_t esp_wifi_sta_get_ap_info(wifi_ap_record_t*i){if(wifi_read_hook&&wifi_read_countdown&&!--wifi_read_countdown){void(*hook)(void)=wifi_read_hook;wifi_read_hook=NULL;hook();}memset(i,0,sizeof(*i));snprintf((char*)i->ssid,sizeof(i->ssid),"%s",wrong_ssid?"Previous network":"Workshop_long_network_name_0");return wifi_ready?ESP_OK:ESP_FAIL;}
-esp_err_t esp_wifi_scan_start(void*p,bool b){(void)p;(void)b;return ESP_OK;}
-esp_err_t esp_wifi_scan_get_ap_num(uint16_t*n){*n=8;return ESP_OK;}
-esp_err_t esp_wifi_scan_get_ap_records(uint16_t*n,wifi_ap_record_t*a){for(unsigned i=0;i<*n;i++){snprintf((char*)a[i].ssid,sizeof(a[i].ssid),"Workshop_long_network_name_%u",i);a[i].rssi=-57-(int)i;}return ESP_OK;}
+static bool scan_fail, scan_count_fail, scan_records_fail, scan_empty, scan_create_fail, scan_finish_immediately;
+static unsigned scan_creations;
+esp_err_t esp_wifi_scan_start(void*p,bool b){(void)p;(void)b;return scan_fail?ESP_FAIL:ESP_OK;}
+esp_err_t esp_wifi_scan_get_ap_num(uint16_t*n){*n=scan_empty?0:8;return scan_count_fail?ESP_FAIL:ESP_OK;}
+esp_err_t esp_wifi_scan_get_ap_records(uint16_t*n,wifi_ap_record_t*a){if(scan_records_fail)return ESP_FAIL;for(unsigned i=0;i<*n;i++){snprintf((char*)a[i].ssid,sizeof(a[i].ssid),"Workshop_long_network_name_%u",i);a[i].rssi=-57-(int)i;}return ESP_OK;}
 void vTaskDelay(unsigned n){(void)n;}
 void vTaskDelete(void*p){(void)p;}
-int xTaskCreate(void(*f)(void*),const char*n,unsigned z,void*p,unsigned pr,void*h){(void)n;(void)z;(void)p;(void)pr;(void)h;scan_task=f;return pdPASS;}
+int xTaskCreate(void(*f)(void*),const char*n,unsigned z,void*p,unsigned pr,void*h){(void)n;(void)z;(void)p;(void)pr;(void)h;scan_creations++;if(scan_create_fail)return 0;scan_task=f;if(scan_finish_immediately)f(NULL);return pdPASS;}
 size_t camera_catalog_default(int profile){(void)profile;if(catalog_read_hook){void(*hook)(void)=catalog_read_hook;catalog_read_hook=NULL;hook();}return saved_camera_slot;}
 bool camera_catalog_get(int p,size_t i,camera_catalog_entry_t*e){(void)p;*e=(camera_catalog_entry_t){.configured=true};snprintf(e->name,sizeof(e->name),"Workshop camera %zu",i);strlcpy(e->stream_url,"http://camera.local/stream",sizeof(e->stream_url));return true;}
 bool camera_catalog_set_default(int p,size_t i){(void)p;assert(i<4);default_saves++;if(default_hook)default_hook();if(default_ok)saved_camera_slot=i;return default_ok;}
@@ -349,7 +351,26 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  click(s_back_action);assert(s_setup_step==SETUP_STEP_TIMEZONE);setup_select_complete_cb(NULL);
  unsigned before=completions;finish_cb(NULL);assert(s_center&&completions==before);
  setup_select_printer_cb(NULL);before=editor_opened;center_printer_cb(NULL);assert(editor_opened==before+1);
- setup_select_wifi_cb(NULL);center_wifi_cb(NULL);assert(s_wifi_scan_busy&&scan_task);wifi_scan_open();scan_task(NULL);wifi_scan_ready(NULL);check();assert(lv_obj_get_child_count(s_wifi_list)==8);
+ setup_select_wifi_cb(NULL);center_wifi_cb(NULL);assert(async_result_busy(&s_wifi_scan_slot)&&scan_task);wifi_scan_open();scan_task(NULL);wifi_scan_ready(NULL);check();assert(lv_obj_get_child_count(s_wifi_list)==8);
+ /* Result ownership survives retries, immediate completion, and page closure. */
+ unsigned launches=scan_creations;
+ scan_fail=true;wifi_scan_open();wifi_scan_open();assert(scan_creations==launches+1);
+ wifi_scan_ready(s_poll);assert(s_poll);scan_task(NULL);wifi_scan_ready(s_poll);
+ assert(!s_poll&&strstr(lv_label_get_text(s_status),"scan failed"));
+ scan_fail=false;scan_count_fail=true;wifi_scan_open();scan_task(NULL);wifi_scan_ready(s_poll);
+ assert(!s_poll&&strstr(lv_label_get_text(s_status),"scan failed"));scan_count_fail=false;
+ scan_records_fail=true;wifi_scan_open();scan_task(NULL);wifi_scan_ready(s_poll);
+ assert(!s_poll&&strstr(lv_label_get_text(s_status),"scan failed"));scan_records_fail=false;
+ scan_empty=true;wifi_scan_open();scan_task(NULL);wifi_scan_ready(s_poll);
+ assert(!s_poll&&strstr(lv_label_get_text(s_status),"No networks found"));scan_empty=false;
+ scan_create_fail=true;wifi_scan_open();assert(!s_poll&&!async_result_busy(&s_wifi_scan_slot));
+ assert(strstr(lv_label_get_text(s_status),"Unable to start"));scan_create_fail=false;
+ scan_finish_immediately=true;wifi_scan_open();wifi_scan_ready(s_poll);scan_finish_immediately=false;
+ assert(!s_poll&&lv_obj_get_child_count(s_wifi_list)==8);
+ wifi_scan_open();ui_setup_wizard_close();scan_task(NULL);
+ ui_setup_wizard_show(connect_wifi);setup_select_wifi_cb(NULL);center_wifi_cb(NULL);
+ assert(async_result_busy(&s_wifi_scan_slot));scan_task(NULL);wifi_scan_ready(s_poll);
+ assert(!s_poll&&lv_obj_get_child_count(s_wifi_list)==8);
  if(width==1024){lv_area_t stage,list;lv_obj_get_content_coords(s_stage,&stage);lv_obj_get_coords(s_wifi_list,&list);assert(list.y2==stage.y2&&lv_obj_get_height(s_wifi_list)>48);}
  if(density==1&&large)snapshot(t,"networks");
  lv_obj_send_event(lv_obj_get_child(s_wifi_list,0),LV_EVENT_CLICKED,NULL);check();assert(s_password&&s_keyboard&&lv_textarea_get_password_mode(s_password));assert(lv_textarea_get_max_length(s_password)==63);lv_textarea_set_text(s_password,"test-password");before=connections;keyboard_layout_check(s_setup_content,s_keyboard,s_password);if(density==1&&large)snapshot(t,"password");lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1&&s_poll);lv_obj_send_event(s_keyboard,LV_EVENT_READY,NULL);assert(connections==before+1);wifi_ready=true;wrong_ssid=true;wifi_verify(NULL);assert(!s_wifi_done&&s_poll);lv_tick_inc(30001);wifi_verify(NULL);assert(!s_wifi_done&&!s_poll&&s_password&&!strcmp(lv_textarea_get_text(s_password),"test-password")&&strstr(lv_label_get_text(s_status),"timed out"));wrong_ssid=false;wifi_save_cb(NULL);assert(s_poll);wifi_verify(NULL);assert(s_wifi_done);wifi_return_timer(s_poll);check();
@@ -402,4 +423,4 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
   show_setup_completion();completion_layout_checks();assert(lv_obj_get_height(s_complete_popup)<=248);
   lv_obj_t *done=lv_obj_get_child(lv_obj_get_child(s_complete_popup,-1),0);click(done);assert(!s_complete_popup);
  }
- lv_display_delete(d);lv_deinit();puts("PASS: persistent completion check marks, failed/canceled writes, accepted defaults, optional camera and Review completion; configured network/printer review values, compact display summary, completion bounds and review-read owner replacement; saved/custom camera summaries and URL redaction, optional/no-printer/empty/failure/retry states, busy scan deduplication and no additional camera save on Continue; active-profile printer editing, SSID/IP/waiting-address summaries, saved-vs-live status and API-key redaction; seven-step Setup layout, sparse timezone catalog/persistence failure, brightness/sleep save failure/retry, deferred theme/text rebuild, direct-delete cancellation, replacement callback ownership and closed-owner cancellation across five themes/densities/text/viewports; Wi-Fi nested dispatch/retry/captured credentials, camera verification ownership/save failures, retired fields/actions/timers, completion and replacement teardown");return 0;}
+ lv_display_delete(d);lv_deinit();puts("PASS: Wi-Fi scan publication/retry, start/count/records failure, empty scan, immediate completion and close/reopen; persistent completion check marks, failed/canceled writes, accepted defaults, optional camera and Review completion; configured network/printer review values, compact display summary, completion bounds and review-read owner replacement; saved/custom camera summaries and URL redaction, optional/no-printer/empty/failure/retry states, busy scan deduplication and no additional camera save on Continue; active-profile printer editing, SSID/IP/waiting-address summaries, saved-vs-live status and API-key redaction; seven-step Setup layout, sparse timezone catalog/persistence failure, brightness/sleep save failure/retry, deferred theme/text rebuild, direct-delete cancellation, replacement callback ownership and closed-owner cancellation across five themes/densities/text/viewports; Wi-Fi nested dispatch/retry/captured credentials, camera verification ownership/save failures, retired fields/actions/timers, completion and replacement teardown");return 0;}

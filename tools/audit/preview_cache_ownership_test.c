@@ -61,7 +61,7 @@ bool moonraker_fetch_file_metadata(const char *host,int port,const char *key,con
  *code=metadata_fail?500:200;*error=metadata_fail?ESP_FAIL:ESP_OK;
  snprintf(out,size,"%s",metadata_reply);if(bump_profile_in_fetch){bump_profile_in_fetch=false;profile_generation++;}return !metadata_fail;
 }
-bool moonraker_fetch_thumbnail_encoded(const char *host,int port,const char *path,uint8_t **out,size_t *size){
+bool moonraker_fetch_thumbnail_encoded_with_api_key(const char *host,int port,const char *key,const char *path,uint8_t **out,size_t *size){(void)key;
  assert(!strcmp(host,"printer.local")&&port==7125);thumbnail_requests++;snprintf(downloaded,sizeof(downloaded),"%s",path);
  if(download_fail)return false;
  *out=heap_caps_malloc(4,MALLOC_CAP_SPIRAM);memset(*out,0,4);*size=4;return true;

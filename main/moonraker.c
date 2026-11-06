@@ -1525,6 +1525,7 @@ bool moonraker_fetch_print_stats(const char *host,
 static bool moonraker_fetch_thumbnail_encoded_internal(
     const char *host,
     int port,
+    const char *api_key,
     const char *encoded_thumb_path,
     uint8_t **out_buf,
     size_t *out_len,
@@ -1584,7 +1585,7 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
     bool ok = moonraker_http_get_raw(
         host,
         port,
-        NULL,
+        api_key,
         path,
         5000,
         buf,
@@ -1616,53 +1617,49 @@ static bool moonraker_fetch_thumbnail_encoded_internal(
 
 
 bool moonraker_fetch_thumbnail_encoded(
-    const char *host,
-    int port,
-    const char *encoded_thumb_path,
-    uint8_t **out_buf,
-    size_t *out_len)
+    const char *host, int port, const char *encoded_thumb_path,
+    uint8_t **out_buf, size_t *out_len)
 {
     return moonraker_fetch_thumbnail_encoded_internal(
-        host,
-        port,
-        encoded_thumb_path,
-        out_buf,
-        out_len,
-        false);
+        host, port, NULL, encoded_thumb_path, out_buf, out_len, false);
 }
 
-
-bool moonraker_fetch_thumbnail_encoded_quiet(
-    const char *host,
-    int port,
-    const char *encoded_thumb_path,
-    uint8_t **out_buf,
-    size_t *out_len)
+bool moonraker_fetch_thumbnail_encoded_with_api_key(
+    const char *host, int port, const char *api_key, const char *encoded_thumb_path,
+    uint8_t **out_buf, size_t *out_len)
 {
+    return moonraker_fetch_thumbnail_encoded_internal(
+        host, port, api_key, encoded_thumb_path, out_buf, out_len, false);
+}
+
+bool moonraker_fetch_thumbnail_encoded_quiet_with_api_key(
+    const char *host, int port, const char *api_key, const char *encoded_thumb_path,
+    uint8_t **out_buf, size_t *out_len)
+{
+    if (!out_buf || !out_len) return false;
+    *out_buf = NULL;
+    *out_len = 0;
 #ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled())return moonraker_fetch_thumbnail_encoded_internal(host,port,encoded_thumb_path,out_buf,out_len,false);
+    if(demo_mode_enabled())return moonraker_fetch_thumbnail_encoded_internal(host,port,api_key,encoded_thumb_path,out_buf,out_len,false);
 #endif
-    if (!network_activity_controller_acquire_exclusive(5000)) {
-        return false;
-    }
-
-    /* Let the final WebSocket teardown traffic drain before the larger
-     * selected-file thumbnail transfer begins.
-     */
+    if (!network_activity_controller_acquire_exclusive(5000)) return false;
     vTaskDelay(pdMS_TO_TICKS(250));
-
     bool ok = moonraker_fetch_thumbnail_encoded_internal(
-        host,
-        port,
-        encoded_thumb_path,
-        out_buf,
-        out_len,
-        true);
-
+        host, port, api_key, encoded_thumb_path, out_buf, out_len, true);
     network_activity_controller_release_exclusive();
     return ok;
 }
 
+bool moonraker_fetch_thumbnail_encoded_quiet(
+    const char *host, int port, const char *encoded_thumb_path,
+    uint8_t **out_buf, size_t *out_len)
+{
+#ifdef PRINTERHMI_DEMO_RUNTIME
+    if(demo_mode_enabled())return moonraker_fetch_thumbnail_encoded_internal(host,port,NULL,encoded_thumb_path,out_buf,out_len,false);
+#endif
+    return moonraker_fetch_thumbnail_encoded_quiet_with_api_key(
+        host, port, NULL, encoded_thumb_path, out_buf, out_len);
+}
 
 
 bool moonraker_fetch_file_metadata(const char *host,

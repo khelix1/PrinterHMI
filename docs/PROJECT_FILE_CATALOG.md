@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.3.41-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.3.52-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -280,3 +280,5 @@ URLs; `demo_camera_frame.c` draws the common desktop/tablet sample image.
 `main/demo_ota.c/h` owns the offline OTA sample catalog and transfer.
 
 `main/demo_setup.c/h` holds the offline Setup sample network in RAM.
+
+Camera test, webcam discovery and manual Moonraker verification workers use `main/async_result_slot.h` for atomic job/result ownership, independent of RTOS task-handle publication.

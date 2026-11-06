@@ -249,8 +249,10 @@ int main(void){
   revision++;ui_printer_chooser_refresh();assert(invalidations>0);settle(d);
   preview_ready=false;ui_printer_chooser_refresh();assert(lv_obj_has_flag(s_cards[0].preview_image,LV_OBJ_FLAG_HIDDEN));settle(d);
   ui_printer_chooser_refresh();assert(!invalidations);
+  /* Select an offline printer: expired sibling state cannot remain Printing. */
+  state.moonraker_ok=false;state.live_data_ok=false;
   fresh[1]=false;ui_printer_chooser_refresh();
-  assert(!strcmp(lv_label_get_text(s_cards[1].status),"Printing"));
+  assert(!strcmp(lv_label_get_text(s_cards[1].status),"Verifying..."));
   assert(lv_color_eq(lv_obj_get_style_text_color(s_cards[1].status,0),UI_TEXT_DIM));
   online[1]=false;ui_printer_chooser_refresh();
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"Offline"));

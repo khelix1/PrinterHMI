@@ -54,7 +54,7 @@ void *demo_test_calloc(size_t,size_t);
   subprocess.run(cmd+['-c',str(root/'main'/name),'-o',str(obj)],check=True);objects.append(str(obj))
  text=(root/'main/moonraker.c').read_text()
  pieces=[]
- for signature in ('static bool moonraker_fetch_thumbnail_encoded_internal(', 'bool moonraker_fetch_thumbnail_encoded_quiet(', 'bool moonraker_fetch_file_metadata(', 'bool moonraker_start_print_file('):
+ for signature in ('static bool moonraker_fetch_thumbnail_encoded_internal(', 'bool moonraker_fetch_thumbnail_encoded_quiet(', 'bool moonraker_fetch_thumbnail_encoded_quiet_with_api_key(', 'bool moonraker_fetch_file_metadata(', 'bool moonraker_start_print_file('):
   start=text.index(signature);end=text.index('#endif',start)+len('#endif')
   pieces.append(text[start:end]+'\n ++demo_transport_live_calls;return false;\n}\n')
  ws=(root/'main/moonraker_live_websocket.c').read_text()

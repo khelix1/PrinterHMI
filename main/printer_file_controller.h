@@ -5,7 +5,8 @@
 
 typedef void (*printer_file_controller_popup_cb_t)(void);
 
-void printer_file_controller_select_file(
+/* Reject unrepresentable paths before changing the selection or preview. */
+bool printer_file_controller_select_file(
     const char *path,
     printer_file_controller_popup_cb_t show_detail_popup);
 

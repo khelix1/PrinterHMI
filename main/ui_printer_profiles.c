@@ -1811,13 +1811,14 @@ static void editor_save_cb(lv_event_t *event)
     int target=s_editor_profile,active=moonraker_config_active_profile_index();
     uint32_t epoch=s_profile_epoch;lv_obj_t *popup=s_editor_popup;
     ui_printer_profiles_active_changed_cb_t changed=s_active_changed_cb;
+    uint32_t initial_generation=moonraker_config_generation();
     bool notify=false,camera_written=false;
     s_profile_dispatching=true;
     bool approved=!draft.secure_transport || moonraker_transport_security_ca_pem_for_profile(target)!=NULL;
     if(!editor_save_current(popup,epoch,active))goto finished;
     if(!approved){editor_set_status("Secure mode requires an approved CA certificate.");goto finished;}
     bool saved=moonraker_config_save_profile(target,draft.name,draft.host,draft.port,draft.api_key);
-    notify=saved && target==active;
+    notify=saved && target==active && initial_generation!=moonraker_config_generation();
     if(!editor_save_current(popup,epoch,active))goto finished;
     if(!saved){editor_set_status("Could not save the profile. Check the host, port and storage, then retry.");goto finished;}
     saved=moonraker_config_set_camera_stream_url(target,draft.camera_stream_url);
@@ -1833,9 +1834,10 @@ static void editor_save_cb(lv_event_t *event)
     editor_close();
     if(s_profile_epoch==epoch+1 && !s_editor_popup){
         manager_rebuild_rows();
-        if(s_profile_epoch==epoch+1)manager_set_status(target==active?"Active printer updated. Reconnecting...":"Printer profile saved.");
+        if(s_profile_epoch==epoch+1)manager_set_status(target==active && initial_generation!=moonraker_config_generation()?"Active printer updated. Reconnecting...":"Printer profile saved.");
     }
 finished:
+    if(camera_written && target==active && initial_generation!=moonraker_config_generation())notify=true;
     profiles_clear_secret(&draft,sizeof(draft));
     if(camera_written){ui_camera_refresh_catalog();ui_dashboard_refresh_camera();}
     if(notify && changed)changed();

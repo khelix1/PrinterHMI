@@ -31,7 +31,6 @@
 
 #define PROFILE_PREVIEW_WORKER_STACK 12288
 #define PROFILE_PREVIEW_WORKER_INTERVAL_MS 1000
-#define PROFILE_PREVIEW_API_KEY_MAX 160
 /* A failed inactive endpoint is not useful work every scheduler pass. */
 #define PROFILE_PREVIEW_OFFLINE_RETRY_US (20LL * 1000 * 1000)
 /* One missed request receives a quick confirmation without returning to
@@ -39,7 +38,6 @@
 #define PROFILE_PREVIEW_CONFIRM_RETRY_US (3LL * 1000 * 1000)
 
 static TaskHandle_t s_preview_worker_task = NULL;
-static char s_preview_worker_api_key[PROFILE_PREVIEW_API_KEY_MAX];
 static int64_t s_preview_retry_after_us[MOONRAKER_CONFIG_MAX_PROFILES];
 
 
@@ -63,24 +61,18 @@ static void printer_profile_preview_worker_task(void *arg)
     (void)arg;
 
     while (true) {
-        printer_profile_preview_worker_poll_one(
-            s_preview_worker_api_key);
+        printer_profile_preview_worker_poll_one();
         vTaskDelay(
             pdMS_TO_TICKS(PROFILE_PREVIEW_WORKER_INTERVAL_MS));
     }
 }
 
 
-void printer_profile_preview_worker_start(const char *api_key)
+void printer_profile_preview_worker_start(void)
 {
     if (s_preview_worker_task) {
         return;
     }
-
-    strlcpy(
-        s_preview_worker_api_key,
-        api_key ? api_key : "",
-        sizeof(s_preview_worker_api_key));
 
     BaseType_t created = xTaskCreatePinnedToCore(
         printer_profile_preview_worker_task,
@@ -101,43 +93,23 @@ void printer_profile_preview_worker_start(const char *api_key)
 }
 
 
-void printer_profile_preview_worker_poll_one(const char *api_key)
+static bool profile_request_current(int index, const moonraker_profile_t *captured,
+                                    uint32_t generation)
 {
-    /* The active endpoint owns recovery.  Inactive HTTP requests while
-     * that WebSocket reconnects only contend for ESP-Hosted transport and
-     * make an otherwise local UI feel stalled. */
-    if (moonraker_live_websocket_running() &&
-        !moonraker_live_websocket_connected()) {
-        return;
-    }
+    const moonraker_profile_t *current = moonraker_config_profile(index);
+    return generation == moonraker_config_generation() &&
+        index != moonraker_config_active_profile_index() && current &&
+        current->configured && captured->port == current->port &&
+        captured->secure_transport == current->secure_transport &&
+        !strcmp(captured->host, current->host) &&
+        !strcmp(captured->api_key, current->api_key);
+}
 
-    int index = printer_profile_health_take_next_index();
-    if (index < 0) {
-        return;
-    }
-
+static void poll_profile(int index, const moonraker_profile_t *profile,
+                         uint32_t generation_before, bool active_recovering)
+{
     int64_t now = esp_timer_get_time();
-
-    if (index >= 0 &&
-        index < MOONRAKER_CONFIG_MAX_PROFILES &&
-        now < s_preview_retry_after_us[index]) {
-        return;
-    }
-    uint32_t generation_before = moonraker_config_generation();
-
-    if (index == moonraker_config_active_profile_index()) {
-        return;
-    }
-
-    const moonraker_profile_t *profile =
-        moonraker_config_profile(index);
-
-    if (!profile || !profile->configured) {
-        printer_profile_health_set(index, true, false);
-        printer_preview_cache_invalidate(index);
-        return;
-    }
-
+    const char *api_key = profile->api_key;
     char host[MOONRAKER_CONFIG_HOST_LENGTH];
     strlcpy(host, profile->host, sizeof(host));
     int port = profile->port;
@@ -155,7 +127,7 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         &http_code,
         &error);
 
-    if (generation_before != moonraker_config_generation()) return;
+    if (!profile_request_current(index, profile, generation_before)) return;
 
     if (!online) {
         /* ESP_ERR_INVALID_STATE here means another short HTTP operation owns
@@ -206,6 +178,11 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     if (parsed_state && strlen(parsed_state) < sizeof(state)) strlcpy(state, parsed_state, sizeof(state));
     if (parsed_file && strlen(parsed_file) < sizeof(file)) strlcpy(file, parsed_file, sizeof(file));
 
+    if (!profile_request_current(index, profile, generation_before)) {
+        cJSON_Delete(root);
+        return;
+    }
+
     /* Moonraker can answer even when Klipper has no MCU, is starting,
      * or is shut down. That printer is not available to the operator. */
     if (!ready) {
@@ -237,7 +214,7 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
 
     printer_profile_health_report_live_state(index, true, state);
 
-    if (!state_has_current_print(state) || !file[0]) {
+    if (active_recovering || !state_has_current_print(state) || !file[0]) {
         return;
     }
 
@@ -269,7 +246,7 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         &http_code,
         &error);
 
-    if (generation_before != moonraker_config_generation()) {
+    if (!profile_request_current(index, profile, generation_before)) {
         heap_caps_free(metadata);
         return;
     }
@@ -296,9 +273,10 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     uint8_t *png = NULL;
     size_t png_size = 0;
 
-    if (!moonraker_fetch_thumbnail_encoded(
+    if (!moonraker_fetch_thumbnail_encoded_with_api_key(
             host,
             port,
+            api_key,
             encoded_thumbnail,
             &png,
             &png_size)) {
@@ -306,7 +284,7 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         return;
     }
 
-    if (generation_before != moonraker_config_generation()) {
+    if (!profile_request_current(index, profile, generation_before)) {
         heap_caps_free(png);
         return;
     }
@@ -314,6 +292,11 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
     bool installed = false;
 
     if (bsp_display_lock(1000)) {
+        if (!profile_request_current(index, profile, generation_before)) {
+            bsp_display_unlock();
+            heap_caps_free(png);
+            return;
+        }
         installed = printer_preview_cache_publish_png(
             index,
             host,
@@ -345,4 +328,47 @@ void printer_profile_preview_worker_poll_one(const char *api_key)
         index + 1,
         installed ? "complete" : "failed",
         file);
+}
+
+void printer_profile_preview_worker_poll_one(void)
+{
+    /* An offline selection must not freeze health for every other printer.
+     * Short status requests still use the serialized shared HTTP lane. Defer
+     * thumbnail work while the active endpoint is recovering. */
+    bool active_recovering = moonraker_live_websocket_running() &&
+        !moonraker_live_websocket_connected();
+
+    int index = printer_profile_health_take_next_index();
+    if (index < 0) {
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+
+    if (index >= 0 &&
+        index < MOONRAKER_CONFIG_MAX_PROFILES &&
+        now < s_preview_retry_after_us[index]) {
+        bool known = false;
+        (void)printer_profile_health_get(index, &known);
+        if (known) return;
+    }
+    uint32_t generation_before = moonraker_config_generation();
+
+    if (index == moonraker_config_active_profile_index()) {
+        return;
+    }
+
+    const moonraker_profile_t *profile =
+        moonraker_config_profile(index);
+
+    if (!profile || !profile->configured) {
+        printer_profile_health_set(index, true, false);
+        printer_preview_cache_invalidate(index);
+        return;
+    }
+
+    moonraker_profile_t captured = *profile;
+    poll_profile(index, &captured, generation_before, active_recovering);
+    for (size_t i = 0; i < sizeof(captured.api_key); ++i)
+        ((volatile char *)captured.api_key)[i] = 0;
 }

@@ -30,7 +30,7 @@ typedef struct {
     bool ok;
 } camera_frame_result_t;
 
-static TaskHandle_t s_task = NULL;
+static bool s_running;
 static char s_url[192];
 static const char *s_ca_pem = NULL;
 static QueueHandle_t s_result_queue = NULL;
@@ -64,7 +64,13 @@ static void camera_retry_wait(uint32_t delay_ms)
 
 static bool camera_stream_open(esp_http_client_handle_t *client_out)
 {
-    if (!client_out || !network_activity_controller_acquire_shared(3000)) {
+    if (!client_out || camera_stop_requested() ||
+        !network_activity_controller_acquire_shared(3000)) {
+        return false;
+    }
+
+    if (camera_stop_requested()) {
+        network_activity_controller_end_shared();
         return false;
     }
 
@@ -81,7 +87,13 @@ static bool camera_stream_open(esp_http_client_handle_t *client_out)
         network_activity_controller_end_shared();
         return false;
     }
-    (void)esp_http_client_fetch_headers(client);
+    if (esp_http_client_fetch_headers(client) < 0 ||
+        esp_http_client_get_status_code(client) != 200 || camera_stop_requested()) {
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        network_activity_controller_end_shared();
+        return false;
+    }
     *client_out = client;
     return true;
 }
@@ -97,7 +109,7 @@ static void camera_stream_task(void *arg)
     if (!jpeg) {
         camera_frame_result_t failed = {.ok = false};
         (void)xQueueSend(s_result_queue, &failed, 0);
-        s_task = NULL;
+        __atomic_store_n(&s_running, false, __ATOMIC_RELEASE);
         vTaskDelete(NULL);
         return;
     }
@@ -189,7 +201,7 @@ static void camera_stream_task(void *arg)
 
     heap_caps_free(jpeg);
     camera_discard_results();
-    s_task = NULL;
+    __atomic_store_n(&s_running, false, __ATOMIC_RELEASE);
     vTaskDelete(NULL);
 }
 
@@ -200,19 +212,25 @@ bool camera_stream_start(const char *url)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return demo_camera_stream_start(url);
 #endif
-    if (!url || !url[0] || s_task) return false;
+    if (!url || !url[0] || strnlen(url, sizeof(s_url)) >= sizeof(s_url)) return false;
+    bool expected = false;
+    if (!__atomic_compare_exchange_n(&s_running, &expected, true, false,
+                                     __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return false;
     if (!s_result_queue) {
         s_result_queue = xQueueCreate(1, sizeof(camera_frame_result_t));
     }
-    if (!s_result_queue) return false;
+    if (!s_result_queue) {
+        __atomic_store_n(&s_running, false, __ATOMIC_RELEASE);
+        return false;
+    }
 
     camera_discard_results();
     strlcpy(s_url, url, sizeof(s_url));
     __atomic_store_n(&s_stop_requested, false, __ATOMIC_RELEASE);
     if (xTaskCreatePinnedToCoreWithCaps(
-            camera_stream_task, "camera_view", 12288, NULL, 4, &s_task,
+            camera_stream_task, "camera_view", 12288, NULL, 4, NULL,
             tskNO_AFFINITY, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
-        s_task = NULL;
+        __atomic_store_n(&s_running, false, __ATOMIC_RELEASE);
         return false;
     }
     return true;
@@ -225,7 +243,7 @@ bool camera_stream_busy(void)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return demo_camera_stream_busy();
 #endif
-    return s_task != NULL;
+    return __atomic_load_n(&s_running, __ATOMIC_ACQUIRE);
 }
 
 
@@ -278,14 +296,14 @@ void camera_stream_stop(void)
      * the camera still owns the shared transport and OTA fails intermittently.
      */
     camera_stream_request_stop();
-    for (int attempt = 0; attempt < 320 && s_task; ++attempt) {
+    for (int attempt = 0; attempt < 320 && camera_stream_busy(); ++attempt) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    if (s_task) {
+    if (camera_stream_busy()) {
         /* The HTTP client timeout is finite. Wait for the worker to release
          * the shared transport before any caller starts another request. */
-        for (int wait_ms = 0; wait_ms < 2000 && s_task; wait_ms += 20) {
+        for (int wait_ms = 0; wait_ms < 2000 && camera_stream_busy(); wait_ms += 20) {
             vTaskDelay(pdMS_TO_TICKS(20));
         }
     }

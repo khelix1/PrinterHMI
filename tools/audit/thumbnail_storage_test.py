@@ -18,7 +18,9 @@ with tempfile.TemporaryDirectory(prefix="thumbnail-storage-") as directory:
     end = source.index("bool moonraker_fetch_thumbnail_encoded(", start)
     harness = (root / "tools/audit/thumbnail_download_buffer_test.c").read_text()
     test = tmp / "download.c"
-    test.write_text(harness.replace("/* PRODUCTION_DOWNLOADER */", source[start:end]))
+    wrappers_end = source.index("\n\nbool ", source.index("bool moonraker_fetch_thumbnail_encoded_quiet(", end) + 10)
+    test.write_text(harness.replace("/* PRODUCTION_DOWNLOADER */", source[start:end])
+                   .replace("/* PRODUCTION_WRAPPERS */", source[end:wrappers_end]))
     download = tmp / "download"
     subprocess.run(["cc", *flags, str(test), "-o", str(download)], check=True)
     subprocess.run([str(download)], check=True)

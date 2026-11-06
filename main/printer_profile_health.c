@@ -35,12 +35,11 @@ static char s_endpoint_host[MOONRAKER_CONFIG_MAX_PROFILES]
 static int s_endpoint_port[MOONRAKER_CONFIG_MAX_PROFILES];
 static char s_printer_state[MOONRAKER_CONFIG_MAX_PROFILES]
                            [PRINTER_PROFILE_HEALTH_STATE_LENGTH];
-/* Successful inactive snapshots only.  A failed request must never
+/* Successful authoritative live snapshots only. A failed request must never
  * refresh this timestamp or prolong a stale ONLINE presentation. */
 static int64_t s_last_live_success_us[MOONRAKER_CONFIG_MAX_PROFILES];
 
 static int s_next_profile = 0;
-static uint32_t s_generation = 0;
 
 
 static bool endpoint_matches(
@@ -90,7 +89,6 @@ void printer_profile_health_reconcile(void)
         remember_endpoint(index, profile);
     }
 
-    s_generation = moonraker_config_generation();
 }
 
 bool printer_profile_health_get(
@@ -103,6 +101,8 @@ bool printer_profile_health_get(
         profile_index >= MOONRAKER_CONFIG_MAX_PROFILES) {
         return false;
     }
+
+    if (!endpoint_matches(profile_index, moonraker_config_profile(profile_index))) return false;
 
     if (known_out) {
         *known_out = s_known[profile_index];
@@ -123,6 +123,8 @@ void printer_profile_health_set_live_state(
         return;
     }
 
+    remember_endpoint(profile_index, moonraker_config_profile(profile_index));
+    online = known && online;
     bool changed =
         s_known[profile_index] != known ||
         (known && s_online[profile_index] != online);
@@ -134,6 +136,9 @@ void printer_profile_health_set_live_state(
         s_printer_state[profile_index],
         online && printer_state ? printer_state : "",
         sizeof(s_printer_state[profile_index]));
+
+    __atomic_store_n(&s_last_live_success_us[profile_index],
+        online ? esp_timer_get_time() : 0, __ATOMIC_RELEASE);
 
     if (changed && known) {
         ESP_LOGI(
@@ -164,6 +169,9 @@ bool printer_profile_health_get_live_state(
         return false;
     }
 
+    out[0] = '\0';
+    if (!endpoint_matches(profile_index, moonraker_config_profile(profile_index))) return false;
+
     strlcpy(
         out,
         s_printer_state[profile_index],
@@ -180,6 +188,8 @@ bool printer_profile_health_live_state_fresh(
         maximum_age_us < 0) {
         return false;
     }
+
+    if (!endpoint_matches(profile_index, moonraker_config_profile(profile_index))) return false;
 
     int64_t updated = __atomic_load_n(
         &s_last_live_success_us[profile_index], __ATOMIC_ACQUIRE);
@@ -278,11 +288,8 @@ void printer_profile_health_set_verifying(int profile_index)
 
 int printer_profile_health_take_next_index(void)
 {
-    uint32_t generation = moonraker_config_generation();
-
-    if (generation != s_generation) {
-        printer_profile_health_reconcile();
-    }
+    /* Inactive edits deliberately leave the active transport generation alone. */
+    printer_profile_health_reconcile();
 
     /* Empty slots do not consume a polling turn. This makes the actual
      * configured profile set refresh as often as the one-second worker

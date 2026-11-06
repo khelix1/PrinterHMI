@@ -539,12 +539,19 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
 void ui_toast_observe_profiles(const moonraker_state_t *active_state)
 {
     typedef struct {
-        bool configured, armed, online;
+        bool configured, armed, online, candidate;
+        uint32_t candidate_since;
         int port;
         char host[MOONRAKER_CONFIG_HOST_LENGTH];
     } profile_observer_t;
     static profile_observer_t observed[MOONRAKER_CONFIG_MAX_PROFILES];
+    static int previous_active = -1;
+    static uint32_t previous_generation;
     int active = moonraker_config_active_profile_index();
+    uint32_t generation = moonraker_config_generation(), now = lv_tick_get();
+    bool selected = active != previous_active || generation != previous_generation;
+    previous_active = active;
+    previous_generation = generation;
     for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index) {
         profile_observer_t *last = &observed[index];
         const moonraker_profile_t *profile = moonraker_config_profile(index);
@@ -562,11 +569,18 @@ void ui_toast_observe_profiles(const moonraker_state_t *active_state)
         if (index == active) {
             /* Active notifications already have their own debounce. Keep the
              * confirmed baseline when that printer later becomes inactive. */
-            if (active_state && active_state->moonraker_ok && active_state->live_data_ok) {
-                last->armed = true;
-                last->online = true;
-            } else if (active_state && !active_state->live_data_ok) {
-                last->online = false;
+            if (active_state) {
+                bool candidate = active_state->moonraker_ok && active_state->live_data_ok;
+                if (selected || candidate != last->candidate) {
+                    last->candidate = candidate;
+                    last->candidate_since = now;
+                }
+                /* A selection/bootstrap gap is not a confirmed loss. Match
+                 * the active connection observer's three-second debounce. */
+                if ((uint32_t)(now - last->candidate_since) >= 3000u) {
+                    if (candidate) last->armed = true;
+                    if (last->armed) last->online = candidate;
+                }
             }
             continue;
         }

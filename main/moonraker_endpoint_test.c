@@ -6,14 +6,14 @@
 #include "freertos/task.h"
 
 #include <string.h>
+#include "async_result_slot.h"
 
-static TaskHandle_t s_task = NULL;
+static async_result_slot_t s_slot;
 static char s_host[MOONRAKER_CONFIG_HOST_LENGTH];
 static int s_port = 0;
 static char s_api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
 static moonraker_probe_result_t s_result;
 static bool s_verified = false;
-static volatile bool s_result_ready = false;
 
 
 static void endpoint_test_task(void *arg)
@@ -24,10 +24,11 @@ static void endpoint_test_task(void *arg)
     bool verified = moonraker_probe_endpoint_with_api_key(
         s_host, s_port, s_api_key, &result);
 
+    for (size_t i = 0; i < sizeof(s_api_key); ++i)
+        ((volatile char *)s_api_key)[i] = 0;
     s_result = result;
     s_verified = verified;
-    __atomic_store_n(&s_result_ready, true, __ATOMIC_RELEASE);
-    s_task = NULL;
+    async_result_publish(&s_slot);
 
     vTaskDelete(NULL);
 }
@@ -36,7 +37,9 @@ static void endpoint_test_task(void *arg)
 bool moonraker_endpoint_test_start(
     const char *host, int port, const char *api_key)
 {
-    if (!host || !host[0] || port <= 0 || port >= 65536 || s_task) {
+    if (!host || !host[0] || strnlen(host, sizeof(s_host)) >= sizeof(s_host) ||
+        (api_key && strnlen(api_key, sizeof(s_api_key)) >= sizeof(s_api_key)) ||
+        port <= 0 || port >= 65536 || !async_result_start(&s_slot)) {
         return false;
     }
 
@@ -45,7 +48,6 @@ bool moonraker_endpoint_test_start(
     s_port = port;
     memset(&s_result, 0, sizeof(s_result));
     s_verified = false;
-    __atomic_store_n(&s_result_ready, false, __ATOMIC_RELEASE);
 
     if (xTaskCreate(
             endpoint_test_task,
@@ -53,8 +55,10 @@ bool moonraker_endpoint_test_start(
             4096,
             NULL,
             4,
-            &s_task) != pdPASS) {
-        s_task = NULL;
+            NULL) != pdPASS) {
+        for (size_t i = 0; i < sizeof(s_api_key); ++i)
+            ((volatile char *)s_api_key)[i] = 0;
+        async_result_release(&s_slot);
         return false;
     }
 
@@ -64,7 +68,7 @@ bool moonraker_endpoint_test_start(
 
 bool moonraker_endpoint_test_busy(void)
 {
-    return s_task != NULL;
+    return async_result_busy(&s_slot);
 }
 
 
@@ -72,10 +76,7 @@ bool moonraker_endpoint_test_take_result(
     moonraker_probe_result_t *result,
     bool *verified)
 {
-    if (!__atomic_exchange_n(
-            &s_result_ready,
-            false,
-            __ATOMIC_ACQ_REL)) {
+    if (!async_result_take(&s_slot)) {
         return false;
     }
 
@@ -85,5 +86,6 @@ bool moonraker_endpoint_test_take_result(
     if (verified) {
         *verified = s_verified;
     }
+    async_result_release(&s_slot);
     return true;
 }

@@ -22,7 +22,10 @@ void vTaskDelete(void *task){assert(!task);deletes++;}
 int xTaskCreatePinnedToCore(void (*fn)(void *),const char *name,unsigned stack,void *arg,unsigned priority,void *handle,int core){
  assert(!strcmp(name,"thumb_dl")&&stack==8192&&priority==4&&!handle&&core==0);if(fail_task)return 0;worker=fn;worker_arg=arg;return pdPASS;
 }
-bool moonraker_fetch_thumbnail_encoded_quiet(const char *host,int port,const char *path,uint8_t **bytes,size_t *length){
+const char *moonraker_config_host(void){return "printer.local";}
+int moonraker_config_port(void){return 7125;}
+const char *moonraker_config_api_key(void){return "preview-key";}
+bool moonraker_fetch_thumbnail_encoded_quiet_with_api_key(const char *host,int port,const char *key,const char *path,uint8_t **bytes,size_t *length){assert(!strcmp(key,"preview-key"));
  assert(!strcmp(host,"printer.local")&&port==7125&&!strcmp(path,".thumbs/job%20name.png"));fetches++;
  if(invalidate_during_fetch==1)generation++;
  if(invalidate_during_fetch==2)thumbnail_manager_mark_pending();

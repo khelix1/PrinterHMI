@@ -1,5 +1,64 @@
 # Changelog
 
+## [7.3.52-dev] - 2026-11-05
+
+- Publish Setup Wi-Fi scan records and completion with one atomic result handoff, preventing a previous worker from clearing the next scan’s busy state.
+- Distinguish scan/start/result-read failures from a successful scan with no networks; preserve retries and close/reopen behavior.
+
+## [7.3.51-dev] - 2026-11-05
+
+- Forward captured printer API keys through Files-row, fullscreen, selected-file and inactive-printer thumbnail downloads.
+- Capture/scrub selected-file download credentials and reject launch if the active endpoint or generation changes during preparation.
+- Clear quiet-download output pointers/lengths before network ownership acquisition fails; preserve explicit anonymous compatibility APIs.
+
+## [7.3.50-dev] - 2026-11-05
+
+- Use each inactive printer’s captured API key for its status/metadata requests instead of retaining the active startup key.
+- Discard background results after inactive endpoint, key, transport or configured-state changes, without forcing an active-printer reconnect.
+- Hide health cached for a different endpoint, reconcile inactive edits on each polling turn, and avoid carrying old-endpoint retry delays into unknown health.
+
+## [7.3.49-dev] - 2026-11-05
+
+- Treat unchanged profile connection fields and primary camera URLs as successful no-op saves without flash writes or generation changes.
+- Rebind the active connection after profile editing only when configuration generation changes, including accepted partial saves.
+
+## [7.3.48-dev] - 2026-11-05
+
+- Reject file selections that exceed the thumbnail session path capacity before changing selected file, cached selection or preview state.
+- Report the path-length failure on Files and safely support selecting the existing session buffer.
+
+## [7.3.47-dev] - 2026-11-05
+
+- Retire deleted print-time preference controls and disable Save when required fields are missing.
+- Reject duplicate/disabled save actions and fence storage completion to its original dialog, preserving replacements and retry selections.
+
+## [7.3.46-dev] - 2026-11-05
+
+- Timestamp authoritative/demo printer-health snapshots and clear freshness on explicit offline or unknown results.
+- Debounce the active-to-inactive notification baseline so brief printer-selection gaps do not fabricate Reconnected notices; retain confirmed loss/recovery behavior.
+
+## [7.3.45-dev] - 2026-11-05
+
+- Keep inactive-printer health checks running when the active printer is offline; defer thumbnail downloads during reconnection.
+- Show Verifying in the chooser once inactive live state expires instead of retaining an old Printing/Paused label.
+
+## [7.3.44-dev] - 2026-11-05
+
+- Keep manual Moonraker verification and LAN discovery restartable after fast worker completion or task-creation failure.
+- Reject oversized endpoint hosts/API keys before copying them; clear temporary verification API keys after completion or failed startup.
+- Publish discovery running/cancellation state atomically and update older worker fixtures for task-handle-free startup.
+
+## [7.3.43-dev] - 2026-11-05
+
+- Keep the live camera stream restartable after early worker exit, queue allocation failure, or task-creation failure.
+- Reject oversized camera stream URLs and reject failed headers/non-200 HTTP responses before reading video data.
+- Release the shared transport if a camera stop arrives while acquiring it.
+
+## [7.3.42-dev] - 2026-11-05
+
+- Keep camera tests and discovery restartable when their workers finish before task creation returns; protect results while consumers copy them.
+- Clear discovery API keys after probing and turn binary lighting outputs fully on regardless of remembered PWM brightness.
+
 ## [7.3.41-dev] - 2026-11-05
 
 - Clear stale Wi-Fi scan rows on rescan and keep result status across Network refreshes.

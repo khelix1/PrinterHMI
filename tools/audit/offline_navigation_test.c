@@ -14,14 +14,15 @@ size_t strlcpy(char *d,const char *s,size_t n){size_t len=strlen(s);if(n){size_t
 QueueHandle_t xQueueCreate(unsigned n,size_t size){assert(n==1 && size==sizeof(queued));return &queued;}
 int xQueueReceive(QueueHandle_t q,void *p,unsigned ticks){assert(q==&queued && ticks==0);if(!has_result)return 0;memcpy(p,&queued,sizeof(queued));has_result=false;return pdPASS;}
 int xQueueSend(QueueHandle_t q,const void *p,unsigned ticks){assert(q==&queued && ticks==0);if(has_result)return 0;memcpy(&queued,p,sizeof(queued));has_result=true;return pdPASS;}
-int xTaskCreatePinnedToCoreWithCaps(void (*fn)(void*),const char *name,unsigned stack,void *arg,unsigned priority,TaskHandle_t *task,int core,unsigned caps){(void)name;(void)stack;(void)arg;(void)priority;(void)core;(void)caps;worker=fn;*task=(void*)1;return pdPASS;}
-void vTaskDelete(void *task){assert(!task && !s_task);}
-void vTaskDelay(unsigned ticks){delays++;elapsed+=ticks;if(stop_on_delay){camera_stream_request_stop();stop_on_delay=false;}else if(camera_stop_requested())s_task=NULL;}
+int xTaskCreatePinnedToCoreWithCaps(void (*fn)(void*),const char *name,unsigned stack,void *arg,unsigned priority,TaskHandle_t *task,int core,unsigned caps){(void)name;(void)stack;(void)arg;(void)priority;(void)core;(void)caps;worker=fn;if(task)*task=(void*)1;return pdPASS;}
+void vTaskDelete(void *task){assert(!task && !camera_stream_busy());}
+void vTaskDelay(unsigned ticks){delays++;elapsed+=ticks;if(stop_on_delay){camera_stream_request_stop();stop_on_delay=false;}else if(camera_stop_requested())__atomic_store_n(&s_running,false,__ATOMIC_RELEASE);}
 bool network_activity_controller_acquire_shared(uint32_t ms){assert(ms==3000);if(!stop_on_open)return false;assert(!shared);shared=true;return true;}
 void network_activity_controller_end_shared(void){assert(shared);shared=false;}
 esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *c){assert(c->timeout_ms==2500);return (void*)2;}
 esp_err_t esp_http_client_open(esp_http_client_handle_t c,int n){assert(c==(void*)2 && n==0);unsigned before=delays;camera_stream_request_stop();assert(delays==before && shared && camera_stream_busy());return ESP_FAIL;}
 int esp_http_client_fetch_headers(esp_http_client_handle_t c){(void)c;return 0;}
+int esp_http_client_get_status_code(esp_http_client_handle_t c){(void)c;return 200;}
 int esp_http_client_read(esp_http_client_handle_t c,char *p,int n){(void)c;(void)p;(void)n;return 0;}
 esp_err_t esp_http_client_close(esp_http_client_handle_t c){(void)c;return ESP_OK;}
 esp_err_t esp_http_client_cleanup(esp_http_client_handle_t c){(void)c;return ESP_OK;}

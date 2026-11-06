@@ -65,31 +65,58 @@ static bool s_display_io_dispatching,s_wake_pending;
 static void settings_demo_cb(lv_event_t *event)
 { (void)event; ui_demo_mode_show(); }
 #endif
-static lv_obj_t *s_estimate_dialog, *s_estimate_progress, *s_estimate_remaining, *s_estimate_eta, *s_estimate_status;
+static lv_obj_t *s_estimate_dialog, *s_estimate_progress, *s_estimate_remaining, *s_estimate_eta, *s_estimate_status, *s_estimate_save;
+static uint32_t s_estimate_epoch;
+static bool s_estimate_saving;
 
+static void estimate_dialog_retire(void)
+{
+    ++s_estimate_epoch;
+    s_estimate_dialog = s_estimate_progress = s_estimate_remaining = s_estimate_eta = s_estimate_status = s_estimate_save = NULL;
+}
 static void estimate_dialog_deleted(lv_event_t *event)
 {
-    if (lv_event_get_target_obj(event) != s_estimate_dialog) return;
-    s_estimate_dialog = s_estimate_progress = s_estimate_remaining = s_estimate_eta = s_estimate_status = NULL;
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    if (target == s_estimate_dialog) { estimate_dialog_retire(); return; }
+    lv_obj_t **fields[] = {&s_estimate_progress, &s_estimate_remaining, &s_estimate_eta, &s_estimate_status, &s_estimate_save};
+    for (unsigned i = 0; i < sizeof(fields)/sizeof(fields[0]); ++i)
+        if (*fields[i] == target) *fields[i] = NULL;
+    if (s_estimate_dialog && (!s_estimate_progress || !s_estimate_remaining || !s_estimate_eta)) {
+        if (s_estimate_save) lv_obj_add_state(s_estimate_save, LV_STATE_DISABLED);
+        if (s_estimate_status) lv_label_set_text(s_estimate_status, "Fields unavailable. Close and reopen this dialog.");
+    }
 }
-
+static void estimate_field_own(lv_obj_t *field)
+{
+    if (field) lv_obj_add_event_cb(field, estimate_dialog_deleted, LV_EVENT_DELETE, NULL);
+}
 static void estimate_dialog_close(lv_event_t *event)
 {
     (void)event;
-    if (s_estimate_dialog) lv_obj_delete(s_estimate_dialog);
+    lv_obj_t *dialog = s_estimate_dialog;
+    estimate_dialog_retire();
+    if (dialog) lv_obj_delete(dialog);
 }
-
 static void estimate_dialog_save(lv_event_t *event)
 {
-    (void)event;
-    if (!s_estimate_dialog) return;
+    if (!s_estimate_dialog || s_estimate_saving || !s_estimate_save ||
+        !s_estimate_progress || !s_estimate_remaining || !s_estimate_eta ||
+        !event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        lv_event_get_target_obj(event) != s_estimate_save ||
+        lv_event_get_current_target_obj(event) != s_estimate_save ||
+        lv_obj_has_state(s_estimate_save, LV_STATE_DISABLED)) return;
+    uint32_t epoch = s_estimate_epoch;
     print_estimate_options_t options = {
         lv_dropdown_get_selected(s_estimate_progress),
         lv_dropdown_get_selected(s_estimate_remaining),
         lv_dropdown_get_selected(s_estimate_eta),
     };
-    if (print_estimate_options_save(options)) estimate_dialog_close(NULL);
-    else lv_label_set_text(s_estimate_status, "Could not save. Try again.");
+    s_estimate_saving = true;
+    bool saved = print_estimate_options_save(options);
+    s_estimate_saving = false;
+    if (epoch != s_estimate_epoch || !s_estimate_dialog) return;
+    if (saved) estimate_dialog_close(NULL);
+    else if (s_estimate_status) lv_label_set_text(s_estimate_status, "Could not save. Try again.");
 }
 
 static lv_obj_t *estimate_dropdown(lv_obj_t *body, const char *label, const char *options, unsigned selected)
@@ -100,17 +127,19 @@ static lv_obj_t *estimate_dropdown(lv_obj_t *body, const char *label, const char
     lv_dropdown_set_selected(dropdown, selected);
     lv_obj_set_width(dropdown, LV_PCT(100));
     ui_selector_style(dropdown, UI_FONT_BODY);
+    estimate_field_own(dropdown);
     return dropdown;
 }
 
 static void settings_print_estimate_cb(lv_event_t *event)
 {
     (void)event;
-    if (s_estimate_dialog) return;
+    if (s_estimate_dialog || s_estimate_saving) return;
     lv_obj_t *dialog = ui_form_dialog("Print progress & time", 610, 490, UI_POPUP_STANDARD);
     if (!dialog) return;
+    ++s_estimate_epoch;
     s_estimate_dialog = dialog;
-    lv_obj_add_event_cb(dialog, estimate_dialog_deleted, LV_EVENT_DELETE, NULL);
+    estimate_field_own(dialog);
     ui_form_divide_title(dialog);
     lv_obj_t *body = ui_form_body(dialog);
     print_estimate_options_t options = print_estimate_options_get();
@@ -123,7 +152,9 @@ static void settings_print_estimate_cb(lv_event_t *event)
     s_estimate_status = ui_form_text(body,
         "Available sources are averaged. A missing source is skipped.", UI_FONT_BODY, UI_TEXT_DIM);
     ui_form_action(dialog, UI_BUTTON_SECONDARY, "Cancel", estimate_dialog_close, NULL);
-    ui_form_action(dialog, UI_BUTTON_PRIMARY, "Save", estimate_dialog_save, NULL);
+    estimate_field_own(s_estimate_status);
+    s_estimate_save = ui_form_action(dialog, UI_BUTTON_PRIMARY, "Save", estimate_dialog_save, NULL);
+    estimate_field_own(s_estimate_save);
     ui_form_finish(dialog);
 }
 static void settings_display_field_deleted(lv_event_t *event)

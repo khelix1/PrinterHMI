@@ -16,17 +16,17 @@
 #include "freertos/task.h"
 
 #include <string.h>
+#include "async_result_slot.h"
 
 #define CAMERA_TEST_FRAME_CAPACITY (256 * 1024)
 #define CAMERA_TEST_READ_BUDGET_US (5 * 1000 * 1000LL)
 
-static TaskHandle_t s_task = NULL;
+static async_result_slot_t s_result;
 static char s_url[192];
 static bool s_ok = false;
 static int s_width = 0;
 static int s_height = 0;
 static size_t s_bytes = 0;
-static volatile bool s_ready = false;
 
 static bool jpeg_dimensions(const uint8_t *data, size_t length,
                             int *width, int *height)
@@ -114,8 +114,7 @@ static void camera_test_task(void *arg)
     s_width = s_height = 0;
     s_bytes = 0;
     s_ok = fetch_frame(&s_width, &s_height, &s_bytes);
-    __atomic_store_n(&s_ready, true, __ATOMIC_RELEASE);
-    s_task = NULL;
+    async_result_publish(&s_result);
     vTaskDelete(NULL);
 }
 
@@ -124,15 +123,15 @@ bool camera_test_start(const char *url)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return demo_camera_test_start(url);
 #endif
-    if (!url || !url[0] || strnlen(url, sizeof(s_url)) >= sizeof(s_url) || s_task)
+    if (!url || !url[0] || strnlen(url, sizeof(s_url)) >= sizeof(s_url) || !async_result_start(&s_result))
         return false;
     strlcpy(s_url, url, sizeof(s_url));
     s_ok = false; s_width = s_height = 0; s_bytes = 0;
-    __atomic_store_n(&s_ready, false, __ATOMIC_RELEASE);
+
     if (xTaskCreatePinnedToCoreWithCaps(camera_test_task, "camera_test", 8192,
-                                        NULL, 4, &s_task, tskNO_AFFINITY,
+                                        NULL, 4, NULL, tskNO_AFFINITY,
                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
-        s_task = NULL;
+        async_result_release(&s_result);
         return false;
     }
     return true;
@@ -142,7 +141,7 @@ bool camera_test_busy(void) {
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return false;
 #endif
-    return s_task != NULL;
+    return async_result_busy(&s_result);
 }
 
 bool camera_test_take_result(bool *ok, int *width, int *height, size_t *bytes)
@@ -150,10 +149,11 @@ bool camera_test_take_result(bool *ok, int *width, int *height, size_t *bytes)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if (demo_mode_enabled()) return demo_camera_test_take(ok, width, height, bytes);
 #endif
-    if (!__atomic_exchange_n(&s_ready, false, __ATOMIC_ACQ_REL)) return false;
+    if (!async_result_take(&s_result)) return false;
     if (ok) *ok = s_ok;
     if (width) *width = s_width;
     if (height) *height = s_height;
     if (bytes) *bytes = s_bytes;
+    async_result_release(&s_result);
     return true;
 }

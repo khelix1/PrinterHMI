@@ -322,6 +322,14 @@ bool moonraker_fetch_thumbnail_encoded(const char *host,
                                        uint8_t **out_buf,
                                        size_t *out_len);
 
+/* Pass the request owner's captured key; never infer credentials from the active printer. */
+bool moonraker_fetch_thumbnail_encoded_with_api_key(
+    const char *host, int port, const char *api_key, const char *encoded_thumb_path,
+    uint8_t **out_buf, size_t *out_len);
+bool moonraker_fetch_thumbnail_encoded_quiet_with_api_key(
+    const char *host, int port, const char *api_key, const char *encoded_thumb_path,
+    uint8_t **out_buf, size_t *out_len);
+
 bool moonraker_fetch_thumbnail_encoded_quiet(
     const char *host,
     int port,

@@ -3429,3 +3429,136 @@ drawable rectangle.
 The WebSocket response suite verifies escaped subscription keys using cJSON
 and tests rollback on an undersized buffer. The object layout suite checks
 that delimiter and quoting characters are rejected before G-code dispatch.
+
+
+### Camera worker completion and lighting output changes
+
+`python3 tools/audit/camera_input_test.py` includes completion before task creation
+returns and task-creation failure/retry, under AddressSanitizer and UndefinedBehaviorSanitizer.
+
+`python3 tools/audit/camera_discovery_worker_test.py` exercises the actual discovery
+controller with immediate and deferred completion, catalog publication, a consumer
+that tries to restart the worker, stale printer generations, and failed creation.
+
+`case_lighting_ui_test.py` also checks that remembered PWM brightness cannot make a
+binary output's On action send an unsupported intermediate value.
+
+
+### Live MJPEG worker failures
+
+`python3 tools/audit/camera_stream_worker_test.py` compiles the actual stream
+controller with AddressSanitizer and UndefinedBehaviorSanitizer. It covers
+fast worker exit, frame/queue allocation, task-creation failure, oversized URLs,
+HTTP initialization/open/header/status errors, stop before worker execution or
+during transport acquisition, decoder failure, and queue-full frame cleanup.
+Frame buffers and network/client ownership must balance, and failed operations
+must remain restartable. The existing `camera_pipeline_test.py` covers display
+frame lifetime, navigation and fullscreen teardown.
+
+
+### Endpoint verification and LAN discovery completion
+
+`python3 tools/audit/endpoint_worker_test.py` exercises the production manual
+verification worker under address/undefined-behavior sanitizers, including input
+bounds, exact maximum-length host/key delivery, task-creation failure, fast task
+completion, restart, one-shot result consumption and temporary-key cleanup.
+
+`discovery_states_test.py` now also runs LAN discovery to completion before
+its task-creation call returns and verifies that Retry remains usable. Its webcam
+discovery and the `offline_navigation_test.py` fixtures accept optional task
+handles, matching the production lifecycle used since v7.3.42-dev.
+
+
+### Offline active printer and chooser freshness
+
+`inactive_profile_recovery_test.py --cjson-dir PATH` compiles the production
+inactive polling function and exercises an offline active profile with three
+siblings, background failure/retry, a generation change during a request, and
+normal preview behavior after reconnection. It checks that health still updates
+while thumbnail metadata is deferred. The regression fails against the previous
+worker, which skipped every inactive check during active WebSocket recovery.
+
+`chooser_refresh_test.py` checks that expired sibling Printing state displays
+Verifying when the active profile is offline, across themes/densities/text sizes.
+
+
+### Health publisher freshness and notification handoff
+
+`python3 tools/audit/profile_health_freshness_test.py` compiles the actual health
+cache under address/undefined-behavior sanitizers. It verifies authoritative/demo
+freshness, explicit offline/unknown clearing, unchanged endpoint reconciliation,
+changed endpoint invalidation and the two-failure background hysteresis.
+
+`notifications_test.py` includes active/inactive handoff checks: a one-second
+selection gap must not produce a recovery notice, while a confirmed three-second
+loss followed by fresh background recovery remains a real transition. Existing
+Quiet-mode connection warnings and silent recovery behavior remain covered.
+
+
+### Print-time preference dialog lifetime
+
+`display_settings_safety_test.py` now exercises the real print-estimate dialog
+callbacks as well as display preferences. Checks cover disabled Save, exact
+option capture, storage failure/retry, duplicate dispatch during a save, deletion
+of each dropdown/status/Save control, replacement during successful or failed
+storage, and reopening from the retired dialog's delete callback. A storage
+result must not close or update a replacement dialog.
+
+
+### File selection path boundary
+
+`python3 tools/audit/file_selection_boundary_test.py` compiles the real file
+selection controller under address/undefined-behavior sanitizers. Oversized,
+empty and null requests must preserve the prior selected file, cached selection,
+Dashboard preview source, Printer preview and detail-dialog state. Accepted
+159-byte, nested and already-selected buffer paths must arrive unchanged.
+
+
+### Unchanged profile and camera saves
+
+`profile_storage_test.py` asserts that saving identical configured profile fields
+and the identical primary camera URL causes no storage opens/writes and leaves
+configuration generation unchanged. Changed fields still persist and failed
+writes retain the prior in-memory profile. The no-op regression fails with the
+previous controller.
+
+`profiles_layout_test.py` verifies that an unchanged active profile save closes
+successfully without invoking the connection-change callback or displaying
+Reconnecting. Existing partial-save/failure and dialog-replacement checks remain.
+
+
+### Inactive profile edits and credential ownership
+
+`inactive_profile_recovery_test.py` uses distinct keys for two inactive printers
+and no key for a third. Each status/metadata request must use its own profile key.
+The production polling functions are checked against host, port, API-key, TLS-mode
+and configured-state changes during a request without an active generation change.
+Old results must not update health. Unknown health can bypass a previous endpoint's
+retry timestamp, while known failures keep the ordinary backoff.
+
+`profile_health_freshness_test.py` also edits an inactive endpoint without advancing
+active generation. Health reads must hide the old endpoint immediately; polling
+reconciles it and a successful new-endpoint observation becomes visible again.
+
+
+### Authenticated thumbnail downloads
+
+`thumbnail_storage_test.py` now compiles the production authenticated/anonymous
+download wrappers too. The HTTP spy checks exact key forwarding; quiet-lane
+rejection must clear stale output pointers/lengths, and accepted quiet operations
+must release their exclusive lane. Existing compact-buffer/failure checks remain.
+
+`thumbnail_manager_test.py --lvgl-dir PATH` verifies captured selected-file keys
+reach the quiet downloader. The preview ownership suite covers the updated Files
+row/fullscreen worker interfaces, and demo-isolation tests include the new
+authenticated quiet-download boundary.
+
+
+### Setup Wi-Fi scan ownership and retry
+
+`setup_center_layout_test.py --lvgl-dir PATH --lvgl-lib PATH` checks repeated
+Scan taps while work is in flight, completion before task creation returns,
+closing/reopening during a scan, task creation failure followed by retry, failed
+scan/count/record reads, and successful empty scans. Failure text must differ
+from no-network text; subsequent successful scans must rebuild the network rows.
+The production Setup owner also compiles independently with warnings as errors.

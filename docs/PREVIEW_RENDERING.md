@@ -145,3 +145,10 @@ so identical filenames from different printers cannot establish ownership alone.
 Fresh fetches and bounded retries are retained; a failed verification can leave
 the last validated cached image visible. This does not retain stale telemetry as
 live printer state or change fullscreen/source selection policy.
+
+
+Thumbnail HTTP downloads use the owning job's captured Moonraker API key,
+including an explicitly empty key for an unauthenticated profile. Credentials
+are forwarded separately from the encoded thumbnail path. The selected-file
+download manager is bound to the captured active endpoint/generation and clears
+its temporary key before releasing each job.

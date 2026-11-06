@@ -80,6 +80,13 @@ static void run(void)
  lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);
  assert(sends==before+1&&sent_percent==35);
  ui_case_lighting_close();
+ prepare(false);ui_case_lighting_show();
+ before=sends;lv_obj_add_state(s_switch,LV_STATE_CHECKED);
+ lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);
+ assert(sends==before+1&&sent_percent==100);
+ case_lighting_snapshot_t digital;case_lighting_snapshot(&digital,clock_us);
+ assert(digital.pending&&digital.target==100);
+ ui_case_lighting_close();
 
 }
 int main(void)

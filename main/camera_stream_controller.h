@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Fetches one JPEG from an MJPEG endpoint per call. The returned frame belongs
- * to the caller and must be released with heap_caps_free(). */
+/* Runs an MJPEG worker and delivers decoded RGB565 frames through take_result.
+ * Each returned frame belongs to the caller; release it with heap_caps_free(). */
 bool camera_stream_start(const char *url);
 bool camera_stream_busy(void);
 /* Navigation retires results immediately; worker cleanup completes asynchronously. */

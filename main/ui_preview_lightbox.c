@@ -304,8 +304,8 @@ static void fullscreen_preview_worker(void *arg)
             if (fetched) {
                 char encoded_thumbnail[768];
                 thumbnail_manager_url_encode(thumbnail_path, encoded_thumbnail, sizeof(encoded_thumbnail));
-                fetched = moonraker_fetch_thumbnail_encoded(
-                    job.host, job.port, encoded_thumbnail, &png, &png_size);
+                fetched = moonraker_fetch_thumbnail_encoded_with_api_key(
+                    job.host, job.port, job.api_key, encoded_thumbnail, &png, &png_size);
             }
 
             /* Only the open lightbox gets a full-size canvas. List/cache slots

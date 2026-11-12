@@ -599,7 +599,7 @@ void ui_bed_mesh_renderer_render(
 
     s = *config;
 
-    if (!s.canvas || !s.buf || !s.mesh.valid) {
+    if (!s.canvas || !s.buf) {
         return;
     }
     const lv_image_dsc_t *image=lv_canvas_get_image(s.canvas);
@@ -607,6 +607,11 @@ void ui_bed_mesh_renderer_render(
        image->header.stride<image->header.w*sizeof(uint16_t) || image->header.stride%sizeof(uint16_t))return;
     s_canvas_width=image->header.w;s_canvas_height=image->header.h;
     s_canvas_stride=image->header.stride/sizeof(uint16_t);
+    if (!s.mesh.valid) {
+        /* Saved profiles can remain available after the active mesh is cleared. */
+        lv_canvas_fill_bg(s.canvas, UI_BED_MESH_BG, LV_OPA_COVER);
+        return;
+    }
 
     uint16_t rows = s.mesh.rows;
     uint16_t cols = s.mesh.cols;

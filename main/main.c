@@ -1870,6 +1870,15 @@ static print_estimate_result_t active_print_estimate(const moonraker_state_t *st
     return estimate;
 }
 
+/* Layer data follows the active file/job/profile cache, never the browsed
+ * thumbnail session. Both page refresh paths use this same selection. */
+static printer_layer_metadata_t active_print_layer_metadata(const moonraker_state_t *state)
+{
+    print_estimate_metadata_t metadata;
+    return print_estimate_metadata_get(state->printer_file, state->print_job_revision, &metadata)
+        ? metadata.layers : (printer_layer_metadata_t){0};
+}
+
 static void ui_refresh_timer_cb(lv_timer_t *timer)
 {
     int64_t ui_refresh_t0 = esp_timer_get_time();
@@ -1891,18 +1900,18 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
     moonraker_filament_state_snapshot(
         &filament_state);
 
-    double printer_meta_object_height = 0, printer_meta_layer_height = 0;
-    (void)thumbnail_session_get_layer_metadata(telemetry_state.printer_file,
-        &printer_meta_object_height, &printer_meta_layer_height);
+    printer_layer_metadata_t layer_metadata = active_print_layer_metadata(&telemetry_state);
 
     printer_layer_result_t resolved_layers =
         printer_layer_resolver_resolve(
             telemetry_state.current_layer,
             telemetry_state.total_layer,
             telemetry_state.current_gcode_z,
-            printer_meta_object_height,
-            printer_meta_layer_height,
-            telemetry_state.progress);
+            &layer_metadata,
+            telemetry_state.progress,
+            printer_layer_resolver_print_started(telemetry_state.print_duration,
+                telemetry_state.estimate_sample.filament_valid,
+                telemetry_state.estimate_sample.filament_used));
 
     ui_telemetry_refresh(
         &telemetry_state,
@@ -1984,7 +1993,9 @@ ui_drybox_refresh();
             ui_printer_preview_show(telemetry_state.printer_state,telemetry_state.printer_file,telemetry_state.printer_file);
         }
         dashboard_runtime_controller_tick(&(dashboard_runtime_context_t){
-            .meta_object_height=20,.meta_layer_height=.2,
+            .layer_metadata={.object_height=20,.layer_height=.2},
+            .layer_job_revision=telemetry_state.print_job_revision,
+            .layer_generation=moonraker_config_generation(),
             .dashboard_canvas=&dash_thumb_canvas,.dashboard_image=&dash_thumb_img,
             .last_print_state=last_dashboard_print_state,.last_print_state_size=sizeof(last_dashboard_print_state),
             .preview_network_ready=false,
@@ -3649,16 +3660,15 @@ static void hmi_runtime_task(void *arg)
                 s_wifi_signal_dirty = false;
             }
 
-            double printer_meta_object_height = 0, printer_meta_layer_height = 0;
             moonraker_state_t layer_state;
             moonraker_state_snapshot(&layer_state);
             print_estimate_result_t estimate = active_print_estimate(&layer_state);
-            (void)thumbnail_session_get_layer_metadata(layer_state.printer_file,
-                &printer_meta_object_height, &printer_meta_layer_height);
+            printer_layer_metadata_t layer_metadata = active_print_layer_metadata(&layer_state);
             dashboard_runtime_controller_tick(
         &(dashboard_runtime_context_t) {
-            .meta_object_height = printer_meta_object_height,
-            .meta_layer_height = printer_meta_layer_height,
+            .layer_metadata = layer_metadata,
+            .layer_job_revision = layer_state.print_job_revision,
+            .layer_generation = moonraker_config_generation(),
             .remaining_seconds = &estimate.remaining,
             .estimate_job_revision = layer_state.print_job_revision,
 

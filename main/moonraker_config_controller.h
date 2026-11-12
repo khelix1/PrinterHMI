@@ -55,6 +55,10 @@ const char *moonraker_config_active_profile_name(void);
  */
 uint32_t moonraker_config_generation(void);
 
+/* Partial/failed loads protect the saved collection from ordinary edits until
+ * a complete successful reload or explicit validated backup replacement. */
+bool moonraker_config_storage_readable(void);
+
 const moonraker_profile_t *moonraker_config_profile(
     int profile_index);
 
@@ -71,6 +75,8 @@ bool moonraker_config_select_profile(
  * Creates or updates a profile. Successful saves advance the active endpoint
  * generation; failed saves restore the previous runtime fields. Existing
  * camera and TLS settings survive this basic connection-field edit.
+ * Nonempty names must fit in MOONRAKER_CONFIG_NAME_LENGTH including NUL;
+ * overlong names are rejected before storage access. NULL/empty uses the default.
  * Separate NVS key writes are not a transaction.
  */
 bool moonraker_config_save_profile(
@@ -102,4 +108,5 @@ bool moonraker_config_replace_profiles(
 bool moonraker_config_set_transport_security(int profile_index, bool secure);
 
 const char *moonraker_config_camera_stream_url(int profile_index);
+/* Requires a configured, valid profile; unused slots cannot hold a camera URL. */
 bool moonraker_config_set_camera_stream_url(int profile_index, const char *url);

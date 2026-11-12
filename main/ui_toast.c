@@ -51,6 +51,7 @@ static void notification_field_own(lv_obj_t *field)
 static ui_notification_level_t s_pending_level;
 static void (*s_preference_changed)(void);
 static void render_notice(void);
+static bool retire_profile_connection_notices(int index);
 static void (*s_printer_chooser_action)(void);
 void ui_toast_set_printer_chooser_action(void (*action)(void)){s_printer_chooser_action=action;}
 
@@ -468,16 +469,23 @@ void ui_toast_preferences_show(void (*changed)(void))
 void ui_toast_observe_printer(const moonraker_state_t *state)
 {
     static uint32_t owner,candidate_since;
+    static int owner_profile = -1;
     static bool initialized,armed,live,candidate,last_sample_live;
     static char previous[32],fault[32];
     if(!state)return;
     uint32_t current=moonraker_config_generation(),now=lv_tick_get();
     if(!initialized || owner!=current) {
+        int profile = moonraker_config_active_profile_index();
+        bool retired = initialized && owner_profile == profile &&
+            retire_profile_connection_notices(profile);
+        owner_profile=profile;
         owner=current;initialized=true;armed=false;live=false;
         candidate=state->live_data_ok;candidate_since=now;
         last_sample_live=state->live_data_ok;
         fault[0]=0;
-        snprintf(previous,sizeof(previous),"%s",state->printer_state);return;
+        snprintf(previous,sizeof(previous),"%s",state->printer_state);
+        if(retired)render_notice();
+        return;
     }
     if(candidate!=state->live_data_ok) {
         candidate=state->live_data_ok;candidate_since=now;
@@ -492,14 +500,7 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
             live=candidate;
             /* Replace this owner's previous connection notice on every
              * transition, including repeated loss/recovery without Dismiss. */
-            unsigned kept=0;
-            for(unsigned i=0;i<s_notice_count;i++) {
-                bool connection=s_notices[i].owner==current &&
-                    s_notices[i].profile_index==moonraker_config_active_profile_index() &&
-                    s_notices[i].connection;
-                if(!connection)s_notices[kept++]=s_notices[i];
-            }
-            ++s_notice_epoch;s_notice_count=kept;
+            retire_profile_connection_notices(moonraker_config_active_profile_index());
             if(live) {
                 toast_show_named(UI_STATUS_INFO,"PRINTER RECONNECTED",
                     "Live status is available again. Review the printer before resuming work.",UI_SHELL_PAGE_PRINTER,true,
@@ -536,13 +537,45 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
     if(state->live_data_ok)snprintf(previous,sizeof(previous),"%s",state->printer_state);
 }
 
+/* Retire current connection cards, preserving their Event History records and
+ * unrelated print/fault notices. A reused profile slot is a new context. */
+static bool retire_profile_connection_notices(int index)
+{
+    unsigned kept = 0;
+    for (unsigned i = 0; i < s_notice_count; ++i) {
+        if (s_notices[i].connection && s_notices[i].profile_index == index) continue;
+        s_notices[kept++] = s_notices[i];
+    }
+    if (kept == s_notice_count) return false;
+    s_notice_count = kept;
+    if (!kept) s_overflow = 0;
+    ++s_notice_epoch;
+    return true;
+}
+
+typedef struct {
+    int port;
+    bool secure_transport;
+    char name[MOONRAKER_CONFIG_NAME_LENGTH];
+    char host[MOONRAKER_CONFIG_HOST_LENGTH];
+    char api_key[MOONRAKER_CONFIG_API_KEY_LENGTH];
+} notification_profile_identity_t;
+
+static bool notification_profile_equal(const notification_profile_identity_t *left,
+    const moonraker_profile_t *right)
+{
+    return left->port == right->port &&
+        left->secure_transport == right->secure_transport &&
+        !strcmp(left->name, right->name) && !strcmp(left->host, right->host) &&
+        !strcmp(left->api_key, right->api_key);
+}
+
 void ui_toast_observe_profiles(const moonraker_state_t *active_state)
 {
     typedef struct {
         bool configured, armed, online, candidate;
         uint32_t candidate_since;
-        int port;
-        char host[MOONRAKER_CONFIG_HOST_LENGTH];
+        notification_profile_identity_t identity;
     } profile_observer_t;
     static profile_observer_t observed[MOONRAKER_CONFIG_MAX_PROFILES];
     static int previous_active = -1;
@@ -552,19 +585,25 @@ void ui_toast_observe_profiles(const moonraker_state_t *active_state)
     bool selected = active != previous_active || generation != previous_generation;
     previous_active = active;
     previous_generation = generation;
+    bool retired = false;
     for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index) {
         profile_observer_t *last = &observed[index];
         const moonraker_profile_t *profile = moonraker_config_profile(index);
         if (!profile || !profile->configured) {
+            retired = retire_profile_connection_notices(index) || retired;
             memset(last, 0, sizeof(*last));
             continue;
         }
-        if (!last->configured || last->port != profile->port ||
-            strcmp(last->host, profile->host)) {
+        if (!last->configured || !notification_profile_equal(&last->identity, profile)) {
+            retired = retire_profile_connection_notices(index) || retired;
             memset(last, 0, sizeof(*last));
             last->configured = true;
-            last->port = profile->port;
-            snprintf(last->host, sizeof(last->host), "%s", profile->host);
+            /* Keep only connection identity; camera URLs are unrelated. */
+            last->identity.port = profile->port;
+            last->identity.secure_transport = profile->secure_transport;
+            snprintf(last->identity.name, sizeof(last->identity.name), "%s", profile->name);
+            snprintf(last->identity.host, sizeof(last->identity.host), "%s", profile->host);
+            snprintf(last->identity.api_key, sizeof(last->identity.api_key), "%s", profile->api_key);
         }
         if (index == active) {
             /* Active notifications already have their own debounce. Keep the
@@ -596,17 +635,12 @@ void ui_toast_observe_profiles(const moonraker_state_t *active_state)
         last->online = online;
         /* Retire this printer's previous connection card, including one
          * captured before the operator selected another active profile. */
-        unsigned kept = 0;
-        for (unsigned i = 0; i < s_notice_count; ++i) {
-            bool connection = s_notices[i].profile_index == index &&
-                s_notices[i].connection;
-            if (!connection) s_notices[kept++] = s_notices[i];
-        }
-        ++s_notice_epoch;s_notice_count = kept;
+        retire_profile_connection_notices(index);
         toast_show_named(online ? UI_STATUS_INFO : UI_STATUS_WARNING,
             online ? "PRINTER RECONNECTED" : "PRINTER OFFLINE",
             online ? "Live status is available again. Open Printers to review this printer."
                    : "This printer is unavailable. A print may still be running; check the printer and its connection.",
             NOTICE_OPEN_PRINTERS, true, profile->name, index, true);
     }
+    if (retired) render_notice();
 }

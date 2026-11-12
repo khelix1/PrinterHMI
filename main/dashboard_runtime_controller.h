@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "lvgl.h"
+#include "printer_layer_resolver.h"
 
 typedef void (*dashboard_runtime_void_cb_t)(void);
 typedef void (*dashboard_runtime_metadata_cb_t)(
@@ -12,8 +13,8 @@ typedef void (*dashboard_runtime_metadata_cb_t)(
     size_t out_size);
 
 typedef struct {
-    double meta_object_height;
-    double meta_layer_height;
+    printer_layer_metadata_t layer_metadata;
+    uint32_t layer_job_revision, layer_generation;
     const double *remaining_seconds;
     uint32_t estimate_job_revision;
 

@@ -33,6 +33,7 @@ static ui_bed_mesh_profiles_state_t s;
 /* Kept outside resettable UI state so transport callbacks cannot reopen/dispatch. */
 static uint32_t s_epoch;
 static bool s_dispatching;
+static const char s_review_unavailable[]="The reviewed profile or mesh is no longer available. Go back and review again.";
 static const char s_name_error[]="Enter a name using letters, numbers, underscore, dot or hyphen.";
 
 static void close_profile_editor_cb(lv_event_t *event);
@@ -78,22 +79,30 @@ void ui_bed_mesh_profiles_refresh_availability(void)
 {
     const char *reason = profile_reason();
     bool selected = reported_profile(selected_profile_name());
+    bool review_unavailable = s.profile_confirm &&
+        (s.confirmation_removing ? !reported_profile(s.pending_profile_name) : !s.mesh_valid);
     for (unsigned i = 0; i < 4; ++i) if (s.actions[i]) {
         bool blocked = reason[0] || s_dispatching || (i == 0 && !s.mesh_valid) ||
-            ((i == 1 || i == 2) && !selected);
+            ((i == 1 || i == 2) && !selected) || (i == 3 && review_unavailable);
         if (blocked) lv_obj_add_state(s.actions[i], LV_STATE_DISABLED);
         else lv_obj_remove_state(s.actions[i], LV_STATE_DISABLED);
     }
     /* Do not erase rejected-command feedback on every page refresh. */
     if (reason[0]) {
         ui_value_set_text(s.connection_label, reason);
-        ui_value_set_text(s.confirm_connection_label, reason);
         s.connection_blocked = s.connection_label != NULL;
-        s.confirmation_blocked = s.confirm_connection_label != NULL;
     } else {
         if (s.connection_blocked) ui_value_set_text(s.connection_label, "");
+        s.connection_blocked = false;
+    }
+    const char *confirmation_reason = reason[0] ? reason :
+        review_unavailable ? s_review_unavailable : "";
+    if (confirmation_reason[0]) {
+        ui_value_set_text(s.confirm_connection_label, confirmation_reason);
+        s.confirmation_blocked = s.confirm_connection_label != NULL;
+    } else {
         if (s.confirmation_blocked) ui_value_set_text(s.confirm_connection_label, "");
-        s.connection_blocked = s.confirmation_blocked = false;
+        s.confirmation_blocked = false;
     }
 }
 
@@ -280,7 +289,7 @@ static void confirmed_profile_command(lv_event_t *event, bool removing)
     const char *operation = removing ? "REMOVE" : "SAVE";
     if ((!strcmp(operation, "REMOVE") && !reported_profile(s.pending_profile_name)) ||
         (!strcmp(operation, "SAVE") && !s.mesh_valid)) {
-        ui_value_set_text(s.confirm_connection_label, "The reviewed profile or mesh is no longer available. Go back and review again.");
+        ui_value_set_text(s.confirm_connection_label, s_review_unavailable);
         return;
     }
     char command[128];

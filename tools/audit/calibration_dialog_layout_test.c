@@ -22,7 +22,10 @@ static bool send_accept=true;
 static void (*send_hook)(void);
 static unsigned result_views, session_resets;
 static bool fixture_screws=true,fixture_z_tilt=true,fixture_qgl=true;
-static char command[512];
+static bool heater_catalog_ready=true,macro_catalog_ready=true;
+static int missing_heater=-1,missing_macro=-1;
+static bool reverse_heaters,reverse_macros,motor_device;
+static char command[MACRO_COMMAND_MAX];
 static calibration_session_snapshot_t session;
 static calibration_capabilities_t page_caps;
 static endstop_status_snapshot_t endstops;
@@ -45,10 +48,12 @@ void calibration_session_controller_snapshot(calibration_session_snapshot_t *o){
 void calibration_session_controller_reset(void){session_resets++;memset(&session,0,sizeof(session));}
 void calibration_session_controller_poll(void){}
 void calibration_capability_controller_snapshot(calibration_capabilities_t *o){*o=page_caps;o->screws_tilt=fixture_screws;o->z_tilt=fixture_z_tilt;o->quad_gantry_level=fixture_qgl;}
-void device_catalog_controller_status(device_catalog_status_t *o){memset(o,0,sizeof(*o));o->discovered=true;o->stored_count=8;}
-bool device_catalog_controller_get(size_t i,device_descriptor_t *o){if(i>=8)return false;memset(o,0,sizeof(*o));snprintf(o->object_name,sizeof(o->object_name),"extruder%u",(unsigned)i);snprintf(o->display_name,sizeof(o->display_name),"Tool %u with a long printer-specific heater name",(unsigned)i);return true;}
-void macro_controller_status(macro_controller_status_t *o){memset(o,0,sizeof(*o));o->count=16;o->discovered=true;}
-bool macro_controller_get(size_t i,char *o,size_t n){if(i>=16)return false;snprintf(o,n,"CALIBRATE_LONG_PRINTER_DEFINED_MACRO_%u",(unsigned)i);return true;}
+void device_catalog_controller_status(device_catalog_status_t *o){memset(o,0,sizeof(*o));o->discovered=heater_catalog_ready;o->stored_count=8;}
+bool device_catalog_controller_get(size_t i,device_descriptor_t *o){if(i>=8)return false;if(reverse_heaters)i=7-i;if((int)i==missing_heater)return false;memset(o,0,sizeof(*o));snprintf(o->object_name,sizeof(o->object_name),"extruder%u",(unsigned)i);if(motor_device&&i==0)strcpy(o->object_name,"extruder_stepper feeder");snprintf(o->display_name,sizeof(o->display_name),"Tool %u with a long printer-specific heater name",(unsigned)i);return true;}
+static const char *resolver_macro;
+void macro_controller_status(macro_controller_status_t *o){memset(o,0,sizeof(*o));o->count=resolver_macro?1:16;o->discovered=macro_catalog_ready;}
+bool macro_controller_get(size_t i,char *o,size_t n){if(resolver_macro){if(i)return false;snprintf(o,n,"%s",resolver_macro);return true;}if(i>=16)return false;if(reverse_macros)i=15-i;if((int)i==missing_macro)return false;snprintf(o,n,"CALIBRATE_LONG_PRINTER_DEFINED_MACRO_%u",(unsigned)i);return true;}
+bool macro_controller_contains(const char *name){macro_controller_status_t status;macro_controller_status(&status);for(size_t i=0;status.discovered&&i<status.count;i++){char candidate[MACRO_CONTROLLER_NAME_MAX];if(macro_controller_get(i,candidate,sizeof(candidate))&&!strcmp(candidate,name))return true;}return false;}
 int64_t esp_timer_get_time(void){return 1000000;}
 bool moonraker_live_websocket_connected(void){return true;}
 bool moonraker_live_websocket_request_endstops(uint32_t id){(void)id;queries++;return true;}
@@ -461,10 +466,24 @@ static void run(void){
  click(action(popup,0));assert(target==210);click(action(popup,1));
  send_accept=true;send_hook=pid_reenter;click(action(popup,1));send_hook=NULL;
  assert(!popup&&!target_label&&!s_pid_feedback&&sends==2&&result_views==1&&strstr(command,"HEATER=extruder7 TARGET=210"));
+ /* Same-printer reconnect can reset/replace catalogs without changing owner. */
+ pid_warning();unsigned held=sends;uint32_t generation=owner;
+ heater_catalog_ready=false;run_pid_tune_cb(NULL);
+ assert(sends==held&&popup&&strstr(lv_label_get_text(s_pid_feedback),"no longer"));
+ heater_catalog_ready=true;missing_heater=7;run_pid_tune_cb(NULL);assert(sends==held&&owner==generation);
+ missing_heater=-1;reverse_heaters=true;run_pid_tune_cb(NULL);reverse_heaters=false;
+ assert(sends==held+1&&!popup&&strstr(command,"HEATER=extruder7 TARGET=210"));
+ /* Restore the counters used by the lifecycle cases below. */
+ result_views=1;
+ assert(pid_object_supported("extruder")&&pid_object_supported("extruder12"));
+ assert(pid_object_supported("heater_generic chamber")&&pid_object_supported("heater_bed"));
+ assert(!pid_object_supported("extruder_stepper feeder")&&!pid_object_supported("extruderfoo"));
+ assert(!pid_object_supported("heater_generic ")&&!pid_object_supported(""));
  unsigned before=sends;run_pid_tune_cb(NULL);assert(sends==before);
  for(unsigned i=0;i<10;i++){pid_warning();lv_obj_delete(popup);assert(!popup&&!target_label&&!s_pid_feedback);run_pid_tune_cb(NULL);assert(sends==before);}
  pid_warning();send_hook=pid_retire_during_send;run_pid_tune_cb(NULL);send_hook=NULL;assert(!popup&&sends==before+1&&result_views==1);
  pid_warning();send_hook=switch_during_send;run_pid_tune_cb(NULL);send_hook=NULL;assert(popup&&sends==before+2&&result_views==1);run_pid_tune_cb(NULL);assert(sends==before+2);ui_calibration_pid_close();
+ motor_device=true;ui_calibration_pid_event(NULL);assert(count==7&&!strcmp(objects[0],"extruder1"));ui_calibration_pid_close();motor_device=false;
  context.heater_capacity=3;ui_calibration_pid_event(NULL);assert(count==3);ui_calibration_pid_close();
  ui_calibration_pid_init(NULL);
 }
@@ -662,6 +681,12 @@ static void run(void){
  lv_obj_t *initial=popup;ui_calibration_custom_event(NULL);assert(popup==initial&&selected==15);
  send_accept=false;click(action(popup,1));assert(sends==1&&popup==initial&&selected==15&&!result_views);assert(strstr(lv_label_get_text(s_custom_feedback),"retained"));layout(popup);
  send_accept=true;send_hook=custom_reenter;click(action(popup,1));send_hook=NULL;assert(sends==2&&!popup&&result_views==1&&strstr(command,"MACRO_15"));
+ custom_review();unsigned held=sends;uint32_t generation=owner;
+ macro_catalog_ready=false;run_custom_macro_cb(NULL);
+ assert(sends==held&&popup&&strstr(lv_label_get_text(s_custom_feedback),"no longer"));
+ macro_catalog_ready=true;missing_macro=15;run_custom_macro_cb(NULL);assert(sends==held&&owner==generation);
+ missing_macro=-1;reverse_macros=true;run_custom_macro_cb(NULL);reverse_macros=false;
+ assert(sends==held+1&&!popup&&strstr(command,"MACRO_15"));result_views=1;
  unsigned before=sends;run_custom_macro_cb(NULL);assert(sends==before);
  for(unsigned i=0;i<10;i++){custom_review();lv_obj_delete(popup);assert(!popup&&!s_custom_feedback);run_custom_macro_cb(NULL);assert(sends==before);}
  custom_review();send_hook=custom_retire_during_send;run_custom_macro_cb(NULL);send_hook=NULL;assert(!popup&&sends==before+1&&result_views==1);
@@ -669,6 +694,8 @@ static void run(void){
  context.names_capacity=3;ui_calibration_custom_event(NULL);assert(count==3);ui_calibration_custom_close();ui_calibration_custom_init(NULL);
 }
 #elif defined(TEST_GEOMETRY)
+#include "printer_action_resolver.c"
+static bool geometry_resolved_send(const char *s){printer_action_resolution_t r;return printer_action_resolver_resolve(s,&r)&&send_command(r.command);}
 #include "ui_calibration_geometry.c"
 static void geometry_reenter(void){run_screws_tilt_cb(NULL);run_gantry_level_cb(NULL);}
 static void geometry_retire_screws(void){lv_obj_delete(*s_geometry->screws_popup);}
@@ -692,7 +719,19 @@ static void run(void){
  fixture_qgl=false;strcpy(state.homed_axes,"");ui_calibration_geometry_gantry_event(NULL);assert(!qgl&&ghome);run_gantry_level_cb(NULL);assert(sends==before+5&&!strcmp(command,"G28\nZ_TILT_ADJUST"));close_gantry_level_popup();fixture_qgl=true;strcpy(state.homed_axes,"xyz");
  for(unsigned i=0;i<10;i++){ui_calibration_geometry_gantry_event(NULL);lv_obj_delete(gantry);assert(!gantry&&!s_gantry_feedback&&!s_gantry_requested);run_gantry_level_cb(NULL);assert(sends==before+5);}
  ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_retire_gantry;run_gantry_level_cb(NULL);send_hook=NULL;assert(!gantry&&sends==before+6);
- ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_switch;run_gantry_level_cb(NULL);send_hook=NULL;assert(gantry&&!s_gantry_requested&&sends==before+7);run_gantry_level_cb(NULL);assert(sends==before+7);ui_calibration_geometry_close();ui_calibration_geometry_init(NULL);
+ ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_switch;run_gantry_level_cb(NULL);send_hook=NULL;assert(gantry&&!s_gantry_requested&&sends==before+7);run_gantry_level_cb(NULL);assert(sends==before+7);ui_calibration_geometry_close();
+ /* Exercise the real UI -> semantic resolver chain, not only the UI's fallback string. */
+ context.send_gcode=geometry_resolved_send;ui_calibration_geometry_init(&context);
+ strcpy(state.homed_axes,"");resolver_macro="LEVEL_SCREWS";
+ ui_calibration_geometry_screws_event(NULL);run_screws_tilt_cb(NULL);
+ assert(!strcmp(command,"G28\nLEVEL_SCREWS"));close_screws_popup();
+ resolver_macro="QGL";fixture_qgl=true;ui_calibration_geometry_gantry_event(NULL);run_gantry_level_cb(NULL);
+ assert(!strcmp(command,"G28\nQGL"));close_gantry_level_popup();
+ resolver_macro="Z_TILT";fixture_qgl=false;ui_calibration_geometry_gantry_event(NULL);run_gantry_level_cb(NULL);
+ assert(!strcmp(command,"G28\nZ_TILT"));close_gantry_level_popup();
+ strcpy(state.homed_axes,"xyz");ui_calibration_geometry_gantry_event(NULL);run_gantry_level_cb(NULL);
+ assert(!strcmp(command,"Z_TILT"));close_gantry_level_popup();
+ resolver_macro=NULL;fixture_qgl=true;ui_calibration_geometry_init(NULL);
 }
 #endif
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(uint16_t *)p;for(int y=a->y1;y<=a->y2;y++)for(int x=a->x1;x<=a->x2;x++)raster[y*1024+x]=*v++;lv_display_flush_ready(d);}

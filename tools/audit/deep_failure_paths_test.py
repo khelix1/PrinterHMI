@@ -57,15 +57,8 @@ catalog = r'''
 #include "json_document_limits.h"
 #include "ota_release_catalog.h"
 #include "firmware_identity.h"
-typedef struct cJSON {struct cJSON *next,*prev,*child;int type;char *valuestring;int valueint;double valuedouble;char *string;} cJSON;
-extern cJSON *cJSON_Parse(const char *);
-extern cJSON *cJSON_ParseWithLength(const char *,size_t);
-extern cJSON *cJSON_ParseWithLengthOpts(const char *,size_t,const char **,int);
-extern cJSON *cJSON_GetObjectItemCaseSensitive(const cJSON *,const char *);
-extern cJSON *cJSON_GetArrayItem(const cJSON *,int);
-extern int cJSON_GetArraySize(const cJSON *);
-extern int cJSON_IsString(const cJSON *),cJSON_IsArray(const cJSON *),cJSON_IsObject(const cJSON *),cJSON_IsTrue(const cJSON *),cJSON_IsNumber(const cJSON *);
-extern void cJSON_Delete(cJSON *);
+#include "json_document_parse.h"
+#include <math.h>
 typedef struct {ota_release_entry_t entries[OTA_RELEASE_CATALOG_MAX];size_t count;} release_catalog_t;
 typedef void *SemaphoreHandle_t;
 static SemaphoreHandle_t s_lock;
@@ -138,21 +131,24 @@ void vTaskDelete(void *);
                  'catalog_fail', 'parse_semver', 'copy_json_string', 'normalize_notes',
                  'valid_nightly_tag', 'parse_releases', 'ota_release_catalog_start',
                  'ota_release_catalog_snapshot', 'ota_release_catalog_entry']
+    functions = [name for name in functions if name != 'parse_semver' or 'static bool parse_semver(' in source]
+    identity = (ROOT / 'main/firmware_identity.c').read_text()
+    version_parser = '\n'.join(function(identity, name) for name in ['semver', 'firmware_identity_parse_stable_version'])
     theme = function((ROOT / 'main/custom_theme.c').read_text(), 'parse_theme_file')
     # Exercise the original reader/parser stage before schema extraction.
     theme_reader = theme[:theme.index('    memset(entry,')].replace(
         'static bool parse_theme_file(', 'static cJSON *read_theme_document(')
     theme_reader += '    return root;\n}\n'
-    (folder / 'catalog.c').write_text(theme_reader + '\n' + '\n'.join(function(source, name) for name in functions))
+    (folder / 'catalog.c').write_text(next(line for line in source.splitlines() if line.startswith('#define RELEASE_RESPONSE_MAX ')) + '\n' + version_parser + '\n' + theme_reader + '\n' + '\n'.join(function(source, name) for name in functions))
     library = ctypes.util.find_library('cjson')
     if not library:
         raise SystemExit('Real libcJSON is required.')
     for name, fixture in [('worker', worker), ('catalog', catalog)]:
         (folder / (name + '_fixture.c')).write_text(compat + fixture)
         cmd = ['cc', '-D_POSIX_C_SOURCE=200809L', '-std=c11', '-O1', '-Wall', '-Wextra',
-               '-Werror', '-fsanitize=undefined', '-I', str(folder), '-I', str(ROOT / 'main'),
+               '-Werror', '-fsanitize=undefined', '-I', str(folder), '-I', str(ROOT / 'main'), '-I', str(ROOT / 'tools/theme-maker/linux/native/vendor/cjson'),
                str(folder / (name + '_fixture.c')), '-o', str(folder / name)]
         if name == 'catalog':
-            cmd += ['-Wl,-l:' + library]
+            cmd += ['-Wl,-l:' + library, '-lm']
         subprocess.run(cmd, check=True)
         subprocess.run([str(folder / name), str(folder / 'theme.json')], check=True)

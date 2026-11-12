@@ -88,6 +88,13 @@ static cJSON *snapshot_to_json(const settings_backup_snapshot_t *s,bool keys){as
 static char *cJSON_PrintBuffered(cJSON *s,int n,bool pretty){(void)s;(void)n;(void)pretty;return strdup("{\"backup\":true}");}
 static void cJSON_Delete(cJSON *s){(void)s;}
 static void cJSON_free(void *s){free(s);}
+/* This fixture owns progress/file sequencing; real JSON wiping is exercised
+ * separately by backup_sensitive_test.py. */
+#define backup_sensitive_json_delete cJSON_Delete
+#define backup_sensitive_json_free cJSON_free
+#define backup_sensitive_clear(p,n) memset((p),0,(n))
+static bool profile_store_readable=true;
+bool moonraker_config_storage_readable(void){return profile_store_readable;}
 static void progress(settings_backup_stage_t phase,void *context){assert(context==phases);assert(phase_count<8);phases[phase_count++]=phase;}
 static void reset(void){applies=captures=loads=phase_count=0;load_ok=apply_ok=true;rollback_ok=false;}
 '''
@@ -105,6 +112,11 @@ int main(int argc,char **argv){
  assert(phase_count==2&&phases[0]==SETTINGS_BACKUP_STAGE_PREPARING&&phases[1]==SETTINGS_BACKUP_STAGE_WRITING);
  FILE *f=fopen(backup,"rb");assert(f);char data[64]={0};assert(fread(data,1,sizeof(data)-1,f)>0);fclose(f);assert(strstr(data,"backup"));
  assert(settings_backup_export_with_progress(NULL,NULL,status,sizeof(status)));assert(access(temporary,F_OK)!=0&&access(previous,F_OK)!=0);
+ reset();profile_store_readable=false;
+ assert(!settings_backup_export_with_progress(progress,phases,status,sizeof(status))&&!captures&&!phase_count);
+ assert(strstr(status,"could not be fully read"));
+ f=fopen(backup,"rb");assert(f);char kept[64]={0};assert(fread(kept,1,sizeof(kept)-1,f)>0);fclose(f);assert(!strcmp(kept,data));
+ profile_store_readable=true;
  reset();load_ok=false;assert(!settings_backup_restore_with_progress(progress,phases,status,sizeof(status)));
  assert(phase_count==1&&phases[0]==SETTINGS_BACKUP_STAGE_READING&&!applies&&!captures);
  reset();assert(!settings_backup_restore_encrypted_with_progress("wrong-passphrase",progress,phases,status,sizeof(status)));

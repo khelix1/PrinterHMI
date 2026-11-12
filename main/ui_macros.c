@@ -206,6 +206,18 @@ static void macro_field_deleted(lv_event_t *event)
     if(retired)++s_macro_epoch;
     if(target==s_macros->editor_target)close_editor();
 }
+static const char *reviewed_macro_reason(void)
+{
+    if (s_macros->pending_owner != moonraker_config_generation())
+        return "Printer changed. Cancel and reopen the macro.";
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    const char *reason = printer_connection_reason(&state);
+    if (reason[0]) return reason;
+    return macro_controller_contains(s_pending_macro) ? "" :
+        "The reviewed macro is no longer available. Cancel and select a detected macro again.";
+}
+
 static void run_macro_cb(lv_event_t *event)
 {
     if(event && lv_event_get_code(event)!=LV_EVENT_CLICKED)return;
@@ -215,10 +227,7 @@ static void run_macro_cb(lv_event_t *event)
     }
 
     if(event && lv_event_get_target_obj(event)!=s_macros->run_action)return;
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
-    const char *reason = s_macros->pending_owner != moonraker_config_generation()
-        ? "Printer changed. Cancel and reopen the macro." : printer_connection_reason(&state);
+    const char *reason = reviewed_macro_reason();
     if (reason[0]) {
         macro_feedback(UI_STATUS_DANGER, "Macro not sent", reason);
         return;
@@ -339,9 +348,7 @@ static void macro_run_deleted(lv_event_t *event){
 }
 static void macro_run_availability(void){
     if(!s_macros || !s_macros->run_action)return;
-    moonraker_state_t state;moonraker_state_snapshot(&state);
-    const char *reason=s_macros->pending_owner!=moonraker_config_generation()?
-        "Printer changed. Cancel and reopen the macro.":printer_connection_reason(&state);
+    const char *reason = reviewed_macro_reason();
     bool was_disabled=lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED);
     if(reason[0]){lv_obj_add_state(s_macros->run_action,LV_STATE_DISABLED);macro_feedback(UI_STATUS_WARNING,"Macro not ready",reason);}
     else {lv_obj_remove_state(s_macros->run_action,LV_STATE_DISABLED);if(was_disabled)macro_feedback(UI_STATUS_INFO,"Macro ready","Review the command, then tap Run.");}

@@ -830,6 +830,13 @@ static void delete_cancel_cb(lv_event_t *event)
 }
 
 
+static const char *profile_storage_feedback(const char *fallback)
+{
+    return moonraker_config_storage_readable() ? fallback :
+        "Saved printer settings could not be fully read. Restart and retry, or restore a configuration backup.";
+}
+
+
 static void delete_confirm_cb(lv_event_t *event)
 {
     if(!s_delete_popup || !manager_action_current(event,s_delete_apply))return;
@@ -849,7 +856,7 @@ static void delete_confirm_cb(lv_event_t *event)
     bool removed=moonraker_config_delete_profile(target);
     if(!removed){
         if(epoch==s_profile_epoch && popup==s_delete_popup && s_delete_status)
-            lv_label_set_text(s_delete_status,"Unable to remove this printer. The review is retained; retry when storage is available.");
+            lv_label_set_text(s_delete_status,profile_storage_feedback("Unable to remove this printer. The review is retained; retry when storage is available."));
         s_profile_dispatching=false;return;
     }
     printer_profile_health_set(target,true,false);
@@ -940,7 +947,7 @@ static void manager_select_cb(lv_event_t *event)
     s_profile_dispatching=true;
     bool selected=moonraker_config_select_profile(target);
     if(epoch==s_profile_epoch && popup==s_manager_popup){
-        if(!selected)manager_set_status("Unable to activate the selected printer. Retry when storage is available.");
+        if(!selected)manager_set_status(profile_storage_feedback("Unable to activate the selected printer. Retry when storage is available."));
         else {
             manager_rebuild_rows();
             if(epoch==s_profile_epoch){char status[160];snprintf(status,sizeof(status),"Active printer: %s",moonraker_config_active_profile_name());manager_set_status(status);}
@@ -1624,8 +1631,15 @@ static void editor_camera_discovery_poll_cb(lv_timer_t *timer)
     if(!camera_job_current(&s_camera_find_job,true,!ready || !found)){
         camera_job_changed(true);s_profile_dispatching=false;return;
     }
-    if(!ready){s_profile_dispatching=false;return;}
+    if(!ready){
+        if(camera_discovery_status()==CAMERA_DISCOVERY_STALE)camera_job_changed(true);
+        s_profile_dispatching=false;return;
+    }
     camera_job_retire(true);
+    if (camera_discovery_status()==CAMERA_DISCOVERY_SAVE_FAILED) {
+        editor_camera_set_status("Cameras were found, but not all could be saved. Check storage and retry Find cameras.");
+        s_profile_dispatching=false;return;
+    }
     if(!found){
         editor_camera_set_status("Moonraker did not return another camera. Enter this stream URL manually.");
         s_profile_dispatching=false;return;
@@ -1790,6 +1804,7 @@ static void editor_camera_open_cb(lv_event_t *event)
     if(profiles_action_current(event,s_editor_camera_action,false))editor_camera_open();
 }
 
+
 static bool editor_save_current(lv_obj_t *popup,uint32_t epoch,int active)
 {
     return popup==s_editor_popup && epoch==s_profile_epoch && active==moonraker_config_active_profile_index();
@@ -1802,6 +1817,10 @@ static void editor_save_cb(lv_event_t *event)
     long port=strtol(port_text?port_text:"",&end,10);
     if(!port_text || !port_text[0] || !end || *end || port<1 || port>65535){editor_set_status("Port must be between 1 and 65535.");return;}
     if(!lv_textarea_get_text(s_editor_host)[0]){editor_set_status("A Moonraker host or IP address is required.");return;}
+    if (!moonraker_config_storage_readable()) {
+        editor_set_status(profile_storage_feedback(""));
+        return;
+    }
     moonraker_profile_t draft={.port=(int)port,.secure_transport=s_editor_secure};
     strlcpy(draft.name,lv_textarea_get_text(s_editor_name),sizeof(draft.name));
     strlcpy(draft.host,lv_textarea_get_text(s_editor_host),sizeof(draft.host));
@@ -1820,7 +1839,7 @@ static void editor_save_cb(lv_event_t *event)
     bool saved=moonraker_config_save_profile(target,draft.name,draft.host,draft.port,draft.api_key);
     notify=saved && target==active && initial_generation!=moonraker_config_generation();
     if(!editor_save_current(popup,epoch,active))goto finished;
-    if(!saved){editor_set_status("Could not save the profile. Check the host, port and storage, then retry.");goto finished;}
+    if(!saved){editor_set_status(profile_storage_feedback("Could not save the profile. Check the host, port and storage, then retry."));goto finished;}
     saved=moonraker_config_set_camera_stream_url(target,draft.camera_stream_url);
     camera_written=saved;
     if(!editor_save_current(popup,epoch,active))goto finished;

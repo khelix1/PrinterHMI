@@ -47,15 +47,33 @@ void ui_calibration_pid_init(ui_calibration_pid_context_t *context)
 static bool pid_object_supported(
     const char *object_name)
 {
-    return object_name &&
-        (strcmp(object_name, "heater_bed") == 0 ||
-         strncmp(object_name, "extruder", 8) == 0 ||
-         strncmp(
-             object_name,
-             "heater_generic ",
-             strlen("heater_generic ")) == 0);
+    if (!object_name || !object_name[0]) return false;
+    if (strcmp(object_name, "heater_bed") == 0) return true;
+    static const char generic[] = "heater_generic ";
+    if (strncmp(object_name, generic, sizeof(generic) - 1) == 0)
+        return object_name[sizeof(generic) - 1] != '\0';
+    if (strncmp(object_name, "extruder", 8) != 0) return false;
+    /* extruder_stepper objects are motors, not PID-capable heaters. */
+    for (const char *suffix = object_name + 8; *suffix; ++suffix)
+        if (*suffix < '0' || *suffix > '9') return false;
+    return true;
 }
 
+
+static bool pid_heater_available(const char *object_name)
+{
+    if (!pid_object_supported(object_name)) return false;
+    device_catalog_status_t status;
+    device_catalog_controller_status(&status);
+    if (!status.discovered) return false;
+    for (size_t index = 0; index < status.stored_count &&
+         index < DEVICE_CATALOG_MAX_DEVICES; ++index) {
+        device_descriptor_t device;
+        if (device_catalog_controller_get(index, &device) &&
+            strcmp(device.object_name, object_name) == 0) return true;
+    }
+    return false;
+}
 
 void ui_calibration_pid_close(void)
 {
@@ -209,6 +227,7 @@ static void run_pid_tune_cb(
     if (!s_context || !*s_context->popup || s_pid_dispatching ||
         s_pid_owner != moonraker_config_generation() ||
         *s_context->selected_index >= *s_context->heater_count ||
+        *s_context->selected_index >= s_context->heater_capacity ||
         !ui_calibration_pid_printer_ready()) {
         return;
     }
@@ -216,6 +235,13 @@ static void run_pid_tune_cb(
     const char *object_name =
         s_context->object_names[
             *s_context->selected_index];
+    /* The dialog owns a reviewed name; catalogs can reset/rebuild on reconnect. */
+    if (!pid_heater_available(object_name)) {
+        if (s_pid_feedback)
+            lv_label_set_text(s_pid_feedback,
+                "The selected heater is no longer available. Close and select a detected heater again.");
+        return;
+    }
     const char *heater =
         pid_heater_argument(object_name);
 

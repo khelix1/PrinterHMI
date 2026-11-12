@@ -30,6 +30,7 @@ void case_lighting_objects(const cJSON *objects,uint32_t generation)
         if(cJSON_IsString(entry)&&!strcmp(entry->valuestring,"output_pin case_led"))found=true;
     portENTER_CRITICAL(&s_light_lock);
     if(s_light.generation==generation){
+        if (s_light.discovered && s_light.available != found) ++s_light.session;
         ++s_revision;s_light.discovered=true;s_light.available=found;
         if(!found){
             s_light.known=false;s_light.configured=false;s_light.pending=false;
@@ -84,6 +85,7 @@ void case_lighting_status_json(const char *json,size_t length,uint32_t generatio
         if(!memcmp(json+i,key,sizeof(key)-1)){mentions=true;break;}
     if(!mentions)return;
     cJSON *root=json_document_parse_bounded(json,length,128*1024,16);if(!root)return;
+    if(cJSON_GetObjectItemCaseSensitive(root,"error")){cJSON_Delete(root);return;}
     const cJSON *result=cJSON_GetObjectItemCaseSensitive(root,"result");
     const cJSON *status=cJSON_GetObjectItemCaseSensitive(result,"status");
     const cJSON *method=cJSON_GetObjectItemCaseSensitive(root,"method");

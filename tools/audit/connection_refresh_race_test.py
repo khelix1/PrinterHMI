@@ -11,8 +11,9 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--main-source', type=Path, default=root / 'main/main.c')
 parser.add_argument('--cjson-dir', type=Path, required=True)
+parser.add_argument('--state-source', type=Path, default=root / 'main/moonraker.c')
 args = parser.parse_args()
-state = (root / 'main/moonraker.c').read_text()
+state = args.state_source.read_text()
 main = args.main_source.read_text()
 def function(source, name):
     mask = re.sub(r'/\*[\s\S]*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', lambda m: ' ' * len(m[0]), source)
@@ -35,6 +36,7 @@ code = r'''
 #include <stdlib.h>
 #include <string.h>
 #include "moonraker.h"
+#include "bed_mesh_controller.h"
 #include "moonraker_poll.h"
 #include "moonraker_websocket_json.h"
 #include "moonraker_telemetry_number.h"
@@ -54,7 +56,10 @@ static bool device_catalog_controller_merge_status(cJSON *s){(void)s;return fals
 static void motion_diagnostics_controller_reset(void){}
 static bool motion_diagnostics_controller_merge_status(cJSON *s){(void)s;return false;}
 static bool calibration_capability_controller_merge_status(cJSON *s){(void)s;return false;}
-static bool bed_mesh_controller_merge_status(cJSON *s){(void)s;return false;}
+static bool mesh_locked;
+void *xSemaphoreCreateMutex(void){return (void*)1;}
+int xSemaphoreTake(void *mutex,unsigned ticks){(void)ticks;assert(mutex==(void*)1&&!mesh_locked);mesh_locked=true;return 1;}
+int xSemaphoreGive(void *mutex){assert(mutex==(void*)1&&mesh_locked);mesh_locked=false;return 1;}
 '''
 code += '\n'.join(function(state, name) for name in functions)
 start = state.index('static cJSON *json_status_object(')
@@ -81,7 +86,19 @@ if 's_last_moonraker_ok_us' in main:
 code += function(main, 'moonraker_live_poll_tasklet')
 code += r'''
 int main(void){
- moonraker_state_reset();assert(!s_websocket_status_us);
+ bed_mesh_controller_init();moonraker_state_reset();assert(!s_websocket_status_us);
+ /* Prime printer A through real status merge; printer B must start without its mesh/list. */
+ publish("{\"result\":{\"status\":{\"bed_mesh\":{\"mesh_matrix\":[[0,0.1],[-0.1,0]],\"profiles\":{\"printer_A_plate\":{}},\"profile_name\":\"printer_A_plate\"}}}}");
+ bed_mesh_snapshot_t mesh;float mesh_values[4];bed_mesh_profile_name_t names[BED_MESH_MAX_PROFILES];
+ assert(bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES)&&mesh.valid&&mesh.profile_count==1);
+ moonraker_state_reset();
+ assert(!bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES));
+ assert(!mesh.valid&&!mesh.profile_count&&!mesh.profile_name[0]);
+ printing();assert(!bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES));
+ publish("{\"result\":{\"status\":{\"bed_mesh\":{\"mesh_matrix\":[[0,0],[0,0]],\"profiles\":{\"printer_B_plate\":{}}}}}}");
+ assert(bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES)&&mesh.valid);
+ assert(mesh.profile_count==1&&!strcmp(names[0],"printer_B_plate"));
+ moonraker_state_reset();
  static moonraker_exclude_state_t objects;
  g_moonraker_exclude_state=&objects;
  printing();
@@ -132,14 +149,18 @@ int main(void){
  running=false;moonraker_live_poll_tasklet();assert(polls==1);
  /* Initial/future timestamps do not establish a valid recent sample. */
  g_moonraker_state.moonraker_ok=true;s_websocket_status_us=now_us+1;moonraker_state_expire_websocket(3000000);assert(!g_moonraker_state.moonraker_ok);
- puts("PASS: real JSON publication survives both injected stale-probe races, equal frames renew freshness, three-second expiry/disconnect/profile reset/shutdown remain truthful, no competing HTTP poll while WebSocket owns reconnect");
+ puts("PASS: real JSON publication survives both injected stale-probe races, equal frames renew freshness, three-second expiry/disconnect/profile reset retires the real mesh/profile cache, shutdown remains truthful, no competing HTTP poll while WebSocket owns reconnect");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='connection-refresh-race-') as directory:
     tmp = Path(directory)
     (tmp / 'esp_err.h').write_text('#pragma once\ntypedef int esp_err_t;\n')
     (tmp / 'esp_http_client.h').write_text('#pragma once\ntypedef void *esp_http_client_handle_t;\ntypedef struct {int event_id;} esp_http_client_event_t;\n')
+    (tmp / 'freertos').mkdir()
+    (tmp / 'freertos/FreeRTOS.h').write_text('#pragma once\n#define portMAX_DELAY 0xffffffffU\n')
+    (tmp / 'freertos/semphr.h').write_text('#pragma once\ntypedef void *SemaphoreHandle_t;\nvoid *xSemaphoreCreateMutex(void);\nint xSemaphoreTake(void*,unsigned);\nint xSemaphoreGive(void*);\n')
+    (tmp / 'esp_heap_caps.h').write_text('#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_8BIT 2\n#define heap_caps_calloc(n,s,c) calloc(n,s)\n#define heap_caps_free free\n')
     (tmp / 'race.c').write_text(code)
     exe = tmp / 'race'
-    subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-O1', '-fsanitize=address,undefined,float-cast-overflow', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie', '-I', str(tmp), '-I', str(root/'main'), '-I', str(args.cjson_dir), str(tmp/'race.c'), str(args.cjson_dir/'cJSON.c'), '-lm', '-o', str(exe)], check=True)
+    subprocess.run(['cc', '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Wall', '-Wextra', '-Werror', '-O1', '-fsanitize=address,undefined,float-cast-overflow', '-fno-omit-frame-pointer', '-fno-pie', '-no-pie', '-I', str(tmp), '-I', str(root/'main'), '-I', str(args.cjson_dir), str(tmp/'race.c'), str(root/'main/bed_mesh_controller.c'), str(args.cjson_dir/'cJSON.c'), '-lm', '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True, env={**os.environ, 'ASAN_OPTIONS':'detect_leaks=0','UBSAN_OPTIONS':'halt_on_error=1'})

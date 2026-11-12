@@ -3314,7 +3314,7 @@ Run `python3 tools/theme-maker/linux/demo-journey-test.py --helper /path/to/firm
 
 ### Layer metadata ownership (v7.3.1-dev)
 
-Run `python3 tools/audit/layer_metadata_ownership_test.py --lvgl-dir /path/to/lvgl`. The actual thumbnail-session module is tested for file and printer ownership, failed fetch invalidation, printer changes during fetch, and full encoding of a long filename. On hardware, start a print externally, switch printers, and check that browsing a different file does not give the active print another file's layer dimensions.
+Run `python3 tools/audit/layer_metadata_ownership_test.py --lvgl-dir /path/to/lvgl`. Following v7.3.64-dev, this historically named suite checks thumbnail request failure/generation ownership and long filename encoding. The thumbnail-owned layer cache/getter has been retired. Active-print layer ownership is covered by `print_estimate_metadata_test.py` and Dashboard runtime tests. On hardware, start a print externally, switch printers, and check that browsing another file does not change the active print's layer dimensions.
 
 ### File detail job bounds (v7.3.2-dev)
 
@@ -3562,3 +3562,553 @@ closing/reopening during a scan, task creation failure followed by retry, failed
 scan/count/record reads, and successful empty scans. Failure text must differ
 from no-network text; subsequent successful scans must rebuild the network rows.
 The production Setup owner also compiles independently with warnings as errors.
+
+
+### Calibration homing through semantic aliases
+
+`printer_action_resolver_test.py` checks every maintained calibration alias both
+with and without an explicit `G28` prerequisite. The resolved script must retain
+that prerequisite; no-macro fallbacks, parameterized scripts, unknown macros,
+confirmation classes and command-size boundaries remain covered under ASan/UBSan.
+
+`calibration_dialog_layout_test.py --variant GEOMETRY --lvgl-dir PATH
+--lvgl-lib PATH` now includes the production semantic resolver in the real
+screws/gantry dialog fixture. A catalog supplies LEVEL_SCREWS, QGL or Z_TILT;
+unhomed dialogs must deliver G28 followed by that macro, while homed dialogs send
+only the selected macro. Existing lifecycle, retry, capability and printer-switch
+checks remain across themes/densities/text/viewport sizes. Host transport is
+mocked; these tests do not execute physical homing or validate macro contents.
+
+
+### Recovery command routes and request construction failures
+
+`estop_transport_test.py` compiles the actual WebSocket/HTTP command adapters
+with ASan/UBSan (leak detection disabled for the host runner). It checks distinct
+host/firmware restart APIs, surrounding blank/comment lines, ordinary scripts
+containing parameters/other commands/quoted tokens, and emergency-stop priority.
+HTTP fixtures check TLS, selected port, exact API-key forwarding and anonymous
+operation. Injected Content-Type, API-key and body setup failures must clean up
+without performing a request or acquiring/releasing the shared lane, while
+returning HTTP zero and the setup error. Existing transport-failure, maximum-size
+JSON escaping and busy-lane emergency bypass checks remain.
+
+`console_transport_test.py` checks literal Console routing, fallback and feedback;
+`recovery_dialog_safety_test.py` retains real LVGL restart/emergency dialog
+ownership and retry coverage. These fixtures mock network/firmware behavior;
+physical printer recovery timing remains a target verification step.
+
+
+### File HTTP request setup failures
+
+`file_request_bounds_test.py` includes the actual Moonraker state/capture types
+and exercises production raw GET, metadata and print-start functions under
+ASan/UBSan. Content-Type, API-key and body failures must return the setter error
+with HTTP zero, without transmission or shared-lane acquisition. Raw GET tests
+cover both shared and caller-owned exclusive paths and cleared output buffers/
+lengths. Metadata clears stale text; an anonymous print request checks body
+failure without an API-key setter. Successful immediate retries remain covered.
+
+Boundary coverage uses a 255-byte metadata filename encoded into 765 bytes,
+separate from the 159-byte start-print filename limit. The security-boundary,
+thumbnail-storage, command transport and demo-isolation tests provide adjacent
+regressions. HTTP setters and network I/O are fault-injected, not target hardware.
+
+
+### Endpoint verification and live response capture
+
+`probe_transport_test.py` compiles the full production probe and live HTTP
+transport units with real cJSON and ASan/UBSan. Network callbacks split response
+bytes across chunks. Coverage includes a validated server-info result, escaped
+hostname decoding, a later shutdown clearing ready, optional lookup failure,
+recovery to ready, large valid documents, keyword-only HTML, wrong/missing result
+fields, error envelopes, trailing data, deep nesting, truncation and embedded NUL.
+Webcam lists use the shared bounded parser too.
+
+Header/init/allocation/shared-lane/HTTP failures and retries must preserve balanced
+client/lane cleanup. Header failure must perform no request. Live polling checks
+TLS/port/key forwarding, cleared lengths/status on header failure, embedded-NUL
+and oversized captures, anonymous operation and retry. The fixture uses HTTP
+spies; it does not call production socket discovery or real Moonraker endpoints.
+
+
+### Camera discovery URL boundaries and clean results
+
+`probe_transport_test.py` also exercises the production webcam-list parser and
+URL normalizer. A 191-byte absolute URL must round-trip; a 192-byte stream must
+be skipped, and an overlong optional snapshot must remain empty. Relative
+snapshot overflow must not leave truncated text. Unsupported schemes must not
+be converted to proxy paths, while a URL embedded in a relative path's query
+must remain intact. Dirty reused output arrays, disabled/rejected entries,
+capacity-one lists and error envelopes test accepted-slot isolation.
+
+`camera_catalog_storage_test.py` and `camera_discovery_worker_test.py` retain
+persistence, result ownership and retry checks. HTTP/catalog/task boundaries
+are host fixtures; these checks do not prove physical camera compatibility.
+
+
+### Backup sensitive-data lifetime and worker boundaries
+
+`backup_sensitive_test.py` compiles production encrypted-export/preflight and
+plain/encrypted-restore functions with real cJSON and ASan/UBSan. Allocator spies
+check watched owned JSON fields and serialized credential plaintext are zero
+before release; snapshot clearing is checked at the cleanup call. Cases cover
+JSON/print/encrypt/write/load failures, successful operations, failed apply,
+successful/failed rollback and borrowed JSON isolation. This verifies explicit
+service-owned temporary copies, not every internal allocator/crypto scratch area.
+
+`backup_worker_test.py` runs the real encrypted worker through delayed/immediate
+completion, failed task creation, failed export/verify followed by retry, busy
+rejection, result status and clearing of shared/stack passphrase copies.
+`network_backup_dialog_test.py` adds 128-byte multibyte input in both create and
+restore forms; it must remain visible with an inline byte-limit error and start
+no worker. Existing rotation, security and dialog lifecycle cases remain.
+
+These checks do not reproduce the historical OTA-after-backup crash or establish
+target stack/heap headroom. Build and tablet transition verification remain local.
+
+
+### OTA persistence and catalog worker recovery
+
+`ota_transfer_test.py` now fault-injects custom URL open/set/commit failures and
+checks the remembered value changes only on success, unchanged aliased saves do
+not write, overlong input is refused and exact-limit input round-trips. The real
+OTA worker retains cancellation, stall, incomplete-image, SDK/task/lane failure,
+retry and progress-lock checks. C atomics define cross-core flag accesses; this
+serial host fixture does not establish target scheduling behavior.
+
+`ota_catalog_worker_test.py` compiles the production release HTTP event handler
+and worker with ASan/UBSan. Header failures must skip request/network acquisition
+and release client/buffers. NUL-containing captures must not reach the parser.
+Failures preserve the previous catalog and a retry can publish a new one without
+buffer/lane leaks. Parsing and release-channel policy remain covered by
+`ota_catalog_input_test.py`; the worker fixture stubs the parser and mutex.
+
+
+### Grouped accessibility persistence
+
+`accessibility_storage_test.py` exercises the production setter with ASan/UBSan
+and a staged NVS fixture. A later-key failure reproduces the old partial-commit
+behavior. The fixed setter must keep live options unchanged on open/set/commit
+failures, avoid committing before all four setters succeed, close every opened
+handle and allow retry. Mixed values verify key ordering. Success must use one
+open, four sets and one commit. The fixture models API commit behavior, not
+physical flash power-loss or corruption recovery.
+
+`theme_default_test.py --lvgl-dir PATH` and `theme_dialog_layout_test.py` with
+host LVGL source/archive arguments retain real-manager saved-theme/default and
+appearance-dialog lifecycle/layout coverage.
+
+
+### Temperature dialog target ownership
+
+`control_popups_layout_test.py` exercises the production popup implementation
+with host LVGL. It switches the active hotend after opening the generic nozzle
+dialog and requires both preset and custom submissions to remain unsent. Reopening
+permits a fresh M104 command. Named heater controls retain their explicit target
+across active-tool changes. Disabled presets, unrelated buttons and clicks bubbled
+from child labels must not send; a normal fan preset must still send. Existing
+printer/job changes, callback deletion/reentry, retry and layout cases also run.
+An optional `--source PATH` selects an earlier ui_printer_popups.c for a regression
+check. The fixture supplies telemetry and command callbacks; remote command
+execution timing still requires target validation.
+
+
+### Manual motion parsing state
+
+Run `python3 tools/audit/toolhead_motion_state_test.py`. It compiles the production
+jog/extrusion formatters with ASan/UBSan (leak detection disabled in restricted
+hosts), emits their full scripts and exercises all four initial coordinate and
+extrusion mode combinations in a parsing-state fixture. Checks include restored
+feedrate and overrides, coordinate origins, logical E continuity, untouched
+PAUSE/default saved states and exactly one intended move. Every undersized
+nonzero output buffer must be cleared and refused. `--source PATH` can select
+earlier source to reproduce the former G90/M83/feedrate leak. The same emitted
+scripts run through the production simulation using actual firmware state types.
+Incomplete restores, trailing commands and MOVE=1 variants must fail without
+changing the demo state.
+
+Run `toolhead_dialog_safety_test.py` and `filament_recovery_test.py` with host LVGL
+source/archive arguments for actual controls, retry, duplicate suppression,
+printer/job changes and teardown across themes, densities and text sizes.
+`/usr/bin/python3 tools/audit/filament_recovery_macros_test.py` requires Jinja2
+and checks the existing example macro state restoration.
+
+On a safe, idle and homed printer, verify small jogs and short hot extrusion in
+both absolute and relative modes, and confirm the next operator command retains
+its original mode/speed. A rejected Klipper move may abort before RESTORE; this
+host fixture does not verify planner behavior, physical travel or error recovery.
+
+
+### Print preparation and layer estimates
+
+Run `python3 tools/audit/printer_layer_resolver_test.py` for production resolver
+ASan/UBSan coverage (host leak detection disabled). The regression combines raised
+and probing Z with advanced file percentages and requires absent/zero layer
+reports to remain at layer zero before printing. Positive Klipper layer reports
+retain priority. Duration and filament validity checks include zero, negatives,
+NaN and infinity. `--source PATH` adapts only the preceding resolver signature
+to reproduce its original preparation-layer error.
+
+Run `telemetry_refresh_test.py` with host LVGL source/archive arguments for the
+Dashboard pipeline. Its preparation sequence traverses Z 20, 8, 0, 25, 4 and
+50 mm at nonzero file progress, checks zero-filament hold, then transitions to
+positive filament usage and normal estimates. Printer and Dashboard call the
+same print-start policy; the firmware build remains necessary for main.c.
+
+On the tablet, start an existing file without slicer layer reports: heating and
+pre-extrusion probing should show 0/total, then advance when printing begins.
+Check both Dashboard and Printer. Actual Klipper reports remain preferred; the
+post-start Z/percentage fallback is approximate and can still respond to Z hops
+or variable layer heights.
+
+
+### Active-job layer metadata and first-layer math
+
+`printer_layer_resolver_test.py` now checks a thicker first layer, metadata-count
+priority, partial final layers, missing metadata and overflow-safe conversion,
+alongside the preparation gate. `--source PATH` adapts preceding signatures to
+reproduce the first-layer/count error against the same new expectations.
+
+`print_estimate_metadata_test.py --lvgl-dir PATH` exercises the actual worker and
+extracts the production main.c layer selection helper. Checks include layer-only
+metadata, rejected fractional/negative/overflow/string/null counts, unusable
+heights, late completion, file/job/profile fencing and nested paths. A failed
+lookup must give the UI empty layer metadata, not a previous job's values.
+
+`telemetry_refresh_test.py` checks the real Dashboard pipeline using metadata
+count 57 and first-layer height 0.4 at Z=0.6 (layer 2), then replaces the job and
+printer generation and requires stale metadata to be ignored. Matching refreshed
+context restores the expected count. Print preparation, reported-layer priority,
+pause/offline/reconnect and one-shot preview cleanup cases remain covered.
+`print_estimates_test.py` retains all four progress modes and estimate policies.
+
+On the tablet, check a file with a thicker first layer and compare its total with
+Moonraker metadata; also browse another file and switch printers during a print.
+The background cache is independent of preview selection. If metadata is not yet
+available, reported counts still work; otherwise total may be unavailable until
+that existing background request completes. Raw-Z fallback remains an estimate.
+
+
+### Incomplete profile reads and credential preservation
+
+`profile_storage_test.py` compiles the real configuration owner with ASan/UBSan.
+A failed API-key read followed by editing another profile must preserve the saved
+key; the preceding source loses it. The fixture models successful NVS setters as
+immediately visible, so no multi-key rollback guarantee is assumed. Further cases
+cover failed namespace/schema/active/profile/name/host/port/key/camera/TLS reads,
+zero/oversized/nonterminated/embedded-NUL string results, changed active slots,
+invalid ports, first-run creation and missing optional legacy fields. Ordinary
+mutators must refuse writes after incomplete loads. Complete reload and validated
+full replacement recover, while replacement failure retains protection.
+`--source PATH` supplies preceding source; a legacy query stub only links the
+fixture, and the actual key-erasure assertion fails before relying on that query.
+
+`wifi_credentials_store_test.py` checks both returned string extents, Wi-Fi byte
+limits even with larger caller buffers, zeroed failure outputs, retry, open
+networks and full-width credentials. Its preceding source fails the malformed-read
+regression. `tls_trust_store_test.py` retains real CA/HTTPS/WSS fail-closed checks.
+
+`profiles_layout_test.py` with host LVGL source/archive arguments checks that an
+unreadable store retains the editor and draft, shows recovery guidance and does
+not call the save callback. The existing layout/lifecycle cases remain enabled.
+`backup_sensitive_test.py` checks refusal of plain/encrypted export before capture,
+encryption or filesystem access. `notification_backup_test.py` verifies the same
+plain-export refusal leaves the actual existing backup file untouched; it owns
+stage/file sequencing while the sensitive-data suite owns real JSON wiping.
+Existing validated plain/encrypted restores and worker checks remain covered.
+
+On hardware, normal profile edits, printer switching and backup export should be
+unchanged with readable settings. If storage reports a load error, restart and
+retry or restore a known-good full backup; no defaults or empty secrets should
+be saved over that incomplete collection. SDK flash errors and power loss remain
+physical checks. Failed restoration cannot promise full rollback of an original
+collection that was already unreadable.
+
+
+### Camera discovery target identity and import outcome
+
+`camera_discovery_worker_test.py` compiles the production controller with
+ASan/UBSan and real profile definitions. It changes an inactive target's host,
+port, API key, TLS, name, configured flag and camera URL without advancing the
+active generation, then requires no import. The preceding source fails this
+regression via `--source PATH`. A legacy status stub only links that source;
+the stale-import assertion fails on its actual catalog writes.
+
+Other cases cover queued active-generation rejection before network access,
+partial import failure at each of two camera slots, retry, empty results, fast
+completion, secret-copy clearing and refusal of reentrant starts during import.
+The discovered count intentionally retains its network meaning when saves fail.
+`profiles_layout_test.py` and `setup_center_layout_test.py` with host LVGL source
+and archive arguments require local partial-save feedback, retired stale waiting
+timers and available retry actions, retaining existing layout/lifetime checks.
+`discovery_states_test.py`, `endpoint_worker_test.py` and `demo_isolation_test.py`
+retain adjacent worker, discovery-dialog and local-demo checks.
+
+On hardware, Find cameras and Setup Scan should populate the normal catalog.
+If storage fails partway, the dialog must report that some cameras were not
+saved and allow retry; already saved slots can remain changed. Closing a dialog
+or changing configuration does not abort an in-flight HTTP request, but a stale
+result must not be imported by the real discovery consumer.
+
+
+`tools/theme-maker/linux/discovery-adapter-test.py` compiles the local timer
+adapter with ASan/UBSan. Its timer fixture checks running-state publication,
+duplicate starts, no-result/start/allocation failures, stale generation,
+canceled close/reopen, timer retirement and retry. The full native helper must
+also build against host LVGL. `native-test.py --helper PATH` checks
+`NativeTests.test_profiles_discovery_empty_retry_and_reviewed_endpoint`,
+`NativeTests.test_profiles_discovery_close_reopen_and_start_failure_retry` and
+`NativeTests.test_network_scan_completion_and_bounded_native_list_scroll` through
+its real pointer protocol. These checks retain shared firmware widgets while
+exercising the repaired local discovery and Network adapters.
+
+
+## Calibration selection freshness (v7.3.67-dev)
+
+Run `tools/audit/calibration_dialog_layout_test.py` with the host LVGL source
+and archive arguments, using `--variant PID` and `--variant CUSTOM` (or omit
+`--variant` for the full suite). With the confirmation already open, the fixtures
+invalidate catalog discovery and remove only the selected object while keeping
+the same printer generation. Neither case may send a command. Restore the
+catalog in reverse order: retry must send the original reviewed name. Existing
+transport failure/retry, switching and deletion checks must still pass.
+The PID selector also excludes an actual `extruder_stepper feeder` catalog entry;
+its name predicate retains extruder, numbered extruders, bed and generic heaters.
+The old UI owners reproduce the unavailable-catalog dispatch regression.
+
+On tablet, check PID heater selection and custom calibration confirmations,
+including reconnect/retry. A missing object should produce local guidance,
+without creating a new session or silently substituting another object.
+
+
+## Console severity and calibration result evidence (v7.3.68-dev)
+
+Run `python3 tools/audit/calibration_console_results_test.py`. It compiles the
+real Console and calibration controllers with ASan/UBSan and sends responses
+through real JSON ingestion. Informational error estimates/counters, embedded
+literal error markers and setting names must stay responses. Leading errors,
+unknown commands, homing errors and Shutdown must still fail the session.
+
+Warnings mentioning SAVE_CONFIG, HELP command-description lines and identifiers
+containing the command name must not unlock Apply & Restart. Normal positive
+save guidance must still complete a save-capable session. The final resonance
+CSV-written response must complete without save permission and survive the
+waiting deadline; partial resonance output must still time out. Probe-accuracy
+warning text must not complete its session, while real final statistics must.
+Optional `--console-source PATH` and `--session-source PATH` replay the same
+regressions against preceding controller sources.
+
+Retain `console_frame_input_test.py`, `console_filters_test.py`,
+`console_transport_test.py`, `tools_action_safety_test.py` and
+`demo_isolation_test.py --cjson-dir tools/theme-maker/linux/native/vendor/cjson`.
+With host LVGL source/archive arguments, run `console_modern_layout_test.py`
+and `calibration_dialog_layout_test.py --variant RESULTS` for the displayed
+Console and calibration-result flows. On tablet, verify Console alert styling,
+PID/Probe result saving and successful resonance-test completion. Merely opening
+HELP during a waiting calibration must not make Apply & Restart available.
+
+
+## Bed Mesh cache lifetime and clear semantics (v7.3.69-dev)
+
+From the project root, run
+`python3 tools/audit/bed_mesh_input_test.py --cjson-dir tools/theme-maker/linux/native/vendor/cjson`. Its ASan/UBSan
+fixture checks finite rectangular retained grids, malformed-cell/container
+rejection without cache mutation, genuine partial updates, both empty-matrix
+forms, nonempty probed fallback and saved profiles retained after clear. Failed
+mutex creation must prevent publication. Twenty reset/reinitialization cycles
+must retire geometry/list metadata and retain the same allocated buffers.
+
+`connection_refresh_race_test.py --cjson-dir tools/theme-maker/linux/native/vendor/cjson`
+now links the real bed-mesh controller. Real JSON status publication seeds
+printer A's cache; the production runtime reset must remove both geometry and
+profile names before any printer B metadata arrives. Printer B's own mesh/list
+can then publish normally. `--state-source PATH` replays this regression against
+an older moonraker implementation, alongside the existing connection races.
+
+With host LVGL source/archive arguments, run `bed_mesh_profiles_layout_test.py`,
+`studio_pages_test.py --variant BED_MESH` and `connection_controls_test.py`.
+Open Save, then clear the mesh; open Remove, then remove the reviewed name from
+the reported list. Confirm actions must disable, show local feedback and send
+nothing. Restore availability and retry the exact reviewed command. A cleared
+active mesh with saved profiles still present must leave a uniform background,
+including a canvas with padded stride; canary bytes must remain unchanged.
+
+On tablet, switch between printers with different meshes and open Bed Mesh
+before the new printer's status arrives. It must not show the old surface or
+profile list. Clear/load a mesh from Mainsail while viewing it: the display and
+any open profile confirmation should follow the reported availability. Existing
+mesh viewing during printing/paused remains available; calibration, saving and
+removal retain their idle-state restrictions.
+
+
+## Encoded JSON NUL and lighting availability (v7.3.70-dev)
+
+From the project root, run
+`python3 tools/audit/json_string_boundary_test.py --cjson-dir tools/theme-maker/linux/native/vendor/cjson`.
+Encoded NUL characters in string keys and values must be rejected by the actual
+bounded parser. Literal backslash-u text, ordinary Unicode and even backslash
+parity remain accepted. Exact-sized/truncated buffers must not be read past their
+ends. `--limits-header PATH` replays the regression against an earlier preflight.
+
+Run `case_lighting_test.py --cjson-dir tools/theme-maker/linux/native/vendor/cjson`
+under tools/audit. Pending commands must not be confirmed by error-bearing or
+encoded-NUL-aliased status envelopes. Ordinary live confirmation, RPC errors,
+timeouts and retry must continue to work. With host LVGL source/archive and
+cJSON arguments, `case_lighting_ui_test.py` presses the slider, removes and
+rediscovers case_led, restores valid config/status, and releases before any UI
+refresh. It must send nothing. Repeated unchanged discovery must still allow
+one release command. `--lighting-source PATH` replays against an earlier model.
+
+Retain the Files input, Console frame, print-estimate metadata, OTA input/worker,
+probe transport, backup-sensitive, custom-theme package, security-boundary,
+deep-failure, connection-race and demo-isolation suites. The deep-failure audit
+now uses the production shared version parser and JSON headers, preserving its
+existing assertions instead of referencing the removed catalog-local helper.
+
+On tablet, check Lighting on/off, brightness release, pending confirmation and
+retry during a print. A fresh slider gesture after lighting becomes available
+again should work normally. Switching printers must retain the existing owner
+checks and only show the button for a detected case_led output.
+
+
+## Macro value round-trips and stale reviews (v7.3.71-dev)
+
+Run `python3 tools/audit/macro_command_roundtrip_test.py`. It builds the actual
+formatter with ASan/UBSan, then feeds its output through comment-aware shlex
+parsing. Hash/space-containing values and every later parameter must survive
+exactly. Quotes, backslashes, semicolons, control characters, duplicate names and
+undersized buffers must still fail with an empty output. `--source PATH` replays
+against an older formatter; an unquoted hash truncates its output on parsing.
+
+`macro_catalog_storage_test.py` covers the real controller's exact-name query:
+uninitialized/missing/undiscovered names reject, valid names survive reordering,
+and a cleared catalog retires old names. Existing favorites persistence/rollback
+and generation-wrap cases remain. With host LVGL source/archive arguments,
+`command_surfaces_safety_test.py` removes a reviewed name before Run, requires no
+send and a disabled action, restores it, and verifies the exact retained command.
+`--macros-source PATH` replays the older UI. The lookup is shared with custom
+calibration; retain `calibration_dialog_layout_test.py --variant CUSTOM`,
+`responsive_layout_test.py --variant MACROS` and
+`lvgl95_modernization_test.py --variant MACROS`.
+
+Build the native helper and run its macro parameter-review, rejected-send retry,
+profile-change, unsafe-value and additional-parameter tests. On tablet, review a
+macro with a harmless hash-bearing text parameter followed by another parameter;
+both must remain visible in the command review. A removed macro must not run
+from an already-open review. Its own definition and behavior remain printer-owned.
+
+
+## Notification identity and retired connection cards (v7.3.72-dev)
+
+With host LVGL source/archive arguments, run `tools/audit/notifications_test.py`.
+Its policy cases arm an inactive printer, record a real loss, then delete the
+profile or change its name/host/port/API key/TLS setting without changing the
+active generation. No false recovery may be recorded; only that slot's old
+connection cards retire. An unrelated fault stays visible. A camera-only edit
+must not alter the connection baseline. Restore verified availability, then lose
+the connection again: all levels, including Quiet, must warn. Recovery logs in
+all levels and remains silent in Quiet. Deleting the final card closes its
+surface and clears obsolete overflow state without clearing Event History.
+
+The active observer is also exercised with an API-key/generation edit and a
+same-slot generation change without field edits. Old connection actions must
+retire while their history record remains. The existing layout, priority,
+deduplication, bootstrap, debounce, persistence, printer-switch and reentrant
+surface tests remain. `--toast-source PATH` replays the stale-profile regression
+against a preceding notification owner.
+
+Retain `event_history_layout_test.py` with host LVGL arguments,
+`profile_health_freshness_test.py`, `notification_backup_test.py` and
+`demo_isolation_test.py --cjson-dir tools/theme-maker/linux/native/vendor/cjson`
+under tools/audit. The native helper's
+`NativeTests.test_settings_notification_cancel_save_and_cross_page_behavior` and
+`NativeTests.test_settings_event_history_about_and_repeated_popup_cleanup` retain
+shared notification/history UI coverage.
+
+On tablet, verify that deleting or editing a printer with a pending offline
+card removes that obsolete card while preserving Event History. After the new
+configuration connects, a real subsequent loss must still warn in Quiet mode.
+Existing alerts for unrelated printers or faults must remain available.
+
+
+## Print-estimate preference load recovery (v7.3.73-dev)
+
+Run `python3 tools/audit/print_estimates_test.py`. Its ASan/UBSan fixture fails
+an NVS open, then a read, then allows the stored setting to load without a
+reboot. Failed reads must close their handle. Fresh processes exercise missing
+namespace and missing key: these settle to defaults without repeated reads, and
+a later successful save updates the cache. A failed commit retains the previous
+selection. Demo edits perform no storage access and stay separate from the live
+selection. `--preferences-source PATH` replays the preceding-owner regression.
+The existing four progress modes and independent remaining/ETA calculations
+remain covered.
+
+Retain `print_estimate_metadata_test.py` with `--lvgl-dir`,
+`telemetry_refresh_test.py` and `telemetry_modern_layout_test.py` with host LVGL
+source/archive arguments, plus `demo_isolation_test.py --cjson-dir
+tools/theme-maker/linux/native/vendor/cjson`, all under tools/audit.
+
+On tablet, select distinct progress, remaining-time and ETA sources, save,
+reboot and verify the choices persist. Demo changes must not replace the live
+choices. Storage-error recovery is fault-injected in the host test.
+
+
+## Custom OTA URL load recovery (v7.3.74-dev)
+
+Run `python3 tools/audit/ota_transfer_test.py`. The fixture fails a storage
+open and then a URL read before recovering the saved URL without reboot or
+write. It verifies handle closure, cached defaults for a missing namespace,
+missing key and empty URL, and replacement after a committed save.
+`--source PATH` can replay this regression against the preceding OTA owner.
+The existing OTA transfer, catalog and demo-isolation checks still apply.
+
+
+## Setup progress recovery (v7.3.75-dev)
+
+Run `python3 tools/audit/onboarding_progress_test.py`. The fixture checks retry
+after open and key read failures, refusal to overwrite unread steps, merging
+after recovery, independent Finish, and saved completion with an unreadable
+checklist. It also checks missing namespace caching and existing save failures.
+Use `--source PATH` to compare the prior implementation. Retain Setup Center
+layout and demo-isolation checks.
+
+
+## Profile setter boundaries (v7.3.76-dev)
+
+Run `python3 tools/audit/profile_storage_test.py`. Camera edits, including
+empty no-ops, must fail for unused slots without changing RAM, generation or
+storage calls. Overlong and bounded unterminated names must fail before storage
+access. A 31-byte name and camera URL must round-trip through reload; NULL
+names retain default naming. Existing persistence-failure checks remain.
+`--source PATH` replays the unused-slot regression against the previous owner.
+Retain `camera_catalog_storage_test.py` and `profiles_layout_test.py` with
+host LVGL source/archive arguments.
+
+
+## Studio Dark accent selection (v7.3.77-dev)
+
+Run `live_appearance_test.py` under tools/audit with host LVGL source/archive
+arguments. In Studio Dark, the test taps each accent and checks the selected
+row outline, Settings chevron, and regular Settings action border. The danger
+action, warning and success colors, and background must stay unchanged.
+Selecting Theme Default restores purple. The appearance layout, saved-choice
+failure feedback, and popup lifecycle checks still run across all themes.
+
+
+## Camera metadata on printer slot reuse (v7.3.78-dev)
+
+Run `python3 tools/audit/profile_storage_test.py` and
+`python3 tools/audit/camera_catalog_storage_test.py`. The profile test deletes
+a printer with saved cameras, injects a cleanup failure, and retries the add.
+The replacement must start without the old URLs, labels, view settings or
+default camera. Other slots and existing-profile edits keep their metadata.
+
+
+## Individual camera removal (v7.3.79-dev)
+
+Run `python3 tools/audit/camera_catalog_storage_test.py`. The host test edits,
+removes and re-adds primary and secondary cameras with saved view settings
+and default selections. A preference read failure must leave the URL intact.
+A successful removal clears its view settings and any default pointing to
+that camera. Editing and removing an unrelated camera preserve the saved
+selection and view settings of the remaining camera.

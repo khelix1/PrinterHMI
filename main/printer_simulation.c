@@ -67,6 +67,10 @@ bool printer_simulation_apply(moonraker_state_t *state,bool excluded[2],bool *se
  else if(number_argument(command,"G91\nG1 X"," F6000\nG90",&v)){if(fabs(v)>1000)return false;state->toolhead_x+=v;}
  else if(number_argument(command,"G91\nG1 Y"," F6000\nG90",&v)){if(fabs(v)>1000)return false;state->toolhead_y+=v;}
  else if(number_argument(command,"G91\nG1 Z"," F600\nG90",&v)){if(fabs(v)>1000)return false;state->toolhead_z+=v;}
+ else if(number_argument(command,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 X"," F6000\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0",&v)){if(fabs(v)>50)return false;state->toolhead_x+=v;}
+ else if(number_argument(command,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 Y"," F6000\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0",&v)){if(fabs(v)>50)return false;state->toolhead_y+=v;}
+ else if(number_argument(command,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 Z"," F600\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0",&v)){if(fabs(v)>25)return false;state->toolhead_z+=v;}
+ else if(number_argument(command,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nM83\nG1 E"," F300\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0",&v)){if(fabs(v)<1 || fabs(v)>50)return false;}
  else if(stop){++state->print_job_revision;strcpy(state->printer_state,"shutdown");state->nozzle_target=state->bed_target=state->part_fan_speed=state->heater_target=0;state->heater_on=false;state->drybox_active_program=0;state->drybox_fan_speed=0;state->live_velocity=state->live_flow=0;}
  else if(restart){++state->print_job_revision;strcpy(state->printer_state,"standby");}
  else if(!strcmp(command,"CANCEL_PRINT")){if(!state->moonraker_ok || !state->live_data_ok || (strcmp(state->printer_state,"printing") && strcmp(state->printer_state,"paused")))return false;++state->print_job_revision;snprintf(state->printer_state,sizeof(state->printer_state),"cancelled");state->nozzle_target=state->bed_target=state->part_fan_speed=0;}

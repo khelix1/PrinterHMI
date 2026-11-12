@@ -22,15 +22,24 @@ print_estimate_options_t print_estimate_options_get(void)
     if (demo_mode_enabled()) return demo;
 #endif
     if (!loaded) {
-        loaded = true;
         selected = defaults;
         nvs_handle_t handle;
         uint8_t packed;
-        if (nvs_open("hmi", NVS_READONLY, &handle) == ESP_OK) {
-            if (nvs_get_u8(handle, "print_estimate", &packed) == ESP_OK)
-                selected = (print_estimate_options_t){packed & 3, (packed >> 2) & 7, packed >> 5};
+        esp_err_t error = nvs_open("hmi", NVS_READONLY, &handle);
+        if (error == ESP_ERR_NVS_NOT_FOUND) {
+            loaded = true; /* A genuinely absent namespace uses defaults. */
+        } else if (error == ESP_OK) {
+            error = nvs_get_u8(handle, "print_estimate", &packed);
             nvs_close(handle);
+            if (error == ESP_OK) {
+                selected = (print_estimate_options_t){packed & 3, (packed >> 2) & 7, packed >> 5};
+                loaded = true;
+            } else if (error == ESP_ERR_NVS_NOT_FOUND) {
+                loaded = true;
+            }
         }
+        /* Other read/open failures use defaults for this call, then retry.
+         * No storage write occurs while resolving the saved preference. */
     }
     return selected;
 }

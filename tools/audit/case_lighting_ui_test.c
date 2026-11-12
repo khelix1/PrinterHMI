@@ -73,6 +73,21 @@ static void run(void)
  prepare(true); /* Reconnect to the same printer before the next UI refresh. */
  lv_slider_set_value(s_slider,45,LV_ANIM_OFF);
  lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);assert(sends==before);
+ /* Disappear/return inside one refresh interval must also retire the drag. */
+ lv_obj_send_event(s_slider,LV_EVENT_PRESSED,NULL);
+ cJSON *catalog=cJSON_Parse("[]");case_lighting_objects(catalog,generation);cJSON_Delete(catalog);
+ catalog=cJSON_Parse("[\"output_pin case_led\"]");case_lighting_objects(catalog,generation);cJSON_Delete(catalog);
+ catalog=cJSON_Parse("{\"output_pin case_led\":{\"pwm\":true}}");case_lighting_config(catalog,generation);cJSON_Delete(catalog);
+ case_lighting_status_json(old,strlen(old),generation);
+ lv_slider_set_value(s_slider,45,LV_ANIM_OFF);lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);
+ assert(sends==before);
+ /* Repeating unchanged discovery must not cancel an otherwise valid gesture. */
+ lv_obj_send_event(s_slider,LV_EVENT_PRESSED,NULL);
+ catalog=cJSON_Parse("[\"output_pin case_led\"]");case_lighting_objects(catalog,generation);cJSON_Delete(catalog);
+ lv_slider_set_value(s_slider,45,LV_ANIM_OFF);lv_obj_send_event(s_slider,LV_EVENT_RELEASED,NULL);
+ assert(sends==before+1&&sent_percent==45);before=sends;
+ const char *confirmed45="{\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.45}}}}";
+ case_lighting_status_json(confirmed45,strlen(confirmed45),generation);refresh(NULL);
  case_lighting_status_json(echo,strlen(echo),generation);refresh(NULL);
  case_lighting_status_json(old,strlen(old),generation);refresh(NULL);
  ui_case_lighting_close();ui_case_lighting_show();

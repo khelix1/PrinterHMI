@@ -15,3 +15,14 @@ bool camera_discovery_busy(void);
  * are imported here, never by the network worker. count is the returned count. */
 bool camera_discovery_take_result(moonraker_webcam_t *webcam, bool *found,
                                   size_t *count);
+
+/* UI-consumer status. Count still means cameras discovered; save failure may
+ * leave some imported. STALE also identifies a consumed/discarded result so a
+ * waiting dialog can retire its timer and retry instead of waiting forever. */
+typedef enum {
+    CAMERA_DISCOVERY_WAITING,
+    CAMERA_DISCOVERY_READY,
+    CAMERA_DISCOVERY_STALE,
+    CAMERA_DISCOVERY_SAVE_FAILED,
+} camera_discovery_status_t;
+camera_discovery_status_t camera_discovery_status(void);

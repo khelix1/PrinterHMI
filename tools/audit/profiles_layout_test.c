@@ -31,6 +31,8 @@ bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void
 bool custom_theme_accent_override(uint8_t a,uint32_t*b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t*a){(void)a;return false;}
 static moonraker_profile_t profiles[4];static int active;
+static bool profile_store_readable=true;
+bool moonraker_config_storage_readable(void){return profile_store_readable;}
 size_t strlcpy(char*d,const char*s,size_t n){size_t len=strlen(s);if(n){size_t k=len<n-1?len:n-1;memcpy(d,s,k);d[k]=0;}return len;}
 static void (*profile_read_hook)(void);
 __attribute__((noinline)) const moonraker_profile_t*moonraker_config_profile(int i){if(profile_read_hook){void(*hook)(void)=profile_read_hook;profile_read_hook=NULL;hook();}return i>=0&&i<4?&profiles[i]:NULL;}
@@ -69,6 +71,8 @@ static size_t camera_set_slot;
 static unsigned camera_default_writes,camera_test_starts,camera_test_polls,camera_find_starts,camera_find_polls;
 static bool camera_default_ok=true,camera_test_accept=true,camera_test_ready,camera_test_ok=true;
 static bool camera_find_accept=true,camera_find_ready,camera_find_found=true,camera_find_advance;
+static camera_discovery_status_t camera_find_status=CAMERA_DISCOVERY_READY;
+camera_discovery_status_t camera_discovery_status(void){return camera_find_status;}
 static void (*camera_test_start_hook)(void),(*camera_test_poll_hook)(void),(*camera_find_start_hook)(void),(*camera_find_poll_hook)(void);
 size_t camera_catalog_default(int i){(void)i;return default_camera;}
 bool camera_catalog_get(int i,size_t s,camera_catalog_entry_t*e){(void)i;if(camera_get_hook){void(*hook)(void)=camera_get_hook;camera_get_hook=NULL;hook();}*e=(camera_catalog_entry_t){.configured=true};snprintf(e->name,sizeof(e->name),"Workshop camera with long name%zu",s);snprintf(e->stream_url,sizeof(e->stream_url),"http://camera%zu.local/stream",s);return true;}
@@ -572,6 +576,13 @@ static void profile_camera_operation_safety(void)
  /* Import can advance its own generation and must keep the staged primary URL current from any slot. */
  editor_camera_discover_cb(NULL);camera_find_ready=true;camera_find_advance=true;editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);camera_find_advance=false;
  assert(!s_editor_camera_discovery_timer&&!strcmp(s_editor_camera_url,"http://imported.local/stream")&&strstr(lv_label_get_text(s_editor_camera_status),"imported"));
+ camera_find_status=CAMERA_DISCOVERY_SAVE_FAILED;
+ editor_camera_discover_cb(NULL);camera_find_ready=true;editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);
+ assert(!s_editor_camera_discovery_timer&&s_editor_camera_popup&&strstr(lv_label_get_text(s_editor_camera_status),"not all could be saved"));
+ camera_find_status=CAMERA_DISCOVERY_STALE;
+ editor_camera_discover_cb(NULL);camera_find_ready=false;editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);
+ assert(!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"changed"));
+ camera_find_status=CAMERA_DISCOVERY_READY;
  editor_camera_discover_cb(NULL);camera_find_ready=true;camera_find_found=false;editor_camera_discovery_poll_cb(s_editor_camera_discovery_timer);camera_find_found=true;
  assert(!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"manually"));
  editor_camera_discover_cb(NULL);lv_obj_delete(s_editor_camera_stream);assert(!s_editor_camera_discovery_timer&&!s_camera_find_job.key[0]);
@@ -911,7 +922,7 @@ viewport=(int[]){1024,640,480}[size];lv_display_set_resolution(d,viewport,size==
 ui_printer_profiles_show(active_changed,discover);nested_checks(theme,!size&&density==1&&large);layout(s_manager_popup);if(ui_theme_is_studio())assert(lv_obj_get_width(s_manager_popup)==viewport-48);for(int i=0;i<4;i++){lv_obj_t*r=s_profile_rows[i];for(unsigned j=0;j<lv_obj_get_child_count(r);j++)inside(lv_obj_get_child(r,j),r);}manager_polish_checks();if(!size&&density==1&&large)snapshot(theme,"manager");
 click(s_profile_rows[2]);assert(s_selected_profile==2);manager_polish_checks();manager_select_cb(NULL);assert(active==0&&changed==old_changed);manager_delete_cb(NULL);assert(!s_delete_popup);
 click(s_profile_rows[0]);manager_polish_checks();manager_edit_cb(NULL);layout(s_editor_popup);editor_polish_checks();profile_scroll_render_check(s_editor_popup,true);lv_obj_t*fields[]={s_editor_name,s_editor_host,s_editor_port};for(unsigned i=0;i<3;i++){assert(lv_obj_get_height(fields[i])>=56);assert(lv_obj_get_style_text_font(fields[i],0)==UI_FONT_BODY_LARGE);}assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));if(!size&&density==1&&large)snapshot(theme,"editor");
-int old_discovered=discovered;editor_discover_cb(NULL);assert(discovered==old_discovered+1);lv_textarea_set_text(s_editor_host,"");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_host,"changed.local");lv_textarea_set_text(s_editor_port,"0");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_port,"65536");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_port,"7127");s_editor_secure=true;editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);s_editor_secure=false;storage_ok=false;editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);storage_ok=true;
+int old_discovered=discovered;editor_discover_cb(NULL);assert(discovered==old_discovered+1);lv_textarea_set_text(s_editor_host,"");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_host,"changed.local");lv_textarea_set_text(s_editor_port,"0");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_port,"65536");editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);lv_textarea_set_text(s_editor_port,"7127");s_editor_secure=true;editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);s_editor_secure=false;storage_ok=false;editor_save_cb(NULL);assert(s_editor_popup&&saves==old_saves);storage_ok=true;profile_store_readable=false;unsigned writes_before=base_writes;editor_save_cb(NULL);assert(s_editor_popup&&base_writes==writes_before&&strstr(lv_label_get_text(s_editor_status),"could not be fully read"));profile_store_readable=true;
 ui_printer_profiles_set_discovered_endpoint("discovered.local",7128,"Moonraker");assert(!strcmp(lv_textarea_get_text(s_editor_host),"discovered.local"));assert(!strcmp(lv_textarea_get_text(s_editor_name),profiles[0].name));editor_save_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1&&changed==old_changed+1);assert(!strcmp(profiles[0].host,"discovered.local")&&profiles[0].port==7128);
 manager_edit_cb(NULL);lv_textarea_set_text(s_editor_host,"cancelled.local");editor_cancel_cb(NULL);assert(!s_editor_popup&&saves==old_saves+1);assert(strcmp(profiles[0].host,"cancelled.local"));
 manager_delete_cb(NULL);assert(s_delete_popup);removal_warning_checks(s_delete_popup);if(!size&&density==1&&large)snapshot(theme,"remove");delete_cancel_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes);manager_delete_cb(NULL);storage_ok=false;delete_confirm_cb(NULL);assert(s_delete_popup&&deletes==old_deletes);storage_ok=true;manager_delete_cb(NULL);delete_confirm_cb(NULL);assert(!s_delete_popup&&deletes==old_deletes+1&&active==1&&changed==old_changed+2);manager_delete_cb(NULL);assert(!s_delete_popup);

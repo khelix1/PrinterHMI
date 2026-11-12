@@ -178,6 +178,73 @@ static void inactive_profile_checks(void){
  ui_toast_close();profiles[1].configured=false;ui_toast_observe_profiles(&state);assert(!s_notice_count);
 }
 
+static void changed_profile_notification_checks(void)
+{
+ moonraker_state_t state={.moonraker_ok=true,.live_data_ok=true};
+ for(unsigned level=0;level<3;level++)for(unsigned field=0;field<6;field++){
+  ui_toast_close();assert(ui_toast_set_level((ui_notification_level_t)level));
+  memset(profiles,0,sizeof(profiles));memset(health_known,0,sizeof(health_known));
+  memset(health_online,0,sizeof(health_online));memset(health_fresh,0,sizeof(health_fresh));
+  active_profile=0;ui_toast_observe_profiles(&state);
+  profiles[1]=(moonraker_profile_t){.configured=true,.port=7126};
+  strcpy(profiles[1].host,"old-printer.local");strcpy(profiles[1].name,"Old printer");
+  strcpy(profiles[1].api_key,"old-test-key");
+  health_known[1]=health_online[1]=health_fresh[1]=true;
+  ui_toast_observe_profiles(&state);assert(!s_notice_count);
+  health_online[1]=false;ui_toast_observe_profiles(&state);assert(s_notice_count==1&&s_notices[0].connection);
+  unsigned before_camera=log_count;
+  strcpy(profiles[1].camera_stream_url,"http://camera.local/stream");
+  ui_toast_observe_profiles(&state);assert(s_notice_count==1&&log_count==before_camera);
+  ui_toast_show(UI_STATUS_DANGER,"UNRELATED FAULT","Keep this fault when a profile changes.");
+  assert(s_notice_count==2);unsigned logged=log_count;
+  /* Inactive profile edits deliberately do not advance the active generation. */
+  uint32_t unchanged_owner=owner;
+  if(field==0)strcpy(profiles[1].name,"Renamed printer");
+  else if(field==1)strcpy(profiles[1].host,"new-printer.local");
+  else if(field==2)profiles[1].port++;
+  else if(field==3)profiles[1].secure_transport=true;
+  else if(field==4)strcpy(profiles[1].api_key,"new-test-key");
+  else profiles[1].configured=false;
+  health_online[1]=true;ui_toast_observe_profiles(&state);
+  assert(owner==unchanged_owner&&log_count==logged&&s_notice_count==1);
+  assert(!s_notices[0].connection&&!strcmp(s_notices[0].title,"UNRELATED FAULT")&&s_toast);
+  ui_toast_close();
+  if(!profiles[1].configured){profiles[1].configured=true;ui_toast_observe_profiles(&state);}
+  ui_toast_observe_profiles(&state);assert(!s_notice_count);
+  health_online[1]=false;ui_toast_observe_profiles(&state);
+  assert(s_notice_count==1&&s_notices[0].kind==UI_STATUS_WARNING);
+  assert(!strcmp(s_notices[0].printer,profiles[1].name));
+  health_online[1]=true;ui_toast_observe_profiles(&state);
+  assert(log_count==logged+2);
+  assert(s_notice_count==(level?1u:0u));
+  ui_toast_close();
+ }
+ /* Deletion of the only connection card closes its surface and resets overflow. */
+ assert(ui_toast_set_level(UI_NOTIFY_QUIET));
+ health_online[1]=false;ui_toast_observe_profiles(&state);assert(s_notice_count==1);
+ s_overflow=2;unsigned logged=log_count;
+ profiles[1].configured=false;ui_toast_observe_profiles(&state);
+ assert(!s_notice_count&&!s_toast&&!s_overflow&&log_count==logged);
+ /* Active edits also retire a warning captured under the old generation. */
+ profiles[1].configured=true;active_profile=1;owner++;
+ ui_toast_observe_printer(&state);ui_toast_observe_profiles(&state);
+ lv_tick_inc(3000);ui_toast_observe_printer(&state);ui_toast_observe_profiles(&state);
+ state.live_data_ok=false;ui_toast_observe_printer(&state);ui_toast_observe_profiles(&state);
+ lv_tick_inc(3000);ui_toast_observe_printer(&state);ui_toast_observe_profiles(&state);
+ assert(s_notice_count==1&&s_notices[0].connection);logged=log_count;
+ strcpy(profiles[1].api_key,"active-edit-test-key");owner++;
+ ui_toast_observe_printer(&state);ui_toast_observe_profiles(&state);
+ assert(!s_notice_count&&!s_toast&&log_count==logged);
+ /* Even a same-slot generation change without field edits retires old actions. */
+ state.live_data_ok=true;ui_toast_observe_printer(&state);lv_tick_inc(3000);ui_toast_observe_printer(&state);
+ state.live_data_ok=false;ui_toast_observe_printer(&state);lv_tick_inc(3000);ui_toast_observe_printer(&state);
+ assert(s_notice_count==1&&s_notices[0].connection);logged=log_count;
+ owner++;ui_toast_observe_printer(&state);
+ assert(!s_notice_count&&!s_toast&&log_count==logged);
+ ui_toast_close();profiles[1].configured=false;active_profile=0;owner++;
+ ui_toast_observe_profiles(&state);
+}
+
 static void preference_nested(void){preference_save(NULL);preference_toggle(NULL);}
 static void preference_replacement(void){ui_toast_preferences_close();ui_toast_preferences_show(changed);}
 static void increment_owner(void){owner++;}
@@ -305,6 +372,7 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   assert(ui_toast_set_level(UI_NOTIFY_QUIET));strcpy(observed.printer_state,"complete");ui_toast_observe_printer(&observed);assert(!s_notice_count);
   attention_checks();
   inactive_profile_checks();
+  if(density==0&&!large&&!narrow)changed_profile_notification_checks();
   notification_lifecycle_checks();
   ui_toast_preferences_show(NULL);lv_obj_delete(s_preference_popup);assert(!s_preference_popup&&!s_preference_value);assert(!lv_obj_get_child_count(lv_layer_top()));strcpy(printer,"Printer A");
  }

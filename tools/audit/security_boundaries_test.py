@@ -77,6 +77,7 @@ static inline size_t strlcpy(char *d,const char *s,size_t n) {
     start = backup.index('typedef struct {')
     end = backup.index('} settings_backup_snapshot_t;', start) + len('} settings_backup_snapshot_t;')
     (folder / 'backup.c').write_text('''#include <time.h>
+#include "settings_backup_sensitive.h"
 typedef int ui_theme_id_t,ui_accent_id_t,ui_density_id_t,ui_notification_level_t;
 typedef struct {bool large_text,high_contrast,reduced_transparency,reduced_motion;} ui_accessibility_t;
 #define CUSTOM_THEME_ID_MAX 32
@@ -106,7 +107,7 @@ static bool size_guard(const uint8_t *plaintext,size_t plaintext_size,
     subprocess.run(['cc', '-D_POSIX_C_SOURCE=200809L', '-std=c11', '-O1', '-g',
                     '-Wall', '-Wextra', '-Werror', '-fsanitize=undefined',
                     '-include', str(folder / 'compat.h'), '-I', str(folder),
-                    '-I', str(ROOT / 'main'),
+                    '-I', str(ROOT / 'main'), '-I', str(ROOT / 'tools/theme-maker/linux/native/vendor/cjson'),
                     str(ROOT / 'tools/audit/security_boundaries_test.c'),
                     str(ROOT / 'main/moonraker_tls_trust_store.c'),
                     str(ROOT / 'main/moonraker_transport_security_controller.c'),

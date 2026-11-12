@@ -10,6 +10,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--lvgl-dir",type=Path)
 parser.add_argument("--lvgl-lib",type=Path,help="Optional host LVGL archive built with these font/stdlib flags")
 parser.add_argument("--cjson-dir",type=Path,required=True)
+parser.add_argument("--lighting-source",type=Path,default=root/"main/case_lighting.c")
 args=parser.parse_args()
 candidates=[args.lvgl_dir] if args.lvgl_dir else list((root/"managed_components").glob("*lvgl*"))
 lvgl=next((p for p in candidates if p and (p/"src/core/lv_obj.c").is_file()),None)
@@ -40,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="lighting-ui-") as directory:
     executable=tmp/"lighting_ui"
     subprocess.run(["cc","-std=c11","-O2","-Wall","-Wextra","-Werror","-Wrestrict","-ffunction-sections","-fdata-sections",*flags,
                     "-I",str(args.cjson_dir),"-I",str(tmp),"-I",str(lvgl),"-I",str(lvgl/"src"),"-I",str(root/"main"),
-                    str(root/"tools/audit/case_lighting_ui_test.c"),str(args.cjson_dir/"cJSON.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(root/"main"/p) for p in sources],
+                    str(root/"tools/audit/case_lighting_ui_test.c"),str(args.cjson_dir/"cJSON.c"),str(lvgl/"src/font/lv_font_montserrat_12.c"),*[str(args.lighting_source if p=="case_lighting.c" else root/"main"/p) for p in sources],
                     str(library),"-Wl,--gc-sections","-lm","-o",str(executable)],check=True)
     subprocess.run([str(executable)],check=True)
 

@@ -48,6 +48,7 @@ int nvs_commit(nvs_handle_t h){assert(h==1);commits++;return commit_error;}
 void nvs_close(nvs_handle_t h){assert(h==1);closes++;}
 static void reset(void){s_favorites_loaded=false;memset(&s_favorites,0,sizeof(s_favorites));memset(&stored,0,sizeof(stored));blob_size=sizeof(stored);open_error=read_error=set_error=commit_error=0;writes=commits=opens=closes=0;}
 int main(void){
+ assert(!macro_controller_contains("CLEAN")&&!macro_controller_contains(NULL));
  assert(macro_controller_init());reset();
  memset(&stored,'x',sizeof(stored));char query[65];memset(query,'x',64);query[64]=0;
  assert(!macro_controller_is_favorite(query));assert(macro_controller_set_favorite("CLEAN",true));assert(macro_controller_is_favorite("CLEAN"));
@@ -75,6 +76,10 @@ int main(void){
  macro_controller_update_from_objects(objects);cJSON_Delete(objects);
  macro_controller_status_t status;macro_controller_status(&status);assert(status.count==1&&status.total_count==2&&status.truncated);
  char name[64];assert(macro_controller_get(0,name,sizeof(name))&&!strcmp(name,"CLEAN"));
+ assert(macro_controller_contains("CLEAN")&&!macro_controller_contains("CLE")&&!macro_controller_contains("clean")&&!macro_controller_contains(""));
+ macro_controller_update_from_objects(NULL);assert(!macro_controller_contains("CLEAN"));
+ objects=cJSON_Parse("[\"gcode_macro OTHER\",\"gcode_macro CLEAN\"]");assert(objects);
+ macro_controller_update_from_objects(objects);cJSON_Delete(objects);assert(macro_controller_contains("CLEAN")&&macro_controller_contains("OTHER"));
  s_store->status.generation=UINT32_MAX;macro_controller_update_parameters(NULL);macro_controller_status(&status);assert(status.generation==1);
  free(s_store);s_store=NULL;
  puts("PASS: macro favorites blob validation, load/save retry, RAM rollback, capacity/no-op cases, overlong catalog omission and nonzero generation wrap");

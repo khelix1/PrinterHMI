@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Bed Mesh JSON boundary: reject nonfinite/unrepresentable values before cache publication."""
+"""Real Bed Mesh JSON boundary: reject malformed grids, honor clears and retire/reuse cached data."""
 from pathlib import Path
 import argparse,os,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
@@ -11,12 +11,17 @@ code=r'''
 #include <stdio.h>
 #include <string.h>
 #include "mesh_under_test.c"
-void *xSemaphoreCreateMutex(void){return (void*)1;}
+static bool fail_mutex=true;
+void *xSemaphoreCreateMutex(void){return fail_mutex ? NULL : (void*)1;}
 int xSemaphoreTake(void *m,unsigned ticks){assert(m==(void*)1);(void)ticks;return 1;}
 int xSemaphoreGive(void *m){assert(m==(void*)1);return 1;}
 static bool merge(const char *text){cJSON *j=cJSON_Parse(text);assert(j);bool ok=bed_mesh_controller_merge_status(j);cJSON_Delete(j);return ok;}
 int main(void){
  bed_mesh_controller_init();
+ assert(!merge("{\"bed_mesh\":{\"mesh_matrix\":[[0,0],[0,0]]}}"));
+ bed_mesh_snapshot_t unavailable={.valid=true};float unavailable_values[4];
+ assert(!bed_mesh_controller_snapshot(&unavailable,unavailable_values,4,NULL,0)&&!unavailable.valid);
+ fail_mutex=false;bed_mesh_controller_init();
  assert(merge("{\"bed_mesh\":{\"mesh_matrix\":[[0,0.1],[-0.1,0]],\"mesh_min\":[10,20],\"mesh_max\":[200,210]}}"));
  float values[4];bed_mesh_snapshot_t before,after;assert(bed_mesh_controller_snapshot(&before,values,4,NULL,0));assert(before.valid);
  const char *invalid[]={"1e309","-1e309","1e300","-1e300"};
@@ -25,6 +30,15 @@ int main(void){
   assert(!merge(text));assert(bed_mesh_controller_snapshot(&after,values,4,NULL,0));
   assert(after.valid&&after.minimum==before.minimum&&after.maximum==before.maximum&&after.mesh_min_x==10&&values[1]==.1f);
  }
+ /* Bad cells and ragged rows cannot invent zero-height samples or publish profiles. */
+ const char *malformed[]={"[[0,null],[0,0]]","[[0,\"0.1\"],[0,0]]","[[0,true],[0,0]]",
+  "[[0,0],[0]]","[[0,0],null]","[[0,0],[0,0,0]]","[[],[0,0]]","null","123","{}"};
+ for(unsigned i=0;i<sizeof(malformed)/sizeof(malformed[0]);i++){
+  char text[512];snprintf(text,sizeof(text),"{\"bed_mesh\":{\"mesh_matrix\":%s,\"profiles\":{\"bad_update\":{}},\"profile_name\":\"bad_update\"}}",malformed[i]);
+  assert(!merge(text));assert(bed_mesh_controller_snapshot(&after,values,4,NULL,0));
+  assert(after.valid&&after.minimum==before.minimum&&after.maximum==before.maximum&&values[1]==.1f);
+  assert(strcmp(after.profile_name,"bad_update"));
+ }
  /* Invalid coordinates never poison an otherwise valid cached view. */
  assert(merge("{\"bed_mesh\":{\"mesh_matrix\":[[0,0],[0,0]],\"mesh_min\":[1e309,20],\"mesh_max\":[200,1e300]}}"));
  assert(bed_mesh_controller_snapshot(&after,values,4,NULL,0));assert(after.valid&&after.mesh_min_x==10&&after.mesh_max_y==210);
@@ -32,8 +46,28 @@ int main(void){
  assert(bed_mesh_controller_snapshot(&after,values,4,NULL,0)&&after.valid);
  assert(merge("{\"bed_mesh\":{\"mesh_matrix\":[]}}"));
  assert(!bed_mesh_controller_snapshot(&after,values,4,NULL,0)||!after.valid);
+ /* Match Klipper's real clear response, including saved profiles retained for loading. */
+ assert(merge("{\"bed_mesh\":{\"mesh_matrix\":[[]],\"probed_matrix\":[[]],\"profile_name\":\"\",\"profiles\":{\"old_plate\":{}}}}"));
+ bed_mesh_profile_name_t names[BED_MESH_MAX_PROFILES];
+ assert(bed_mesh_controller_snapshot(&after,values,4,names,BED_MESH_MAX_PROFILES));
+ assert(!after.valid&&after.profile_count==1&&!strcmp(names[0],"old_plate"));
+ /* Empty interpolation may still use a nonempty probed matrix. */
+ assert(merge("{\"bed_mesh\":{\"mesh_matrix\":[[]],\"probed_matrix\":[[0,0],[0,0]]}}"));
+ assert(bed_mesh_controller_snapshot(&after,values,4,NULL,0)&&after.valid);
+ float *retained_values=s.values;bed_mesh_profile_name_t *retained_names=s.profile_names;
+ for(unsigned i=0;i<20;i++){
+  bed_mesh_controller_reset();
+  assert(!bed_mesh_controller_snapshot(&after,values,4,names,BED_MESH_MAX_PROFILES));
+  assert(!after.valid&&!after.profile_count&&!after.profile_name[0]);
+  assert(s.values==retained_values&&s.profile_names==retained_names);
+  /* Reinitialization likewise clears metadata without losing allocated buffers. */
+  bed_mesh_controller_init();assert(s.values==retained_values&&s.profile_names==retained_names);
+  assert(merge("{\"bed_mesh\":{\"mesh_matrix\":[[0,0],[0,0]],\"profiles\":{\"new_plate\":{}},\"profile_name\":\"new_plate\"}}"));
+  assert(bed_mesh_controller_snapshot(&after,values,4,names,BED_MESH_MAX_PROFILES));
+  assert(after.valid&&after.profile_count==1&&!strcmp(names[0],"new_plate"));
+ }
  free(s.values);free(s.profile_names);
- puts("PASS: real Bed Mesh JSON rejects nonfinite/unrepresentable heights, preserves last valid mesh and safe coordinates, retains partial/clear semantics");
+ puts("PASS: real Bed Mesh JSON rejects bad cells/shapes/heights, honors []/[[]] clears, fails closed without a mutex and reuses buffers across resets");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='bed-mesh-input-') as folder:

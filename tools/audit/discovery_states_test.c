@@ -22,6 +22,7 @@ static int active_profile, expected_profile;
 static size_t probe_count=2;
 uint32_t moonraker_config_generation(void){return generation;}
 int moonraker_config_active_profile_index(void){return active_profile;}
+const moonraker_profile_t *moonraker_config_profile(int i){static moonraker_profile_t profiles[4];return i>=0&&i<4?&profiles[i]:NULL;}
 bool camera_catalog_set(int p,size_t i,const char *n,const char *u){assert(!in_worker&&p==expected_profile&&i<probe_count&&n[0]&&u[0]);saved++;if(p==active_profile&&i==0)generation++;return true;}
 size_t moonraker_probe_webcams_with_api_key(const char *h,int p,const char *k,moonraker_webcam_t *out,size_t cap){assert(in_worker&&!strcmp(h,"printer.local")&&p==7125&&!strcmp(k,"key")&&cap>=probe_count);for(size_t i=0;i<probe_count;i++){snprintf(out[i].name,sizeof(out[i].name),"Camera %zu",i);strcpy(out[i].stream_url,"http://fixture/stream");}return probe_count;}
 int xTaskCreatePinnedToCoreWithCaps(void(*f)(void*),const char*n,unsigned z,void*a,unsigned pr,TaskHandle_t*t,int c,unsigned caps){(void)n;(void)z;(void)a;(void)pr;(void)c;(void)caps;if(fail_task)return 0;if(t)*t=(void*)1;task_fn=f;return pdPASS;}

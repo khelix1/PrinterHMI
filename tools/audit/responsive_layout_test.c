@@ -592,6 +592,7 @@ void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s)
 bool macro_controller_get(size_t i,char *o,size_t n){if(i>=64)return false;snprintf(o,n,"MACRO_%02u_WITH_A_VERY_LONG_OPERATOR_ACTION_NAME",(unsigned)i);return true;}
 bool macro_controller_is_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);return i<64 && fav[i];}
 bool macro_controller_set_favorite(const char *n,bool favorite){unsigned i=0;sscanf(n,"MACRO_%u",&i);if(i>=64)return false;fav[i]=favorite;gen++;return true;}
+bool macro_controller_contains(const char *name){macro_controller_status_t status;macro_controller_status(&status);for(size_t i=0;status.discovered&&i<status.count;i++){char candidate[MACRO_CONTROLLER_NAME_MAX];if(macro_controller_get(i,candidate,sizeof(candidate))&&!strcmp(candidate,name))return true;}return false;}
 bool macro_controller_parameters(const char *n,macro_parameter_catalog_t *p){snprintf(selected,sizeof(selected),"%s",n);memset(p,0,sizeof(*p));p->count=8;for(int i=0;i<8;i++)snprintf(p->names[i],sizeof(p->names[i]),"PARAM_%d",i);return true;}
 
 #include "ui_macros.c"

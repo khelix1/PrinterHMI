@@ -176,7 +176,9 @@ static esp_err_t release_http_event(
     }
 
     size_t incoming = (size_t)event->data_len;
-    if (capture->length + incoming + 1 > capture->capacity) {
+    if (capture->length >= capture->capacity ||
+        incoming >= capture->capacity - capture->length ||
+        memchr(event->data, '\0', incoming)) {
         capture->overflow = true;
         return ESP_OK;
     }
@@ -458,18 +460,17 @@ static void release_catalog_task(void *argument)
         return;
     }
 
-    esp_http_client_set_header(
-        client,
-        "Accept",
-        "application/vnd.github+json");
-    esp_http_client_set_header(
-        client,
-        "X-GitHub-Api-Version",
-        "2022-11-28");
-    esp_http_client_set_header(
-        client,
-        "User-Agent",
-        "PrinterHMI");
+    esp_err_t setup = esp_http_client_set_header(client, "Accept", "application/vnd.github+json");
+    if (setup == ESP_OK) setup = esp_http_client_set_header(client, "X-GitHub-Api-Version", "2022-11-28");
+    if (setup == ESP_OK) setup = esp_http_client_set_header(client, "User-Agent", "PrinterHMI");
+    if (setup != ESP_OK) {
+        esp_http_client_cleanup(client);
+        free(catalog);
+        free(response);
+        catalog_fail("Could not configure GitHub request. Try again.");
+        vTaskDeleteWithCaps(NULL);
+        return;
+    }
 
     esp_err_t result = ESP_ERR_INVALID_STATE;
     int status = 0;
@@ -503,7 +504,7 @@ static void release_catalog_task(void *argument)
     if (capture.overflow) {
         free(catalog);
         free(response);
-        catalog_fail("GitHub response exceeded 256 KiB");
+        catalog_fail("GitHub response exceeded 256 KiB or contained NUL bytes");
         vTaskDeleteWithCaps(NULL);
         return;
     }

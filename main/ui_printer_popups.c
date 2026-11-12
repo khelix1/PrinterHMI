@@ -903,6 +903,8 @@ void ui_printer_popups_set_control_sender(bool (*send)(const char *command))
 {
     s_control_send=send;
 }
+static bool s_control_tracks_hotend;
+static char s_control_hotend[MOONRAKER_HOTEND_NAME_MAX];
 static bool control_send(const char *command,const char **error)
 {
     *error="Send failed. Input kept; check the connection and retry.";
@@ -917,6 +919,9 @@ static bool control_send(const char *command,const char **error)
     if (printer_connection_reason(&state)[0]) {
         *error="Printer is offline or Klipper is unavailable. Input kept.";return false;
     }
+    if (s_control_tracks_hotend && strcmp(state.active_hotend, s_control_hotend)) {
+        *error="Active hotend changed. Close and reopen nozzle temperature.";return false;
+    }
     s_control_dispatching = true;
     bool accepted = false;
     if (s_control_send) accepted = s_control_send(command);
@@ -929,6 +934,11 @@ static void gcode_button_event_cb(lv_event_t *e)
 {
     if (!e || lv_event_get_code(e) != LV_EVENT_CLICKED ||
         !s_control_popup || s_control_dispatching) return;
+    lv_obj_t *target = lv_event_get_target_obj(e);
+    if (!target || target != lv_event_get_current_target_obj(e) ||
+        !lv_obj_check_type(target, &lv_button_class) ||
+        lv_obj_has_state(target, LV_STATE_DISABLED) ||
+        ui_popup_find_owner(target) != s_control_popup) return;
     lv_obj_t *popup = s_control_popup;
     uint32_t epoch = s_control_epoch, owner = moonraker_config_generation();
     const char *cmd = (const char *)lv_event_get_user_data(e);
@@ -1248,6 +1258,10 @@ static void show_control_popup(const char *title, double current_value,
     s_control_owner=moonraker_config_generation();
     moonraker_state_t live;moonraker_state_snapshot(&live);
     s_control_job=live.print_job_revision;
+    /* M104 acts on the active tool. A later external tool selection must
+     * not redirect a modal that still displays the earlier nozzle values. */
+    s_control_tracks_hotend = custom_command_prefix && !strcmp(custom_command_prefix, "M104 S");
+    snprintf(s_control_hotend, sizeof(s_control_hotend), "%s", live.active_hotend);
     s_custom_temp_title = custom_title;
     s_custom_temp_command_prefix = custom_command_prefix;
     s_custom_temp_max = custom_max;

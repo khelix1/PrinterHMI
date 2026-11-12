@@ -99,6 +99,7 @@ static void run_custom_macro_cb(
         s_custom_owner != moonraker_config_generation() || !s_custom->ready ||
         *s_custom->selected >=
             *s_custom->count ||
+        *s_custom->selected >= s_custom->names_capacity ||
         !s_custom->ready(
             "Custom calibration")) {
         return;
@@ -106,6 +107,13 @@ static void run_custom_macro_cb(
 
     char command[MACRO_CONTROLLER_NAME_MAX];
     lv_snprintf(command, sizeof(command), "%s", s_custom->names[*s_custom->selected]);
+    /* Catalog ownership stays in the shared controller. */
+    if (!macro_controller_contains(command)) {
+        if (s_custom_feedback)
+            lv_label_set_text(s_custom_feedback,
+                "The selected macro is no longer available. Close and select a detected macro again.");
+        return;
+    }
     uint32_t start_sequence =
         console_controller_latest_sequence();
     calibration_session_controller_begin(

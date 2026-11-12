@@ -1,5 +1,6 @@
 #include "settings_backup.h"
 #include "settings_backup_crypto.h"
+#include "settings_backup_sensitive.h"
 #include "json_document_limits.h"
 
 #include <errno.h>
@@ -337,7 +338,7 @@ static cJSON *snapshot_to_json(
         cJSON *item = cJSON_CreateObject();
         if (!item) goto failed;
         if (!cJSON_AddItemToArray(profiles, item)) {
-            cJSON_Delete(item);
+            backup_sensitive_json_delete(item);
             goto failed;
         }
         if (!cJSON_AddNumberToObject(item, "slot", index) ||
@@ -372,7 +373,7 @@ static cJSON *snapshot_to_json(
     return root;
 failed:
     /* A partially built document must never replace a known-good backup. */
-    cJSON_Delete(root);
+    backup_sensitive_json_delete(root);
     return NULL;
 }
 
@@ -740,11 +741,18 @@ bool settings_backup_export_with_progress(
     char *status,
     size_t status_size)
 {
+    if (!moonraker_config_storage_readable()) {
+        set_status(status, status_size,
+            "Saved printer settings could not be fully read. Restart and retry before creating a new backup; existing backups were preserved.");
+        return false;
+    }
+
     if(progress)progress(SETTINGS_BACKUP_STAGE_PREPARING,user_data);
     settings_backup_snapshot_t snapshot;
     capture_current(&snapshot);
 
     cJSON *root = snapshot_to_json(&snapshot, false);
+    backup_sensitive_clear(&snapshot, sizeof(snapshot));
 
     if (!root) {
         set_status(
@@ -760,7 +768,7 @@ bool settings_backup_export_with_progress(
             2048,
             true);
 
-    cJSON_Delete(root);
+    backup_sensitive_json_delete(root);
 
     if (!document) {
         set_status(
@@ -774,7 +782,7 @@ bool settings_backup_export_with_progress(
             SETTINGS_BACKUP_DIRECTORY,
             0775) != 0 &&
         errno != EEXIST) {
-        cJSON_free(document);
+        backup_sensitive_json_free(document);
         set_status(
             status,
             status_size,
@@ -788,7 +796,7 @@ bool settings_backup_export_with_progress(
         "wb");
 
     if (!file) {
-        cJSON_free(document);
+        backup_sensitive_json_free(document);
         set_status(
             status,
             status_size,
@@ -804,7 +812,7 @@ bool settings_backup_export_with_progress(
         fsync(fileno(file)) == 0;
 
     bool closed = fclose(file) == 0;
-    cJSON_free(document);
+    backup_sensitive_json_free(document);
 
     if (!written || !closed) {
         unlink(SETTINGS_BACKUP_TEMP_PATH);
@@ -905,6 +913,7 @@ static bool load_backup_snapshot(
     }
 
     if (!read_backup_exact(file, document, (size_t)file_size)) {
+        backup_sensitive_clear(document, (size_t)file_size + 1);
         free(document);
         set_status(
             status,
@@ -915,6 +924,7 @@ static bool load_backup_snapshot(
 
     document[file_size] = 0;
     cJSON *root = parse_backup_document(document, (size_t)file_size);
+    backup_sensitive_clear(document, (size_t)file_size + 1);
     free(document);
 
     if (!root) {
@@ -927,7 +937,7 @@ static bool load_backup_snapshot(
 
     bool valid = parse_snapshot(
         root, snapshot, false, status, status_size);
-    cJSON_Delete(root);
+    backup_sensitive_json_delete(root);
     return valid;
 }
 
@@ -970,6 +980,12 @@ bool settings_backup_export_encrypted_with_progress(
     char *status,
     size_t status_size)
 {
+    if (!moonraker_config_storage_readable()) {
+        set_status(status, status_size,
+            "Saved printer settings could not be fully read. Restart and retry before creating a new backup; existing backups were preserved.");
+        return false;
+    }
+
     if (progress_cb) {
         progress_cb(SETTINGS_BACKUP_ENCRYPTED_PREPARING, progress_user_data);
     }
@@ -977,12 +993,13 @@ bool settings_backup_export_encrypted_with_progress(
     settings_backup_snapshot_t snapshot;
     capture_current(&snapshot);
     cJSON *root = snapshot_to_json(&snapshot, true);
+    backup_sensitive_clear(&snapshot, sizeof(snapshot));
     if (!root) {
         set_status(status, status_size, "Unable to create encrypted backup document.");
         return false;
     }
     char *document = cJSON_PrintBuffered(root, 2048, true);
-    cJSON_Delete(root);
+    backup_sensitive_json_delete(root);
     if (!document) {
         set_status(status, status_size, "Unable to encode encrypted backup document.");
         return false;
@@ -997,7 +1014,7 @@ bool settings_backup_export_encrypted_with_progress(
     bool encrypted_ok = settings_backup_crypto_encrypt(
         passphrase, (const uint8_t *)document, strlen(document),
         &encrypted, &encrypted_size, status, status_size);
-    cJSON_free(document);
+    backup_sensitive_json_free(document);
     if (!encrypted_ok) {
         return false;
     }
@@ -1074,7 +1091,7 @@ static bool load_encrypted_backup_snapshot(
         return false;
     }
     bool valid = parse_snapshot(root, snapshot, true, status, status_size);
-    cJSON_Delete(root);
+    backup_sensitive_json_delete(root);
     return valid;
 }
 
@@ -1108,11 +1125,13 @@ bool settings_backup_encrypted_preflight(
     char *status,
     size_t status_size)
 {
-    settings_backup_snapshot_t snapshot;
+    settings_backup_snapshot_t snapshot = {0};
     if (!load_encrypted_backup_snapshot(passphrase, &snapshot, status, status_size)) {
+        backup_sensitive_clear(&snapshot, sizeof(snapshot));
         return false;
     }
     format_preflight(&snapshot, true, status, status_size);
+    backup_sensitive_clear(&snapshot, sizeof(snapshot));
     return true;
 }
 
@@ -1123,13 +1142,14 @@ bool settings_backup_restore_encrypted_with_progress(
     size_t status_size)
 {
     if(progress)progress(SETTINGS_BACKUP_STAGE_AUTHENTICATING,user_data);
-    settings_backup_snapshot_t restored;
+    settings_backup_snapshot_t restored = {0}, previous = {0};
     if (!load_encrypted_backup_snapshot(passphrase, &restored, status, status_size)) {
         operator_event_log_add(OPERATOR_EVENT_ERROR,
             "Encrypted configuration restore rejected: validation failed");
+        backup_sensitive_clear(&restored, sizeof(restored));
+        backup_sensitive_clear(&previous, sizeof(previous));
         return false;
     }
-    settings_backup_snapshot_t previous;
     capture_current(&previous);
     if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
     if (!apply_snapshot(&restored)) {
@@ -1140,12 +1160,16 @@ bool settings_backup_restore_encrypted_with_progress(
             : "Encrypted restore failed; previous settings could not be fully reapplied. Check settings before rebooting.");
         operator_event_log_add(OPERATOR_EVENT_ERROR,
             "Encrypted configuration restore failed");
+        backup_sensitive_clear(&restored, sizeof(restored));
+        backup_sensitive_clear(&previous, sizeof(previous));
         return false;
     }
     set_status(status, status_size,
         "Encrypted configuration restored. Reboot the controller to finish.");
     operator_event_log_add(OPERATOR_EVENT_INFO,
         "Encrypted configuration restored from SD card");
+    backup_sensitive_clear(&restored, sizeof(restored));
+    backup_sensitive_clear(&previous, sizeof(previous));
     return true;
 }
 
@@ -1180,9 +1204,10 @@ bool settings_backup_preflight(
     char *status,
     size_t status_size)
 {
-    settings_backup_snapshot_t snapshot;
+    settings_backup_snapshot_t snapshot = {0};
 
     if (!load_backup_snapshot(&snapshot, status, status_size)) {
+        backup_sensitive_clear(&snapshot, sizeof(snapshot));
         return false;
     }
 
@@ -1209,6 +1234,7 @@ bool settings_backup_preflight(
         profile_count,
         profile_count == 1 ? "profile" : "profiles",
         active->name[0] ? active->name : "unnamed printer");
+    backup_sensitive_clear(&snapshot, sizeof(snapshot));
     return true;
 }
 
@@ -1219,16 +1245,17 @@ bool settings_backup_restore_with_progress(
     size_t status_size)
 {
     if(progress)progress(SETTINGS_BACKUP_STAGE_READING,user_data);
-    settings_backup_snapshot_t restored;
+    settings_backup_snapshot_t restored = {0}, previous = {0};
 
     if (!load_backup_snapshot(&restored, status, status_size)) {
         operator_event_log_add(
             OPERATOR_EVENT_ERROR,
             "Configuration restore rejected: validation failed");
+        backup_sensitive_clear(&restored, sizeof(restored));
+        backup_sensitive_clear(&previous, sizeof(previous));
         return false;
     }
 
-    settings_backup_snapshot_t previous;
     capture_current(&previous);
 
     if(progress)progress(SETTINGS_BACKUP_STAGE_APPLYING,user_data);
@@ -1243,6 +1270,8 @@ bool settings_backup_restore_with_progress(
         operator_event_log_add(
             OPERATOR_EVENT_ERROR,
             "Configuration restore failed");
+        backup_sensitive_clear(&restored, sizeof(restored));
+        backup_sensitive_clear(&previous, sizeof(previous));
         return false;
     }
 
@@ -1255,5 +1284,7 @@ bool settings_backup_restore_with_progress(
         OPERATOR_EVENT_INFO,
         "Configuration restored from SD card");
 
+    backup_sensitive_clear(&restored, sizeof(restored));
+    backup_sensitive_clear(&previous, sizeof(previous));
     return true;
 }

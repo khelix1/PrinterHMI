@@ -1,6 +1,6 @@
 # Project file catalog
 
-This catalog reflects the v7.3.52-dev source list in `main/CMakeLists.txt`. Update it
+This catalog reflects the v7.3.79-dev source list in `main/CMakeLists.txt`. Update it
 when ownership or build membership changes.
 
 ## Application coordinator
@@ -49,6 +49,7 @@ when ownership or build membership changes.
 | `ui_printer_popups` | Temperature, fan, cancel and exclude-object interactions |
 | `printer_controller`, `printer_ui_controller` | Printer policy and UI command routing |
 | `printer_file_controller`, `printer_files` | Selected-file policy and file metadata parsing |
+| `print_estimate_metadata`, `printer_layer_resolver` | Active-job metadata cache and pure layer calculations |
 
 ## Calibration, Bed Mesh, Devices, Macros and Console
 
@@ -282,3 +283,9 @@ URLs; `demo_camera_frame.c` draws the common desktop/tablet sample image.
 `main/demo_setup.c/h` holds the offline Setup sample network in RAM.
 
 Camera test, webcam discovery and manual Moonraker verification workers use `main/async_result_slot.h` for atomic job/result ownership, independent of RTOS task-handle publication.
+
+
+Backup private cleanup: `main/settings_backup_sensitive.h` contains the backup
+service's volatile temporary-buffer wiping and owned-JSON deletion helpers.
+It preserves cJSON reference/constant ownership and uses cJSON's allocator when
+releasing printed documents.

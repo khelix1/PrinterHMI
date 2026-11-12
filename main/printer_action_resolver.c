@@ -249,10 +249,13 @@ bool printer_action_resolver_resolve(
                 break;
             }
 
-            if (find_macro(
-                    alias,
-                    output->command,
-                    sizeof(output->command))) {
+            char macro[MACRO_CONTROLLER_NAME_MAX];
+            if (find_macro(alias, macro, sizeof(macro))) {
+                /* The caller's explicit prerequisite is part of the action,
+                 * even when its final command resolves to a printer macro. */
+                bool home_first = strncmp(requested, "G28\n", 4) == 0;
+                snprintf(output->command, sizeof(output->command), "%s%s",
+                         home_first ? "G28\n" : "", macro);
                 output->macro_used = true;
                 return true;
             }

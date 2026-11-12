@@ -4,6 +4,8 @@
 #include <string.h>
 #include "dashboard_runtime_controller.c"
 static moonraker_state_t live;
+static uint32_t generation=1;
+uint32_t moonraker_config_generation(void){return generation;}
 static char layer[32],elapsed[32],remaining[32],selected[160],path[160],metadata[256],dashboard_file[160],printer_file[160];
 static lv_obj_t *printer_canvas,*printer_image,*dashboard_canvas,*dashboard_image;
 static unsigned preview_calls,cleanups,placeholders,deletions;
@@ -33,20 +35,41 @@ void thumbnail_preview_coordinator_update(thumbnail_preview_coordinator_context_
  preview_calls++;
 }
 int main(void){
- printer_layer_result_t edge=printer_layer_resolver_resolve(0,40,6,20,.5,0);assert(edge.valid&&edge.current==0);
- edge=printer_layer_resolver_resolve(0,40,-1,0,0,1);assert(edge.valid&&edge.current==40);
- edge=printer_layer_resolver_resolve(0,-1,6,0,0,.5);assert(!edge.valid);
- edge=printer_layer_resolver_resolve(8,40,6,20,.5,.5);assert(edge.valid&&edge.current==8);
+ printer_layer_result_t edge=printer_layer_resolver_resolve(0,40,6,&(printer_layer_metadata_t){.object_height=20,.layer_height=.5},0,false);assert(edge.valid&&edge.current==0);
+ edge=printer_layer_resolver_resolve(0,40,-1,NULL,1,true);assert(edge.valid&&edge.current==40);
+ edge=printer_layer_resolver_resolve(0,-1,6,NULL,.5,true);assert(!edge.valid);
+ edge=printer_layer_resolver_resolve(8,40,6,&(printer_layer_metadata_t){.object_height=20,.layer_height=.5},.5,true);assert(edge.valid&&edge.current==8);
  lv_init();lv_display_t *display=lv_display_create(1024,600);
  char last[32]="";
- dashboard_runtime_context_t context={.meta_object_height=20,.meta_layer_height=.5,.dashboard_canvas=&dashboard_canvas,.dashboard_image=&dashboard_image,.last_print_state=last,.last_print_state_size=sizeof(last),.preview_network_ready=true,.free_thumbnail=free_thumbnails};
+ dashboard_runtime_context_t context={.layer_metadata={.object_height=20,.layer_height=.5},.layer_generation=1,.dashboard_canvas=&dashboard_canvas,.dashboard_image=&dashboard_image,.last_print_state=last,.last_print_state_size=sizeof(last),.preview_network_ready=true,.free_thumbnail=free_thumbnails};
  live=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true,.progress=.5,.print_duration=1200,.current_layer=12,.total_layer=40,.current_gcode_z=6};
  strcpy(live.printer_state,"printing");strcpy(live.printer_file,"job.gcode");strcpy(selected,"job.gcode");strcpy(path,"job.png");
  dashboard_runtime_controller_tick(&context);
  assert(!strcmp(layer,"12/40")&&!strcmp(elapsed,"00:20")&&!strcmp(remaining,"0:20")&&!strcmp(last,"PRINTING")&&preview_calls==1&&!cleanups);
+ /* START_PRINT advances file bytes while probing, but has not deposited filament. */
+ live.current_layer=0;live.total_layer=40;live.print_duration=0;live.progress=.04;
+ live.estimate_sample.filament_valid=true;live.estimate_sample.filament_used=0;
+ for(unsigned i=0;i<6;i++){
+  live.current_gcode_z=(double[]){20,8,0,25,4,50}[i];
+  dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"0/40"));
+ }
+ live.current_layer=-1;live.current_gcode_z=20;live.print_duration=25;
+ dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"0/40"));
+ live.current_layer=3;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"3/40"));
+ live.current_layer=-1;live.current_gcode_z=6;live.print_duration=1200;live.progress=.5;
+ live.estimate_sample.filament_used=12;
  /* Metadata fallback remains active when slicer layer counts are absent. */
  live.current_layer=live.total_layer=-1;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40"));
  /* An externally started job may report zero indefinitely even as it moves. */
+ context.layer_metadata=(printer_layer_metadata_t){.object_height=10,.layer_height=.2,.first_layer_height=.4,.total_layers=57};
+ live.current_layer=-1;live.total_layer=-1;live.current_gcode_z=.6;
+ dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"2/57"));
+ live.print_job_revision++;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"--/--"));
+ context.layer_job_revision=live.print_job_revision;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"2/57"));
+ generation++;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"--/--"));
+ context.layer_generation=generation;
+ context.layer_metadata=(printer_layer_metadata_t){.object_height=20,.layer_height=.5};
+ live.current_gcode_z=6;
  live.current_layer=0;live.total_layer=40;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40"));
  live.total_layer=-1;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40"));
  live.total_layer=40;

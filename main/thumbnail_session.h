@@ -24,12 +24,6 @@ bool thumbnail_session_build_metadata(
     char *out,
     size_t out_size);
 
-/* Clears outputs unless metadata belongs to this file and current printer. */
-bool thumbnail_session_get_layer_metadata(
-    const char *file,
-    double *object_height,
-    double *layer_height);
-
 void thumbnail_session_clear_png_buffer(void);
 void thumbnail_session_free_thumbnail(void);
 

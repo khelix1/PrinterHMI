@@ -28,7 +28,8 @@ bool wifi_credentials_store_load(char *ssid, size_t ssid_size,
     size_t ssid_len = ssid_size;
     size_t pass_len = password_size;
     err = nvs_get_str(h, "ssid", ssid, &ssid_len);
-    if (err != ESP_OK || ssid[0] == 0) {
+    if (err != ESP_OK || ssid_len < 2 || ssid_len > ssid_size || ssid_len > 33 ||
+        memchr(ssid, '\0', ssid_len) != ssid + ssid_len - 1) {
         memset(ssid, 0, ssid_size);
         nvs_close(h);
         ESP_LOGW(TAG, "NVS WiFi load: no saved SSID");
@@ -37,7 +38,8 @@ bool wifi_credentials_store_load(char *ssid, size_t ssid_size,
 
     err = nvs_get_str(h, "pass", password, &pass_len);
     nvs_close(h);
-    if (err != ESP_OK) {
+    if (err != ESP_OK || pass_len < 1 || pass_len > password_size || pass_len > 65 ||
+        memchr(password, '\0', pass_len) != password + pass_len - 1) {
         memset(ssid, 0, ssid_size);
         memset(password, 0, password_size);
         ESP_LOGW(TAG, "NVS WiFi load: saved password unavailable");

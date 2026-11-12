@@ -3,7 +3,9 @@
 #include "cJSON.h"
 #include "json_document_limits.h"
 
-/* Parse exactly one bounded JSON document; no trailing NUL is required. */
+/* Parse exactly one bounded JSON document; no trailing NUL is required.
+ * Embedded NUL bytes and encoded NUL characters are rejected, because cJSON
+ * exposes object keys and string values as NUL-terminated C strings. */
 static inline cJSON *json_document_parse_bounded(
     const char *document, size_t size, size_t max_size, unsigned max_depth)
 {

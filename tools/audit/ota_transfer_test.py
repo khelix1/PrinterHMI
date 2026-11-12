@@ -3,9 +3,13 @@
 No firmware is fetched or flashed. Target throughput must be measured separately.
 """
 from pathlib import Path
+import argparse
 import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[2]
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--source',type=Path,default=root/'main/ota_manager.c')
+args=parser.parse_args()
 stubs={
 'lvgl.h':'#pragma once\n#include <stddef.h>\n',
 'esp_err.h':'#pragma once\ntypedef int esp_err_t;\n#define ESP_OK 0\n#define ESP_FAIL -1\n#define ESP_ERR_TIMEOUT -2\nconst char *esp_err_to_name(esp_err_t);\n',
@@ -16,7 +20,7 @@ stubs={
 'esp_https_ota.h':'#pragma once\n#include "esp_http_client.h"\ntypedef void *esp_https_ota_handle_t;\ntypedef struct {const esp_http_client_config_t *http_config; esp_err_t(*http_client_init_cb)(esp_http_client_handle_t);} esp_https_ota_config_t;\n#define ESP_ERR_HTTPS_OTA_IN_PROGRESS 1\nesp_err_t esp_https_ota_begin(const esp_https_ota_config_t*,esp_https_ota_handle_t*);\nesp_err_t esp_https_ota_perform(esp_https_ota_handle_t);\nesp_err_t esp_https_ota_finish(esp_https_ota_handle_t);\nesp_err_t esp_https_ota_abort(esp_https_ota_handle_t);\nbool esp_https_ota_is_complete_data_received(esp_https_ota_handle_t);\nint esp_https_ota_get_image_len_read(esp_https_ota_handle_t);\nint esp_https_ota_get_image_size(esp_https_ota_handle_t);\n',
 'esp_ota_ops.h':'#pragma once\n',
 'esp_system.h':'#pragma once\nvoid esp_restart(void);\n',
-'nvs.h':'#pragma once\n#include <stddef.h>\n#include "esp_err.h"\ntypedef unsigned nvs_handle_t;\n#define NVS_READONLY 0\n#define NVS_READWRITE 1\nesp_err_t nvs_open(const char*,int,nvs_handle_t*);\nesp_err_t nvs_get_str(nvs_handle_t,const char*,char*,size_t*);\nesp_err_t nvs_set_str(nvs_handle_t,const char*,const char*);\nesp_err_t nvs_commit(nvs_handle_t);\nvoid nvs_close(nvs_handle_t);\n',
+'nvs.h':'#pragma once\n#include <stddef.h>\n#include "esp_err.h"\ntypedef unsigned nvs_handle_t;\n#define NVS_READONLY 0\n#define NVS_READWRITE 1\n#define ESP_ERR_NVS_NOT_FOUND 0x1102\nesp_err_t nvs_open(const char*,int,nvs_handle_t*);\nesp_err_t nvs_get_str(nvs_handle_t,const char*,char*,size_t*);\nesp_err_t nvs_set_str(nvs_handle_t,const char*,const char*);\nesp_err_t nvs_commit(nvs_handle_t);\nvoid nvs_close(nvs_handle_t);\n',
 'freertos/FreeRTOS.h':'#pragma once\n#include <stdint.h>\ntypedef int BaseType_t;\ntypedef int portMUX_TYPE;\n#define portMUX_INITIALIZER_UNLOCKED 0\n#define pdPASS 1\n#define pdMS_TO_TICKS(x) (x)\nvoid fixture_lock(portMUX_TYPE*);\nvoid fixture_unlock(portMUX_TYPE*);\n#define portENTER_CRITICAL fixture_lock\n#define portEXIT_CRITICAL fixture_unlock\n',
 'freertos/task.h':'#pragma once\n#include "FreeRTOS.h"\nvoid vTaskDelay(unsigned);\nvoid vTaskDelete(void*);\nBaseType_t xTaskCreate(void(*)(void*),const char*,unsigned,void*,unsigned,void*);\n',
 }
@@ -32,6 +36,8 @@ void fixture_log(const char *format,...){
 }
 static int64_t clock_us;
 static bool locked,task_accept=true,exclusive=true,ready=true,complete=true;
+static char saved_url[192]="https://saved/fw.bin",pending_url[192];
+static int nvs_failure;static unsigned url_writes,nvs_opens,nvs_reads,nvs_closes;
 static int mode,reads,aborts,finishes,releases,reboots,pumps,closes,read_timeout;
 static char status[160],transfer_text[112];
 static int pumped_bytes,pumped_total,pumped_percent;
@@ -44,11 +50,11 @@ void vTaskDelete(void *p){(void)p;assert(!locked);}
 BaseType_t xTaskCreate(void(*f)(void*),const char*n,unsigned stack,void*a,unsigned priority,void*out){(void)a;(void)out;assert(f==update_task&&stack==12288&&priority==5&&!strcmp(n,"ota_update"));return task_accept?pdPASS:0;}
 const char *esp_err_to_name(esp_err_t e){(void)e;return "fixture failure";}
 esp_err_t esp_crt_bundle_attach(void *p){(void)p;return ESP_OK;}
-esp_err_t nvs_open(const char*n,int mode,nvs_handle_t*out){(void)n;(void)mode;(void)out;return ESP_FAIL;}
-esp_err_t nvs_get_str(nvs_handle_t h,const char*k,char*v,size_t*n){(void)h;(void)k;(void)v;(void)n;return ESP_FAIL;}
-esp_err_t nvs_set_str(nvs_handle_t h,const char*k,const char*v){(void)h;(void)k;(void)v;return ESP_OK;}
-esp_err_t nvs_commit(nvs_handle_t h){(void)h;return ESP_OK;}
-void nvs_close(nvs_handle_t h){(void)h;}
+esp_err_t nvs_open(const char*n,int mode,nvs_handle_t*out){assert(!strcmp(n,"ota")&&(mode==NVS_READONLY||mode==NVS_READWRITE));nvs_opens++;if(nvs_failure==1)return ESP_FAIL;if(nvs_failure==5)return ESP_ERR_NVS_NOT_FOUND;*out=1;return ESP_OK;}
+esp_err_t nvs_get_str(nvs_handle_t h,const char*k,char*v,size_t*n){assert(h==1&&!strcmp(k,"url")&&*n>strlen(saved_url));nvs_reads++;if(nvs_failure==4)return ESP_FAIL;if(nvs_failure==6)return ESP_ERR_NVS_NOT_FOUND;strcpy(v,saved_url);*n=strlen(v)+1;return ESP_OK;}
+esp_err_t nvs_set_str(nvs_handle_t h,const char*k,const char*v){assert(h==1&&!strcmp(k,"url"));url_writes++;if(nvs_failure==2)return ESP_FAIL;strcpy(pending_url,v);return ESP_OK;}
+esp_err_t nvs_commit(nvs_handle_t h){assert(h==1);if(nvs_failure==3)return ESP_FAIL;strcpy(saved_url,pending_url);return ESP_OK;}
+void nvs_close(nvs_handle_t h){assert(h==1);nvs_closes++;}
 void operator_event_log_add(operator_event_level_t level,const char *format,...){(void)level;(void)format;assert(!locked);}
 bool network_activity_controller_request_exclusive(void){return exclusive;}
 bool network_activity_controller_exclusive_ready(void){return ready;}
@@ -84,7 +90,33 @@ esp_err_t esp_https_ota_finish(esp_https_ota_handle_t h){assert(h==(void*)1&&!s_
 esp_err_t esp_https_ota_abort(esp_https_ota_handle_t h){assert(h==(void*)1);aborts++;return ESP_OK;}
 void esp_restart(void){reboots++;longjmp(reboot,1);}
 static void reset(int m){mode=m;read_timeout=0;reads=aborts=finishes=releases=reboots=pumps=closes=0;clock_us=1000000;complete=ready=exclusive=task_accept=true;s_task_running=s_cancel_requested=s_cancel_complete=false;}
-int main(void){
+int main(int argc,char **argv){
+ if(argc>1){
+  if(!strcmp(argv[1],"missing-namespace"))nvs_failure=5;
+  else if(!strcmp(argv[1],"missing-key"))nvs_failure=6;
+  else saved_url[0]='\0';
+  assert(!strcmp(ota_manager_get_url(),OTA_TEST_URL));
+  assert(nvs_opens==1&&nvs_reads==(nvs_failure!=5)&&nvs_closes==nvs_reads&&!url_writes);
+  nvs_failure=0;
+  assert(!strcmp(ota_manager_get_url(),OTA_TEST_URL)&&nvs_opens==1);
+  ota_manager_set_url("https://saved/replacement.bin");
+  assert(!strcmp(ota_manager_get_url(),"https://saved/replacement.bin")&&url_writes==1);
+  return 0;
+ }
+ nvs_failure=1;
+ assert(!strcmp(ota_manager_get_url(),OTA_TEST_URL)&&nvs_opens==1&&!nvs_reads&&!nvs_closes);
+ nvs_failure=4;
+ assert(!strcmp(ota_manager_get_url(),OTA_TEST_URL)&&nvs_opens==2&&nvs_reads==1&&nvs_closes==1);
+ nvs_failure=0;
+ assert(!strcmp(ota_manager_get_url(),"https://saved/fw.bin")&&nvs_opens==3&&nvs_reads==2&&nvs_closes==2&&!url_writes);
+ assert(!strcmp(ota_manager_get_url(),"https://saved/fw.bin"));
+ for(nvs_failure=1;nvs_failure<=3;nvs_failure++){
+  ota_manager_set_url("https://candidate/fw.bin");assert(!strcmp(ota_manager_get_url(),"https://saved/fw.bin"));
+ }
+ nvs_failure=0;ota_manager_set_url("https://candidate/fw.bin");assert(!strcmp(ota_manager_get_url(),"https://candidate/fw.bin"));
+ unsigned written=url_writes;ota_manager_set_url(ota_manager_get_url());assert(url_writes==written);
+ char huge[193];memset(huge,'x',192);huge[192]=0;ota_manager_set_url(huge);assert(url_writes==written&&!strcmp(ota_manager_get_url(),"https://candidate/fw.bin"));
+ huge[191]=0;ota_manager_set_url(huge);assert(!strcmp(ota_manager_get_url(),huge));
  reset(0);char too_long[sizeof(s_task_url)+1];memset(too_long,'x',sizeof(too_long)-1);too_long[sizeof(too_long)-1]=0;
  assert(!ota_manager_start(too_long)&&!s_task_running&&!progress_snapshot().started_us);
  too_long[sizeof(s_task_url)-1]=0;assert(ota_manager_start(too_long)&&!strcmp(s_task_url,too_long));
@@ -116,15 +148,17 @@ int main(void){
  reset(0);exclusive=false;assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(!reads&&!aborts&&!releases&&!s_task_running);
  reset(0);ready=false;assert(ota_manager_start("https://fixture/fw.bin"));update_task(NULL);assert(!reads&&!aborts&&releases==1&&!s_task_running);
  reset(0);assert(ota_manager_start("https://fixture/fw.bin"));ota_manager_cancel();update_task(NULL);assert(!reads&&!reboots);ota_manager_pump_ui();assert(closes==1);
- puts("PASS: actual OTA worker buffer/TLS configuration, firmware counters, known/unknown size, transfer rate/frozen elapsed, restart, cancellation during a stalled short read, transient stalls, 15s no-progress deadline, timeout-setting failure, SDK failures, incomplete image, task failure, lane timeouts and snapshot lock boundaries");
+ puts("PASS: URL load retry and settled defaults; committed URL persistence/failure/no-op/bounds; actual OTA worker buffer/TLS configuration, firmware counters, known/unknown size, transfer rate/frozen elapsed, restart, cancellation during a stalled short read, transient stalls, 15s no-progress deadline, timeout-setting failure, SDK failures, incomplete image, task failure, lane timeouts and snapshot lock boundaries");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='ota-transfer-') as directory:
     tmp=Path(directory)
     for name,text in stubs.items():
         p=tmp/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
+    (tmp/'ota_manager.c').write_bytes(args.source.read_bytes())
     (tmp/'fixture.c').write_text(fixture)
-    common=['cc','-D_POSIX_C_SOURCE=200809L','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wformat-truncation=2','-Wrestrict','-I',str(tmp),'-I',str(root/'main')]
+    common=['cc','-D_POSIX_C_SOURCE=200809L','-DOTA_TEST_URL="https://default/fw.bin"','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wformat-truncation=2','-Wrestrict','-I',str(tmp),'-I',str(root/'main')]
     subprocess.run([*common,str(tmp/'fixture.c'),'-o',str(tmp/'worker')],check=True)
-    subprocess.run([str(tmp/'worker')],check=True)
-    subprocess.run([*common,'-c',str(root/'main/ota_manager.c'),'-o',str(tmp/'owner.o')],check=True)
+    for scenario in [[], ['missing-namespace'], ['missing-key'], ['empty-key']]:
+        subprocess.run([str(tmp/'worker'), *scenario],check=True)
+    subprocess.run([*common,'-c',str(args.source),'-o',str(tmp/'owner.o')],check=True)

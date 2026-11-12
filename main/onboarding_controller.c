@@ -18,16 +18,32 @@ void onboarding_controller_init(void)
         return;
     }
 
-    s_initialized = true;
     nvs_handle_t handle;
     uint8_t complete = 0;
-    if (nvs_open(ONBOARDING_NVS_NAMESPACE, NVS_READONLY, &handle) == ESP_OK) {
-        (void)nvs_get_u8(handle, ONBOARDING_NVS_KEY, &complete);
-        (void)nvs_get_u8(handle, ONBOARDING_NVS_STEPS_KEY, &s_steps);
-        s_steps &= ONBOARDING_STEP_MASK;
+    uint8_t steps = 0;
+    const esp_err_t open_error = nvs_open(ONBOARDING_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (open_error == ESP_OK) {
+        const esp_err_t complete_error = nvs_get_u8(handle, ONBOARDING_NVS_KEY, &complete);
+        /* The completion flag supersedes the checklist. */
+        esp_err_t steps_error = ESP_ERR_NVS_NOT_FOUND;
+        if ((complete_error == ESP_OK && complete != 1U) ||
+            complete_error == ESP_ERR_NVS_NOT_FOUND) {
+            steps_error = nvs_get_u8(handle, ONBOARDING_NVS_STEPS_KEY, &steps);
+        }
         nvs_close(handle);
+        if ((complete_error != ESP_OK && complete_error != ESP_ERR_NVS_NOT_FOUND) ||
+            (steps_error != ESP_OK && steps_error != ESP_ERR_NVS_NOT_FOUND)) {
+            return;
+        }
+        if (complete_error == ESP_ERR_NVS_NOT_FOUND) complete = 0;
+        if (steps_error == ESP_ERR_NVS_NOT_FOUND) steps = 0;
+    } else if (open_error != ESP_ERR_NVS_NOT_FOUND) {
+        return;
     }
+
     s_complete = complete == 1U;
+    s_steps = steps & ONBOARDING_STEP_MASK;
+    s_initialized = true;
 }
 
 bool onboarding_controller_should_show(void)
@@ -52,6 +68,7 @@ bool onboarding_controller_mark_complete(void)
     }
 
     s_complete = true;
+    s_initialized = true;
     return true;
 }
 
@@ -66,6 +83,8 @@ bool onboarding_controller_mark_step_complete(onboarding_step_t step)
 {
     if ((unsigned)step >= ONBOARDING_STEP_COUNT) return false;
     if (onboarding_controller_step_complete(step)) return true;
+    /* Never merge a new step into an unread saved checklist. */
+    if (!s_initialized) return false;
     const uint8_t updated = s_steps | (1U << step);
     nvs_handle_t handle;
     if (nvs_open(ONBOARDING_NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile the real WebSocket/HTTP command adapters with typed transport fixtures."""
 from pathlib import Path
-import subprocess,tempfile
+import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
 def function(source,name):
     # Firmware functions close at column zero; nested blocks are indented.
@@ -16,5 +16,5 @@ with tempfile.TemporaryDirectory(prefix='estop-transport-') as tmp:
     folder=Path(tmp)
     (folder/'actual_estop_transport.c').write_text('\n'.join(function(ws,n) for n in ['append_command_text','append_command_json_string','moonraker_live_websocket_send_gcode'])+'\n'+function(http,'moonraker_send_gcode_script'))
     executable=folder/'test'
-    subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-Wrestrict','-I',str(folder),'-I',str(root/'main'),str(root/'tools/audit/estop_transport_test.c'),'-o',str(executable)],check=True)
-    subprocess.run([str(executable)],check=True)
+    subprocess.run(['cc','-std=c11','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-no-pie','-Wall','-Wextra','-Werror','-Wrestrict','-I',str(folder),'-I',str(root/'main'),str(root/'tools/audit/estop_transport_test.c'),'-o',str(executable)],check=True)
+    subprocess.run([str(executable)],check=True,env=dict(os.environ,ASAN_OPTIONS="detect_leaks=0"))

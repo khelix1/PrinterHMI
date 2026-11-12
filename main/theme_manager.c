@@ -394,10 +394,23 @@ const char *theme_manager_accessibility_label(void)
 
 bool theme_manager_set_accessibility(ui_accessibility_t options)
 {
-    if (!save_u8(THEME_NVS_LARGE_TEXT_KEY, options.large_text) ||
-        !save_u8(THEME_NVS_CONTRAST_KEY, options.high_contrast) ||
-        !save_u8(THEME_NVS_SOLID_KEY, options.reduced_transparency) ||
-        !save_u8(THEME_NVS_MOTION_KEY, options.reduced_motion)) return false;
+    /* This is one preference group. Do not commit earlier options before
+     * discovering that a later write in the same user action failed. */
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(THEME_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (error != ESP_OK) return false;
+    const char *keys[] = {THEME_NVS_LARGE_TEXT_KEY, THEME_NVS_CONTRAST_KEY,
+                          THEME_NVS_SOLID_KEY, THEME_NVS_MOTION_KEY};
+    const uint8_t values[] = {options.large_text, options.high_contrast,
+                              options.reduced_transparency, options.reduced_motion};
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]) && error == ESP_OK; ++i)
+        error = nvs_set_u8(handle, keys[i], values[i]);
+    if (error == ESP_OK) error = nvs_commit(handle);
+    nvs_close(handle);
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "Could not save accessibility options: %s", esp_err_to_name(error));
+        return false;
+    }
     ui_theme_set_accessibility(options);
     return true;
 }

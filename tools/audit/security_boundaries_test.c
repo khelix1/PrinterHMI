@@ -24,25 +24,7 @@ void nvs_close(int h){(void)h;}
 #include "validators.c"
 #include "size.c"
 
-typedef struct cJSON {struct cJSON *next,*prev,*child;int type;char *valuestring;int valueint;double valuedouble;char *string;} cJSON;
-extern cJSON *cJSON_CreateObject(void);
-extern cJSON *cJSON_AddStringToObject(cJSON *,const char *,const char *);
-extern int cJSON_PrintPreallocated(cJSON *,char *,int,int);
-extern cJSON *cJSON_Parse(const char *);
-extern cJSON *cJSON_GetObjectItemCaseSensitive(const cJSON *,const char *);
-extern void cJSON_Delete(cJSON *);
-extern cJSON *cJSON_AddArrayToObject(cJSON *,const char *);
-extern cJSON *cJSON_AddObjectToObject(cJSON *,const char *);
-extern cJSON *cJSON_AddNumberToObject(cJSON *,const char *,double);
-extern cJSON *cJSON_AddBoolToObject(cJSON *,const char *,int);
-extern int cJSON_AddItemToArray(cJSON *,cJSON *);
-extern cJSON *cJSON_GetArrayItem(const cJSON *,int);
-extern int cJSON_IsBool(const cJSON *);
-extern int cJSON_IsTrue(const cJSON *);
-extern int cJSON_IsString(const cJSON *);
-extern cJSON *cJSON_ParseWithLengthOpts(const char *,size_t,const char **,int);
-typedef struct {void *(*malloc_fn)(size_t);void (*free_fn)(void *);} cJSON_Hooks;
-extern void cJSON_InitHooks(cJSON_Hooks *);
+#include "cJSON.h"
 #include "backup.c"
 static int allocations,fail_allocation,outstanding;
 static void *checked_malloc(size_t size){allocations++;if(allocations==fail_allocation)return NULL;void *p=malloc(size);if(p)outstanding++;return p;}

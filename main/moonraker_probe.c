@@ -5,6 +5,7 @@
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "cJSON.h"
+#include "json_document_parse.h"
 #include "esp_heap_caps.h"
 
 #include "lwip/inet.h"
@@ -22,6 +23,7 @@ typedef struct {
     char *buf;
     size_t len;
     size_t cap;
+    bool invalid;
 } moonraker_probe_capture_t;
 
 
@@ -38,7 +40,9 @@ static esp_err_t probe_http_event_handler(
     if (event->event_id == HTTP_EVENT_ON_DATA &&
         event->data && event->data_len > 0 &&
         capture->buf && capture->cap > 1) {
+        if (memchr(event->data, '\0', (size_t)event->data_len)) capture->invalid = true;
         size_t available = capture->cap - capture->len - 1;
+        if ((size_t)event->data_len > available) capture->invalid = true;
         size_t copy_len = (size_t)event->data_len < available
             ? (size_t)event->data_len
             : available;
@@ -231,7 +235,10 @@ static bool probe_get(
     }
 
     if (api_key && api_key[0]) {
-        esp_http_client_set_header(client, "X-Api-Key", api_key);
+        if (esp_http_client_set_header(client, "X-Api-Key", api_key) != ESP_OK) {
+            esp_http_client_cleanup(client);
+            return false;
+        }
     }
 
     if (!network_activity_controller_acquire_shared(900)) {
@@ -243,50 +250,8 @@ static bool probe_get(
     network_activity_controller_end_shared();
     int code = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
-    return err == ESP_OK && code == 200;
+    return err == ESP_OK && code == 200 && !capture.invalid;
 }
-
-
-static bool extract_json_string(
-    const char *body,
-    const char *key,
-    char *out,
-    size_t out_size)
-{
-    if (!body || !key || !out || out_size == 0) {
-        return false;
-    }
-
-    out[0] = '\0';
-    char needle[80];
-    int written = snprintf(needle, sizeof(needle), "\"%s\"", key);
-    if (written < 0 || written >= (int)sizeof(needle)) {
-        return false;
-    }
-
-    const char *value = strstr(body, needle);
-    if (!value || !(value = strchr(value + strlen(needle), ':'))) {
-        return false;
-    }
-
-    while (*++value == ' ' || *value == '\t') {
-    }
-    if (*value != '\"') {
-        return false;
-    }
-
-    ++value;
-    size_t copied = 0;
-    while (*value && *value != '\"' && copied + 1 < out_size) {
-        if (*value == '\\' && value[1]) {
-            ++value;
-        }
-        out[copied++] = *value++;
-    }
-    out[copied] = '\0';
-    return copied > 0 && *value == '\"';
-}
-
 
 
 static bool normalize_webcam_url(
@@ -302,9 +267,17 @@ static bool normalize_webcam_url(
 
     if (strncmp(source, "http://", 7) == 0 ||
         strncmp(source, "https://", 8) == 0) {
-        strlcpy(destination, source, destination_size);
-        return destination[0] != '\0';
+        /* Never persist a different address produced by truncating a URL. */
+        if (strlen(source) >= destination_size) return false;
+        memcpy(destination, source, strlen(source) + 1);
+        return true;
     }
+
+    /* A scheme belongs before the first path/query/fragment delimiter.
+     * Unsupported schemes must not turn into apparent HTTP camera paths. */
+    const char *colon = strchr(source, ':');
+    const char *delimiter = strpbrk(source, "/?#");
+    if (colon && (!delimiter || colon < delimiter)) return false;
 
     /* Relative webcam paths are served by the host web proxy on port 80,
      * not by Moonraker's API port or its secured HTTPS proxy port. */
@@ -314,7 +287,11 @@ static bool normalize_webcam_url(
         "http://%s/%s",
         host,
         source[0] == '/' ? source + 1 : source);
-    return written > 0 && written < (int)destination_size;
+    if (written <= 0 || (size_t)written >= destination_size) {
+        destination[0] = '\0';
+        return false;
+    }
+    return true;
 }
 
 
@@ -332,28 +309,29 @@ size_t moonraker_probe_webcams_with_api_key(
 
     size_t count = 0;
     if (probe_get(host, port, "/server/webcams/list", api_key, body, 4096)) {
-        cJSON *root = cJSON_Parse(body);
+        cJSON *root = json_document_parse_bounded(body, strlen(body), 4095, 16);
         cJSON *result = root ? cJSON_GetObjectItemCaseSensitive(root, "result") : NULL;
         cJSON *items = result ? cJSON_GetObjectItemCaseSensitive(result, "webcams") :
             (root ? cJSON_GetObjectItemCaseSensitive(root, "webcams") : NULL);
         cJSON *entry = NULL;
-        if (cJSON_IsArray(items)) cJSON_ArrayForEach(entry, items) {
+        if (!cJSON_GetObjectItemCaseSensitive(root, "error") && cJSON_IsArray(items)) cJSON_ArrayForEach(entry, items) {
             if (count >= webcam_capacity) break;
+            moonraker_webcam_t candidate = {0};
             cJSON *enabled = cJSON_GetObjectItemCaseSensitive(entry, "enabled");
             cJSON *stream = cJSON_GetObjectItemCaseSensitive(entry, "stream_url");
             if (!cJSON_IsObject(entry) || (enabled && !cJSON_IsTrue(enabled)) ||
                 !cJSON_IsString(stream) || !stream->valuestring ||
                 !normalize_webcam_url(host, stream->valuestring,
-                    webcams[count].stream_url, sizeof(webcams[count].stream_url))) continue;
+                    candidate.stream_url, sizeof(candidate.stream_url))) continue;
             cJSON *name = cJSON_GetObjectItemCaseSensitive(entry, "name");
-            strlcpy(webcams[count].name,
+            strlcpy(candidate.name,
                 cJSON_IsString(name) && name->valuestring ? name->valuestring : "Moonraker camera",
-                sizeof(webcams[count].name));
+                sizeof(candidate.name));
             cJSON *snapshot = cJSON_GetObjectItemCaseSensitive(entry, "snapshot_url");
             if (cJSON_IsString(snapshot) && snapshot->valuestring)
                 (void)normalize_webcam_url(host, snapshot->valuestring,
-                    webcams[count].snapshot_url, sizeof(webcams[count].snapshot_url));
-            ++count;
+                    candidate.snapshot_url, sizeof(candidate.snapshot_url));
+            webcams[count++] = candidate;
         }
         cJSON_Delete(root);
     }
@@ -373,32 +351,41 @@ bool moonraker_probe_endpoint_with_api_key(
     }
 
     moonraker_probe_result_t local = {0};
-    char body[384];
-
-    if (!probe_get(host, port, "/server/info", api_key, body, sizeof(body)) ||
-        (!strstr(body, "klippy") &&
-         !strstr(body, "moonraker") &&
-         !strstr(body, "\"result\""))) {
+    /* Parse complete bounded responses rather than inspecting a truncated
+     * stack prefix for keywords. One buffer is reused for both requests. */
+    const size_t capacity = 8192;
+    char *body = heap_caps_malloc(capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!body) body = heap_caps_malloc(capacity, MALLOC_CAP_8BIT);
+    if (!body) return false;
+    cJSON *root = NULL;
+    if (probe_get(host, port, "/server/info", api_key, body, capacity)) {
+        root = json_document_parse_bounded(body, strlen(body), capacity - 1, 16);
+    }
+    const cJSON *info = cJSON_GetObjectItemCaseSensitive(root, "result");
+    const cJSON *state = cJSON_GetObjectItemCaseSensitive(info, "klippy_state");
+    bool verified = cJSON_IsObject(info) && cJSON_IsString(state) && state->valuestring[0] &&
+        !cJSON_GetObjectItemCaseSensitive(root, "error");
+    if (!verified) {
+        cJSON_Delete(root);
+        free(body);
         return false;
     }
-
     local.reachable = true;
-    char klippy_state[24] = "";
-    if (extract_json_string(
-            body, "klippy_state", klippy_state, sizeof(klippy_state)) &&
-        strcmp(klippy_state, "ready") == 0) {
-        local.klippy_ready = true;
-    }
+    local.klippy_ready = strcmp(state->valuestring, "ready") == 0;
+    cJSON_Delete(root);
 
-    if (probe_get(host, port, "/printer/info", api_key, body, sizeof(body))) {
-        (void)extract_json_string(
-            body, "hostname", local.identity, sizeof(local.identity));
-        if (extract_json_string(
-                body, "state", klippy_state, sizeof(klippy_state)) &&
-            strcmp(klippy_state, "ready") == 0) {
-            local.klippy_ready = true;
+    if (probe_get(host, port, "/printer/info", api_key, body, capacity)) {
+        root = json_document_parse_bounded(body, strlen(body), capacity - 1, 16);
+        info = cJSON_GetObjectItemCaseSensitive(root, "result");
+        if (cJSON_IsObject(info) && !cJSON_GetObjectItemCaseSensitive(root, "error")) {
+            const cJSON *identity = cJSON_GetObjectItemCaseSensitive(info, "hostname");
+            if (cJSON_IsString(identity)) strlcpy(local.identity, identity->valuestring, sizeof(local.identity));
+            state = cJSON_GetObjectItemCaseSensitive(info, "state");
+            if (cJSON_IsString(state)) local.klippy_ready = strcmp(state->valuestring, "ready") == 0;
         }
+        cJSON_Delete(root);
     }
+    free(body);
 
     if (!local.identity[0]) {
         strlcpy(local.identity, "Moonraker", sizeof(local.identity));

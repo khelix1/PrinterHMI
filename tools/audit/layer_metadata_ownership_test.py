@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run actual thumbnail-session metadata ownership and filename encoding checks."""
+"""Run thumbnail-session request ownership and filename encoding checks."""
 from pathlib import Path
 import argparse,re,subprocess,tempfile
 root=Path(__file__).resolve().parents[2]

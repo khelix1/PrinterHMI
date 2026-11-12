@@ -29,6 +29,7 @@ void nvs_close(nvs_handle_t);
 ''',
     'esp_err.h': '''#pragma once
 #define ESP_OK 0
+#define ESP_FAIL -2
 #define ESP_ERR_NVS_NOT_FOUND -1
 typedef int esp_err_t;
 const char *esp_err_to_name(int);
@@ -47,6 +48,7 @@ with tempfile.TemporaryDirectory(prefix='profile-storage-') as directory:
         (p / name).write_text(content)
     subprocess.run(['cc', '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Wall', '-Wextra', '-Werror',
                     '-fsanitize=address,undefined', '-fno-pie', '-no-pie',
+                    *(['-DLEGACY_PROFILE_SOURCE'] if 'bool moonraker_config_storage_readable(void)' not in args.source.read_text() else []),
                     '-I', str(p), '-I', str(root / 'main'),
                     str(root / 'tools/audit/profile_storage_test.c'), str(args.source),
                     '-o', str(p / 'test')], check=True)

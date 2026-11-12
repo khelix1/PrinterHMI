@@ -271,6 +271,18 @@ bool macro_controller_get(
     return found;
 }
 
+bool macro_controller_contains(const char *name)
+{
+    if (!s_store || !name || !name[0]) return false;
+    bool found = false;
+    portENTER_CRITICAL(&s_lock);
+    for (size_t i = 0; s_store->status.discovered && i < s_store->status.count; ++i) {
+        if (!strcmp(name, s_store->names[i])) { found = true; break; }
+    }
+    portEXIT_CRITICAL(&s_lock);
+    return found;
+}
+
 void macro_controller_update_parameters(const struct cJSON *config)
 {
     if (!s_store) return;

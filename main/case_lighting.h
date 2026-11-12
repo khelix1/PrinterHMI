@@ -4,6 +4,7 @@
 #include <stdint.h>
 struct cJSON;
 typedef struct {
+    /* session retires gestures on reconnect or discovered availability changes. */
     uint32_t generation, session;
     bool discovered, available, configured, pwm, known, pending;
     double scale, value;

@@ -14,7 +14,7 @@ static unsigned sends, snapshot_reads, invalidations;
 static void invalidated(lv_event_t *e){(void)e;invalidations++;}
 static bool accept=true;
 static int during_send;
-static char sent[128];
+static char sent[160];
 static lv_obj_t *steps[3];
 static double step=10;
 uint32_t moonraker_config_generation(void){return generation;}
@@ -169,8 +169,8 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
   lv_obj_t *last=find_label(s_tab_panels[2],"Reset offset");assert(last);
   /* Preserve exact commands through the new grid buttons. */
   lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);click(steps[0]);assert(step==1);
-  lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"X+ " LV_SYMBOL_RIGHT)));assert(!strcmp(sent,"G91\nG1 X1.00 F6000\nG90"));
-  click(s_z_step005_btn);lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,LV_SYMBOL_DOWN " Z-")));assert(!strcmp(sent,"G91\nG1 Z-0.050 F600\nG90"));
+  lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"X+ " LV_SYMBOL_RIGHT)));assert(!strcmp(sent,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 X1.00 F6000\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0"));
+  click(s_z_step005_btn);lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,LV_SYMBOL_DOWN " Z-")));assert(!strcmp(sent,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 Z-0.050 F600\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0"));
   click(s_tab_buttons[2]);
   lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"+0.01")));assert(!strcmp(sent,"SET_GCODE_OFFSET Z_ADJUST=+0.010 MOVE=1"));
   click(s_tab_buttons[0]);
@@ -179,14 +179,14 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
    click(lv_obj_get_parent(find_label(s_toolhead_popup,z_values[i])));assert(fabs(s_z_step-atof(z_values[i]))<0.0001);
    for(int sign=0;sign<2;sign++) {
     lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,sign?LV_SYMBOL_DOWN " Z-":LV_SYMBOL_UP " Z+")));
-    char expected[128];snprintf(expected,sizeof(expected),"G91\nG1 Z%.3f F600\nG90",(sign?-1:1)*atof(z_values[i]));assert(!strcmp(sent,expected));
+    char expected[160];snprintf(expected,sizeof(expected),"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 Z%.3f F600\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0",(sign?-1:1)*atof(z_values[i]));assert(!strcmp(sent,expected));
    }
   }
   click(s_tab_buttons[2]);
   const char *adjustments[]={"-0.005","+0.005","-0.01","+0.01","-0.025","+0.025","-0.05","+0.05","-0.10","+0.10"};
   for(unsigned i=0;i<10;i++) {
    lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,adjustments[i])));
-   char expected[128];snprintf(expected,sizeof(expected),"SET_GCODE_OFFSET Z_ADJUST=%+.3f MOVE=1",atof(adjustments[i]));assert(!strcmp(sent,expected));
+   char expected[160];snprintf(expected,sizeof(expected),"SET_GCODE_OFFSET Z_ADJUST=%+.3f MOVE=1",atof(adjustments[i]));assert(!strcmp(sent,expected));
   }
   lv_tick_inc(350);click(lv_obj_get_parent(last));assert(!strcmp(sent,"SET_GCODE_OFFSET Z=0 MOVE=1"));
   click(s_tab_buttons[1]);
@@ -194,11 +194,11 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
    click(s_extrusion_buttons[i]);assert(s_extrusion_step==atof(s_extrusion_values[i]));
    for(int retract=0;retract<2;retract++) {
     lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,retract?"Retract":"Extrude")));
-    char expected[128];snprintf(expected,sizeof(expected),"M83\nG1 E%.0f F300",(retract?-1:1)*s_extrusion_step);assert(!strcmp(sent,expected));
+    char expected[160];snprintf(expected,sizeof(expected),"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nM83\nG1 E%.0f F300\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0",(retract?-1:1)*s_extrusion_step);assert(!strcmp(sent,expected));
    }
   }
   click(s_extrusion_buttons[2]);
-  lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"Extrude")));assert(!strcmp(sent,"M83\nG1 E10 F300"));
+  lv_tick_inc(350);click(lv_obj_get_parent(find_label(s_toolhead_popup,"Extrude")));assert(!strcmp(sent,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nM83\nG1 E10 F300\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0"));
   click(s_tab_buttons[0]);assert(s_extrusion_step==10&&fabs(s_z_step-25.0)<0.0001);
   motion_open();assert(!lv_obj_has_flag(s_tab_panels[0],LV_OBJ_FLAG_HIDDEN)&&lv_obj_has_state(s_tab_buttons[0],LV_STATE_CHECKED)&&s_refresh_timer==baseline_timer);
   click(s_tab_buttons[2]);motion_open();assert(!lv_obj_has_flag(s_tab_panels[2],LV_OBJ_FLAG_HIDDEN)&&lv_obj_has_state(s_tab_buttons[2],LV_STATE_CHECKED)&&s_refresh_timer==baseline_timer);
@@ -207,9 +207,9 @@ static void native_layout_checks(lv_display_t *display,lv_indev_t *pointer)
 }
 int main(void)
 {
-    char command[96];
+    char command[160];
     assert(ui_printer_toolhead_format_jog_command("Z-",25,command,sizeof(command)) &&
-           !strcmp(command,"G91\nG1 Z-25.000 F600\nG90"));
+           !strcmp(command,"SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 Z-25.000 F600\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0"));
     assert(!ui_printer_toolhead_format_jog_command("X?",10,command,sizeof(command)) && !command[0]);
     assert(!ui_printer_toolhead_format_jog_command("X+",NAN,command,sizeof(command)));
     assert(!ui_printer_toolhead_format_jog_command("X+",10,command,8) && !command[0]);

@@ -13,10 +13,11 @@ static uint32_t generation=1;
 uint32_t moonraker_config_generation(void){return generation;}
 static bool linked=true,accept_send=true;
 static const char *printer_state="ready";
+static const char *active_hotend="extruder";
 static void (*send_hook)(void);
 static unsigned attempts;
 static uint32_t job_revision;
-void moonraker_state_snapshot(moonraker_state_t *out){memset(out,0,sizeof(*out));out->print_job_revision=job_revision;out->moonraker_ok=out->live_data_ok=linked;snprintf(out->printer_state,sizeof(out->printer_state),"%s",printer_state);}
+void moonraker_state_snapshot(moonraker_state_t *out){memset(out,0,sizeof(*out));out->print_job_revision=job_revision;snprintf(out->active_hotend,sizeof(out->active_hotend),"%s",active_hotend);out->moonraker_ok=out->live_data_ok=linked;snprintf(out->printer_state,sizeof(out->printer_state),"%s",printer_state);}
 static char sent[128];static unsigned sends;
 static void send(const char *s){snprintf(sent,sizeof(sent),"%s",s);sends++;}
 static bool checked_send(const char *s){attempts++;if(send_hook)send_hook();if(!accept_send)return false;send(s);return true;}
@@ -98,5 +99,21 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
  ui_printer_popups_show_bed(send,60,60);open_custom();lv_textarea_set_text(s_custom_temp_textarea,"80");keyboard=lv_obj_get_child(s_custom_temp_popup,2);lv_obj_send_event(keyboard,LV_EVENT_READY,NULL);assert(sends==before+1&&!s_custom_temp_popup&&!s_control_popup);
  ui_printer_popups_show_bed(send,60,60);open_custom();lv_obj_delete(s_control_popup);assert(!s_custom_temp_popup&&!s_custom_temp_textarea);
  ui_printer_popups_show_part_fan(send,50);accept_send=false;click(lv_obj_get_child(presets(),3));assert(s_control_popup&&sends==before+1);accept_send=true;click(lv_obj_get_child(presets(),3));assert(!s_control_popup&&sends==before+2);
+ /* Generic nozzle controls must retain their active-hotend identity. */
+ ui_printer_popups_show_nozzle(send,205,210);before=sends;active_hotend="extruder1";
+ click(lv_obj_get_child(presets(),1));assert(s_control_popup&&sends==before);
+ open_custom();lv_textarea_set_text(s_custom_temp_textarea,"225");set_custom_temp_cb(NULL);
+ assert(sends==before&&s_custom_temp_popup&&strstr(lv_label_get_text(s_custom_temp_status),"Active hotend changed"));
+ close_custom_temp_cb(NULL);lv_obj_delete(s_control_popup);
+ ui_printer_popups_show_nozzle(send,205,210);click(lv_obj_get_child(presets(),1));assert(!s_control_popup&&sends==before+1&&!strcmp(sent,"M104 S200"));
+ /* A selected heater's explicit command remains bound to it across tool changes. */
+ show_control_popup("T1",205,210,"C",true,cmds,labels,values,2,"T1","SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=",300);
+ active_hotend="extruder";open_custom();lv_textarea_set_text(s_custom_temp_textarea,"225");set_custom_temp_cb(NULL);
+ assert(sends==before+2&&!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=225"));
+ ui_printer_popups_show_part_fan(send,50);lv_obj_t *preset=lv_obj_get_child(presets(),3);before=sends;
+ lv_obj_add_state(preset,LV_STATE_DISABLED);click(preset);assert(s_control_popup&&sends==before);lv_obj_remove_state(preset,LV_STATE_DISABLED);
+ lv_obj_t *foreign=lv_button_create(lv_screen_active());lv_obj_add_event_cb(foreign,gcode_button_event_cb,LV_EVENT_CLICKED,"M106 S255");click(foreign);assert(sends==before&&s_control_popup);lv_obj_delete(foreign);
+ lv_obj_t *label=lv_obj_get_child(preset,0);lv_obj_add_flag(label,LV_OBJ_FLAG_EVENT_BUBBLE);click(label);assert(sends==before&&s_control_popup);
+ click(preset);assert(!s_control_popup&&sends==before+1&&!strcmp(sent,"M106 S191"));
  lifetime_checks();
  puts("PASS: callback deletion/printer change/reentry, retry input, shutdown and active-print controls; native popup wrapping/scroll, pinned actions, five themes/densities/text sizes, 1024/640/480 widths, preset/custom/zero/range/keyboard commands and teardown");return 0;}

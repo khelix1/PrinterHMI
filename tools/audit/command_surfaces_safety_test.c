@@ -52,17 +52,23 @@ static void checks(void){
 #elif defined(TEST_MACROS)
 #include "macro_controller.h"
 static uint32_t catalog_generation=1;
-static bool favorite_storage_ok=true,favorite_value;
+static bool favorite_storage_ok=true,favorite_value,macro_present=true;
 void macro_controller_status(macro_controller_status_t*out){memset(out,0,sizeof(*out));out->discovered=true;out->count=out->total_count=3;out->generation=catalog_generation;}
 bool macro_controller_get(size_t i,char*out,size_t n){if(i>=3)return false;snprintf(out,n,"TEST_%u",(unsigned)i);return true;}
+bool macro_controller_contains(const char *name){if(!macro_present&&!strcmp(name,"TEST_0"))return false;for(size_t i=0;i<3;i++){char candidate[64];macro_controller_get(i,candidate,sizeof(candidate));if(!strcmp(candidate,name))return true;}return false;}
 bool macro_controller_is_favorite(const char*n){(void)n;return favorite_value;}
 bool macro_controller_set_favorite(const char*n,bool favorite){(void)n;if(!favorite_storage_ok)return false;favorite_value=favorite;catalog_generation++;return true;}
 bool macro_controller_parameters(const char*n,macro_parameter_catalog_t*out){(void)n;memset(out,0,sizeof(*out));out->count=1;strcpy(out->names[0],"VALUE");return true;}
 #include "ui_macros.c"
+static bool macro_feedback_has(lv_obj_t *root,const char *text){
+ if(lv_obj_check_type(root,&lv_label_class)&&strstr(lv_label_get_text(root),text))return true;
+ for(unsigned i=0;i<lv_obj_get_child_count(root);i++)if(macro_feedback_has(lv_obj_get_child(root,i),text))return true;
+ return false;
+}
 static bool send(const char*command){sends++;snprintf(sent,sizeof(sent),"%s",command);unsigned m=mode;mode=0;if(m==1)run_macro_cb(NULL);if(m==2)close_confirm();if(m==3){ui_macros_hide();ui_macros_show(send);}if(m==4)generation++;return accepted;}
 void console_controller_add_command(const char*c){(void)c;unsigned m=log_mode;if(m!=5)log_mode=0;if(m==1)ui_macros_hide();if(m==2)generation++;if(m==3)s_command_callback=NULL;if(m==4)run_macro_cb(NULL);}
 void console_controller_add(console_entry_type_t t,const char*f,...){(void)t;(void)f;if(log_mode==5){log_mode=0;ui_macros_hide();}}
-static void reset(void){favorite_value=false;ui_macros_hide();setup();ui_macros_show(send);s_macros->accepted=false;click(s_macros->rows[0]);assert(s_confirm);lv_textarea_set_text(s_macros->parameter_fields[0],"42");review_macro_cb(NULL);assert(s_macros->reviewed);}
+static void reset(void){macro_present=true;favorite_value=false;ui_macros_hide();setup();ui_macros_show(send);s_macros->accepted=false;click(s_macros->rows[0]);assert(s_confirm);lv_textarea_set_text(s_macros->parameter_fields[0],"42");review_macro_cb(NULL);assert(s_macros->reviewed);}
 static void review(void){click(s_macros->rows[0]);lv_textarea_set_text(s_macros->parameter_fields[0],"42");review_macro_cb(NULL);}
 static lv_indev_data_t favorite_pointer_data;
 static void favorite_pointer_read(lv_indev_t *indev,lv_indev_data_t *data){(void)indev;*data=favorite_pointer_data;}
@@ -88,6 +94,11 @@ static void checks(void){
  lv_obj_send_event(s_macros->rows[0],LV_EVENT_LONG_PRESSED,NULL);
  assert(catalog_generation==before_favorites&&strstr(lv_label_get_text(s_macros->status),"Favorite not changed"));
  favorite_storage_ok=true;lv_obj_send_event(s_macros->rows[0],LV_EVENT_LONG_PRESSED,NULL);assert(catalog_generation==before_favorites+1);
+ reset();unsigned stale_before=sends;macro_present=false;
+ run_macro_cb(NULL);assert(sends==stale_before&&s_confirm&&macro_feedback_has(s_confirm,"no longer available"));
+ macro_run_availability();assert(lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED));
+ macro_present=true;macro_run_availability();assert(!lv_obj_has_state(s_macros->run_action,LV_STATE_DISABLED));
+ run_macro_cb(NULL);assert(sends==stale_before+1&&!s_confirm&&!strcmp(sent,"TEST_0 VALUE=42"));
  reset();unsigned before=sends;accepted=false;run_macro_cb(NULL);assert(sends==before+1&&s_confirm&&s_macros->reviewed&&!strcmp(s_macros->pending_command,"TEST_0 VALUE=42"));accepted=true;run_macro_cb(NULL);assert(sends==before+2&&!s_confirm&&!strcmp(sent,"TEST_0 VALUE=42"));review();run_macro_cb(NULL);assert(sends==before+2&&s_confirm);ui_macros_hide();ui_macros_show(send);review();run_macro_cb(NULL);assert(sends==before+2);lv_tick_inc(5000);run_macro_cb(NULL);assert(sends==before+3&&!s_confirm);
  for(unsigned m=1;m<=4;m++){reset();before=sends;mode=m;run_macro_cb(NULL);assert(sends==before+1&&!s_macro_dispatching);if(m==2||m==3){ui_macros_show(send);review();run_macro_cb(NULL);assert(sends==before+1);}}
  for(unsigned m=1;m<=5;m++){reset();before=sends;log_mode=m;accepted=m!=5;run_macro_cb(NULL);assert(sends==before+((m==1||m==2)?0:1)&&!s_macro_dispatching);if(m==3)assert(!s_confirm);if(m==5)assert(!s_root);}

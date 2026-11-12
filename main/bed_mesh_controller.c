@@ -178,6 +178,18 @@ static void read_profiles_locked(cJSON *profiles)
     sort_profiles_locked();
 }
 
+/* Keep reusable buffers; resetting an endpoint must retire all published data. */
+void bed_mesh_controller_reset(void)
+{
+    if (!mutex) return;
+    lock();
+    s = (mesh_state_t){
+        .values = s.values, .capacity = s.capacity,
+        .profile_names = s.profile_names, .profile_capacity = s.profile_capacity,
+    };
+    unlock();
+}
+
 void bed_mesh_controller_init(void)
 {
     if (!mutex) {
@@ -188,13 +200,11 @@ void bed_mesh_controller_init(void)
         return;
     }
 
-    lock();
-    memset(&s, 0, sizeof(s));
-    unlock();
+    bed_mesh_controller_reset();
 }
 bool bed_mesh_controller_merge_status(cJSON *status)
 {
-    if (!cJSON_IsObject(status)) {
+    if (!mutex || !cJSON_IsObject(status)) {
         return false;
     }
 
@@ -218,19 +228,21 @@ bool bed_mesh_controller_merge_status(cJSON *status)
     bool matrix_present =
         mesh_matrix != NULL ||
         probed_matrix != NULL;
-    cJSON *matrix = mesh_matrix;
-
-    if (!cJSON_IsArray(matrix) ||
-        cJSON_GetArraySize(matrix) <= 0) {
-        matrix = probed_matrix;
+    /* Klipper reports an inactive mesh as [[]], not only as []. */
+    cJSON *matrices[] = {mesh_matrix, probed_matrix};
+    bool empty[2] = {true, true};
+    for (unsigned i = 0; i < 2; ++i) {
+        if (!matrices[i]) continue;
+        if (!cJSON_IsArray(matrices[i])) return false;
+        int size = cJSON_GetArraySize(matrices[i]);
+        cJSON *first = cJSON_GetArrayItem(matrices[i], 0);
+        empty[i] = size == 0 ||
+            (size == 1 && cJSON_IsArray(first) && cJSON_GetArraySize(first) == 0);
     }
+    cJSON *matrix = !empty[0] ? mesh_matrix : !empty[1] ? probed_matrix : NULL;
 
-    /*
-     * Moonraker status notifications are partial. Profile-name or saved-list
-     * updates must not clear an unchanged active mesh.
-     */
-    if (!cJSON_IsArray(matrix) ||
-        cJSON_GetArraySize(matrix) <= 0) {
+    /* Missing matrices are partial updates; explicit empty arrays clear. */
+    if (!matrix) {
         lock();
 
         if (cJSON_IsObject(profiles)) {
@@ -254,6 +266,10 @@ bool bed_mesh_controller_merge_status(cJSON *status)
             s.valid = false;
             s.rows = 0;
             s.cols = 0;
+            s.truncated = false;
+            s.minimum = s.maximum = s.average = s.range = 0.0;
+            s.mesh_min_x = s.mesh_min_y = s.mesh_max_x = s.mesh_max_y = 0.0;
+            if (!profile) s.profile_name[0] = '\0';
         }
 
         unlock();
@@ -284,9 +300,11 @@ bool bed_mesh_controller_merge_status(cJSON *status)
     /* Reject unrepresentable server numbers before changing the cached mesh. */
     for (uint16_t y = 0; y < rows; ++y) {
         cJSON *row = cJSON_GetArrayItem(matrix, y);
+        if (!cJSON_IsArray(row) || cJSON_GetArraySize(row) != source_cols)
+            return false;
         for (uint16_t x = 0; x < cols; ++x) {
             cJSON *value = cJSON_IsArray(row) ? cJSON_GetArrayItem(row, x) : NULL;
-            if (cJSON_IsNumber(value) && !display_number(value->valuedouble))
+            if (!cJSON_IsNumber(value) || !display_number(value->valuedouble))
                 return false;
         }
     }
@@ -305,33 +323,16 @@ bool bed_mesh_controller_merge_status(cJSON *status)
     double low = DBL_MAX;
     double high = -DBL_MAX;
     double sum = 0.0;
-    size_t valid_count = 0;
 
     for (uint16_t y = 0; y < rows; ++y) {
         cJSON *row = cJSON_GetArrayItem(matrix, y);
-
         for (uint16_t x = 0; x < cols; ++x) {
-            cJSON *value =
-                cJSON_IsArray(row)
-                    ? cJSON_GetArrayItem(row, x)
-                    : NULL;
-            double z =
-                cJSON_IsNumber(value)
-                    ? value->valuedouble
-                    : 0.0;
-
+            /* Every retained cell was validated before any cached data changed. */
+            double z = cJSON_GetArrayItem(row, x)->valuedouble;
             s.values[(size_t)y * cols + x] = (float)z;
-
-            if (cJSON_IsNumber(value)) {
-                if (z < low) {
-                    low = z;
-                }
-                if (z > high) {
-                    high = z;
-                }
-                sum += z;
-                ++valid_count;
-            }
+            if (z < low) low = z;
+            if (z > high) high = z;
+            sum += z;
         }
     }
 
@@ -368,14 +369,11 @@ bool bed_mesh_controller_merge_status(cJSON *status)
     s.truncated =
         source_rows > BED_MESH_MAX_ROWS ||
         source_cols > BED_MESH_MAX_COLS;
-    s.minimum = valid_count ? low : 0.0;
-    s.maximum = valid_count ? high : 0.0;
-    s.average =
-        valid_count
-            ? sum / valid_count
-            : 0.0;
+    s.minimum = low;
+    s.maximum = high;
+    s.average = sum / count;
     s.range = s.maximum - s.minimum;
-    s.valid = valid_count > 0;
+    s.valid = true;
 
     unlock();
     return true;
@@ -392,8 +390,9 @@ bool bed_mesh_controller_snapshot(
         return false;
     }
 
-    lock();
     memset(out, 0, sizeof(*out));
+    if (!mutex) return false;
+    lock();
 
     if (s.profile_names &&
         profile_names &&

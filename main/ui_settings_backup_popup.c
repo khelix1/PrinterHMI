@@ -479,10 +479,18 @@ static void secret_submit_cb(lv_event_t *event)
     bool restore = s_secret_is_restore;
     s_secret_validation_error=false;
     char passphrase[BACKUP_PASSPHRASE_MAX + 1], status[256];
-    snprintf(passphrase, sizeof(passphrase), "%s", lv_textarea_get_text(s_secret_input));
-    if (strlen(passphrase) < SETTINGS_BACKUP_CRYPTO_MIN_PASSPHRASE_LENGTH) {
+    const char *input = lv_textarea_get_text(s_secret_input);
+    size_t input_bytes = strlen(input);
+    /* LVGL limits characters; the crypto worker and buffer limit UTF-8 bytes. */
+    if (input_bytes > BACKUP_PASSPHRASE_MAX) {
+        s_secret_validation_error = true;
+        secret_status("Use no more than 96 UTF-8 bytes. Shorten the passphrase.");
+        goto done;
+    }
+    memcpy(passphrase, input, input_bytes + 1);
+    if (input_bytes < SETTINGS_BACKUP_CRYPTO_MIN_PASSPHRASE_LENGTH) {
         s_secret_validation_error=true;
-        secret_status("Use a passphrase of at least 12 characters.");
+        secret_status("Use a passphrase of at least 12 UTF-8 bytes.");
         goto done;
     }
     if (!restore && strcmp(passphrase, lv_textarea_get_text(s_secret_confirm))) {
@@ -511,7 +519,7 @@ static void show_secret_popup(bool restore)
     s_secret_validation_error=false;
     s_secret_is_restore=restore;backup_dialog_own(s_secret_popup);lv_obj_t *body=ui_form_body(s_secret_popup);
     ui_form_text(body,restore?"Backup passphrase":"New passphrase",UI_FONT_CAPTION,UI_TEXT_DIM);
-    s_secret_input=ui_form_input(body,"At least 12 characters",NULL,true,BACKUP_PASSPHRASE_MAX);
+    s_secret_input=ui_form_input(body,"12 to 96 UTF-8 bytes",NULL,true,BACKUP_PASSPHRASE_MAX);
     if(!restore) {
         ui_form_text(body,"Confirm passphrase",UI_FONT_CAPTION,UI_TEXT_DIM);
         s_secret_confirm=ui_form_input(body,"Enter the same passphrase again",NULL,true,BACKUP_PASSPHRASE_MAX);

@@ -13,6 +13,8 @@
 static bool streaming,stream_failed,discovery_pending,test_pending,test_ok;
 static unsigned stream_camera;
 static int discovery_profile;
+static bool discovery_import_failed;
+camera_discovery_status_t camera_discovery_status(void){return discovery_import_failed?CAMERA_DISCOVERY_SAVE_FAILED:discovery_pending?CAMERA_DISCOVERY_WAITING:CAMERA_DISCOVERY_READY;}
 bool camera_stream_start(const char *url){if(!url||!url[0]||streaming)return false;streaming=true;stream_failed=strstr(url,"fail")||strstr(url,"unavailable");stream_camera=strstr(url,"/2")?1:0;return true;}
 bool camera_stream_busy(void){return streaming;}
 void camera_stream_request_stop(void){streaming=false;}
@@ -27,6 +29,6 @@ bool camera_test_start(const char *url){if(!url||!url[0])return false;test_pendi
 bool camera_test_busy(void){return false;}
 bool camera_test_take_result(bool *ok,int *w,int *h,size_t *bytes){if(!test_pending)return false;test_pending=false;*ok=test_ok;*w=480;*h=320;*bytes=480*320*2;return true;}
 
-bool camera_discovery_start_for_profile(int p,const char *host,int port,const char *key){(void)host;(void)port;(void)key;if(p<0||p>=MOONRAKER_CONFIG_MAX_PROFILES)return false;discovery_profile=p;discovery_pending=true;return true;}
+bool camera_discovery_start_for_profile(int p,const char *host,int port,const char *key){(void)host;(void)port;(void)key;if(p<0||p>=MOONRAKER_CONFIG_MAX_PROFILES)return false;discovery_profile=p;discovery_pending=true;discovery_import_failed=false;return true;}
 bool camera_discovery_busy(void){return false;}
-bool camera_discovery_take_result(moonraker_webcam_t *out,bool *found,size_t *count){if(!discovery_pending)return false;discovery_pending=false;camera_catalog_set(discovery_profile,0,"Front camera","http://simulation.invalid/camera/1");camera_catalog_set(discovery_profile,1,"Side camera","http://simulation.invalid/camera/2");snprintf(out->name,sizeof(out->name),"Front camera");snprintf(out->stream_url,sizeof(out->stream_url),"http://simulation.invalid/camera/1");*found=true;*count=2;return true;}
+bool camera_discovery_take_result(moonraker_webcam_t *out,bool *found,size_t *count){if(!discovery_pending)return false;discovery_pending=false;bool first=camera_catalog_set(discovery_profile,0,"Front camera","http://simulation.invalid/camera/1");bool second=camera_catalog_set(discovery_profile,1,"Side camera","http://simulation.invalid/camera/2");discovery_import_failed=!first||!second;snprintf(out->name,sizeof(out->name),"Front camera");snprintf(out->stream_url,sizeof(out->stream_url),"http://simulation.invalid/camera/1");*found=true;*count=2;return true;}

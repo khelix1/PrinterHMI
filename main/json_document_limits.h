@@ -17,7 +17,13 @@ static inline bool json_document_within_limits(const char *document, size_t size
         unsigned char ch = (unsigned char)document[i];
         if (quoted) {
             if (escaped) escaped = false;
-            else if (ch == '\\') escaped = true;
+            else if (ch == '\\') {
+                /* cJSON exposes strings as C strings: an encoded NUL must not
+                 * turn a longer key/identifier into a trusted shorter one. */
+                if (size - i >= 6 && document[i + 1] == 'u' &&
+                    !memcmp(document + i + 2, "0000", 4)) return false;
+                escaped = true;
+            }
             else if (ch == '"') quoted = false;
         } else if (ch == '"') quoted = true;
         else if (ch == '{' || ch == '[') {

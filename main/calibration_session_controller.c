@@ -60,6 +60,44 @@ static bool contains_case_insensitive(
 }
 
 
+static bool mentions_save_config(const char *text)
+{
+    static const char command[] = "SAVE_CONFIG";
+    const char *body = text;
+    while (isspace((unsigned char)*body)) ++body;
+    if (!strncmp(body, "//", 2)) {
+        body += 2;
+        while (isspace((unsigned char)*body)) ++body;
+    }
+    if (find_case_insensitive(body, command) == body) {
+        const char *after = body + sizeof(command) - 1;
+        while (isspace((unsigned char)*after)) ++after;
+        /* HELP describes this command even when no calibration has finished. */
+        if (*after == ':') return false;
+    }
+    for (const char *start = text; *start; ++start) {
+        if (start != text &&
+            (isalnum((unsigned char)start[-1]) || start[-1] == '_')) continue;
+        const char *match = find_case_insensitive(start, command);
+        if (match != start) continue;
+        unsigned char after = (unsigned char)start[sizeof(command) - 1];
+        if (!isalnum(after) && after != '_') return true;
+    }
+    return false;
+}
+
+static bool resonance_result_complete(const char *message)
+{
+    while (*message == ' ' || *message == '\t') ++message;
+    if (!strncmp(message, "//", 2)) {
+        message += 2;
+        while (*message == ' ' || *message == '\t') ++message;
+    }
+    static const char prefix[] = "Resonances data written to ";
+    return find_case_insensitive(message, prefix) == message &&
+        message[sizeof(prefix) - 1] != '\0';
+}
+
 static bool parse_screw_adjustment(
     const char *message,
     char *output,
@@ -317,7 +355,7 @@ static bool generic_result_relevant(
     if (kind == CALIBRATION_SESSION_PROBE_ACCURACY)
         return contains_case_insensitive(message, "probe accuracy results:");
 
-    if (contains_case_insensitive(message, "SAVE_CONFIG")) {
+    if (mentions_save_config(message)) {
         return true;
     }
 
@@ -435,7 +473,7 @@ void calibration_session_controller_poll(void)
                     entry.message,
                     adjustment,
                     sizeof(adjustment))) {
-                append_result(adjustment, true, false);
+                append_result(adjustment, entry.type == CONSOLE_ENTRY_RESPONSE, false);
             }
             continue;
         }
@@ -444,14 +482,18 @@ void calibration_session_controller_poll(void)
             continue;
         }
 
-        bool save_available = kind != CALIBRATION_SESSION_PROBE_ACCURACY &&
-            contains_case_insensitive(
-                entry.message,
-                "SAVE_CONFIG");
-        bool completed = kind == CALIBRATION_SESSION_PROBE_ACCURACY || save_available ||
-            (kind == CALIBRATION_SESSION_ACCELEROMETER_CHECK &&
-             (contains_case_insensitive(entry.message, "axes noise") ||
-              contains_case_insensitive(entry.message, "noise for")));
+        /* Warnings may be useful context, but cannot authorize persistence
+         * or claim successful completion. Errors are handled above. */
+        bool response = entry.type == CONSOLE_ENTRY_RESPONSE;
+        bool save_available = response && kind != CALIBRATION_SESSION_PROBE_ACCURACY &&
+            mentions_save_config(entry.message);
+        bool completed = response &&
+            (kind == CALIBRATION_SESSION_PROBE_ACCURACY || save_available ||
+             (kind == CALIBRATION_SESSION_RESONANCE_TEST &&
+              resonance_result_complete(entry.message)) ||
+             (kind == CALIBRATION_SESSION_ACCELEROMETER_CHECK &&
+              (contains_case_insensitive(entry.message, "axes noise") ||
+               contains_case_insensitive(entry.message, "noise for"))));
         append_result(entry.message, completed, save_available);
     }
 }

@@ -80,6 +80,7 @@ ui_accessibility_t ui_theme_get_accessibility(void);
 lv_color_t ui_theme_accent_color(uint32_t operator_rgb,
                                  uint32_t foundry_rgb,
                                  uint32_t glass_rgb,
+                                 uint32_t studio_rgb,
                                  uint8_t tone);
 int32_t ui_theme_density_metric(int32_t compact_value,
                                 int32_t comfortable_value,
@@ -128,7 +129,7 @@ int32_t ui_theme_studio_metric(int32_t operator_value, int32_t foundry_value,
 #define UI_BORDER_SOFT          (ui_theme_is_studio() ? ui_theme_studio_color(0x31445C, 0x594236, 0x1B2A43, 0x363640) : ui_theme_accessible_color(ui_theme_color(0x31445C, 0x594236, 0x1B2A43), 0xB8CEE2))
 #define UI_BORDER_CONTROL       (ui_theme_is_studio() ? ui_theme_studio_color(0x35506F, 0x8A6245, 0x3A67A0, 0x555363) : ui_theme_accessible_color(ui_theme_color(0x35506F, 0x8A6245, 0x3A67A0), 0xD0E2F2))
 #define UI_BORDER_POPUP         (ui_theme_is_studio() ? ui_theme_studio_color(0x3D6F99, 0xB87545, 0x7440B5, 0x555363) : ui_theme_color(0x3D6F99, 0xB87545, 0x7440B5))
-#define UI_BORDER_BRIGHT        (ui_theme_is_studio() ? ui_theme_studio_color(0x8FD3FF, 0xF4B860, 0x7FEAFF, 0xB59CFF) : ui_theme_color(0x8FD3FF, 0xF4B860, 0x7FEAFF))
+#define UI_BORDER_BRIGHT        (ui_theme_is_studio() ? ui_theme_accent_color(0x8FD3FF, 0xF4B860, 0x7FEAFF, 0xB59CFF, 2) : ui_theme_color(0x8FD3FF, 0xF4B860, 0x7FEAFF))
 #define UI_WIFI_INACTIVE        (ui_theme_is_studio() ? ui_theme_studio_color(0x3A4654, 0x705C4D, 0x29334A, 0x555363) : ui_theme_color(0x3A4654, 0x705C4D, 0x29334A))
 
 /* Text */
@@ -139,14 +140,14 @@ int32_t ui_theme_studio_metric(int32_t operator_value, int32_t foundry_value,
 #define UI_TEXT_ERROR           (ui_theme_is_studio() ? ui_theme_studio_color(0xFF6B6B, 0xFF8580, 0xFF79A8, 0xFF6473) : ui_theme_color(0xFF6B6B, 0xFF8580, 0xFF79A8))
 
 /* Accent colors */
-#define UI_ACCENT               (ui_theme_is_studio() ? ui_theme_studio_color(0x255A91, 0xC9693B, 0x6537D8, 0x8B6CFF) : ui_theme_accent_color(0x255A91, 0xC9693B, 0x6537D8, 0))
-#define UI_ACCENT_2             (ui_theme_is_studio() ? ui_theme_studio_color(0x1266C3, 0xE07A3F, 0xB33CFF, 0x7855F5) : ui_theme_accent_color(0x1266C3, 0xE07A3F, 0xB33CFF, 1))
-#define UI_ACCENT_BRIGHT        (ui_theme_is_studio() ? ui_theme_studio_color(0x33C7FF, 0xFFAD66, 0xF45BFF, 0xB59CFF) : ui_theme_accent_color(0x33C7FF, 0xFFAD66, 0xF45BFF, 2))
-#define UI_ACCENT_CYAN          (ui_theme_is_studio() ? ui_theme_studio_color(0x19C7E8, 0x55C2B8, 0x38E8FF, 0x8B6CFF) : ui_theme_accent_color(0x19C7E8, 0x55C2B8, 0x38E8FF, 1))
-#define UI_ACCENT_INFO          (ui_theme_is_studio() ? ui_theme_studio_color(0x3AA8FF, 0x71B7C5, 0x5C91FF, 0xA68CFF) : ui_theme_accent_color(0x3AA8FF, 0x71B7C5, 0x5C91FF, 1))
-#define UI_ACCENT_PURPLE        (ui_theme_is_studio() ? ui_theme_studio_color(0xB65CFF, 0xC889D8, 0xD86CFF, 0xB59CFF) : ui_theme_accent_color(0xB65CFF, 0xC889D8, 0xD86CFF, 2))
+#define UI_ACCENT               ui_theme_accent_color(0x255A91, 0xC9693B, 0x6537D8, 0x8B6CFF, 0)
+#define UI_ACCENT_2             ui_theme_accent_color(0x1266C3, 0xE07A3F, 0xB33CFF, 0x7855F5, 1)
+#define UI_ACCENT_BRIGHT        ui_theme_accent_color(0x33C7FF, 0xFFAD66, 0xF45BFF, 0xB59CFF, 2)
+#define UI_ACCENT_CYAN          ui_theme_accent_color(0x19C7E8, 0x55C2B8, 0x38E8FF, 0x8B6CFF, 1)
+#define UI_ACCENT_INFO          ui_theme_accent_color(0x3AA8FF, 0x71B7C5, 0x5C91FF, 0xA68CFF, 1)
+#define UI_ACCENT_PURPLE        ui_theme_accent_color(0xB65CFF, 0xC889D8, 0xD86CFF, 0xB59CFF, 2)
 #define UI_ACCENT_ORANGE        (ui_theme_is_studio() ? ui_theme_studio_color(0xFF8C2A, 0xFF934F, 0xFF9A5C, 0xFFB45C) : ui_theme_color(0xFF8C2A, 0xFF934F, 0xFF9A5C))
-#define UI_ACCENT_SKY           (ui_theme_is_studio() ? ui_theme_studio_color(0x00D1FF, 0x77D4D0, 0x48F5FF, 0xB59CFF) : ui_theme_accent_color(0x00D1FF, 0x77D4D0, 0x48F5FF, 2))
+#define UI_ACCENT_SKY           ui_theme_accent_color(0x00D1FF, 0x77D4D0, 0x48F5FF, 0xB59CFF, 2)
 
 /* Dark Glass optical layers. Other themes map these to neutral tokens. */
 #define UI_GLASS_EDGE           (ui_theme_is_studio() ? ui_theme_studio_color(0x8FD3FF, 0xF4B860, 0xD9FAFF, 0x555363) : ui_theme_color(0x8FD3FF, 0xF4B860, 0xD9FAFF))

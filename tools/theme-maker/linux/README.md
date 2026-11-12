@@ -856,3 +856,15 @@ and stale reply ownership. The complete native suite contains 137 tests. Editor
 checks cover Calibration routing, Bed mesh navigation and stale-frame isolation.
 Linux Mint GUI/touch verification remains a user check; desktop multitouch and
 remaining Settings service workflows still have the documented limitations.
+
+
+### Native discovery adapter checks
+
+The Network adapter includes the shared Wi-Fi scan status formatter. Local
+Moonraker discovery owns an LVGL timer, publishes the shared scan-running state,
+and retires canceled timers before retry; it does not reuse firmware task handles.
+Run `python3 tools/theme-maker/linux/discovery-adapter-test.py` for the timer
+lifecycle fixture. The full native helper's profile discovery retry/close-reopen
+and Network scan workflows are covered by `native-test.py --helper PATH`.
+Camera discovery reports save failure separately from the number of cameras
+found, matching the updated profile/setup status handling.

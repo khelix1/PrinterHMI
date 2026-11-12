@@ -1,4 +1,5 @@
 #include "moonraker_config_controller.h"
+#include "camera_catalog_storage.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -22,6 +23,9 @@ static moonraker_profile_t
     s_profiles[MOONRAKER_CONFIG_MAX_PROFILES];
 
 static int s_active_profile = 0;
+/* An incomplete read must never be written back as an empty/default profile.
+ * A successful reload or explicit complete backup replacement clears this. */
+static bool s_storage_readable = true;
 
 /*
  * A 32-bit read/write is atomic on the ESP32-P4. Volatile ensures the
@@ -244,6 +248,17 @@ static void install_default_profile(void)
 }
 
 
+/* Do not connect to a guessed/default HTTP endpoint after an unreadable load. */
+static bool profile_load_failed(void)
+{
+    s_storage_readable = false;
+    for (int index = 0; index < MOONRAKER_CONFIG_MAX_PROFILES; ++index)
+        clear_profile(&s_profiles[index]);
+    s_active_profile = 0;
+    return false;
+}
+
+
 static int first_configured_profile(void)
 {
     for (int index = 0;
@@ -352,8 +367,12 @@ static esp_err_t persist_profile(
 }
 
 
-static bool persist_collection(void)
+static bool persist_collection_with_new_slot(int new_slot)
 {
+    if (!s_storage_readable) {
+        ESP_LOGE(TAG, "Profile save refused: saved collection was not fully readable");
+        return false;
+    }
     if (!valid_profile_index(s_active_profile) ||
         !profile_valid(
             &s_profiles[s_active_profile])) {
@@ -377,11 +396,12 @@ static bool persist_collection(void)
         return false;
     }
 
-    error =
-        nvs_set_u8(
-            handle,
-            MOONRAKER_SCHEMA_KEY,
-            MOONRAKER_SCHEMA_VALUE);
+    /* Retire stale camera metadata before publishing a reused slot.
+     * A failed cleanup must leave the slot unavailable for a new printer. */
+    if (new_slot >= 0) error = camera_catalog_erase_slot_metadata(handle, new_slot);
+    if (error == ESP_OK) {
+        error = nvs_set_u8(handle, MOONRAKER_SCHEMA_KEY, MOONRAKER_SCHEMA_VALUE);
+    }
 
     if (error == ESP_OK) {
         error =
@@ -442,133 +462,74 @@ static bool persist_collection(void)
 }
 
 
-static bool load_profile(
-    nvs_handle_t handle,
-    int profile_index)
+static bool persist_collection(void)
+{
+    return persist_collection_with_new_slot(-1);
+}
+
+
+/* Validate the NVS string's returned extent before treating it as C text. */
+static esp_err_t read_profile_text(nvs_handle_t handle, const char *key,
+    char *out, size_t capacity)
+{
+    size_t length = capacity;
+    esp_err_t error = nvs_get_str(handle, key, out, &length);
+    if (error == ESP_OK && (length == 0 || length > capacity ||
+        memchr(out, '\0', length) != out + length - 1)) error = ESP_FAIL;
+    if (error != ESP_OK) memset(out, 0, capacity);
+    return error;
+}
+
+static bool load_profile(nvs_handle_t handle, int profile_index)
 {
     char key[16];
     uint8_t configured = 0;
-
-    profile_key(
-        key,
-        sizeof(key),
-        profile_index,
-        "used");
-
-    if (nvs_get_u8(
-            handle,
-            key,
-            &configured) != ESP_OK ||
-        !configured) {
-        clear_profile(
-            &s_profiles[profile_index]);
-
+    profile_key(key, sizeof(key), profile_index, "used");
+    esp_err_t error = nvs_get_u8(handle, key, &configured);
+    if (error == ESP_ERR_NVS_NOT_FOUND || (error == ESP_OK && configured == 0)) {
+        clear_profile(&s_profiles[profile_index]);
         return false;
     }
-
-    moonraker_profile_t loaded = {
-        .configured = true,
-        .port = DEFAULT_MOONRAKER_PORT,
-    };
-
-    size_t name_length =
-        sizeof(loaded.name);
-
-    profile_key(
-        key,
-        sizeof(key),
-        profile_index,
-        "name");
-
-    if (nvs_get_str(
-            handle,
-            key,
-            loaded.name,
-            &name_length) != ESP_OK ||
-        !loaded.name[0]) {
-        default_profile_name(
-            loaded.name,
-            sizeof(loaded.name),
-            profile_index);
-    }
-
-    size_t host_length =
-        sizeof(loaded.host);
-
-    profile_key(
-        key,
-        sizeof(key),
-        profile_index,
-        "host");
-
-    if (nvs_get_str(
-            handle,
-            key,
-            loaded.host,
-            &host_length) != ESP_OK ||
-        !loaded.host[0]) {
-        clear_profile(
-            &s_profiles[profile_index]);
-
-        return false;
-    }
-
-    int32_t loaded_port =
-        DEFAULT_MOONRAKER_PORT;
-
-    profile_key(
-        key,
-        sizeof(key),
-        profile_index,
-        "port");
-
-    if (nvs_get_i32(
-            handle,
-            key,
-            &loaded_port) == ESP_OK &&
-        valid_port((int)loaded_port)) {
-        loaded.port =
-            (int)loaded_port;
-    }
-
-    size_t key_length = sizeof(loaded.api_key);
+    if (error != ESP_OK || configured != 1) goto unreadable;
+    moonraker_profile_t loaded = {.configured=true,.port=DEFAULT_MOONRAKER_PORT};
+    profile_key(key, sizeof(key), profile_index, "name");
+    error = read_profile_text(handle, key, loaded.name, sizeof(loaded.name));
+    if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) goto unreadable;
+    if (!loaded.name[0]) default_profile_name(loaded.name, sizeof(loaded.name), profile_index);
+    profile_key(key, sizeof(key), profile_index, "host");
+    if (read_profile_text(handle, key, loaded.host, sizeof(loaded.host)) != ESP_OK ||
+        !valid_host(loaded.host)) goto unreadable;
+    int32_t port = DEFAULT_MOONRAKER_PORT;
+    profile_key(key, sizeof(key), profile_index, "port");
+    error = nvs_get_i32(handle, key, &port);
+    if (error != ESP_ERR_NVS_NOT_FOUND && (error != ESP_OK || !valid_port(port))) goto unreadable;
+    if (error == ESP_OK) loaded.port = (int)port;
     profile_key(key, sizeof(key), profile_index, "key");
-    if (nvs_get_str(handle, key, loaded.api_key, &key_length) != ESP_OK) {
-        loaded.api_key[0] = '\0';
-    }
-
-    if (!valid_api_key(loaded.api_key)) {
-        loaded.api_key[0] = '\0';
-    }
-
-    size_t camera_length = sizeof(loaded.camera_stream_url);
+    error = read_profile_text(handle, key, loaded.api_key, sizeof(loaded.api_key));
+    if ((error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) ||
+        !valid_api_key(loaded.api_key)) goto unreadable;
     profile_key(key, sizeof(key), profile_index, "cam");
-    if (nvs_get_str(handle, key, loaded.camera_stream_url, &camera_length) != ESP_OK ||
-        !valid_camera_stream_url(loaded.camera_stream_url)) loaded.camera_stream_url[0] = '\0';
-
+    error = read_profile_text(handle, key, loaded.camera_stream_url, sizeof(loaded.camera_stream_url));
+    if ((error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) ||
+        !valid_camera_stream_url(loaded.camera_stream_url)) goto unreadable;
     uint8_t secure_transport = 0;
     profile_key(key, sizeof(key), profile_index, "tls");
-    esp_err_t security_error = nvs_get_u8(handle, key, &secure_transport);
-    /* Missing TLS fields belong to older HTTP-only profiles. An unreadable
-     * or malformed stored field must never silently enable plaintext. */
-    loaded.secure_transport = security_error != ESP_ERR_NVS_NOT_FOUND &&
-        (security_error != ESP_OK || secure_transport != 0);
-    if (security_error != ESP_ERR_NVS_NOT_FOUND &&
-        (security_error != ESP_OK || secure_transport > 1)) {
+    error = nvs_get_u8(handle, key, &secure_transport);
+    /* Missing TLS belongs to older profiles. A read error never enables HTTP. */
+    loaded.secure_transport = error != ESP_ERR_NVS_NOT_FOUND &&
+        (error != ESP_OK || secure_transport != 0);
+    if (error != ESP_ERR_NVS_NOT_FOUND && (error != ESP_OK || secure_transport > 1)) {
+        s_storage_readable = false;
         ESP_LOGW(TAG, "Profile %d TLS setting invalid; requiring secure transport", profile_index);
     }
-
-    if (!profile_valid(&loaded)) {
-        clear_profile(
-            &s_profiles[profile_index]);
-
-        return false;
-    }
-
-    s_profiles[profile_index] =
-        loaded;
-
+    if (!profile_valid(&loaded)) goto unreadable;
+    s_profiles[profile_index] = loaded;
     return true;
+unreadable:
+    s_storage_readable = false;
+    clear_profile(&s_profiles[profile_index]);
+    ESP_LOGW(TAG, "Profile %d unreadable; saved collection preserved", profile_index);
+    return false;
 }
 
 
@@ -599,6 +560,15 @@ static bool migrate_legacy_config(
             "moon_port",
             &legacy_port);
 
+    if ((host_error != ESP_OK && host_error != ESP_ERR_NVS_NOT_FOUND) ||
+        (port_error != ESP_OK && port_error != ESP_ERR_NVS_NOT_FOUND) ||
+        (host_error == ESP_OK && (host_length == 0 || host_length > sizeof(legacy_host) ||
+         memchr(legacy_host, '\0', host_length) != legacy_host + host_length - 1 ||
+         !valid_host(legacy_host))) ||
+        (port_error == ESP_OK && !valid_port(legacy_port))) {
+        return profile_load_failed();
+    }
+
     if (host_error == ESP_OK &&
         legacy_host[0]) {
         copy_text(
@@ -626,6 +596,7 @@ static bool migrate_legacy_config(
 
 bool moonraker_config_load(void)
 {
+    s_storage_readable = true;
     install_default_profile();
 
     nvs_handle_t handle;
@@ -642,7 +613,7 @@ bool moonraker_config_load(void)
             "Profile NVS load open failed: %s",
             esp_err_to_name(error));
 
-        return false;
+        return profile_load_failed();
     }
 
     uint8_t schema = 0;
@@ -658,12 +629,13 @@ bool moonraker_config_load(void)
             migrate_legacy_config(handle);
 
         nvs_close(handle);
-        return migrated;
+        if (!migrated) return profile_load_failed();
+        return true;
     }
     if (error != ESP_OK || schema != MOONRAKER_SCHEMA_VALUE) {
         nvs_close(handle);
         ESP_LOGE(TAG, "Profile schema unreadable or unsupported; saved profiles preserved");
-        return false;
+        return profile_load_failed();
     }
 
     for (int index = 0;
@@ -675,11 +647,14 @@ bool moonraker_config_load(void)
     }
 
     uint8_t loaded_active = 0;
-
-    if (nvs_get_u8(
-            handle,
-            MOONRAKER_ACTIVE_KEY,
-            &loaded_active) == ESP_OK &&
+    error = nvs_get_u8(handle, MOONRAKER_ACTIVE_KEY, &loaded_active);
+    if ((error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) ||
+        (error == ESP_OK && (!valid_profile_index((int)loaded_active) ||
+         !profile_valid(&s_profiles[loaded_active])))) {
+        nvs_close(handle);
+        return profile_load_failed();
+    }
+    if (error == ESP_OK &&
         valid_profile_index((int)loaded_active) &&
         profile_valid(
             &s_profiles[loaded_active])) {
@@ -699,13 +674,13 @@ bool moonraker_config_load(void)
     if (first_configured_profile() < 0) {
         ESP_LOGW(
             TAG,
-            "No valid profiles found; restoring default");
+            "No valid profiles found; saved collection preserved");
 
-        install_default_profile();
-        /* Preserve the unreadable collection for recovery instead of saving
-         * defaults over it during a load. */
-        return false;
+        /* Preserve the unreadable collection without publishing a guessed endpoint. */
+        return profile_load_failed();
     }
+
+    if (!s_storage_readable) return false;
 
     ESP_LOGI(
         TAG,
@@ -775,6 +750,11 @@ const char *moonraker_config_active_profile_name(void)
 }
 
 
+bool moonraker_config_storage_readable(void)
+{
+    return s_storage_readable;
+}
+
 uint32_t moonraker_config_generation(void)
 {
     return s_configuration_generation;
@@ -795,6 +775,7 @@ const moonraker_profile_t *moonraker_config_profile(
 bool moonraker_config_select_profile(
     int profile_index)
 {
+    if (!s_storage_readable) return false;
     if (!valid_profile_index(profile_index) ||
         !profile_valid(
             &s_profiles[profile_index])) {
@@ -839,7 +820,9 @@ bool moonraker_config_save_profile(
     int port,
     const char *api_key)
 {
+    if (!s_storage_readable) return false;
     if (!valid_profile_index(profile_index) ||
+        (name && strnlen(name, MOONRAKER_CONFIG_NAME_LENGTH) >= MOONRAKER_CONFIG_NAME_LENGTH) ||
         !valid_host(host) ||
         !valid_port(port) ||
         !valid_api_key(api_key)) {
@@ -888,7 +871,7 @@ bool moonraker_config_save_profile(
     s_profiles[profile_index] =
         updated;
 
-    if (!persist_collection()) {
+    if (!persist_collection_with_new_slot(previous.configured ? -1 : profile_index)) {
         s_profiles[profile_index] =
             previous;
 
@@ -913,6 +896,7 @@ bool moonraker_config_save_profile(
 
 bool moonraker_config_set_transport_security(int profile_index, bool secure)
 {
+    if (!s_storage_readable) return false;
     if (!valid_profile_index(profile_index) || !profile_valid(&s_profiles[profile_index])) return false;
     if (s_profiles[profile_index].secure_transport == secure) return true;
     bool previous = s_profiles[profile_index].secure_transport;
@@ -925,6 +909,7 @@ bool moonraker_config_set_transport_security(int profile_index, bool secure)
 bool moonraker_config_delete_profile(
     int profile_index)
 {
+    if (!s_storage_readable) return false;
     if (!valid_profile_index(profile_index) ||
         !s_profiles[profile_index].configured) {
         return false;
@@ -1038,7 +1023,10 @@ bool moonraker_config_replace_profiles(
     s_active_profile =
         active_profile_index;
 
+    bool previous_readable = s_storage_readable;
+    s_storage_readable = true;
     if (!persist_collection()) {
+        s_storage_readable = previous_readable;
         memcpy(
             s_profiles,
             previous_profiles,
@@ -1072,7 +1060,9 @@ const char *moonraker_config_camera_stream_url(int profile_index)
 
 bool moonraker_config_set_camera_stream_url(int profile_index, const char *url)
 {
-    if (!valid_profile_index(profile_index) || !valid_camera_stream_url(url)) return false;
+    if (!s_storage_readable) return false;
+    if (!valid_profile_index(profile_index) || !profile_valid(&s_profiles[profile_index]) ||
+        !valid_camera_stream_url(url)) return false;
     if (!strcmp(s_profiles[profile_index].camera_stream_url, url ? url : "")) return true;
     moonraker_profile_t previous = s_profiles[profile_index];
     copy_text(s_profiles[profile_index].camera_stream_url,

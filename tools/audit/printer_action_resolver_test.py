@@ -17,8 +17,10 @@ fixture = r'''
 #include "macro_controller.h"
 #include "printer_action_resolver.h"
 static const char *names[]={"HOME_MACHINE", "QGL", "CUSTOM"};
-void macro_controller_status(macro_controller_status_t *out){memset(out,0,sizeof(*out));out->count=3;}
-bool macro_controller_get(size_t i,char *out,size_t size){if(i>=3)return false;snprintf(out,size,"%s",names[i]);return true;}
+static const char *only_macro;
+static size_t catalog_count(void){return only_macro?1:3;}
+void macro_controller_status(macro_controller_status_t *out){memset(out,0,sizeof(*out));out->count=catalog_count();}
+bool macro_controller_get(size_t i,char *out,size_t size){if(i>=catalog_count())return false;snprintf(out,size,"%s",only_macro?only_macro:names[i]);return true;}
 int main(void){
  printer_action_resolution_t out;
  char macro[64],keys[6][32],values[6][65],command[MACRO_COMMAND_MAX];
@@ -42,11 +44,42 @@ int main(void){
  assert(!printer_action_resolver_resolve("G28",NULL));
  assert(printer_action_resolver_resolve("quad_gantry_level",&out));
  assert(!strcmp(out.command,"QGL")&&out.macro_used&&out.confirmation==PRINTER_ACTION_CONFIRM_MOTION);
- assert(printer_action_resolver_resolve("G28\nQUAD_GANTRY_LEVEL",&out));assert(!strcmp(out.command,"QGL")&&out.macro_used);
+ assert(printer_action_resolver_resolve("G28\nQUAD_GANTRY_LEVEL",&out));assert(!strcmp(out.command,"G28\nQGL")&&out.macro_used);
  assert(printer_action_resolver_resolve("HOME_ALL",&out));assert(!strcmp(out.command,"G28")&&!out.macro_used);
  assert(printer_action_resolver_resolve("custom",&out));assert(!strcmp(out.command,"CUSTOM")&&out.confirmation==PRINTER_ACTION_CONFIRM_UNKNOWN_MACRO);
  assert(printer_action_resolver_resolve("CUSTOM X=123",&out));assert(!strcmp(out.command,"CUSTOM X=123")&&!out.macro_used);
- puts("PASS: real macro builder/resolver, 639-byte exact preservation, oversized command refusal with cleared output, alias selection, confirmations and standard fallbacks");
+
+ /* Every calibration alias retains explicit homing; unprefixed actions stay unprefixed. */
+ const char *canonical[]={"Z_TILT_ADJUST","QUAD_GANTRY_LEVEL","SCREWS_TILT_CALCULATE",
+  "BED_MESH_CALIBRATE","PROBE_CALIBRATE","SHAPER_CALIBRATE"};
+ const char *aliases[][4]={
+  {"Z_TILT","Z_TILT_CALIBRATE","CALIBRATE_Z_TILT",NULL},
+  {"QGL","GANTRY_LEVEL","QUAD_GANTRY_LEVEL",NULL},
+  {"SCREWS_TILT","LEVEL_SCREWS","SCREWS_TILT_CALCULATE",NULL},
+  {"BED_MESH_CALIBRATE","CALIBRATE_BED",NULL,NULL},
+  {"PROBE_CALIBRATE","Z_OFFSET_CALIBRATE","CALIBRATE_Z_OFFSET",NULL},
+  {"SHAPER_CALIBRATE","INPUT_SHAPER_CALIBRATE",NULL,NULL}};
+ for(size_t i=0;i<sizeof(canonical)/sizeof(*canonical);i++){
+  for(size_t j=0;j<4&&aliases[i][j];j++){
+   char requested[128],expected[128];only_macro=aliases[i][j];
+   snprintf(requested,sizeof(requested),"G28\n%s",canonical[i]);
+   snprintf(expected,sizeof(expected),"G28\n%s",only_macro);
+   assert(printer_action_resolver_resolve(requested,&out));
+   assert(!strcmp(out.command,expected)&&out.macro_used&&out.confirmation==PRINTER_ACTION_CONFIRM_MOTION);
+   assert(printer_action_resolver_resolve(canonical[i],&out));
+   assert(!strcmp(out.command,only_macro)&&out.macro_used);
+  }
+  only_macro="UNRELATED";char requested[128];snprintf(requested,sizeof(requested),"G28\n%s",canonical[i]);
+  assert(printer_action_resolver_resolve(requested,&out));assert(!strcmp(out.command,requested)&&!out.macro_used);
+ }
+ only_macro="QGL";
+ assert(printer_action_resolver_resolve("G28 X\nQUAD_GANTRY_LEVEL",&out));
+ assert(!strcmp(out.command,"G28 X\nQUAD_GANTRY_LEVEL")&&!out.macro_used);
+ assert(printer_action_resolver_resolve("G28\nQUAD_GANTRY_LEVEL EXTRA=1",&out));
+ assert(!strcmp(out.command,"G28\nQUAD_GANTRY_LEVEL EXTRA=1")&&!out.macro_used);
+ only_macro="HOME_ALL";assert(printer_action_resolver_resolve("HOME_ALL",&out));
+ assert(!strcmp(out.command,"HOME_ALL")&&out.macro_used);
+ puts("PASS: explicit homing retained for all calibration aliases and unchanged fallbacks; real macro builder/resolver, 639-byte exact preservation, oversized command refusal with cleared output, alias selection, confirmations and standard fallbacks");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='action-command-bounds-') as directory:

@@ -1208,12 +1208,23 @@ static void camera_discovery_poll(lv_timer_t *timer)
     s_setup_dispatching=true;
     bool received=camera_discovery_take_result(&ignored, &found, &count);
     s_setup_dispatching=s_appearance_pending;
-    if(!setup_current(epoch) || original_profile!=moonraker_config_active_profile_index() || !received)return;
+    if(!setup_current(epoch) || original_profile!=moonraker_config_active_profile_index())return;
+    if (!received) {
+        if (camera_discovery_status()==CAMERA_DISCOVERY_STALE) {
+            delete_poll();camera_actions(false);
+            set_status("Printer details changed. Scan cameras again.");
+        }
+        return;
+    }
     /* Importing camera slot 1 advances our own active configuration. */
     s_camera_owner = moonraker_config_generation();
     delete_poll();
     camera_actions(false);
     const int profile = moonraker_config_active_profile_index();
+    if (camera_discovery_status()==CAMERA_DISCOVERY_SAVE_FAILED) {
+        set_status("Cameras were found, but not all could be saved. Check storage and scan again.");
+        return;
+    }
     if (!found || !count) {
         set_status("A camera is optional. Scan again or continue setup.");
         if(s_camera_list) {

@@ -195,9 +195,10 @@ static void run(void){s_query[0]=0;s_follow=true;ui_console_show(send_command);l
 static void run(void){lv_obj_t *r=page_root();ui_calibration_card_refs_t refs[4];lv_obj_t *cards[4];for(int i=0;i<4;i++)cards[i]=ui_calibration_layout_card(r,"WORKFLOW",i%2?430:20,i>1?322:126,&refs[i]);children_inside(r);assert(lv_obj_get_x(cards[1])+lv_obj_get_width(cards[1])==976);assert(lv_obj_get_y(cards[3])+lv_obj_get_height(cards[3])==424);snapshot("calibration-layout-native");lv_obj_delete(r);}
 #elif defined(TEST_BED_MESH)
 #include "ui_bed_mesh.c"
-static bool valid_mesh;
+static bool valid_mesh,profiles_only;
 bool bed_mesh_controller_snapshot(bed_mesh_snapshot_t *out,float *v,size_t n,bed_mesh_profile_name_t *p,size_t c){
- (void)p;(void)c;memset(out,0,sizeof(*out));if(!valid_mesh)return false;assert(n>=9);
+ memset(out,0,sizeof(*out));
+ if(!valid_mesh){if(profiles_only){assert(p&&c);strcpy(p[0],"saved_plate");out->profile_count=1;out->profile_names=p;return true;}return false;}assert(n>=9);
  for(unsigned i=0;i<9;i++)v[i]=((int)i-4)*.05f;
  *out=(bed_mesh_snapshot_t){.valid=true,.rows=3,.cols=3,.mesh_max_x=200,.mesh_max_y=200,.minimum=-.2,.maximum=.2,.range=.4,.values=v};
  strcpy(out->profile_name,"Reference mesh");return true;
@@ -231,6 +232,10 @@ static void renderer_bounds(void){
   ui_bed_mesh_renderer_render(&config);
   for(unsigned j=0;j<128;j++)assert(storage[j]==0xA5&&storage[128+bytes+j]==0xA5);
  }
+ config.mesh.valid=false;ui_bed_mesh_renderer_render(&config);
+ uint16_t *cleared=(uint16_t*)(storage+128);
+ for(int y=0;y<height;y++)for(int x=0;x<width;x++)assert(cleared[y*(stride/2)+x]==cleared[0]);
+ for(unsigned j=0;j<128;j++)assert(storage[j]==0xA5&&storage[128+bytes+j]==0xA5);
  lv_obj_delete(canvas);lv_free(storage);
 }
 static void mesh_confirm_capture(void)
@@ -302,7 +307,11 @@ static void run(void){
  snapshot(ui_theme_is_studio()?"bed-mesh-valid-studio":"bed-mesh-valid-operator");
  renderer_bounds();
  mesh_confirm_checks();
- valid_mesh=false;ui_bed_mesh_refresh();assert(!strcmp(lv_label_get_text(s.metrics),""));
+ valid_mesh=false;profiles_only=true;ui_bed_mesh_refresh();
+ assert(!s.mesh.valid&&s.mesh.profile_count==1&&!lv_label_get_text(s.metrics)[0]);
+ const lv_image_dsc_t *cleared_image=lv_canvas_get_image(s.canvas);size_t pitch=cleared_image->header.stride/2;
+ for(unsigned y=0;y<CH;y++)for(unsigned x=0;x<CW;x++)assert(s.buf[y*pitch+x]==s.buf[0]);
+ profiles_only=false;ui_bed_mesh_refresh();assert(!strcmp(lv_label_get_text(s.metrics),""));
  lv_obj_delete(s.metrics);assert(!s.metrics);stats();calibrate_cb(NULL);assert(s.calibrate_confirm);
  ui_bed_mesh_close();assert(!s.popup&&!s.buf&&!s.calibrate_confirm);
 }

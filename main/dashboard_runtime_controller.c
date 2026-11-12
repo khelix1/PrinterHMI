@@ -44,14 +44,20 @@ static void update_active_print(
     char elapsed[32];
     char remaining[32];
 
+    const printer_layer_metadata_t *metadata =
+        context->layer_job_revision == state->print_job_revision &&
+        context->layer_generation == moonraker_config_generation()
+            ? &context->layer_metadata : NULL;
     printer_layer_result_t display_layers =
         printer_layer_resolver_resolve(
             state->current_layer,
             state->total_layer,
             state->current_gcode_z,
-            context->meta_object_height,
-            context->meta_layer_height,
-            state->progress);
+            metadata,
+            state->progress,
+            printer_layer_resolver_print_started(state->print_duration,
+                state->estimate_sample.filament_valid,
+                state->estimate_sample.filament_used));
 
     if (display_layers.valid) {
         snprintf(

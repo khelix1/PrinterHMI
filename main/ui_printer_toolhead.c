@@ -244,19 +244,25 @@ bool ui_printer_toolhead_format_jog_command(const char *axis,
     if (!cmd || !cmd_size) return false;
     cmd[0] = '\0';
     if (!axis || !axis[0]) return false;
+    /* Preserve coordinate/extrusion modes and feedrate without moving back.
+     * A dedicated name leaves PAUSE and user macro saved states untouched. */
+    char formatted[160];
     int written;
     if (strcmp(axis, "HOME") == 0) {
-        written = snprintf(cmd, cmd_size, "G28");
+        written = snprintf(formatted, sizeof(formatted), "G28");
     } else {
         if (!strchr("XYZ", axis[0]) || (axis[1] != '+' && axis[1] != '-') ||
             axis[2] || !isfinite(jog_step) || jog_step <= 0 ||
             jog_step > (axis[0] == 'Z' ? 25.0 : 50.0)) return false;
         double distance = axis[1] == '-' ? -jog_step : jog_step;
         written = axis[0] == 'Z'
-            ? snprintf(cmd, cmd_size, "G91\nG1 Z%.3f F600\nG90", distance)
-            : snprintf(cmd, cmd_size, "G91\nG1 %c%.2f F6000\nG90", axis[0], distance);
+            ? snprintf(formatted, sizeof(formatted), "SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 Z%.3f F600\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0", distance)
+            : snprintf(formatted, sizeof(formatted), "SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nG91\nG1 %c%.2f F6000\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0", axis[0], distance);
     }
-    if (written >= 0 && (size_t)written < cmd_size) return true;
+    if (written >= 0 && (size_t)written < sizeof(formatted) && (size_t)written < cmd_size) {
+        memcpy(cmd, formatted, (size_t)written + 1);
+        return true;
+    }
     cmd[0] = '\0';
     return false;
 }
@@ -269,8 +275,12 @@ static bool format_extrusion_distance(const char *dir, double distance,
     if (!dir || !isfinite(distance) || distance < 1.0 || distance > 50.0) return false;
     if (strcmp(dir, "RETRACT") == 0) distance = -distance;
     else if (strcmp(dir, "EXTRUDE") != 0) return false;
-    int written = snprintf(cmd, cmd_size, "M83\nG1 E%.0f F300", distance);
-    if (written >= 0 && (size_t)written < cmd_size) return true;
+    char formatted[160];
+    int written = snprintf(formatted, sizeof(formatted), "SAVE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD\nM83\nG1 E%.0f F300\nRESTORE_GCODE_STATE NAME=PRINTERHMI_TOOLHEAD MOVE=0", distance);
+    if (written >= 0 && (size_t)written < sizeof(formatted) && (size_t)written < cmd_size) {
+        memcpy(cmd, formatted, (size_t)written + 1);
+        return true;
+    }
     cmd[0] = '\0';
     return false;
 }
@@ -392,7 +402,7 @@ static void jog_cb(lv_event_t *event)
             ? s_z_step
             : (s_xy_step ? *s_xy_step : 10.0);
 
-    char command[96];
+    char command[160];
     if (ui_printer_toolhead_format_jog_command(
             axis, step, command, sizeof(command))) {
         toolhead_send(command);
@@ -414,7 +424,7 @@ static void extrude_cb(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || !s_toolhead_popup) return;
 
     const char *direction = lv_event_get_user_data(event);
-    char command[96];
+    char command[160];
 
     if (format_extrusion_distance(
             direction, s_extrusion_step, command, sizeof(command))) {

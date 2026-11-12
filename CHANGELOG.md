@@ -1,5 +1,165 @@
 # Changelog
 
+## [7.3.79-dev] - 2026-11-10
+
+- Clear a removed camera’s rotation, mirror settings, and saved default selection if it was the default. Ordinary camera edits retain these settings.
+
+## [7.3.78-dev] - 2026-11-10
+
+- Clear leftover camera metadata before adding a printer to an unused slot, so it cannot inherit the removed printer’s cameras or view preferences.
+
+## [7.3.77-dev] - 2026-11-10
+
+- Apply the saved accent choice in Studio Dark, including Settings chevrons, outlined actions, and the selected row in the accent chooser. Theme Default restores the Studio palette.
+
+## [7.3.76-dev] - 2026-11-10
+
+- Reject primary camera URL edits for unused printer slots instead of reporting a save that disappears on reload.
+- Reject overlong printer names before storage access instead of silently truncating them; preserve default and exact-limit names.
+
+## [7.3.75-dev] - 2026-11-10
+
+- Retry failed Setup progress reads and prevent step saves from overwriting an unread checklist. A saved completion flag still takes precedence.
+
+## [7.3.74-dev] - 2026-11-10
+
+- Retry loading the remembered Custom OTA URL after a temporary storage failure. Missing or empty settings still use the configured default.
+
+## [7.3.73-dev] - 2026-11-09
+
+- Retry transient storage failures when loading print progress, remaining-time and ETA preferences instead of permanently caching defaults.
+- Settle genuinely absent settings to defaults, retain failed-save rollback, and keep demo selections isolated from stored live preferences.
+- Exercise retry, absence, save and demo behavior under ASan/UBSan alongside existing estimate and telemetry coverage.
+
+## [7.3.72-dev] - 2026-11-08
+
+- Retire obsolete connection cards when a printer profile is deleted or its name, endpoint, API key or TLS setting changes, preserving Event History and unrelated faults.
+- Rebaseline background notification observers on complete connection identity instead of host/port alone, preventing stale-profile recovery alerts.
+- Retire old active-printer connection actions on same-slot configuration-generation changes.
+- Share connection-card retirement between active/background observers and reset stale overflow state when their queue becomes empty.
+- Retain genuine Quiet-mode loss warnings and normal recovery logging/debounce behavior.
+
+## [7.3.71-dev] - 2026-11-08
+
+- Quote macro parameter values containing hash characters so Klipper-style comment parsing preserves the value and following parameters.
+- Recheck the reviewed macro against the discovered catalog before Run; disable unavailable reviews and retain exact commands for retry.
+- Centralize exact-name membership under the macro controller lock and reuse it from regular and custom-calibration macro dialogs.
+- Add parser round-trip, catalog-query, stale-review and native macro workflow checks.
+
+## [7.3.70-dev] - 2026-11-08
+
+- Reject encoded NUL characters in shared bounded JSON ingress so object keys and identifiers cannot alias shorter C strings; retain literal backslashes and ordinary Unicode.
+- Ignore lighting status envelopes carrying an error field instead of allowing them to confirm a pending command.
+- Retire lighting slider gestures when detected availability changes, including disappear/return between UI refreshes; unchanged discovery preserves valid gestures.
+- Align the older deep-failure audit with the shared firmware-version and JSON parsers, retaining its worker, mutex, task and theme-read checks.
+
+## [7.3.69-dev] - 2026-11-08
+
+- Retire active mesh and saved-profile metadata when the active printer runtime resets, using the telemetry-to-mesh lock order and retaining reusable buffers.
+- Honor Klipper `[[]]` mesh-clear responses; reject malformed retained grid cells/rows instead of substituting zero-height points.
+- Fail closed if the Bed Mesh mutex could not be created, and preserve allocated buffers during reinitialization.
+- Disable stale Save/Remove confirmations with local feedback and clear the old rendered surface when only saved profiles remain.
+- Extend real parser, runtime-reset, profile-dialog and renderer regression coverage.
+
+## [7.3.68-dev] - 2026-11-08
+
+- Classify Console severity using response prefixes, retaining explicit Klipper errors while avoiding failures caused by keywords embedded in informational output.
+- Prevent warning messages, SAVE_CONFIG HELP descriptions and similarly named macro identifiers from enabling calibration Apply & Restart.
+- Complete resonance-test sessions on the final CSV-written response without enabling persistence or later reporting a false waiting timeout.
+- Keep response interpretation in Console and completion/save policy in the calibration session controller; exercise their real ingestion pipeline under ASan/UBSan.
+
+## [7.3.67-dev] - 2026-11-08
+
+- Exclude extruder_stepper motors and empty generic-heater names from PID selection.
+- Revalidate the reviewed PID heater and custom calibration macro against the current discovered catalog before starting a session or sending a command.
+- Preserve confirmation/retry feedback for unavailable selections; catalog reordering retains the originally reviewed name.
+
+## [7.3.66-dev] - 2026-11-08
+
+- Reject camera discovery results after the target profile changes, including inactive-profile edits that do not advance the active configuration generation.
+- Skip queued webcam probes after active configuration changes and clear copied credentials when results are consumed/discarded or task creation fails.
+- Report partial camera import failures instead of claiming successful saves; retain Find/Scan retry actions.
+- Publish discarded-result status so profile/setup dialogs retire stale waiting timers. Keep the native provider aligned with import-failure feedback.
+- Repair native Network helper inclusion and local discovery timer ownership/running-state integration after prior firmware refactors.
+
+## [7.3.65-dev] - 2026-11-07
+
+- Protect an incompletely read printer-profile collection from ordinary writes, avoiding API-key/camera erasure and silent default-port persistence after NVS read errors.
+- Refuse guessed/default connections after unreadable required profile/schema/active-selection data; retain fail-closed TLS behavior and genuine first-run/legacy compatibility.
+- Validate returned Wi-Fi and profile string lengths/termination before using saved values.
+- Report profile recovery guidance locally and refuse new plain/encrypted exports of incomplete settings while preserving existing backups and explicit full restore.
+
+## [7.3.64-dev] - 2026-11-07
+
+- Prefer validated Moonraker metadata layer_count over height-derived totals and account for first_layer_height in current/total layer estimates.
+- Round up partial final layers instead of dropping them from height-derived totals.
+- Source active-print layer metadata from the existing file/job/profile-owned background cache, removing the obsolete thumbnail layer cache/getter.
+- Fence Dashboard metadata by job revision and printer generation; test first-layer math, parser bounds, late metadata and stale snapshots.
+
+## [7.3.63-dev] - 2026-11-07
+
+- Keep absent/zero print layers at zero during preparation instead of converting probing/raised Z into a layer when file progress advances.
+- Gate layer estimation on print-duration and available filament-use evidence, sharing the same policy between Dashboard and Printer.
+- Preserve positive Klipper layer reports and test the preparation-to-print transition, invalid telemetry and existing external-start fallback.
+
+## [7.3.62-dev] - 2026-11-07
+
+- Preserve Klipper coordinate/extrusion modes, parsing offsets and feedrate after successful Toolhead jog and manual extrusion scripts, using a dedicated saved state and MOVE=0 restore.
+- Format complete scripts before copying to caller buffers; reject insufficient space with cleared output.
+- Keep offline demo movement compatible with the wrapped commands and verify state preservation, exact UI dispatch and malformed-script rejection.
+
+## [7.3.61-dev] - 2026-11-07
+
+- Reject generic nozzle temperature commands when the active hotend changed after the dialog opened; reopening refreshes the target.
+- Reject disabled, foreign and bubbled-child preset button events before dispatch.
+- Cover stale preset/custom targets, reopening, explicitly selected heaters and valid fan presets with the real LVGL popup implementation.
+
+## [7.3.60-dev] - 2026-11-07
+
+- Save accessibility options with one NVS handle and a single commit after all four key writes, rather than committing each option separately.
+- Retain live options on failed saves and cover every storage failure boundary plus retry with a staged-NVS regression fixture.
+
+## [7.3.59-dev] - 2026-11-07
+
+- Update the remembered custom OTA URL only after a successful NVS commit; reject truncation and skip unchanged saves.
+- Use C atomics for OTA running/cancel flags shared between UI and worker cores.
+- Reject embedded-NUL release captures and GitHub header setup failures, preserving the previous catalog and allowing retry.
+
+## [7.3.58-dev] - 2026-11-06
+
+- Wipe owned backup JSON strings, serialized plaintext and temporary configuration snapshots before releasing them on export, preflight, restore and rollback paths.
+- Reject backup passphrases exceeding 96 UTF-8 bytes before copying or starting work; align form guidance with the crypto worker’s byte limits.
+- Add production backup cleanup and worker lifecycle fault-injection coverage, retaining existing restore rotation and dialog checks.
+
+## [7.3.57-dev] - 2026-11-06
+
+- Reject overlong absolute camera URLs instead of silently shortening them, and reject unsupported URI schemes instead of treating them as relative proxy paths.
+- Build discovered webcam entries in cleared temporary slots so missing or rejected snapshot URLs cannot retain previous scan data.
+- Clear truncated relative snapshot output and reject webcam error envelopes even when they contain a result list.
+
+## [7.3.56-dev] - 2026-11-06
+
+- Verify Moonraker endpoint identity/readiness from complete bounded JSON instead of keyword matches in a truncated response prefix.
+- Honor a later non-ready printer-info state, decode escaped identities correctly and reject JSON errors, trailing data, oversized/deep and embedded-NUL probe replies.
+- Reject API-key setup failure in endpoint/webcam probes and live polling before network ownership or transmission; reject embedded NULs in live status captures.
+
+## [7.3.55-dev] - 2026-11-06
+
+- Stop print-start requests if Content-Type, API-key or body setup fails, returning the setup error without sending or acquiring the shared lane.
+- Stop authenticated shared/exclusive GET requests when API-key header setup fails; retain cleared data/length/status outputs and caller-owned exclusive cleanup.
+- Refresh request-boundary tests to use production state/capture types and cover the full 255-byte metadata filename encoding limit.
+
+## [7.3.54-dev] - 2026-11-06
+
+- Route standalone RESTART through Moonraker’s host-restart API on WebSocket and HTTP, alongside the existing firmware-restart route.
+- Recognize standalone recovery commands surrounded by blank/comment lines without redirecting parameterized or multi-command scripts; retain M112 priority.
+- Abort command requests when Content-Type, API-key or body setup fails, reporting the setup error without transmission or network-lane acquisition.
+
+## [7.3.53-dev] - 2026-11-06
+
+- Preserve an explicit G28 homing prerequisite when a calibration action resolves to a detected printer macro.
+- Cover all calibration aliases and the real screws/gantry UI-to-resolver path; retain unprefixed actions, literal parameterized scripts and standard fallbacks.
+
 ## [7.3.52-dev] - 2026-11-05
 
 - Publish Setup Wi-Fi scan records and completion with one atomic result handoff, preventing a previous worker from clearing the next scan’s busy state.

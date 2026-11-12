@@ -198,6 +198,8 @@ void moonraker_state_reset(void)
 {
     motion_diagnostics_controller_reset();
     state_lock();
+    /* Same lock order as status merge: telemetry, then Bed Mesh. */
+    bed_mesh_controller_reset();
     uint32_t job_revision = g_moonraker_state.print_job_revision + 1;
     memset(&g_moonraker_state, 0, sizeof(g_moonraker_state));
     g_moonraker_state.print_job_revision = job_revision;
@@ -1376,10 +1378,13 @@ static bool moonraker_http_get_raw(
     }
 
     if (api_key && api_key[0]) {
-        esp_http_client_set_header(
-            client,
-            "X-Api-Key",
-            api_key);
+        esp_err_t setup_error = esp_http_client_set_header(
+            client, "X-Api-Key", api_key);
+        if (setup_error != ESP_OK) {
+            esp_http_client_cleanup(client);
+            if (err_out) *err_out = setup_error;
+            return false;
+        }
     }
 
     if (!exclusive_owned) {
@@ -1749,7 +1754,9 @@ bool moonraker_send_gcode_script(const char *host,
 #endif
     const char *admin_method=moonraker_command_admin_method(cmd);
     const char *path=admin_method && strcmp(admin_method,"printer.emergency_stop")==0
-        ? "/printer/emergency_stop" : admin_method?"/printer/firmware_restart":"/printer/gcode/script";
+        ? "/printer/emergency_stop"
+        : admin_method && strcmp(admin_method,"printer.restart")==0
+            ? "/printer/restart" : admin_method?"/printer/firmware_restart":"/printer/gcode/script";
     bool emergency=admin_method && strcmp(admin_method,"printer.emergency_stop")==0;
     char url[256];
     const char *ca_pem = NULL;
@@ -1847,19 +1854,19 @@ bool moonraker_send_gcode_script(const char *host,
         return false;
     }
 
-    esp_http_client_set_header(client,
-                               "Content-Type",
-                               "application/json");
-
-    if (api_key && api_key[0]) {
-        esp_http_client_set_header(client,
-                                   "X-Api-Key",
-                                   api_key);
+    esp_err_t setup_error = esp_http_client_set_header(
+        client, "Content-Type", "application/json");
+    if (setup_error == ESP_OK && api_key && api_key[0]) {
+        setup_error = esp_http_client_set_header(client, "X-Api-Key", api_key);
     }
-
-    esp_http_client_set_post_field(client,
-                                   body,
-                                   body_len);
+    if (setup_error == ESP_OK) {
+        setup_error = esp_http_client_set_post_field(client, body, body_len);
+    }
+    if (setup_error != ESP_OK) {
+        esp_http_client_cleanup(client);
+        if (err_out) *err_out = setup_error;
+        return false;
+    }
 
     bool shared_owner=network_activity_controller_try_begin_shared();
     /* A stop gets a private client even when background HTTP owns the normal
@@ -1942,13 +1949,19 @@ bool moonraker_start_print_file(const char *host,
         return false;
     }
 
-    esp_http_client_set_header(client, "Content-Type", "application/json");
-
-    if (api_key && api_key[0]) {
-        esp_http_client_set_header(client, "X-Api-Key", api_key);
+    esp_err_t setup_error = esp_http_client_set_header(
+        client, "Content-Type", "application/json");
+    if (setup_error == ESP_OK && api_key && api_key[0]) {
+        setup_error = esp_http_client_set_header(client, "X-Api-Key", api_key);
     }
-
-    esp_http_client_set_post_field(client, body, strlen(body));
+    if (setup_error == ESP_OK) {
+        setup_error = esp_http_client_set_post_field(client, body, strlen(body));
+    }
+    if (setup_error != ESP_OK) {
+        esp_http_client_cleanup(client);
+        if (err_out) *err_out = setup_error;
+        return false;
+    }
 
     if (!network_activity_controller_try_begin_shared()) {
         esp_http_client_cleanup(client);

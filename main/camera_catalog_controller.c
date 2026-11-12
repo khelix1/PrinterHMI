@@ -1,4 +1,5 @@
 #include "camera_catalog_controller.h"
+#include "camera_catalog_storage.h"
 
 #include "moonraker_config_controller.h"
 
@@ -26,25 +27,6 @@ static bool valid_url(const char *url)
            strncmp(url, "https://", 8) == 0;
 }
 
-static void slot_key(char *key, size_t size, int profile, size_t camera)
-{
-    snprintf(key, size, "p%d_c%u", profile, (unsigned)camera);
-}
-
-static void camera_name_key(char *key, size_t size, int profile, size_t camera)
-{
-    snprintf(key, size, "p%d_n%u", profile, (unsigned)camera);
-}
-
-static void camera_default_key(char *key, size_t size, int profile)
-{
-    /* Profiles are bounded by moonraker_config_profile_capacity().  Keeping
-     * the formatted value in the uint8_t storage domain also lets GCC prove
-     * that every supported NVS key fits in the existing key buffer. */
-    unsigned profile_id = (unsigned)(uint8_t)profile;
-    snprintf(key, size, "p%u_cdef", profile_id);
-}
-
 static void load_camera_name(int profile, size_t camera, char *name, size_t size)
 {
     snprintf(name, size, "Camera %u", (unsigned)(camera + 1));
@@ -57,11 +39,6 @@ static void load_camera_name(int profile, size_t camera, char *name, size_t size
         snprintf(name, size, "Camera %u", (unsigned)(camera + 1));
     }
     nvs_close(handle);
-}
-
-static void view_key(char *key, size_t size, int profile, size_t camera)
-{
-    snprintf(key, size, "p%d_v%u", profile, (unsigned)camera);
 }
 
 static void load_view(int profile_index, size_t camera_index,
@@ -123,6 +100,22 @@ bool camera_catalog_get(int profile_index, size_t camera_index,
     return true;
 }
 
+static esp_err_t clear_camera_preferences(nvs_handle_t handle, int profile, size_t camera)
+{
+    char key[24];
+    camera_default_key(key, sizeof(key), profile);
+    uint8_t preferred = 0;
+    esp_err_t error = nvs_get_u8(handle, key, &preferred);
+    if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) return error;
+    if (error == ESP_OK && preferred == camera) {
+        error = nvs_erase_key(handle, key);
+        if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) return error;
+    }
+    view_key(key, sizeof(key), profile, camera);
+    error = nvs_erase_key(handle, key);
+    return error == ESP_ERR_NVS_NOT_FOUND ? ESP_OK : error;
+}
+
 bool camera_catalog_set(int profile_index, size_t camera_index,
                         const char *name, const char *stream_url)
 {
@@ -133,9 +126,9 @@ bool camera_catalog_set(int profile_index, size_t camera_index,
             CAMERA_CATALOG_NAME_LENGTH)) {
         return false;
     }
-    if (camera_index == 0 &&
-        !moonraker_config_set_camera_stream_url(profile_index,
-                                                 stream_url ? stream_url : "")) {
+    const bool removing = !stream_url || !stream_url[0];
+    if (camera_index == 0 && !removing &&
+        !moonraker_config_set_camera_stream_url(profile_index, stream_url)) {
         return false;
     }
 
@@ -145,8 +138,9 @@ bool camera_catalog_set(int profile_index, size_t camera_index,
     }
 
     char key[16];
-    esp_err_t error = ESP_OK;
-    if (camera_index != 0) {
+    esp_err_t error = removing ?
+        clear_camera_preferences(handle, profile_index, camera_index) : ESP_OK;
+    if (error == ESP_OK && camera_index != 0) {
         slot_key(key, sizeof(key), profile_index, camera_index);
         error = stream_url && stream_url[0]
             ? nvs_set_str(handle, key, stream_url)
@@ -162,7 +156,10 @@ bool camera_catalog_set(int profile_index, size_t camera_index,
     }
     if (error == ESP_OK) error = nvs_commit(handle);
     nvs_close(handle);
-    return error == ESP_OK;
+    if (error != ESP_OK) return false;
+    /* Keep the primary URL until the camera metadata cleanup succeeds. */
+    return camera_index != 0 || !removing ||
+        moonraker_config_set_camera_stream_url(profile_index, "");
 }
 
 bool camera_catalog_clear(int profile_index, size_t camera_index)

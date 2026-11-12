@@ -1,4 +1,5 @@
 #include "print_estimate_metadata.h"
+#include <limits.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -47,7 +48,15 @@ static bool parse_metadata(const char *body, print_estimate_metadata_t *out)
         .start_byte = -1, .end_byte = -1,
         .filament_total = moonraker_metadata_number(result, "filament_total"),
         .estimated_time = moonraker_metadata_number(result, "estimated_time"),
+        .layers = {
+            .object_height = moonraker_metadata_number(result, "object_height"),
+            .layer_height = moonraker_metadata_number(result, "layer_height"),
+            .first_layer_height = moonraker_metadata_number(result, "first_layer_height"),
+        },
     };
+    double count = moonraker_metadata_number(result, "layer_count");
+    if (count <= INT_MAX && count >= 1 && count == floor(count))
+        out->layers.total_layers = (int)count;
     const cJSON *start = cJSON_GetObjectItemCaseSensitive(result, "gcode_start_byte");
     const cJSON *end = cJSON_GetObjectItemCaseSensitive(result, "gcode_end_byte");
     if (cJSON_IsNumber(start) && cJSON_IsNumber(end) && isfinite(start->valuedouble) &&
@@ -57,7 +66,9 @@ static bool parse_metadata(const char *body, print_estimate_metadata_t *out)
         out->end_byte = end->valuedouble;
     }
     cJSON_Delete(root);
-    return out->end_byte >= 0 || out->filament_total > 0 || out->estimated_time > 0;
+    return out->end_byte >= 0 || out->filament_total > 0 || out->estimated_time > 0 ||
+        out->layers.total_layers > 0 ||
+        (out->layers.object_height > 0 && out->layers.layer_height > 0);
 }
 
 static void finish_request(estimate_request_t *request, const print_estimate_metadata_t *metadata)

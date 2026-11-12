@@ -98,7 +98,7 @@ bool macro_parameter_build_command(const char *macro,
                 if (error) *error = "Values cannot contain quotes, backslashes, semicolons or line breaks.";
                 goto invalid;
             }
-            if (isspace(*p)) quote = true;
+            if (isspace(*p) || *p == '#') quote = true;
         }
         char upper[MACRO_PARAMETER_NAME_MAX];
         size_t length = strlen(name);

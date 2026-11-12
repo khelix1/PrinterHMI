@@ -42,6 +42,15 @@ int main(void)
  char trailing[256];snprintf(trailing,sizeof(trailing),"%s{}",good);status(trailing,10);
  case_lighting_snapshot(&s,1);assert(s.pending&&s.value==.25);
  snprintf(trailing,sizeof(trailing),"%sjunk",good);status(trailing,10);case_lighting_snapshot(&s,1);assert(s.pending);
+ const char *hostile[]={
+  "{\"error\":null,\"result\":{\"status\":{\"output_pin case_led\":{\"value\":0.5}}}}",
+  "{\"error\":{},\"method\":\"notify_status_update\",\"params\":[{\"output_pin case_led\":{\"value\":0.5}},1]}",
+  "{\"method\":\"notify_status_update\\u0000extra\",\"params\":[{\"output_pin case_led\":{\"value\":0.5}},1]}",
+  "{\"result\":{\"status\":{\"output_pin case_led\\u0000extra\":{\"value\":0.5}}}}"
+ };
+ for(unsigned i=0;i<sizeof(hostile)/sizeof(hostile[0]);++i){
+  status(hostile[i],10);case_lighting_snapshot(&s,1);assert(s.pending&&s.value==.25);
+ }
  char raw[256];size_t len=strlen(good);memcpy(raw,good,len);case_lighting_status_json(raw,len,10);
  case_lighting_snapshot(&s,2);assert(!s.pending&&s.value==.5);
  id=case_lighting_begin(10,75,3,cmd,sizeof(cmd));assert(id);

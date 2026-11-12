@@ -23,6 +23,7 @@
 #include "freertos/task.h"
 
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -54,10 +55,10 @@ static ota_progress_snapshot_t progress_snapshot(void)
     return snapshot;
 }
 
-static volatile bool s_task_running = false;
-static volatile bool s_cancel_requested = false;
-static volatile bool s_cancel_allowed = false;
-static volatile bool s_cancel_complete = false;
+static _Atomic bool s_task_running = false;
+static _Atomic bool s_cancel_requested = false;
+static _Atomic bool s_cancel_allowed = false;
+static _Atomic bool s_cancel_complete = false;
 static char s_task_url[192] = "";
 
 
@@ -76,8 +77,6 @@ static void ota_manager_load_url(void)
     if (s_ota_url_loaded) {
         return;
     }
-
-    s_ota_url_loaded = true;
 
     nvs_handle_t handle;
     size_t length = sizeof(s_ota_url);
@@ -99,10 +98,13 @@ static void ota_manager_load_url(void)
         nvs_close(handle);
 
         if (err == ESP_OK && s_ota_url[0] != '\0') {
+            s_ota_url_loaded = true;
             return;
         }
     }
 
+    /* A temporary storage failure only falls back for this visit. */
+    s_ota_url_loaded = err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND;
     snprintf(
         s_ota_url,
         sizeof(s_ota_url),
@@ -124,59 +126,30 @@ size_t ota_manager_url_capacity(void)
 
 void ota_manager_set_url(const char *url)
 {
-    if (!url || !url[0]) {
-        return;
-    }
+    if (!url || !url[0]) return;
+    size_t length = strnlen(url, sizeof(s_ota_url));
+    if (length >= sizeof(s_ota_url)) return;
+    if (s_ota_url_loaded && !strcmp(s_ota_url, url)) return;
 
-    snprintf(
-        s_ota_url,
-        sizeof(s_ota_url),
-        "%s",
-        url
-    );
-
-    s_ota_url_loaded = true;
-
+    /* Capture aliased input before storage calls. Only committed values may
+     * replace the remembered URL displayed on the next visit. */
+    char candidate[sizeof(s_ota_url)];
+    memcpy(candidate, url, length + 1);
     nvs_handle_t handle;
-
-    esp_err_t err = nvs_open(
-        OTA_NVS_NAMESPACE,
-        NVS_READWRITE,
-        &handle
-    );
-
+    esp_err_t err = nvs_open(OTA_NVS_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) {
-        ESP_LOGW(
-            TAG,
-            "OTA: failed to open NVS for URL save: %s",
-            esp_err_to_name(err)
-        );
+        ESP_LOGW(TAG, "OTA: failed to open NVS for URL save: %s", esp_err_to_name(err));
         return;
     }
-
-    err = nvs_set_str(
-        handle,
-        OTA_NVS_KEY_URL,
-        s_ota_url
-    );
-
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
-
+    err = nvs_set_str(handle, OTA_NVS_KEY_URL, candidate);
+    if (err == ESP_OK) err = nvs_commit(handle);
     nvs_close(handle);
-
     if (err == ESP_OK) {
-        ESP_LOGI(
-            TAG,
-            "OTA: saved URL to NVS"
-        );
+        memcpy(s_ota_url, candidate, length + 1);
+        s_ota_url_loaded = true;
+        ESP_LOGI(TAG, "OTA: saved URL to NVS");
     } else {
-        ESP_LOGW(
-            TAG,
-            "OTA: failed to save URL: %s",
-            esp_err_to_name(err)
-        );
+        ESP_LOGW(TAG, "OTA: failed to save URL: %s", esp_err_to_name(err));
     }
 }
 

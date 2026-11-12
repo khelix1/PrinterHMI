@@ -37,6 +37,9 @@ bool macro_controller_get(
     char *output,
     size_t output_size);
 
+/* Check a full name against the currently discovered catalog under its lock. */
+bool macro_controller_contains(const char *name);
+
 /* Favorites are panel-local shortcuts; the macro itself remains in Klipper. */
 bool macro_controller_is_favorite(const char *name);
 /* Returns storage success; on failure the in-memory favorites stay unchanged. */

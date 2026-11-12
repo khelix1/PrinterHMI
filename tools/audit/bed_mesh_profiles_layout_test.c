@@ -154,6 +154,29 @@ static void keyboard_action_checks(void)
  close_profile_popup_cb(NULL);
 }
 
+static void stale_review_checks(const bed_mesh_snapshot_t *mesh)
+{
+ unsigned before=sends;bool old_accept=accept;
+ ui_bed_mesh_profiles_show_cb(NULL);save_as_profile_cb(NULL);
+ lv_textarea_set_text(s.profile_name_input,"clear_during_review");save_name_continue_cb(NULL);
+ bed_mesh_snapshot_t cleared=*mesh;cleared.valid=false;
+ ui_bed_mesh_profiles_update(&cleared);
+ assert(lv_obj_has_state(s.actions[3],LV_STATE_DISABLED));
+ assert(strstr(lv_label_get_text(s.confirm_connection_label),"no longer available"));
+ confirm_save_profile_cb(NULL);assert(sends==before&&s.profile_confirm);
+ ui_bed_mesh_profiles_update(mesh);assert(!lv_obj_has_state(s.actions[3],LV_STATE_DISABLED));
+ accept=true;confirm_save_profile_cb(NULL);assert(sends==before+1&&!s.profile_popup);
+ assert(!strcmp(last_command,"BED_MESH_PROFILE SAVE=clear_during_review\nSAVE_CONFIG"));
+ ui_bed_mesh_profiles_show_cb(NULL);remove_selected_profile_cb(NULL);assert(s.profile_confirm);
+ bed_mesh_snapshot_t removed=*mesh;removed.profile_count=0;
+ ui_bed_mesh_profiles_update(&removed);assert(lv_obj_has_state(s.actions[3],LV_STATE_DISABLED));
+ assert(strstr(lv_label_get_text(s.confirm_connection_label),"no longer available"));
+ confirm_remove_profile_cb(NULL);assert(sends==before+1&&s.profile_confirm);
+ ui_bed_mesh_profiles_update(mesh);assert(!lv_obj_has_state(s.actions[3],LV_STATE_DISABLED));
+ confirm_remove_profile_cb(NULL);assert(sends==before+2&&!s.profile_popup);
+ accept=old_accept;
+}
+
 int main(void){
  lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(d,flush);lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned narrow=0;narrow<3;narrow++){
@@ -162,7 +185,7 @@ int main(void){
   lv_obj_t*owner=lv_obj_create(lv_screen_active());ui_bed_mesh_profiles_init(owner,send_command);
   bed_mesh_profile_name_t names[BED_MESH_MAX_PROFILES];for(unsigned i=0;i<BED_MESH_MAX_PROFILES;i++)snprintf(names[i],sizeof(names[i]),"plate_%02u_with_a_long_descriptive_name",i);
   bed_mesh_snapshot_t mesh={.valid=true,.profile_count=BED_MESH_MAX_PROFILES,.profile_names=names};strcpy(mesh.profile_name,names[0]);
-  ui_bed_mesh_profiles_update(&mesh);keyboard_action_checks();ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup&&s.selected_profile==0);layout(s.profile_popup);
+  ui_bed_mesh_profiles_update(&mesh);keyboard_action_checks();stale_review_checks(&mesh);ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup&&s.selected_profile==0);layout(s.profile_popup);
   for(unsigned i=0;i<lv_obj_get_child_count(s.profile_list);i++){
    lv_obj_t*row=lv_obj_get_child(s.profile_list,i),*name=lv_obj_get_child(row,0);
    inside(name,row);assert(!strcmp(lv_label_get_text(name),names[i]));

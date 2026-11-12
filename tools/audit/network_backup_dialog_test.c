@@ -157,16 +157,16 @@ static void backup(void)
     allowed=true;restore_confirm_cb(NULL);assert(!s_restore_confirmation&&restored==before+2);
     assert(s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)==100&&strstr(lv_label_get_text(s_export_progress_status),"reboot"));
     layout(s_export_progress_popup);progress_close_cb(NULL);assert(!s_export_progress_popup);
-    show_secret_popup(false);layout(s_secret_popup);keyboard_layout_check(s_secret_popup,s_secret_keyboard,s_secret_input);keyboard_layout_check(s_secret_popup,s_secret_keyboard,s_secret_confirm);lv_obj_send_event(s_secret_keyboard,LV_EVENT_READY,NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"12 characters"));
+    show_secret_popup(false);layout(s_secret_popup);keyboard_layout_check(s_secret_popup,s_secret_keyboard,s_secret_input);keyboard_layout_check(s_secret_popup,s_secret_keyboard,s_secret_confirm);lv_obj_send_event(s_secret_keyboard,LV_EVENT_READY,NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"12 UTF-8 bytes"));
     before=worker_starts;
     lv_obj_send_event(s_secret_input,LV_EVENT_CLICKED,NULL);assert(lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_input);
     lv_obj_t *foreign=lv_textarea_create(lv_screen_active());
     lv_obj_add_event_cb(foreign,secret_value_changed,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(foreign,secret_focus_cb,LV_EVENT_CLICKED,NULL);
     lv_textarea_set_text(foreign,"unrelated");lv_obj_send_event(foreign,LV_EVENT_CLICKED,NULL);
-    assert(strstr(lv_label_get_text(s_secret_status),"12 characters")&&lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_input);lv_obj_delete(foreign);
+    assert(strstr(lv_label_get_text(s_secret_status),"12 UTF-8 bytes")&&lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_input);lv_obj_delete(foreign);
     lv_textarea_set_text(s_secret_input,"short");assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
-    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 characters"));
+    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 UTF-8 bytes"));
     lv_textarea_set_text(s_secret_input,passphrase);assert(!lv_label_get_text(s_secret_status)[0]);
     lv_textarea_set_text(s_secret_confirm,"different");secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"match")&&worker_starts==before);
     lv_textarea_set_text(s_secret_input,"another-passphrase");assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
@@ -175,6 +175,13 @@ static void backup(void)
     secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"match"));
     lv_obj_send_event(s_secret_confirm,LV_EVENT_CLICKED,NULL);assert(lv_keyboard_get_textarea(s_secret_keyboard)==s_secret_confirm);
     lv_textarea_set_text(s_secret_confirm,passphrase);assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
+    char utf8[129];for(unsigned i=0;i<64;i++){utf8[2*i]=(char)0xc3;utf8[2*i+1]=(char)0xa9;}utf8[128]=0;
+    lv_textarea_set_text(s_secret_input,utf8);lv_textarea_set_text(s_secret_confirm,utf8);
+    secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"96 UTF-8 bytes")&&worker_starts==before);
+    close_secret_popup(false);show_secret_popup(true);lv_textarea_set_text(s_secret_input,utf8);
+    secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"96 UTF-8 bytes")&&worker_starts==before&&!s_restore_passphrase[0]);
+    close_secret_popup(false);show_secret_popup(false);
+    lv_textarea_set_text(s_secret_input,passphrase);lv_textarea_set_text(s_secret_confirm,passphrase);
     worker_allowed=false;secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"busy"));
     lv_textarea_set_text(s_secret_confirm,"different");assert(strstr(lv_label_get_text(s_secret_status),"busy"));
     lv_textarea_set_text(s_secret_confirm,passphrase);assert(strstr(lv_label_get_text(s_secret_status),"busy"));
@@ -210,7 +217,7 @@ static void backup(void)
         progress_close_cb(NULL);assert(!s_export_progress_popup&&!s_progress_close);
     }
     show_secret_popup(true);layout(s_secret_popup);before=worker_starts;
-    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 characters"));
+    secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 UTF-8 bytes"));
     lv_textarea_set_text(s_secret_input,passphrase);assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
     secret_submit_cb(NULL);
     assert(!s_secret_popup&&s_export_progress_popup&&!strcmp(s_restore_passphrase,passphrase));

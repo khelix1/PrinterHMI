@@ -301,59 +301,40 @@ static char console_ascii_lower(char character)
 }
 
 
-static bool console_contains_ignore_case(
-    const char *text,
-    const char *needle)
+/* Severity is a response prefix, not a keyword embedded in printer output. */
+static bool response_prefix(const char *text, const char *prefix)
 {
-    if (!text || !needle || !needle[0]) {
-        return false;
+    while (*prefix && *text &&
+           console_ascii_lower(*text) == console_ascii_lower(*prefix)) {
+        ++text;
+        ++prefix;
     }
-
-    for (const char *start = text; *start; ++start) {
-        const char *left = start;
-        const char *right = needle;
-
-        while (*left &&
-               *right &&
-               console_ascii_lower(*left) ==
-                   console_ascii_lower(*right)) {
-            ++left;
-            ++right;
-        }
-
-        if (!*right) {
-            return true;
-        }
-    }
-
-    return false;
+    return !*prefix && (!*text || *text == ':' || *text == ' ' || *text == '\t');
 }
-
 
 static console_entry_type_t response_type(const char *response)
 {
-    if (!response) {
-        return CONSOLE_ENTRY_RESPONSE;
+    if (!response) return CONSOLE_ENTRY_RESPONSE;
+    while (*response == ' ' || *response == '\t') ++response;
+    if (!strncmp(response, "//", 2)) {
+        response += 2;
+        while (*response == ' ' || *response == '\t') ++response;
     }
-
-    if (strstr(response, "!!") ||
-        console_contains_ignore_case(response, "error") ||
-        console_contains_ignore_case(response, "unknown command") ||
-        console_contains_ignore_case(response, "invalid command") ||
-        console_contains_ignore_case(response, "failed") ||
-        console_contains_ignore_case(response, "must home") ||
-        console_contains_ignore_case(response, "shutdown")) {
+    /* Klipper reports command errors with !!; retain explicit legacy labels
+     * and Unknown command (which Klipper emits as informational output). */
+    if (!strncmp(response, "!!", 2) ||
+        response_prefix(response, "error") ||
+        response_prefix(response, "unknown command") ||
+        response_prefix(response, "invalid command") ||
+        response_prefix(response, "failed") ||
+        response_prefix(response, "must home") ||
+        response_prefix(response, "shutdown") ||
+        response_prefix(response, "Klipper state: Shutdown"))
         return CONSOLE_ENTRY_ERROR;
-    }
-
-    if (console_contains_ignore_case(response, "warning") ||
-        console_contains_ignore_case(response, "warn")) {
+    if (response_prefix(response, "warning") || response_prefix(response, "warn"))
         return CONSOLE_ENTRY_WARNING;
-    }
-
     return CONSOLE_ENTRY_RESPONSE;
 }
-
 
 static void add_response_lines(const char *response)
 {

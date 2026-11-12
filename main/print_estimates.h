@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "printer_layer_resolver.h"
 
 typedef enum {
     PRINT_PROGRESS_FILE_RELATIVE, PRINT_PROGRESS_FILE_ABSOLUTE,
@@ -22,6 +23,7 @@ typedef struct {
 
 typedef struct {
     double start_byte, end_byte, filament_total, estimated_time;
+    printer_layer_metadata_t layers;
 } print_estimate_metadata_t;
 
 typedef struct { double progress, remaining, eta_remaining; } print_estimate_result_t;

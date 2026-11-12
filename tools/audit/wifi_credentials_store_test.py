@@ -28,6 +28,7 @@ void nvs_close(nvs_handle_t);
 }
 fixture = r'''
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include "wifi_credentials_store.h"
@@ -35,6 +36,7 @@ fixture = r'''
 #include "nvs.h"
 static int open_error,ssid_error,pass_error,set_error,commit_error;
 static unsigned opens,closes,writes,commits;
+static int malformed_kind;static bool malformed_pass;
 static const char *stored_ssid="network", *stored_pass="secret";
 const char *esp_err_to_name(int e){(void)e;return "injected";}
 int nvs_open(const char *name,int mode,nvs_handle_t *h){assert(!strcmp(name,"netcfg"));assert(mode==0||mode==1);opens++;*h=42;return open_error;}
@@ -44,11 +46,18 @@ int nvs_get_str(nvs_handle_t h,const char *key,char *out,size_t *size){
  int error=ssid?ssid_error:pass_error;
  if(error){memset(out,'x',*size);return error;} /* Failure must clear even a touched buffer. */
  const char *text=ssid?stored_ssid:stored_pass;size_t n=strlen(text)+1;
- if(n>*size){return 2;}memcpy(out,text,n);*size=n;return 0;
+ if(n>*size){return 2;}size_t capacity=*size;memcpy(out,text,n);*size=n;
+ if(malformed_kind && ssid!=malformed_pass){
+  if(malformed_kind==1)*size=0;
+  if(malformed_kind==2)*size=capacity+1;
+  if(malformed_kind==3){memset(out,'x',capacity);*size=capacity;}
+  if(malformed_kind==4){out[n]='x';out[n+1]=0;*size=n+2;}
+ }
+ return 0;
 }
 int nvs_set_str(nvs_handle_t h,const char *key,const char *value){assert(h==42&&value);assert(!strcmp(key,"ssid")||!strcmp(key,"pass"));writes++;return set_error;}
 int nvs_commit(nvs_handle_t h){assert(h==42);commits++;return commit_error;}
-static void reset(void){open_error=ssid_error=pass_error=set_error=commit_error=0;opens=closes=writes=commits=0;stored_ssid="network";stored_pass="secret";}
+static void reset(void){open_error=ssid_error=pass_error=set_error=commit_error=0;opens=closes=writes=commits=0;stored_ssid="network";stored_pass="secret";malformed_kind=0;malformed_pass=false;}
 static void zero(const char *p,size_t n){for(size_t i=0;i<n;i++)assert(!p[i]);}
 int main(void){
  char ssid[33],pass[65];wifi_config_t config;
@@ -60,9 +69,19 @@ int main(void){
  reset();assert(wifi_credentials_store_load(ssid,sizeof(ssid),pass,sizeof(pass)));assert(!strcmp(ssid,"network")&&!strcmp(pass,"secret"));
  stored_pass="";assert(wifi_credentials_store_load(ssid,sizeof(ssid),pass,sizeof(pass))&&!pass[0]);
  stored_ssid="";assert(!wifi_credentials_store_load(ssid,sizeof(ssid),pass,sizeof(pass)));zero(ssid,sizeof(ssid));zero(pass,sizeof(pass));
+ for(unsigned field=0;field<2;field++)for(int kind=1;kind<=4;kind++){
+  reset();malformed_pass=field;malformed_kind=kind;
+  assert(!wifi_credentials_store_load(ssid,sizeof(ssid),pass,sizeof(pass)));
+  zero(ssid,sizeof(ssid));zero(pass,sizeof(pass));assert(opens==closes);
+  malformed_kind=0;assert(wifi_credentials_store_load(ssid,sizeof(ssid),pass,sizeof(pass)));
+ }
  char max_ssid[33],max_pass[65],long_ssid[34],long_pass[66];
  memset(max_ssid,'s',32);max_ssid[32]=0;memset(max_pass,'a',64);max_pass[64]=0;
  memset(long_ssid,'s',33);long_ssid[33]=0;memset(long_pass,'p',65);long_pass[65]=0;
+ reset();char wide_ssid[80],wide_pass[80];stored_ssid=long_ssid;
+ assert(!wifi_credentials_store_load(wide_ssid,sizeof(wide_ssid),wide_pass,sizeof(wide_pass)));zero(wide_ssid,sizeof(wide_ssid));zero(wide_pass,sizeof(wide_pass));
+ stored_ssid="network";stored_pass=long_pass;
+ assert(!wifi_credentials_store_load(wide_ssid,sizeof(wide_ssid),wide_pass,sizeof(wide_pass)));zero(wide_ssid,sizeof(wide_ssid));zero(wide_pass,sizeof(wide_pass));
  reset();stored_ssid=max_ssid;stored_pass=max_pass;
  assert(wifi_credentials_store_load(ssid,sizeof(ssid),pass,sizeof(pass)));
  assert(wifi_station_config_build(&config,ssid,pass));assert(!memcmp(config.sta.ssid,max_ssid,32)&&!memcmp(config.sta.password,max_pass,64));
@@ -77,7 +96,7 @@ int main(void){
  reset();set_error=1;assert(!wifi_credentials_store_save("network","secret")&&writes==1&&!commits&&closes==1);
  reset();commit_error=1;assert(!wifi_credentials_store_save("network","secret")&&writes==2&&commits==1&&closes==1);
  reset();assert(wifi_credentials_store_save("network",NULL));
- puts("PASS: WiFi read failures clear both outputs; explicit open-network passwords, full-width credentials, bounds and storage failures checked");
+ puts("PASS: WiFi read failures clear both outputs; explicit open-network passwords, full-width credentials, returned string extent/termination, retry, bounds and storage failures checked");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='wifi-store-') as directory:

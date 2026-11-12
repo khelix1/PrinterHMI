@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.3.52-dev is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.3.79-dev is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -61,6 +61,28 @@ status banners, cards, previews, charts, action panels and popup controllers.
   interface beneath it. `ui_about_popup` is a focused Settings-owned
   consumer of those shared popup primitives.
 
+### Camera discovery publication
+
+`camera_discovery_controller` owns the bounded worker result and captured target
+profile. It fences consumption by active generation and profile contents before
+catalog writes, including edits to inactive profiles. Network work does not
+persist camera settings. The UI consumer owns import and publishes its outcome;
+profile/setup dialogs distinguish a stale result from a still-running search and
+report partial save failure locally. Imports are serialized but are not a
+multi-camera storage transaction.
+
+### Printer configuration read integrity
+
+`moonraker_config_controller` distinguishes genuinely missing legacy fields from
+unreadable stored profiles. An incomplete collection is protected against ordinary
+writes until a successful reload or explicit validated full replacement. Its
+readability query lets the profile UI explain the failure locally and lets
+`settings_backup` refuse exports that could replace a good recovery file with
+incomplete data. The configuration module owns this policy; UI and backup code
+do not infer it from widget contents. Failed schema/required active-profile
+loads expose no guessed default endpoint. Existing TLS read failures remain
+secure-only. This does not make multi-key persistence transactional.
+
 ### LVGL page refresh and layout
 
 Console retains up to 64 labels, Macros up to 64 buttons, and Devices up to
@@ -77,6 +99,19 @@ scrolling two-column Grid with Flex cells. Callbacks can use
 `ui_popup_find_owner()` to resolve the modal through nested layout containers.
 Preview wells use native image `COVER`; fitted images and fullscreen previews
 use `CONTAIN`. See [the modernization scope](LVGL_MODERNIZATION.md).
+
+### Active-print layer metadata
+
+`print_estimate_metadata` owns the background active-file metadata request and
+cache, keyed by printer generation, print-job revision and full file path. Its
+snapshot includes estimate inputs and layer count/first-layer/normal-layer
+metadata. No extra file download or worker is needed for layers.
+`printer_layer_resolver` remains a pure calculation: live reported values take
+priority, metadata counts come next, and height estimates account for a different
+first-layer thickness. Dashboard contexts carry job/profile provenance and reject
+mismatched metadata after their fresh telemetry snapshot. `thumbnail_session`
+owns selected-file preview requests and formatting; it no longer stores or
+exports active-print layer dimensions.
 
 ### Live value updates
 

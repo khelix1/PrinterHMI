@@ -4,6 +4,7 @@
 #include <string.h>
 #include "lvgl.h"
 #include "custom_theme.h"
+#include "ui_settings_components.h"
 static bool fail_async,fail_save;
 static lv_result_t queue_apply(lv_async_cb_t cb,void *data){return fail_async?LV_RESULT_INVALID:lv_async_call(cb,data);}
 #define lv_async_call queue_apply
@@ -86,7 +87,38 @@ static void render_dialogs(lv_display_t *d){
 }
 static lv_obj_t *sections(bool reordered){lv_obj_t*body=lv_obj_create(lv_screen_active());lv_obj_set_size(body,300,160);lv_obj_set_style_pad_all(body,0,0);for(unsigned i=0;i<3;i++){lv_obj_t*s=lv_obj_create(body);lv_obj_set_pos(s,0,i*200);lv_obj_set_size(s,260,190);lv_obj_t*l=lv_label_create(s);lv_label_set_text(l,(const char*[]){"Display","Connections","About"}[reordered?(i+1)%3:i]);}lv_obj_update_layout(body);return body;}
 static void rebuild_sections(void){lv_obj_delete(s_settings_content);s_settings_content=NULL;s_settings_content=sections(true);}
+static void other_row_cb(lv_event_t *event){(void)event;}
+static void studio_accent_choices(void)
+{
+    static const uint32_t bright[] = {0xB59CFF,0x79E7F7,0x8FC2FF,0x8BE8C1,0xFFD27A,0xC7A8FF};
+    static const uint32_t normal[] = {0x8B6CFF,0x19C7E8,0x3A8DFF,0x2DBE83,0xE0A22E,0x8C62D9};
+    ui_theme_set_active(UI_THEME_STUDIO_DARK);
+    ui_theme_set_accent(UI_ACCENT_DEFAULT);
+    lv_color_t danger=UI_DANGER_BRIGHT,warn=UI_WARN,ok=UI_OK_BRIGHT,bg=UI_BG;
+    ui_appearance_popups_show_accent(changed);
+    for(unsigned i=1;i<=UI_ACCENT_COUNT;i++){
+        unsigned choice=i%UI_ACCENT_COUNT;
+        click(s_rows[choice]);pump();
+        assert(s_popup&&theme_manager_accent()==choice);
+        assert(lv_obj_has_state(s_rows[choice],LV_STATE_CHECKED));
+        assert(lv_color_eq(lv_obj_get_style_border_color(s_rows[choice],0),lv_color_hex(normal[choice])));
+        assert(!lv_obj_has_state(s_rows[(choice+1)%UI_ACCENT_COUNT],LV_STATE_CHECKED));
+        lv_obj_t *section=lv_obj_create(lv_screen_active());
+        lv_obj_t *value=ui_settings_section_add_row(section,"Accent","", "Selected",0,other_row_cb);
+        lv_obj_t *chevron=lv_obj_get_child(lv_obj_get_parent(value),-1);
+        assert(!strcmp(lv_label_get_text(chevron),LV_SYMBOL_RIGHT));
+        assert(lv_color_eq(lv_obj_get_style_text_color(chevron,0),lv_color_hex(bright[choice])));
+        lv_obj_t *action=ui_settings_section_add_action_row(section,"Setup","","Open",68,NULL,false);
+        lv_obj_t *danger_action=ui_settings_section_add_action_row(section,"Restart","","Restart",136,NULL,true);
+        assert(lv_color_eq(lv_obj_get_style_border_color(action,0),lv_color_hex(bright[choice])));
+        assert(lv_color_eq(lv_obj_get_style_border_color(danger_action,0),danger));
+        assert(lv_color_eq(UI_WARN,warn)&&lv_color_eq(UI_OK_BRIGHT,ok)&&lv_color_eq(UI_BG,bg));
+        lv_obj_delete(section);
+    }
+    ui_appearance_popups_close_all();
+}
 int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t pixels[1024*40*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_obj_t*background=lv_obj_create(lv_screen_active());lv_obj_set_size(background,LV_PCT(100),LV_PCT(100));lv_obj_add_event_cb(background,background_draw,LV_EVENT_DRAW_MAIN,NULL);
+studio_accent_choices();
 for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++)for(unsigned size=0;size<3;size++){
  lv_display_set_resolution(d,(int[]){1024,640,480}[size],(int[]){600,480,320}[size]);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});ui_theme_set_accent(UI_ACCENT_DEFAULT);
  unsigned objs=objects(lv_screen_active())+objects(lv_layer_top()),ts=timers(),before=changes;

@@ -25,13 +25,29 @@ static inline const char *moonraker_command_admin_method(const char *script)
         if(!next)break;
         line=next+1;
     }
-    /* Firmware recovery also has a dedicated endpoint usable after shutdown.
-     * Only redirect a standalone restart; preserve ordinary multi-line scripts. */
-    if(moonraker_command_token_is(script,"FIRMWARE_RESTART")) {
-        while(*script==' ' || *script=='\t' || *script=='\r')script++;
-        script+=strlen("FIRMWARE_RESTART");
-        while(isspace((unsigned char)*script))script++;
-        if(!*script || (*script==';' && !strchr(script,'\n')))return "printer.firmware_restart";
+    /* Recovery has dedicated endpoints that handle the expected disconnect.
+     * Redirect only one restart command, allowing surrounding blank/comment
+     * lines; preserve scripts containing parameters or another real command. */
+    const char *method = NULL;
+    for (const char *line = script; *line;) {
+        while (*line == ' ' || *line == '\t' || *line == '\r') ++line;
+        if (*line && *line != '\n' && *line != ';') {
+            if (method) return NULL;
+            size_t length;
+            if (moonraker_command_token_is(line, "FIRMWARE_RESTART")) {
+                method = "printer.firmware_restart";
+                length = strlen("FIRMWARE_RESTART");
+            } else if (moonraker_command_token_is(line, "RESTART")) {
+                method = "printer.restart";
+                length = strlen("RESTART");
+            } else return NULL;
+            const char *tail = line + length;
+            while (*tail == ' ' || *tail == '\t' || *tail == '\r') ++tail;
+            if (*tail && *tail != '\n' && *tail != ';') return NULL;
+        }
+        const char *next = strchr(line, '\n');
+        if (!next) break;
+        line = next + 1;
     }
-    return NULL;
+    return method;
 }

@@ -38,6 +38,7 @@ fixture = r'''
 #include "nvs.h"
 #include "esp_err.h"
 static char primary[192],url[256],name[128];
+static int packed_view[4],preferred,preference_error;
 static int open_error,read_error,write_error,commit_error;
 static unsigned opens,closes,writes,commits,primary_writes;
 size_t strlcpy(char *out,const char *in,size_t size){size_t n=strlen(in);if(size)snprintf(out,size,"%s",in);return n;}
@@ -52,12 +53,16 @@ int nvs_get_str(nvs_handle_t h,const char *key,char *out,size_t *size){
  if(n>*size)return -8;
  memcpy(out,text,n);*size=n;return ESP_OK;
 }
-int nvs_get_u8(nvs_handle_t h,const char *key,uint8_t *out){assert(h==1);(void)key;*out=0;return ESP_ERR_NVS_NOT_FOUND;}
+static int *byte_key(const char *key){
+ if(strstr(key,"_cdef"))return &preferred;
+ const char *view=strstr(key,"_v");assert(view&&view[2]>='0'&&view[2]<='3');return &packed_view[view[2]-'0'];
+}
+int nvs_get_u8(nvs_handle_t h,const char *key,uint8_t *out){assert(h==1);if(preference_error)return preference_error;int value=*byte_key(key);if(value<0)return ESP_ERR_NVS_NOT_FOUND;*out=(uint8_t)value;return ESP_OK;}
 int nvs_set_str(nvs_handle_t h,const char *key,const char *text){assert(h==1);writes++;if(write_error)return write_error;strlcpy(strstr(key,"_n")?name:url,text,strstr(key,"_n")?sizeof(name):sizeof(url));return ESP_OK;}
-int nvs_set_u8(nvs_handle_t h,const char *key,uint8_t value){assert(h==1);(void)key;(void)value;writes++;return write_error;}
-int nvs_erase_key(nvs_handle_t h,const char *key){assert(h==1);writes++;if(write_error)return write_error;(strstr(key,"_n")?name:url)[0]=0;return ESP_OK;}
+int nvs_set_u8(nvs_handle_t h,const char *key,uint8_t value){assert(h==1);writes++;if(write_error)return write_error;*byte_key(key)=value;return ESP_OK;}
+int nvs_erase_key(nvs_handle_t h,const char *key){assert(h==1);writes++;if(write_error)return write_error;if(strstr(key,"_v")||strstr(key,"_cdef"))*byte_key(key)=-1;else (strstr(key,"_n")?name:url)[0]=0;return ESP_OK;}
 int nvs_commit(nvs_handle_t h){assert(h==1);commits++;return commit_error;}
-static void reset(void){primary[0]=url[0]=name[0]=0;open_error=read_error=write_error=commit_error=0;opens=closes=writes=commits=primary_writes=0;}
+static void reset(void){primary[0]=url[0]=name[0]=0;for(int i=0;i<4;i++)packed_view[i]=-1;preferred=-1;preference_error=0;open_error=read_error=write_error=commit_error=0;opens=closes=writes=commits=primary_writes=0;}
 static void empty(const camera_catalog_entry_t *e){const unsigned char *p=(const unsigned char*)e;for(size_t i=0;i<sizeof(*e);i++)assert(!p[i]);}
 int main(void){
  camera_catalog_entry_t entry;char max_url[192],long_url[193],max_name[32],long_name[33];
@@ -82,7 +87,22 @@ int main(void){
  reset();write_error=-9;assert(!camera_catalog_set(0,1,"camera","http://camera")&&!commits&&opens==closes);
  reset();commit_error=-9;assert(!camera_catalog_set(0,1,"camera","http://camera")&&commits==1&&opens==closes);
  reset();assert(camera_catalog_clear(0,1)&&camera_catalog_get(0,1,&entry));empty(&entry);
- puts("PASS: camera catalog exact-limit round trips, oversized rejection before primary/NVS writes, cleared outputs and distinct missing/error reads");
+ for(size_t slot=0;slot<2;slot++){
+  reset();assert(camera_catalog_set(0,slot,"Old","http://old"));
+  assert(camera_catalog_set_view(0,slot,90,true,true)&&camera_catalog_set_default(0,slot));
+  assert(camera_catalog_set(0,slot,"Edited","http://edited"));
+  assert(camera_catalog_get(0,slot,&entry)&&entry.rotation==90&&entry.mirror_horizontal&&entry.mirror_vertical);
+  assert(preferred==(int)slot);
+  preference_error=-9;unsigned before=writes;assert(!camera_catalog_clear(0,slot)&&writes==before&&!strcmp(slot?url:primary,"http://edited"));preference_error=0;
+  assert(camera_catalog_clear(0,slot)&&preferred==-1);
+  assert(camera_catalog_set(0,slot,"New","http://new")&&camera_catalog_get(0,slot,&entry));
+  assert(entry.configured&&!entry.rotation&&!entry.mirror_horizontal&&!entry.mirror_vertical);
+ }
+ reset();assert(camera_catalog_set(0,0,"Keep","http://keep")&&camera_catalog_set_default(0,0));
+ assert(camera_catalog_set_view(0,0,270,true,false));
+ assert(camera_catalog_set(0,1,"Remove","http://remove")&&camera_catalog_clear(0,1));
+ assert(preferred==0&&camera_catalog_get(0,0,&entry)&&entry.rotation==270&&entry.mirror_horizontal);
+ puts("PASS: camera removal resets view/default, edits and other cameras retain preferences; camera catalog exact-limit round trips, oversized rejection before primary/NVS writes, cleared outputs and distinct missing/error reads");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='camera-catalog-') as directory:

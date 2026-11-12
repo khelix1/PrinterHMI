@@ -17,7 +17,7 @@ typedef struct {
     char *buffer;
     size_t length;
     size_t capacity;
-    bool overflowed;
+    bool invalid;
 } moonraker_live_capture_t;
 
 
@@ -42,6 +42,8 @@ static esp_err_t moonraker_live_http_event_handler(
     }
 
     size_t incoming = (size_t)event->data_len;
+    /* A JSON prefix before an embedded NUL is not a complete status reply. */
+    if (memchr(event->data, '\0', incoming)) capture->invalid = true;
     size_t available = 0;
 
     if (capture->length < capture->capacity - 1) {
@@ -51,7 +53,7 @@ static esp_err_t moonraker_live_http_event_handler(
     size_t copy_length = incoming;
     if (copy_length > available) {
         copy_length = available;
-        capture->overflowed = true;
+        capture->invalid = true;
     }
 
     if (copy_length > 0) {
@@ -104,7 +106,7 @@ bool moonraker_live_transport_fetch(
         .buffer = response_buffer,
         .length = 0,
         .capacity = buffer_size,
-        .overflowed = false,
+        .invalid = false,
     };
 
     esp_http_client_config_t config = {
@@ -127,10 +129,10 @@ bool moonraker_live_transport_fetch(
     }
 
     if (api_key && api_key[0]) {
-        esp_http_client_set_header(
-            client,
-            "X-Api-Key",
-            api_key);
+        if (esp_http_client_set_header(client, "X-Api-Key", api_key) != ESP_OK) {
+            esp_http_client_cleanup(client);
+            return false;
+        }
     }
 
     esp_err_t error = ESP_ERR_INVALID_STATE;
@@ -148,10 +150,10 @@ bool moonraker_live_transport_fetch(
 
     esp_http_client_cleanup(client);
 
-    if (capture.overflowed) {
+    if (capture.invalid) {
         ESP_LOGE(
             TAG,
-            "Live-object response exceeded %u bytes",
+            "Live-object response exceeded %u-byte limit or contained NUL bytes",
             (unsigned)buffer_size);
         return false;
     }

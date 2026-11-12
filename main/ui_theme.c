@@ -225,9 +225,13 @@ ui_accessibility_t ui_theme_get_accessibility(void)
 lv_color_t ui_theme_accent_color(uint32_t operator_rgb,
                                  uint32_t foundry_rgb,
                                  uint32_t glass_rgb,
+                                 uint32_t studio_rgb,
                                  uint8_t tone)
 {
     if (s_active_accent == UI_ACCENT_DEFAULT) {
+        if (ui_theme_is_studio()) {
+            return ui_theme_studio_color(operator_rgb, foundry_rgb, glass_rgb, studio_rgb);
+        }
         uint32_t custom_rgb = 0;
         if (custom_theme_accent_override(
                 tone,

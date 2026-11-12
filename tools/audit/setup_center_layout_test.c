@@ -97,7 +97,10 @@ bool camera_catalog_get(int p,size_t i,camera_catalog_entry_t*e){(void)p;*e=(cam
 bool camera_catalog_set_default(int p,size_t i){(void)p;assert(i<4);default_saves++;if(default_hook)default_hook();if(default_ok)saved_camera_slot=i;return default_ok;}
 bool camera_discovery_start(const char*h,int p,const char*k){(void)h;(void)p;(void)k;camera_scans++;return camera_discover_ok;}
 bool camera_discovery_busy(void){return false;}
-bool camera_discovery_take_result(moonraker_webcam_t*w,bool*f,size_t*n){(void)w;*f=discovery_result;*n=discovery_result?4:0;if(discovery_result)config_generation++;return true;}
+static camera_discovery_status_t camera_scan_status=CAMERA_DISCOVERY_READY;
+static bool camera_scan_received=true;
+camera_discovery_status_t camera_discovery_status(void){return camera_scan_status;}
+bool camera_discovery_take_result(moonraker_webcam_t*w,bool*f,size_t*n){if(!camera_scan_received)return false;(void)w;*f=discovery_result;*n=discovery_result?4:0;if(discovery_result)config_generation++;return true;}
 bool camera_test_start(const char*u){assert(u[0]);camera_starts++;return camera_test_ok;}
 bool camera_test_take_result(bool*o,int*w,int*h,size_t*b){*o=camera_result;*w=900;*h=520;*b=4096;return true;}
 static bool connect_wifi(const char*s,const char*p){assert(s[0]);assert(!strcmp(p,"test-password"));connections++;if(connect_hook)connect_hook();assert(s[0]&&!strcmp(p,"test-password"));return wifi_accept;}
@@ -393,6 +396,12 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  if(width==1024)for(unsigned group=0;group<lv_obj_get_child_count(s_stage);group++)inside(lv_obj_get_child(s_stage,group),s_stage);
  if(density==1&&large)snapshot(t,"camera-saved");
  size_t previous_default=saved_camera_slot;saved_camera_slot=2;custom_camera_url=true;setup_select_camera_cb(NULL);assert(contains_text(s_stage,"Custom camera")&&!contains_text(s_center,"PRIVATE-SECRET"));custom_camera_url=false;saved_camera_slot=previous_default;
+ setup_select_camera_cb(NULL);center_camera_cb(NULL);camera_scan_status=CAMERA_DISCOVERY_SAVE_FAILED;camera_discovery_poll(NULL);
+ assert(!s_poll&&strstr(lv_label_get_text(s_status),"not all could be saved")&&!lv_obj_has_state(s_camera_scan_action,LV_STATE_DISABLED));
+ camera_scan_status=CAMERA_DISCOVERY_STALE;camera_scan_received=false;
+ setup_select_camera_cb(NULL);center_camera_cb(NULL);camera_discovery_poll(NULL);
+ assert(!s_poll&&strstr(lv_label_get_text(s_status),"details changed"));
+ camera_scan_received=true;camera_scan_status=CAMERA_DISCOVERY_READY;
  setup_select_camera_cb(NULL);center_camera_cb(NULL);config_generation++;camera_discovery_poll(NULL);assert(!s_poll&&strstr(lv_label_get_text(s_status),"Printer changed")&&!lv_obj_get_child_count(s_camera_list));center_camera_cb(NULL);camera_discovery_poll(NULL);assert(lv_obj_get_child_count(s_camera_list)==4);
  setup_select_complete_cb(NULL);check();assert(strstr(lv_label_get_text(lv_obj_get_child(s_stage,3)),timezone_config_selected_label()));
  assert(contains_text(s_stage,"Display:")&&contains_text(s_stage,"70%")&&contains_text(s_stage,"Sleep 15 min"));

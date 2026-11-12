@@ -27,9 +27,13 @@ void vTaskDelete(void *);
 """)
     manager = (root / "main/thumbnail_manager.c").read_text()
     encoder = re.search(r"void thumbnail_manager_url_encode\(.*?^}", manager, re.S | re.M).group()
+    main = (root / "main/main.c").read_text()
+    layer_bridge = re.search(r"static printer_layer_metadata_t active_print_layer_metadata\(.*?^}", main, re.S | re.M).group()
+    (path / "layer_bridge.inc").write_text(layer_bridge)
     (path / "test.c").write_text(r'''
 #include <assert.h>
 #include "print_estimate_metadata.c"
+#include "layer_bridge.inc"
 static void (*worker)(void *);
 static void *argument;
 static uint32_t generation=1;
@@ -50,13 +54,25 @@ bool moonraker_fetch_file_metadata(const char *host,int port,const char *api,con
     (void)code;(void)error;
     assert(!strcmp(host,"host")&&port==7125&&!strcmp(api,"key")&&!strcmp(file,expected));
     ++requests;
-    snprintf(out,size,"{\"result\":{\"gcode_start_byte\":0,\"gcode_end_byte\":500,\"filament_total\":200,\"estimated_time\":1000}}");
+    snprintf(out,size,"{\"result\":{\"gcode_start_byte\":0,\"gcode_end_byte\":500,\"filament_total\":200,\"estimated_time\":1000,\"object_height\":10,\"layer_height\":0.2,\"first_layer_height\":0.4,\"layer_count\":49}}");
     return success;
 }
 static void run(void){void (*fn)(void *)=worker;assert(fn);worker=NULL;fn(argument);}
 int main(void)
 {
     print_estimate_metadata_t result;
+    assert(parse_metadata("{\"result\":{\"layer_count\":57,\"object_height\":10,\"layer_height\":0.2,\"first_layer_height\":0.4}}",&result));
+    assert(result.layers.total_layers==57&&result.layers.object_height==10&&result.layers.layer_height==.2&&result.layers.first_layer_height==.4);
+    assert(parse_metadata("{\"result\":{\"layer_count\":1}}",&result)&&result.layers.total_layers==1);
+    assert(parse_metadata("{\"result\":{\"object_height\":10,\"layer_height\":0.2}}",&result)&&!result.layers.total_layers);
+    assert(!parse_metadata("{\"result\":{\"layer_count\":2.5}}",&result));
+    assert(!parse_metadata("{\"result\":{\"layer_count\":2147483648}}",&result));
+    assert(!parse_metadata("{\"result\":{\"layer_count\":-1}}",&result));
+    assert(!parse_metadata("{\"result\":{\"layer_count\":\"57\"}}",&result));
+    assert(!parse_metadata("{\"result\":{\"layer_count\":null}}",&result));
+    assert(!parse_metadata("{\"result\":{\"layer_height\":-1,\"object_height\":10}}",&result));
+    assert(!parse_metadata("{\"result\":{\"layer_height\":1e999,\"object_height\":10}}",&result));
+
     expected="nested/a%20file.gcode";
     print_estimate_metadata_poll("nested/a file.gcode",1,1,100);
     run();
@@ -67,6 +83,12 @@ int main(void)
     success=true;run();
     assert(print_estimate_metadata_get("nested/a file.gcode",1,&result));
     assert(result.start_byte==0&&result.end_byte==500&&result.filament_total==200&&result.estimated_time==1000);
+    moonraker_state_t state={.print_job_revision=1};snprintf(state.printer_file,sizeof(state.printer_file),"nested/a file.gcode");
+    printer_layer_metadata_t layers=active_print_layer_metadata(&state);
+    assert(layers.total_layers==49&&layers.first_layer_height==.4);
+    state.print_job_revision=2;layers=active_print_layer_metadata(&state);assert(!layers.total_layers&&!layers.layer_height);
+    state.print_job_revision=1;strcpy(state.printer_file,"b.gcode");layers=active_print_layer_metadata(&state);assert(!layers.total_layers&&!layers.layer_height);
+
     print_estimate_metadata_poll("nested/a file.gcode",2,1,10000101);
     assert(!print_estimate_metadata_get("nested/a file.gcode",1,&result));
     print_estimate_metadata_poll("b.gcode",3,1,10000102);
@@ -81,6 +103,9 @@ int main(void)
     print_estimate_metadata_poll("b.gcode",3,2,10000105);
     run();
     assert(requests==4&&print_estimate_metadata_get("b.gcode",3,&result));
+    state.print_job_revision=3;layers=active_print_layer_metadata(&state);assert(layers.total_layers==49);
+    ++generation;layers=active_print_layer_metadata(&state);assert(!layers.total_layers&&!layers.layer_height);
+
 }
 ''' + "\n" + encoder + "\n")
     cjson = native / "vendor/cjson"
@@ -89,4 +114,4 @@ int main(void)
                     "-I",str(native/"shims"),"-I",str(args.lvgl_dir),"-I",str(cjson),
                     str(path/"test.c"),str(cjson/"cJSON.c"),"-lm","-o",str(path/"test")],check=True)
     subprocess.run([str(path/"test")],check=True)
-print("PASS: background metadata fetch, throttled retry, job replacement, profile fencing and nested filename encoding")
+print("PASS: background metadata fetch, throttled retry, job replacement, profile fencing, active-layer bridge, count/first-layer parsing, numeric rejection and nested filename encoding")

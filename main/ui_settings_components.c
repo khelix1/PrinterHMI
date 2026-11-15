@@ -162,10 +162,14 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
     int minimum,
     int maximum,
     int y,
-    lv_event_cb_t event_cb)
+    lv_event_cb_t event_cb,
+    lv_obj_t **description_out)
 {
+    if (description_out) *description_out = NULL;
     if(ui_theme_is_studio()) {
         lv_obj_t *row=studio_settings_row(section,title,description,y);
+        if (description_out && description && description[0])
+            *description_out = lv_obj_get_child(row, 1);
         char text[16];lv_snprintf(text,sizeof(text),"%d%%",value);
         lv_obj_t *label=studio_text(row,text,902,22,74,UI_FONT_BODY,UI_TEXT);
         lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_RIGHT,0);
@@ -206,6 +210,8 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
             description,
             UI_FONT_CAPTION,
             UI_TEXT_DIM);
+
+        if (description_out) *description_out = description_label;
 
         lv_obj_set_width(description_label, UI_PAGE_RAIL_WIDTH - 36 - 386);
         lv_obj_set_pos(

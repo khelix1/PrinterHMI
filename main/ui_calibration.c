@@ -231,7 +231,7 @@ static void refresh_capabilities(void)
     if (!capabilities.discovered) {
         lv_label_set_text(
             s_calibration->banner_status,
-            ui_text("Waiting for printer"));
+            ui_text("Checking calibration tools"));
 
         ui_calibration_card_refs_t *cards[] = {
             &s_calibration->bed,
@@ -250,10 +250,10 @@ static void refresh_capabilities(void)
 
             lv_label_set_text(
                 cards[index]->summary,
-                ui_text("Waiting for active-printer discovery."));
+                ui_text("Checking printer tools."));
             lv_label_set_text(
                 cards[index]->status,
-                ui_text("Awaiting discovery"));
+                ui_text("Checking tools"));
             ui_apply_label_dim(cards[index]->status);
         }
 
@@ -1216,9 +1216,14 @@ static void calibration_refresh_timer_cb(
         else lv_obj_remove_state(commands[i],LV_STATE_DISABLED);
     }
     if(reason[0]) {
-        const char *caption=!live.moonraker_ok?"Offline - reconnect":!live.live_data_ok?"Klipper not ready":
-            !strcmp(live.printer_state,"printing")?"Printing - wait":!strcmp(live.printer_state,"paused")?"Paused - resume/cancel":"Klipper not ready";
-        ui_value_set_text(s_calibration->banner_status,caption);
+        const char *caption = !live.moonraker_ok ? "Printer offline" :
+            !strcmp(live.printer_state, "shutdown") ? "Klipper shutdown" :
+            !strcmp(live.printer_state, "error") ? "Klipper error" :
+            !live.live_data_ok ? "Waiting for Klipper" :
+            !strcmp(live.printer_state, "printing") ? "Printing - wait" :
+            !strcmp(live.printer_state, "paused") ? "Paused - resume or cancel" :
+            "Waiting for Klipper";
+        ui_value_set_text(s_calibration->banner_status, ui_text(caption));
         ui_value_set_color(s_calibration->banner_status,UI_WARN,0);
     } else ui_value_set_color(s_calibration->banner_status,UI_ACCENT_BRIGHT,0);
     ui_calibration_geometry_refresh();
@@ -1309,7 +1314,7 @@ void ui_calibration_show(
     if (s_calibration->root) {
         lv_obj_move_foreground(
             s_calibration->root);
-        refresh_capabilities();
+        calibration_refresh_timer_cb(NULL);
         return;
     }
 
@@ -1337,8 +1342,9 @@ void ui_calibration_show(
         lv_obj_set_style_text_align(s_calibration->banner_status,LV_TEXT_ALIGN_RIGHT,0);
     } else {
     lv_obj_t *banner=ui_create_operator_page_header(s_calibration->root,"Calibration",
-        "Available workflows from the active printer's capabilities",UI_PAGE_RAIL_WIDTH);
+        "Tools for the active printer",UI_PAGE_RAIL_WIDTH);
     lv_obj_set_style_max_width(lv_obj_get_child(banner,0),520,0);
+    lv_obj_set_style_max_width(lv_obj_get_child(banner,1),520,0);
 
     s_calibration->banner_status = ui_calibration_layout_label(
         banner,

@@ -463,7 +463,7 @@ static bool editor_security_action(lv_event_t *event,lv_obj_t *button)
 {
     if(!s_editor_security_popup || !profiles_action_current(event,button,false))return false;
     if(editor_security_current())return true;
-    if(s_security_status)lv_label_set_text(s_security_status,"Printer configuration changed. Close and reopen Security.");
+    ui_value_reveal_text(s_security_status,"Printer configuration changed. Close and reopen Security.");
     return false;
 }
 static void editor_security_standard_cb(lv_event_t *event)
@@ -489,11 +489,11 @@ static void editor_security_pem_selected_cb(lv_event_t *event)
     size_t row=(size_t)(uintptr_t)lv_event_get_user_data(event);
     if(row>=EDITOR_PEM_MAX_FILES || !profiles_action_current(event,s_pem_rows[row],false))return;
     if(!editor_security_current()){
-        if(s_pem_status)lv_label_set_text(s_pem_status,"Printer configuration changed. Close and reopen Security.");
+        ui_value_reveal_text(s_pem_status,"Printer configuration changed. Close and reopen Security.");
         return;
     }
     if(!s_editor_port || !s_editor_pem_paths[row][0]){
-        if(s_pem_status)lv_label_set_text(s_pem_status,"Connection fields are unavailable. Reopen the profile editor.");
+        ui_value_reveal_text(s_pem_status,"Connection fields are unavailable. Reopen the profile editor.");
         return;
     }
     char path[sizeof(s_editor_pem_paths[0])],port[6];
@@ -507,7 +507,7 @@ static void editor_security_pem_selected_cb(lv_event_t *event)
         s_profile_dispatching=false;return;
     }
     if(!imported){
-        if(s_pem_status)lv_label_set_text(s_pem_status,"CA import failed. Check the PEM file and SD card, then select it again.");
+        ui_value_reveal_text(s_pem_status,"CA import failed. Check the PEM file and SD card, then select it again.");
         s_profile_dispatching=false;return;
     }
     s_editor_secure=true;
@@ -565,7 +565,7 @@ static void editor_security_pem_picker_open_cb(lv_event_t *event)
     if(editor_pem_scan_current(popup,body,epoch)){
         if(count==0)profiles_label(body,"No .pem files found in SD-card root.",false);
     }else if(popup==s_editor_pem_picker && s_pem_status)
-        lv_label_set_text(s_pem_status,"Certificate listing interrupted. Close and reopen Security.");
+        ui_value_reveal_text(s_pem_status,"Certificate listing interrupted. Close and reopen Security.");
     s_profile_dispatching=false;
 }
 static void editor_security_cancel_cb(lv_event_t *event)
@@ -847,7 +847,7 @@ static void delete_confirm_cb(lv_event_t *event)
     const moonraker_profile_t *profile=moonraker_config_profile(target);
     if(s_delete_generation!=moonraker_config_generation() || !profile || !profile->configured ||
         moonraker_config_profile_count()<=1) {
-        if(s_delete_status)lv_label_set_text(s_delete_status,"Profiles changed or only one remains. Cancel and review again.");
+        ui_value_reveal_text(s_delete_status,"Profiles changed or only one remains. Cancel and review again.");
         return;
     }
     char name[MOONRAKER_CONFIG_NAME_LENGTH];strlcpy(name,profile->name,sizeof(name));
@@ -856,7 +856,7 @@ static void delete_confirm_cb(lv_event_t *event)
     bool removed=moonraker_config_delete_profile(target);
     if(!removed){
         if(epoch==s_profile_epoch && popup==s_delete_popup && s_delete_status)
-            lv_label_set_text(s_delete_status,profile_storage_feedback("Unable to remove this printer. The review is retained; retry when storage is available."));
+            ui_value_reveal_text(s_delete_status,profile_storage_feedback("Unable to remove this printer. The review is retained; retry when storage is available."));
         s_profile_dispatching=false;return;
     }
     printer_profile_health_set(target,true,false);
@@ -1194,6 +1194,22 @@ static void editor_auth_open_cb(lv_event_t *event)
 }
 
 
+/* A worker can finish before its starter returns. Keep the reserved timer
+ * private and paused until the result has an owner that can consume it. */
+static lv_timer_t *profiles_reserve_poll(lv_timer_cb_t callback)
+{
+    lv_timer_t *poll = lv_timer_create(callback, 80, NULL);
+    if (poll) lv_timer_pause(poll);
+    return poll;
+}
+
+static void profiles_start_poll(lv_timer_t **slot, lv_timer_t *poll)
+{
+    *slot = poll;
+    lv_timer_reset(poll);
+    lv_timer_resume(poll);
+}
+
 static void editor_test_cb(lv_event_t *event)
 {
     if (!profiles_action_current(event,s_editor_test_action,false) || s_editor_test_timer ||
@@ -1217,6 +1233,11 @@ static void editor_test_cb(lv_event_t *event)
         return;
     }
 
+    lv_timer_t *poll = profiles_reserve_poll(editor_test_poll_cb);
+    if (!poll) {
+        editor_set_status("Unable to prepare connection test. Try again.");
+        return;
+    }
     ++s_profile_epoch;
     editor_test_draft_t captured={.popup=s_editor_popup,.epoch=s_profile_epoch,
         .generation=moonraker_config_generation(),.profile=s_editor_profile,.port=(int)port,.secure=s_editor_secure};
@@ -1226,20 +1247,20 @@ static void editor_test_cb(lv_event_t *event)
     bool started=moonraker_endpoint_test_start(captured.host,captured.port,captured.key);
     s_profile_dispatching=false;
     if(captured.epoch!=s_profile_epoch || captured.popup!=s_editor_popup) {
-        profiles_clear_secret(&captured,sizeof(captured));return;
+        lv_timer_delete(poll);profiles_clear_secret(&captured,sizeof(captured));return;
     }
     if(!started){
+        lv_timer_delete(poll);
         profiles_clear_secret(&captured,sizeof(captured));
         editor_set_status(moonraker_endpoint_test_busy()?"A connection test is already running.":"Unable to start the connection test.");return;
     }
     s_test_draft=captured;profiles_clear_secret(&captured,sizeof(captured));
-    if(!editor_test_draft_current()){editor_test_retire();return;}
+    if(!editor_test_draft_current()){lv_timer_delete(poll);editor_test_retire();return;}
     s_profile_dispatching=true;
     editor_set_status("Testing Moonraker connection...");
-    if(!editor_test_draft_current()){s_profile_dispatching=false;editor_test_retire();return;}
-    s_editor_test_timer=lv_timer_create(editor_test_poll_cb,80,NULL);
+    if (editor_test_draft_current()) profiles_start_poll(&s_editor_test_timer,poll);
+    else {lv_timer_delete(poll);editor_test_retire();}
     s_profile_dispatching=false;
-    if(!s_editor_test_timer){editor_test_retire();editor_set_status("Connection test is running; wait for it to finish.");}
 
 }
 
@@ -1687,6 +1708,12 @@ static void editor_camera_test_cb(lv_event_t *event)
     if(!captured.draft.url[0] || !camera_url_valid(captured.draft.url)){
         editor_camera_set_status("Enter or find a valid camera stream URL first.");return;
     }
+    lv_timer_t *poll = profiles_reserve_poll(editor_camera_test_poll_cb);
+    if (!poll) {
+        profiles_clear_secret(&captured,sizeof(captured));
+        editor_camera_set_status("Unable to prepare camera test. Try again.");
+        return;
+    }
     s_profile_dispatching=true;
     bool started=camera_test_start(captured.draft.url);
     if(camera_job_current(&captured,false,true)){
@@ -1694,11 +1721,12 @@ static void editor_camera_test_cb(lv_event_t *event)
             s_camera_test_job=captured;
             editor_camera_set_status("Testing camera stream...");
             if(camera_job_current(&s_camera_test_job,false,true)){
-                s_editor_camera_test_timer=lv_timer_create(editor_camera_test_poll_cb,80,NULL);
-                if(!s_editor_camera_test_timer){camera_job_retire(false);editor_camera_set_status("Camera test is running; retry Test after it finishes.");}
+                profiles_start_poll(&s_editor_camera_test_timer,poll);
+                poll = NULL;
             }else camera_job_retire(false);
         }else editor_camera_set_status(camera_test_busy()?"Camera test already running.":"Unable to start camera test.");
     }
+    if (poll) lv_timer_delete(poll);
     profiles_clear_secret(&captured,sizeof(captured));s_profile_dispatching=false;
 }
 static void editor_camera_discover_cb(lv_event_t *event)
@@ -1711,6 +1739,12 @@ static void editor_camera_discover_cb(lv_event_t *event)
         profiles_clear_secret(&captured,sizeof(captured));
         editor_camera_set_status("Enter a valid Moonraker host and port before searching.");return;
     }
+    lv_timer_t *poll = profiles_reserve_poll(editor_camera_discovery_poll_cb);
+    if (!poll) {
+        profiles_clear_secret(&captured,sizeof(captured));
+        editor_camera_set_status("Unable to prepare camera search. Try again.");
+        return;
+    }
     s_profile_dispatching=true;
     bool started=camera_discovery_start_for_profile(captured.draft.context.profile,captured.host,(int)port,captured.key);
     if(camera_job_current(&captured,true,true)){
@@ -1718,11 +1752,12 @@ static void editor_camera_discover_cb(lv_event_t *event)
             s_camera_find_job=captured;
             editor_camera_set_status("Searching Moonraker for configured cameras...");
             if(camera_job_current(&s_camera_find_job,true,true)){
-                s_editor_camera_discovery_timer=lv_timer_create(editor_camera_discovery_poll_cb,80,NULL);
-                if(!s_editor_camera_discovery_timer){camera_job_retire(true);editor_camera_set_status("Camera search is running; retry Find after it finishes.");}
+                profiles_start_poll(&s_editor_camera_discovery_timer,poll);
+                poll = NULL;
             }else camera_job_retire(true);
         }else editor_camera_set_status(camera_discovery_busy()?"Camera search is already running.":"Unable to start the camera search.");
     }
+    if (poll) lv_timer_delete(poll);
     profiles_clear_secret(&captured,sizeof(captured));s_profile_dispatching=false;
 }
 

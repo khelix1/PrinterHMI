@@ -26,7 +26,7 @@ void printer_profile_health_set(
     bool known,
     bool online);
 
-/* One normalized print_stats.state snapshot per inactive profile. */
+/* Last observed job state, or a Klipper startup/fault state when unavailable. */
 void printer_profile_health_set_live_state(
     int profile_index,
     bool known,

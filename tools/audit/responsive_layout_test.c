@@ -313,7 +313,13 @@ static void run(int width){
  const char *titles[]={"Loading files","No search results","No files found","Files offline","Files unavailable"};
  const char *states[]={"files-loading","files-search-empty","files-empty","files-offline","files-error"};
  for(unsigned state=0;state<5;state++){ui_files_set_status(messages[state]);lv_obj_update_layout(s_printer_file_popup);assert(!strcmp(lv_label_get_text(s_files_state->title),titles[state]));inside(s_files_state->title,s_files_state->root);inside(s_files_state->detail,s_files_state->root);files_state_capture=states[state];snapshot(s_printer_file_popup);}
- files_state_capture=NULL;assert(lv_obj_get_scrollbar_mode(s_printer_file_list)==LV_SCROLLBAR_MODE_OFF);
+ files_state_capture=NULL;
+ ui_files_set_status("Access denied. Check the printer profile credentials, then tap Refresh.");
+ lv_obj_update_layout(s_printer_file_popup);
+ assert(!strcmp(lv_label_get_text(s_files_state->title),"Access denied"));
+ assert(!strcmp(lv_label_get_text(s_files_state->detail),"Check the printer profile credentials, then tap Refresh."));
+ inside(s_files_state->detail,s_files_state->root);
+ assert(lv_obj_get_scrollbar_mode(s_printer_file_list)==LV_SCROLLBAR_MODE_OFF);
  ui_thumbnail_t *view=NULL;lv_obj_t *box=NULL;
  ui_files_show_detail_popup("Long_operator_job_name_for_the_inspector_and_ready_to_print_dialog.gcode","Loading metadata",&box,&view,cancel_job,start_job);
  assert(view && box && ui_files_detail_is_open() && lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED));
@@ -503,6 +509,13 @@ static void network_lifecycle(void)
  assert(!network_invalidations);
  ui_network_refresh_objects("Offline","Workshop","--",false,"printer.local",0,"Ready to scan");
  assert(network_invalidations&&!strcmp(lv_label_get_text(s_network.wifi_state),"Offline"));
+ ui_network_refresh_objects("Offline","Workshop","--",true,"printer.local",200,NULL);
+ assert(!strcmp(lv_label_get_text(s_network.moonraker_state),"Waiting for Wi-Fi"));
+ assert(!strcmp(lv_label_get_text(s_network.moonraker_http),"--"));
+ ui_network_refresh_objects("Wi-Fi connected","Workshop","192.168.1.2",false,"printer.local",401,NULL);
+ assert(!strcmp(lv_label_get_text(s_network.moonraker_state),"Access denied"));
+ network_values();
+ assert(!strcmp(lv_label_get_text(s_network.moonraker_state),"Connected"));
  lv_obj_delete(s_network.root);assert(!s_network.root&&!s_network.wifi_name&&!s_network.networks_list);
  ui_network_refresh_objects(NULL,NULL,NULL,false,NULL,0,NULL);ui_network_set_port(7126);ui_network_set_scan_status("late");
  ui_network_render_scan_results(NULL,0,0,selected_cb);
@@ -576,7 +589,7 @@ static void run(int width){
  snapshot(s_network.root);
  ui_network_render_scan_results(NULL,0,0,selected_cb);assert(lv_obj_get_child_count(s_network.networks_list)==1);
  assert(lv_obj_check_type(lv_obj_get_child(s_network.networks_list,0),&lv_label_class));assert(lv_obj_get_scrollbar_mode(s_network.networks_list)==LV_SCROLLBAR_MODE_OFF);
- ui_network_refresh_objects(NULL,NULL,NULL,false,NULL,0,"No networks found");assert(!strcmp(lv_label_get_text(s_network.wifi_state),"Offline")&&!strcmp(lv_label_get_text(s_network.moonraker_state),"Disconnected"));
+ ui_network_refresh_objects(NULL,NULL,NULL,false,NULL,0,"No networks found");assert(!strcmp(lv_label_get_text(s_network.wifi_state),"Offline")&&!strcmp(lv_label_get_text(s_network.moonraker_state),"Waiting for Wi-Fi"));
  network_empty_capture=true;snapshot(s_network.root);network_empty_capture=false;
  ui_network_hide();assert(!s_network.root && !s_network.networks_list);network_lifecycle();
 }
@@ -588,7 +601,8 @@ static bool macro_accept=true;
 static void (*macro_send_hook)(void);
 static char sent_macro[MACRO_COMMAND_MAX];
 static bool send_macro(const char *command){macro_sends++;snprintf(sent_macro,sizeof(sent_macro),"%s",command);if(macro_send_hook)macro_send_hook();return macro_accept;}
-void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=true;s->count=s->total_count=64;s->generation=gen;}
+static bool catalog_ready=true;
+void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=catalog_ready;s->count=s->total_count=catalog_ready?64:0;s->generation=gen;}
 bool macro_controller_get(size_t i,char *o,size_t n){if(i>=64)return false;snprintf(o,n,"MACRO_%02u_WITH_A_VERY_LONG_OPERATOR_ACTION_NAME",(unsigned)i);return true;}
 bool macro_controller_is_favorite(const char *n){unsigned i=0;sscanf(n,"MACRO_%u",&i);return i<64 && fav[i];}
 bool macro_controller_set_favorite(const char *n,bool favorite){unsigned i=0;sscanf(n,"MACRO_%u",&i);if(i>=64)return false;fav[i]=favorite;gen++;return true;}
@@ -650,6 +664,14 @@ static void run(int width){
   lv_area_t a,b;lv_obj_get_coords(icon,&a);lv_obj_get_coords(name,&b);assert(a.x2<b.x1);
   inside(name,entry);
  }
+ catalog_ready=false;gen++;connected=false;refresh_timer_cb(NULL);
+ assert(!strcmp(lv_label_get_text(s_status),"Printer offline"));
+ connected=true;klipper_ready=false;refresh_timer_cb(NULL);
+ assert(!strcmp(lv_label_get_text(s_status),"Waiting for Klipper"));
+ klipper_ready=true;refresh_timer_cb(NULL);
+ assert(!strcmp(lv_label_get_text(s_status),"Loading macros..."));
+ catalog_ready=true;gen++;refresh_timer_cb(NULL);
+ assert(lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));
  assert(lv_obj_has_state(s_macros->clear_action,LV_STATE_DISABLED));macro_drag_list();
  lv_obj_t *first=s_macros->rows[0];fav[63]=true;gen++;rebuild_macro_list();lv_obj_update_layout(s_root);cards(s_list);assert(first==s_macros->rows[0]);
  strcpy(s_macros->query,"nothing");rebuild_macro_list();lv_obj_update_layout(s_root);assert(s_macros->empty && !lv_obj_has_flag(s_macros->empty,LV_OBJ_FLAG_HIDDEN));inside(s_macros->empty,s_list);

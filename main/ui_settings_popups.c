@@ -72,7 +72,7 @@ static bool theme_reserve_change(void)
     s_theme_change_pending=true;
     if(lv_async_call(theme_changed_async_cb,NULL)!=LV_RESULT_OK){
         s_theme_change_pending=false;s_pending_theme_changed_cb=NULL;
-        ui_value_set_text(s_remove_status?s_remove_status:s_custom_status?s_custom_status:s_theme_status,"Could not queue theme refresh. Your selection was not saved; try again.");
+        ui_value_reveal_text(s_remove_status?s_remove_status:s_custom_status?s_custom_status:s_theme_status,"Could not queue theme refresh. Your selection was not saved; try again.");
         return false;
     }
     return true;
@@ -207,7 +207,7 @@ static bool controller_restart_ready(uint32_t epoch,lv_obj_t **status)
     const char *reason=updating?"A firmware update is running. Wait for it to finish before restarting or resetting.":
         (backup>=SETTINGS_BACKUP_ENCRYPTED_WORKER_PREPARING && backup<=SETTINGS_BACKUP_ENCRYPTED_WORKER_WRITING)?
         "A backup operation is running. Wait for it to finish before restarting or resetting.":NULL;
-    if(reason){if(*status)ui_value_set_text(*status,reason);if(*status)lv_obj_scroll_to_view(*status,LV_ANIM_OFF);return false;}
+    if (reason) { ui_value_reveal_text(*status, reason); return false; }
     return true;
 }
 static void reset_settings_confirm_cb(lv_event_t *e)
@@ -219,7 +219,7 @@ static void reset_settings_confirm_cb(lv_event_t *e)
     if(!controller_restart_ready(epoch,&s_reset_status) || !s_reset_confirm){s_preferences_dispatching=false;return;}
     esp_err_t result=nvs_flash_erase();
     if(result!=ESP_OK){
-        if(epoch==s_settings_epoch)ui_value_set_text(s_reset_status,"Could not erase settings. Restart was not requested; try again or Cancel.");
+        if(epoch==s_settings_epoch)ui_value_reveal_text(s_reset_status,"Could not erase settings. Restart was not requested; try again or Cancel.");
         s_preferences_dispatching=false;return;
     }
     s_reset_accepted=true;s_controller_restart_accepted=true;
@@ -336,7 +336,7 @@ static void timezone_select_cb(lv_event_t *event)
     bool selected=timezone_config_select(index);
     if(epoch!=s_settings_epoch){s_preferences_dispatching=false;return;}
     if(!selected){
-        ui_value_set_text(s_timezone_status,"Could not save the time zone. Try again or Close.");
+        ui_value_reveal_text(s_timezone_status,"Time zone not saved. Try again.");
         s_preferences_dispatching=false;return;
     }
     timezone_popup_close();
@@ -457,7 +457,7 @@ static void theme_select_cb(lv_event_t *event)
     uint32_t epoch=s_settings_epoch;
     if (!theme_manager_select(theme)) {
         theme_cancel_change();s_preferences_dispatching=false;
-        if(epoch==s_settings_epoch)ui_value_set_text(s_theme_status,"Could not save theme. Try again or Close.");
+        if(epoch==s_settings_epoch)ui_value_reveal_text(s_theme_status,"Could not save theme. Try again or Close.");
         ESP_LOGE(TAG, "Could not select theme %d", (int)theme);
         return;
     }
@@ -482,7 +482,7 @@ static void operator_shell_select_cb(lv_event_t *event)
     uint32_t epoch=s_settings_epoch;
     if (!theme_manager_select(UI_THEME_OPERATOR_SHELL)) {
         theme_cancel_change();s_preferences_dispatching=false;
-        if(epoch==s_settings_epoch)ui_value_set_text(s_theme_status,"Could not save theme. Try again or Close.");
+        if(epoch==s_settings_epoch)ui_value_reveal_text(s_theme_status,"Could not save theme. Try again or Close.");
         ESP_LOGE(TAG, "Could not select Operator Shell theme");
         return;
     }
@@ -534,7 +534,7 @@ static void custom_theme_apply_cb(lv_event_t *event)
     uint32_t epoch=s_settings_epoch;
     if (!theme_manager_select_custom(index)) {
         theme_cancel_change();s_preferences_dispatching=false;
-        if(epoch==s_settings_epoch)ui_value_set_text(s_custom_status,"Could not save custom theme. Try again or Close.");
+        if(epoch==s_settings_epoch)ui_value_reveal_text(s_custom_status,"Could not save custom theme. Try again or Close.");
         ESP_LOGE(TAG, "Could not select custom theme %u",
                  (unsigned)index);
         return;
@@ -571,7 +571,7 @@ static void custom_remove_confirm_cb(lv_event_t *event)
     if (!theme_manager_remove_custom(index)) {
         if(removing_active)theme_cancel_change();
         s_preferences_dispatching=false;
-        if(epoch==s_settings_epoch)ui_value_set_text(s_remove_status,"Could not remove theme. Try again or Keep.");
+        if(epoch==s_settings_epoch)ui_value_reveal_text(s_remove_status,"Could not remove theme. Try again or Keep.");
         ESP_LOGE(TAG, "Could not remove custom theme %u",
                  (unsigned)index);
         return;

@@ -9,6 +9,8 @@ static bool empty_list,invalid_list;
 static uint32_t generation=1;
 static lv_obj_t *page=(void*)1;
 static char status[160],last_path[160];
+static unsigned folder_rows;
+static char folder_paths[64][160];
 static void (*worker_fn)(void*);
 static void *worker_arg,*result;
 void *heap_caps_malloc(size_t n,uint32_t c){(void)c;if(body_fail && n==FILES_PAGE_LIST_CAPACITY)return NULL;allocations++;return malloc(n);}
@@ -30,12 +32,12 @@ lv_obj_t *ui_files_get_popup(void){assert(!in_worker);return page;}
 bool ui_files_can_refresh_rows(void){assert(!in_worker);return !detail||embedded;}
 void ui_files_set_browser_callbacks(ui_files_search_cb_t a,ui_files_action_cb_t b,ui_files_folder_cb_t c,ui_files_action_cb_t d){(void)a;(void)b;(void)c;(void)d;assert(!in_worker);}
 void ui_files_set_file_thumbnail(const char *p,const lv_image_dsc_t *i){(void)p;(void)i;assert(!in_worker);}
-void ui_files_clear_rows(void){assert(!in_worker);cleared++;}
+void ui_files_clear_rows(void){assert(!in_worker);cleared++;folder_rows=0;}
 void ui_files_set_breadcrumb(const char *s){(void)s;assert(!in_worker);}
 void ui_files_set_sort_text(const char *s){(void)s;assert(!in_worker);}
 void ui_files_set_search_text(const char *s){(void)s;assert(!in_worker);}
 void ui_files_add_file_entry(const char *p,double size,double modified,int y){(void)size;(void)modified;(void)y;assert(!in_worker);rendered++;snprintf(last_path,sizeof(last_path),"%s",p);}
-void ui_files_add_folder_button(const char *n,const char *p,int y){(void)n;(void)p;(void)y;assert(!in_worker);}
+void ui_files_add_folder_button(const char *n,const char *p,int y){(void)n;(void)y;assert(!in_worker&&folder_rows<64);snprintf(folder_paths[folder_rows++],160,"%s",p);}
 int32_t ui_theme_density_metric(int32_t a,int32_t b,int32_t c){(void)b;(void)c;return a;}
 void files_row_preview_begin(const char *h,int p,const char *k,bool sd,const printer_file_entry_t *entries,size_t count,files_row_preview_ready_cb_t cb){(void)h;(void)p;(void)k;(void)sd;(void)cb;assert(!in_worker&&entries&&count<=64);preview_begin++;}
 int printer_files_parse_entries(const char *body,printer_file_entry_t *entries,size_t capacity){assert(!in_worker && capacity);if(invalid_list)return -1;if(empty_list)return 0;snprintf(entries[0].path,sizeof(entries[0].path),"%s.gcode",body);return 1;}
@@ -63,5 +65,47 @@ int main(void){
 
  files_page_controller_set_search("new-printer");stable_clears=cleared;files_page_controller_set_search("  new-printer  ");assert(cleared==stable_clears);
  files_page_controller_set_search("");assert(cleared>stable_clears);
+ load("parts/subfolder/first");run_worker();poll();
+ files_page_controller_open_folder("parts/subfolder");
+ load("parts/subfolder/second");run_worker();poll();
+ assert(!strcmp(s_folder,"parts/subfolder")&&!strcmp(last_path,"parts/subfolder/second.gcode"));
+ invalid_list=true;load("bad-refresh");run_worker();poll();invalid_list=false;
+ assert(!strcmp(s_folder,"parts/subfolder"));
+ files_page_controller_set_search("sibling");
+ load("parts/sibling");run_worker();poll();
+ assert(!strcmp(s_folder,"parts")&&!strcmp(s_search,"sibling"));
+ files_page_controller_up_folder();assert(!s_search[0]&&!strcmp(s_folder,"parts"));
+ char oversized[161];memset(oversized,'x',160);oversized[160]=0;
+ files_page_controller_open_folder(oversized);assert(!strcmp(s_folder,"parts"));
+ load("parts-other/first");run_worker();poll();
+ assert(!s_folder[0]&&folder_rows==1&&!strcmp(folder_paths[0],"parts-other"));
+ /* Distinct case-sensitive folders, a long component and more than 24 folders. */
+ s_entry_count=30;
+ for(unsigned i=0;i<26;i++)snprintf(s_entries[i].path,160,"folder%02u/a.gcode",i);
+ snprintf(s_entries[26].path,160,"Parts/a.gcode");
+ snprintf(s_entries[27].path,160,"parts/b.gcode");
+ snprintf(s_entries[28].path,160,"Parts/c.gcode");
+ char long_folder[101];memset(long_folder,'x',100);long_folder[100]=0;
+ snprintf(s_entries[29].path,160,"%s/a.gcode",long_folder);
+ render_entries();assert(folder_rows==29);
+ assert(!strcmp(folder_paths[26],"Parts")&&!strcmp(folder_paths[27],"parts"));
+ assert(!strcmp(folder_paths[28],long_folder));
+ files_page_controller_open_folder("parts");assert(!strcmp(last_path,"parts/b.gcode"));
+ files_page_controller_open_folder(long_folder);assert(!strcmp(last_path,s_entries[29].path));
+ files_page_controller_up_folder();assert(folder_rows==29);
+ s_entry_count=2;
+ s_entries[0]=(printer_file_entry_t){.path="z.gcode",.size=42,.modified=10};
+ s_entries[1]=(printer_file_entry_t){.path="a.gcode",.size=42,.modified=10};
+ s_sort_mode=FILE_SORT_NEWEST;render_entries();assert(!strcmp(last_path,"z.gcode"));
+ s_sort_mode=FILE_SORT_SIZE;render_entries();assert(!strcmp(last_path,"z.gcode"));
+ files_page_controller_open_folder("unlisted/folder");
+ s_entry_count=FILES_PAGE_ENTRY_CAPACITY;reconcile_folder();
+ assert(!strcmp(s_folder,"unlisted/folder"));
+ generation++;invalid_list=true;load("first-attempt");run_worker();poll();
+ assert(!s_search[0]&&!s_folder[0]);
+ files_page_controller_set_search("match");
+ invalid_list=false;load("match");run_worker();poll();
+ assert(!strcmp(s_search,"match")&&!strcmp(last_path,"match.gcode"));
+ generation++;load("other-printer");assert(!s_search[0]);run_worker();poll();
  heap_caps_free(s_entries);s_entries=NULL;assert(allocations==frees && !s_pending_load && !s_load_busy && !s_load_timer);lv_deinit();puts("PASS: file-list HTTP/retries run outside LVGL, one worker/coalesced latest job, profile/page/serial fencing, deferred detail publication and allocation/task-failure cleanup");
 }

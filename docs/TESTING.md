@@ -4112,3 +4112,218 @@ and default selections. A preference read failure must leave the URL intact.
 A successful removal clears its view settings and any default pointing to
 that camera. Editing and removing an unrelated camera preserve the saved
 selection and view settings of the remaining camera.
+
+
+## Camera view save ownership (v7.3.80-dev)
+
+Run `python3 tools/audit/camera_catalog_storage_test.py`. View saves must
+fail without writes after either primary or secondary camera removal and
+when the secondary camera URL cannot be read. Configured cameras retain
+normal rotation and mirror saves.
+
+
+## Saved camera strings (v7.3.81-dev)
+
+Run `python3 tools/audit/camera_catalog_storage_test.py`. The host fixture
+checks missing terminators, embedded NULs, and reported lengths larger than
+the buffer. Malformed labels fall back; malformed URLs clear the result.
+
+
+## Camera preference fallback (v7.3.82-dev)
+
+Run `python3 tools/audit/camera_catalog_storage_test.py`. A failed default
+read that modifies the output must still choose the first configured camera.
+An out-of-range default must also fall back. Unknown view bits must be
+ignored, and a valid rotation and mirror save must still work afterward.
+
+
+## Files folders and sort ties (v7.3.83-dev)
+
+Run `files_load_worker_test.py` with host LVGL. The fixture checks separate
+case-sensitive folder paths, a long folder name, more than 24 folders,
+deduplication, folder navigation, and equal date and size sort ordering.
+
+
+## Files navigation after refresh (v7.3.84-dev)
+
+Run `files_load_worker_test.py` with host LVGL. Refresh while browsing a
+nested folder and verify it stays open when still listed, falls back to its
+parent or root when missing, and stays selected on failure or a full index.
+Verify search preservation, exact path prefix matching, and rejection of
+overlong folder paths.
+
+
+## Files search on retry (v7.3.85-dev)
+
+Run `files_load_worker_test.py` with host LVGL. Fail the first list load,
+enter a search, and retry on the same printer. The query must survive and
+filter the result. Switching printers must clear it.
+
+
+## Paused Dashboard ETA (v7.3.86-dev)
+
+Run `dashboard_offline_test.py` with host LVGL. Verify a live paused print
+shows ETA paused with a missing or stale estimate and without a synced clock.
+Offline ETA remains unavailable and resuming restores the finish clock.
+
+
+## Dashboard metrics on reconnect (v7.3.87-dev)
+
+Run `telemetry_refresh_test.py` with host LVGL. With valid cached layer
+metadata, check placeholders while waiting for Klipper or offline. A live
+snapshot must restore the layer display on reconnect.
+
+
+## Unknown current layer during printing (v7.3.88-dev)
+
+Run `printer_layer_resolver_test.py`. A known total alone must not produce
+layer one. Verify reported and metadata totals, invalid position/progress,
+valid zero progress, and the existing preparation behavior.
+
+
+## Layer zero without file progress (v7.3.89-dev)
+
+Run `printer_layer_resolver_test.py`. Confirm valid Z can resolve a zero
+layer report after print start when progress is zero or missing. Without
+usable Z or positive progress, a reported zero is preserved.
+
+
+## Reported layer above an estimated total (v7.3.90-dev)
+
+Run `printer_layer_resolver_test.py` and `telemetry_refresh_test.py`.
+A reported current layer must survive an undersized estimated total, and
+Dashboard must display the current layer with an unknown total.
+
+## Known total with unknown current layer (v7.3.91-dev)
+
+Run `telemetry_refresh_test.py` and `studio_pages_test.py --variant PRINTER`.
+Verify that a live total is visible with a placeholder for the current layer
+and both values clear when the printer goes offline.
+
+## Chooser startup status (v7.3.92-dev)
+
+Run `inactive_profile_recovery_test.py` and `chooser_refresh_test.py`. Reboot
+with slot 1 printing and other configured slots idle or offline. Leave the
+chooser open and watch for correct statuses and unexpected connection notices.
+Disconnect and reconnect the tablet Wi-Fi, then select slot 1 and verify its
+Dashboard preview loads.
+
+## Chooser polling across Wi-Fi reconnect (v7.3.93-dev)
+
+Run `inactive_profile_recovery_test.py`. It drops and restores Wi-Fi during
+an in-flight status request and verifies that the old failure is ignored and
+that the next round clears the prior retry delay.
+
+## Chooser HTTP failures (v7.3.94-dev)
+
+Run `inactive_profile_recovery_test.py`. An auth, rate-limit, gateway,
+or rejected HTTP response must not enter the offline confirmation path.
+A failed transport request without a response must still enter that path.
+
+## Chooser connection settings changes (v7.3.95-dev)
+
+Run `profile_storage_test.py`, `profile_health_freshness_test.py` and
+`inactive_profile_recovery_test.py`. Verify credential and TLS edits retire
+old health and retry delays without restarting the active printer connection.
+
+## Normal firmware status across screens (v7.3.96-dev)
+
+Run `chooser_refresh_test.py`, `dashboard_offline_test.py`,
+`profile_health_freshness_test.py` and `inactive_profile_recovery_test.py`.
+On the tablet, compare the chooser, Dashboard and Printer while a printer is
+offline, starting Klipper and reporting live state. Dashboard must distinguish
+unavailable print status from a connected printer with no print.
+
+## Print outcome banners (v7.3.97-dev)
+
+Run `dashboard_offline_test.py`. On the tablet, finish one print and cancel
+another. Confirm the reported outcome remains visible until the printer changes
+state, with no ETA and no stale percentage after cancellation.
+
+## Network connection messages (v7.3.98-dev)
+
+Run `responsive_layout_test.py --variant NETWORK`. Verify the printer does
+not show connected or retain an HTTP code after the tablet loses Wi-Fi.
+Check that an HTTP 401 or 403 shows Access denied while Wi-Fi stays connected.
+
+## Files retry messages (v7.3.99-dev)
+
+Run `responsive_layout_test.py --variant FILES`. On-device verify loading,
+empty and offline messages, then revoke file-list access and verify the
+credentials hint and subsequent Refresh recovery.
+
+## Macros connection messages (v7.3.100-dev)
+
+Run `responsive_layout_test.py --variant MACROS`. Verify that status messages
+change when the printer disconnects or Klipper becomes ready, even if the
+macro catalog has not changed.
+
+## Console status (v7.3.101-dev)
+
+Run `console_modern_layout_test.py`. Check that Klipper startup, shutdown and
+error have distinct labels while the Console still permits recovery commands
+when Moonraker is reachable.
+
+## Camera reconnect feedback (v7.3.102-dev)
+
+Run `camera_pipeline_test.py`. Check that Retry stays available when automatic
+reconnect starts, then disappears when the first usable frame arrives.
+
+## Devices connection feedback (v7.3.103-dev)
+
+Run `devices_text_layout_test.py`. Keep Devices open while the printer goes
+offline and verify the header updates while device readings become unavailable.
+
+## Drybox status (v7.3.104-dev)
+
+Run `live_widget_refresh_test.py`. Confirm that drybox status explains why
+readings are unavailable and that program buttons stay disabled in those states.
+
+## Bed Mesh status (v7.3.105-dev)
+
+Run `bed_mesh_profiles_layout_test.py`. Check Bed Mesh during a print with
+no active mesh, then after a live mesh arrives and the printer disconnects.
+
+## Calibration status (v7.3.106-dev)
+
+Run `calibration_dialog_layout_test.py` to check shutdown, startup and recovery feedback.
+
+## Firmware release check feedback (v7.3.107-dev)
+
+Run `calibration_dialog_layout_test.py --variant OTAFAILURE` to verify
+that a check which cannot start offers Retry and can recover.
+
+## Backup result feedback (v7.3.108-dev)
+
+Run `network_backup_dialog_test.py` to verify backup failure feedback,
+progress cleanup, and restore retry.
+
+## Brightness save feedback (v7.3.109-dev)
+
+Run `display_settings_safety_test.py`. Check that the brightness row shows
+the save failure while the live level differs and clears the hint after retry.
+
+## Sleep timeout save feedback (v7.3.110-dev)
+
+Run `display_settings_safety_test.py` to verify the previous timeout stays
+active after a failed save and the inline notice clears after retry.
+
+## Settings dialog failure visibility (v7.3.111-dev)
+
+Run `settings_dialog_layout_test.py` and `theme_dialog_layout_test.py`. The failure cases scroll down before attempting a time zone save or applying a custom theme, then check that the error is visible and the operation can still be retried.
+
+## Action feedback in scrolling dialogs (v7.3.112-dev)
+
+Run `display_settings_safety_test.py`, `profiles_layout_test.py`, `network_backup_dialog_test.py`, and `bed_mesh_profiles_layout_test.py` to verify that failed estimate saves, a rejected CA import, restore progress creation failure, and a rejected mesh load expose feedback in the current dialog. The restore test also verifies that failing to open progress does not call the restore backend. Settings, theme, and live appearance suites cover existing feedback paths that share the same label helper.
+
+## Setup result timers (v7.3.113-dev)
+
+Run `setup_center_layout_test.py`. Inject timer allocation failure in Wi-Fi Scan, Connect, camera discovery, and camera Test. Assert that no backend starts, the current screen shows a retry message, and the same action succeeds when allocation recovers. Verify that a successful Wi-Fi connection returns from the password screen using its original timer.
+
+## Printer profile result timers (v7.3.114-dev)
+
+Run `profiles_layout_test.py`. Inject timer allocation failure in the profile connection test, camera test, and camera search. Verify that the editor stays open, the backend does not start, and the next attempt starts once allocation recovers. Existing nested dispatch and editor replacement checks verify result ownership.
+
+## Firmware release result timer (v7.3.115-dev)
+
+Run `calibration_dialog_layout_test.py`. Reject timer creation with the catalog idle and with a check already running. Verify that Retry stays available, no worker starts without a timer, and recovering the timer displays the completed catalog without starting duplicate work.

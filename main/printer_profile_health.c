@@ -29,6 +29,7 @@ static volatile uint8_t
 /* Per-profile endpoint fingerprints are runtime-only and contain no
  * credentials.  They prevent an active-profile selection from clearing
  * valid health for every unchanged card. */
+static uint32_t s_endpoint_revision[MOONRAKER_CONFIG_MAX_PROFILES];
 static bool s_endpoint_configured[MOONRAKER_CONFIG_MAX_PROFILES];
 static char s_endpoint_host[MOONRAKER_CONFIG_MAX_PROFILES]
                            [MOONRAKER_CONFIG_HOST_LENGTH];
@@ -51,6 +52,7 @@ static bool endpoint_matches(
         profile &&
         profile->configured &&
         s_endpoint_configured[index] &&
+        s_endpoint_revision[index] == moonraker_config_connection_revision(index) &&
         s_endpoint_port[index] == profile->port &&
         strcmp(s_endpoint_host[index], profile->host) == 0;
 }
@@ -61,6 +63,7 @@ static void remember_endpoint(
 {
     bool configured = profile && profile->configured;
 
+    s_endpoint_revision[index] = moonraker_config_connection_revision(index);
     s_endpoint_configured[index] = configured;
     s_endpoint_port[index] = configured ? profile->port : 0;
     strlcpy(
@@ -134,7 +137,7 @@ void printer_profile_health_set_live_state(
     s_failures[profile_index] = 0;
     strlcpy(
         s_printer_state[profile_index],
-        online && printer_state ? printer_state : "",
+        printer_state ? printer_state : "",
         sizeof(s_printer_state[profile_index]));
 
     __atomic_store_n(&s_last_live_success_us[profile_index],
@@ -273,17 +276,7 @@ void printer_profile_health_report_live_state(
  * reachable. This is neither a live printer nor a confirmed fault. */
 void printer_profile_health_set_verifying(int profile_index)
 {
-    if (profile_index < 0 ||
-        profile_index >= MOONRAKER_CONFIG_MAX_PROFILES) {
-        return;
-    }
-
-    s_known[profile_index] = false;
-    s_online[profile_index] = false;
-    s_failures[profile_index] = 0;
-    s_printer_state[profile_index][0] = '\0';
-    __atomic_store_n(
-        &s_last_live_success_us[profile_index], 0, __ATOMIC_RELEASE);
+    printer_profile_health_set_live_state(profile_index, false, false, "startup");
 }
 
 int printer_profile_health_take_next_index(void)

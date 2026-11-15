@@ -848,10 +848,10 @@ void ui_printer_live_status_refresh(
         char text[48];
 
         int total =
-            printer_total_layer;
+            moonraker_online ? printer_total_layer : -1;
 
         int current =
-            printer_current_layer;
+            moonraker_online ? printer_current_layer : -1;
 
 
         if (current >= 0 && total > 0) {
@@ -861,6 +861,12 @@ void ui_printer_live_status_refresh(
                 ui_theme_is_studio()?"%d / %d":"LAYER\n%d / %d",
                 current,
                 total);
+        } else if (current > 0) {
+            snprintf(text, sizeof(text),
+                ui_theme_is_studio()?"%d / --":"LAYER\n%d / --", current);
+        } else if (total > 0) {
+            snprintf(text, sizeof(text),
+                ui_theme_is_studio()?"-- / %d":"LAYER\n-- / %d", total);
         } else {
             snprintf(
                 text,

@@ -6,7 +6,16 @@
 #include "ui_network_tools.c"
 #include "keyboard_layout_checks.h"
 #include "network_wifi_scan.c"
+#include "ui_form_dialog.h"
+static bool reject_restore_progress;
+static lv_obj_t *test_backup_dialog(const char *title,int width,int height,ui_popup_kind_t kind)
+{
+    if(reject_restore_progress && !strcmp(title,"Restoring plain backup"))return NULL;
+    return ui_form_dialog(title,width,height,kind);
+}
+#define ui_form_dialog test_backup_dialog
 #include "ui_settings_backup_popup.c"
+#undef ui_form_dialog
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t*b){(void)a;(void)b;return false;}
@@ -21,7 +30,7 @@ static unsigned restored,encrypted_restored,removed,exported,selected_calls;
 static settings_backup_encrypted_worker_state_t worker_state;
 static char worker_message[256]="Worker status",selected_ssid[33],scan_status[192];
 static const char passphrase[]="test-passphrase-123";
-static bool fixture_export(char *s,size_t n){exported++;run_backup_hook();snprintf(s,n,"Backup exported");return allowed;}
+static bool fixture_export(char *s,size_t n){exported++;run_backup_hook();snprintf(s,n,"%s",allowed?"Backup exported":"");return allowed;}
 bool settings_backup_preflight(char *s,size_t n){snprintf(s,n,"Backup verified: schema 1, 2 printer profiles.\nActive printer: Sermoon D1.\nAppearance, display and notifications included.\nPlain backups omit API keys.");return allowed;}
 static bool fixture_restore(char *s,size_t n){restored++;run_backup_hook();snprintf(s,n,allowed?"Restored; reboot required":"Restore failed; current settings retained");return allowed;}
 static bool fixture_restore_encrypted(const char *p,char *s,size_t n){assert(!strcmp(p,passphrase));encrypted_restored++;run_backup_hook();snprintf(s,n,"Encrypted restore result");return allowed;}
@@ -148,9 +157,15 @@ static void backup(void)
     exported=0;backup_cb(NULL);assert(exported==1&&s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)==100);
     layout(s_export_progress_popup);progress_close_cb(NULL);assert(!s_export_progress_popup);
     allowed=false;backup_cb(NULL);assert(exported==2&&s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)<100);
+    assert(lv_obj_has_flag(s_export_progress_bar,LV_OBJ_FLAG_HIDDEN)&&lv_obj_has_flag(s_progress_hint,LV_OBJ_FLAG_HIDDEN));
+    assert(strstr(lv_label_get_text(s_export_progress_status),"Check the SD card"));
     progress_close_cb(NULL);allowed=true;
     unsigned before=restored;allowed=false;restore_request_cb(NULL);assert(!s_restore_confirmation&&restored==before);
     allowed=true;restore_request_cb(NULL);layout(s_restore_confirmation);assert(restored==before);
+    reject_restore_progress=true;restore_confirm_cb(NULL);reject_restore_progress=false;
+    assert(s_restore_confirmation&&!s_export_progress_popup&&restored==before);
+    assert(strstr(lv_label_get_text(s_restore_status),"Could not open restore progress"));
+    lv_obj_update_layout(s_restore_confirmation);inside(s_restore_status,lv_obj_get_parent(s_restore_status));
     allowed=false;restore_confirm_cb(NULL);assert(s_restore_confirmation&&strstr(lv_label_get_text(s_restore_status),"failed"));
     assert(s_export_progress_popup&&lv_bar_get_value(s_export_progress_bar)<100&&!lv_obj_has_state(s_progress_close,LV_STATE_DISABLED));
     layout(s_export_progress_popup);progress_close_cb(NULL);assert(!s_export_progress_popup&&s_restore_confirmation);

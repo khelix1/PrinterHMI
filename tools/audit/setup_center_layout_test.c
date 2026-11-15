@@ -4,7 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 size_t strlcpy(char*,const char*,size_t);
+#include "lvgl.h"
+static bool reject_poll_timer;
+static lv_timer_t *setup_test_timer_create(lv_timer_cb_t callback, uint32_t period, void *data)
+{
+    return reject_poll_timer ? NULL : lv_timer_create(callback, period, data);
+}
+#define lv_timer_create setup_test_timer_create
 #include "ui_setup_wizard.c"
+#undef lv_timer_create
 #include "keyboard_layout_checks.h"
 #include "custom_theme.h"
 #include "ui_page_layout_profile.h"
@@ -130,6 +138,43 @@ static void nested_camera_save(void){camera_save_cb(NULL);setup_select_wifi_cb(N
 static void nested_finish(void){finish_cb(NULL);}
 static void reopen_on_delete(lv_event_t *event){(void)event;ui_setup_wizard_show(connect_wifi);}
 static void unrelated_timer(lv_timer_t *timer){(void)timer;}
+static void poll_allocation_checks(void)
+{
+ wifi_ready=false;configured=true;wifi_accept=true;
+ ui_setup_wizard_show(connect_wifi);
+ setup_select_wifi_cb(NULL);
+ unsigned scans=scan_creations;
+ reject_poll_timer=true;center_wifi_cb(NULL);reject_poll_timer=false;
+ assert(!s_poll&&scan_creations==scans&&strstr(lv_label_get_text(s_status),"Try again"));
+ open_password();
+ unsigned before=connections;
+ reject_poll_timer=true;wifi_save_cb(NULL);reject_poll_timer=false;
+ assert(!s_poll&&connections==before&&!strcmp(lv_textarea_get_text(s_password),"test-password"));
+ assert(strstr(lv_label_get_text(s_status),"Try again"));
+ wifi_save_cb(NULL);assert(s_poll&&connections==before+1);
+ lv_timer_t *verify=s_poll;
+ wifi_ready=true;
+ reject_poll_timer=true;wifi_verify(verify);reject_poll_timer=false;
+ assert(s_wifi_done&&s_poll==verify);
+ wifi_return_timer(verify);assert(!s_poll&&s_wifi_done);
+
+ setup_select_camera_cb(NULL);
+ scans=camera_scans;
+ reject_poll_timer=true;center_camera_cb(NULL);reject_poll_timer=false;
+ assert(!s_poll&&camera_scans==scans&&strstr(lv_label_get_text(s_status),"Try again"));
+ assert(!lv_obj_has_state(s_camera_scan_action,LV_STATE_DISABLED));
+ center_camera_cb(NULL);assert(s_poll&&camera_scans==scans+1);
+ discovery_result=true;camera_discovery_poll(s_poll);
+ before=camera_starts;
+ reject_poll_timer=true;click(s_camera_rows[0]);reject_poll_timer=false;
+ assert(!s_poll&&camera_starts==before&&!s_camera_verified);
+ assert(strstr(lv_label_get_text(s_status),"Try again"));
+ click(s_camera_rows[0]);assert(s_poll&&camera_starts==before+1);
+ camera_result=true;camera_test_poll(s_poll);
+ assert(!s_poll&&s_camera_verified&&s_camera_use_action);
+ ui_setup_wizard_close();
+}
+
 static void safety_checks(void)
 {
  wifi_ready=configured=camera_ready=false;wifi_accept=true;default_ok=url_ok=true;
@@ -408,7 +453,7 @@ int main(void){lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8
  if(width==1024){for(unsigned row=0;row<3;row++){lv_obj_t *summary=lv_obj_get_child(s_stage,row);for(unsigned cell=0;cell<lv_obj_get_child_count(summary);cell++){lv_obj_t *label=lv_obj_get_child(summary,cell);inside(label,summary);assert(lv_obj_get_height(label)==lv_obj_get_style_text_font(label,0)->line_height);}}assert(contains_text(s_stage,"Workshop_long_")&&contains_text(s_stage,"Workshop printer"));for(unsigned group=0;group<lv_obj_get_child_count(s_stage);group++)inside(lv_obj_get_child(s_stage,group),s_stage);lv_obj_t *display_summary=lv_obj_get_child(s_stage,4);assert(lv_obj_get_height(display_summary)<lv_obj_get_style_text_font(display_summary,0)->line_height*2);}if(density==1&&large)snapshot(t,"review");storage_ok=false;finish_cb(NULL);assert(s_center);storage_ok=true;finish_cb(NULL);assert(!s_center&&!s_setup_content&&!s_status&&!s_poll&&s_complete_popup);lv_obj_update_layout(s_complete_popup);inside(s_complete_popup,lv_screen_active());assert(contains_text(s_complete_popup,"Setup complete")&&contains_text(s_complete_popup,"live connection status"));
  completion_layout_checks();
  lv_obj_t *completion_footer=lv_obj_get_child(s_complete_popup,-1),*done=lv_obj_get_child(completion_footer,0);inside(completion_footer,s_complete_popup);inside(done,completion_footer);inside(lv_obj_get_child(done,0),done);if(density==1&&large)snapshot(t,"completed");unsigned completed_before_done=completions;click(done);assert(!s_complete_popup&&!s_center&&completions==completed_before_done);
- ui_setup_wizard_show(connect_wifi);lv_obj_delete(s_center);assert(!s_center&&!s_setup_content&&!s_status&&!s_keyboard);ui_setup_wizard_show(connect_wifi);later_cb(NULL);assert(!s_center);safety_checks();
+ ui_setup_wizard_show(connect_wifi);lv_obj_delete(s_center);assert(!s_center&&!s_setup_content&&!s_status&&!s_keyboard);ui_setup_wizard_show(connect_wifi);later_cb(NULL);assert(!s_center);poll_allocation_checks();safety_checks();
  }
  wifi_ready=configured=true;ui_setup_wizard_show(connect_wifi);wifi_read_hook=reopen_setup;wifi_read_countdown=2;setup_select_complete_cb(NULL);assert(s_center&&s_setup_step==SETUP_STEP_WELCOME&&!s_finish_action&&lv_obj_get_child_count(s_actions)==1);ui_setup_wizard_close();
  configured=camera_ready=true;ui_setup_wizard_show(connect_wifi);catalog_read_hook=reopen_setup;setup_select_camera_cb(NULL);assert(s_setup_step==SETUP_STEP_WELCOME&&lv_obj_get_child_count(s_actions)==1);

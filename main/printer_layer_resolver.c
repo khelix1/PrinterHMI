@@ -33,8 +33,7 @@ printer_layer_result_t printer_layer_resolver_resolve(
     /* File bytes and Z motion also advance during START_PRINT. Until actual
      * printing begins, a missing/zero report means layer 0, not probing Z/h.
      * Positive Klipper reports always retain priority. */
-    bool estimate_current = print_started && (result.current < 0 ||
-        (result.current == 0 && isfinite(progress) && progress > 0.0));
+    bool estimate_current = print_started && result.current <= 0;
     if (result.current <= 0 && !print_started) result.current = 0;
 
     if (estimate_current &&
@@ -49,17 +48,19 @@ printer_layer_result_t printer_layer_resolver_resolve(
 
     if (estimate_current && result.current <= 0 &&
         result.total > 0 &&
-        isfinite(progress) && progress >= 0.0 && progress <= 1.0) {
+        isfinite(progress) && progress <= 1.0 &&
+        (result.current < 0 ? progress >= 0.0 : progress > 0.0)) {
         result.current = (int)floor(progress * (result.total - 1)) + 1;
-    }
-
-    if (result.current < 0 && result.total > 0) {
-        result.current = 1;
     }
 
     if (result.total > 0 &&
         result.current > result.total) {
-        result.current = result.total;
+        if (reported_current > 0 && reported_total <= 0) {
+            /* A derived total must not overwrite a reported current layer. */
+            result.total = -1;
+        } else {
+            result.current = result.total;
+        }
     }
 
     result.valid =

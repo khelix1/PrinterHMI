@@ -284,7 +284,12 @@ int main(void){
   offer(10,10,2);camera_poll_cb(NULL);assert(!s_frame && !lv_image_get_src(s_image));
   lv_refr_now(d);invalidations=0;for(int i=0;i<100;i++)camera_mark_unavailable();assert(!invalidations);
   assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));camera_retry_cb(NULL);assert(lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN)&&busy);
-  offer(3,2,12);camera_poll_cb(NULL);assert(s_frame&&strstr(lv_label_get_text(s_status),"Live"));offer(3,2,12);config_generation++;camera_poll_cb(NULL);assert(!s_frame&&!pending&&s_camera_generation==config_generation);
+  camera_mark_unavailable();busy=false;camera_poll_cb(NULL);
+  assert(busy&&strstr(lv_label_get_text(s_status),"Retrying automatically"));
+  assert(!lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
+  offer(3,2,12);camera_poll_cb(NULL);
+  assert(lv_obj_has_flag(s_retry_button,LV_OBJ_FLAG_HIDDEN));
+  assert(s_frame&&strstr(lv_label_get_text(s_status),"Live"));offer(3,2,12);config_generation++;camera_poll_cb(NULL);assert(!s_frame&&!pending&&s_camera_generation==config_generation);
   busy=true;offer(3,2,12);camera_poll_cb(NULL);assert(s_frame);ui_camera_hide();assert(!s_frame && !lv_image_get_src(s_image) && !s_refresh_timer && !busy);
   ui_camera_destroy();assert(!s_root && !s_image && !s_frame);
   entry.configured=false;ui_camera_show();lv_obj_update_layout(s_root);

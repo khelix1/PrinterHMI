@@ -677,14 +677,25 @@ void ui_network_refresh_objects(
     if(!s_network.root)return;
     uint32_t epoch=s_network_epoch;
     const bool wifi_connected=ip_text && ip_text[0] && ip_text[0]!='-';
-    const char *connection=moonraker_connected?"Connected":wifi_connected?"Wi-Fi":"Offline";
+    /* Wi-Fi and the printer link are separate. An old HTTP result cannot
+     * report a live printer while this tablet has no network address. */
+    const bool printer_connected = wifi_connected && moonraker_connected;
+    const bool access_denied = wifi_connected && !printer_connected &&
+        (http_code == 401 || http_code == 403);
+    const char *connection = printer_connected ? "Connected" :
+        wifi_connected ? "Wi-Fi only" : "Offline";
+    const char *printer_status = printer_connected ? "Connected" :
+        !wifi_connected ? "Waiting for Wi-Fi" :
+        access_denied ? "Access denied" : "Disconnected";
+    const char *message = access_denied ? "Check the printer profile credentials" :
+        (banner_text ? banner_text : "Network offline");
     if(s_network.studio) {
         if(!network_value(s_network.banner_state,connection,epoch))return;
-        ui_value_set_color(s_network.banner_state,moonraker_connected?UI_OK_BRIGHT:UI_TEXT_DIM,0);
+        ui_value_set_color(s_network.banner_state,printer_connected?UI_OK_BRIGHT:UI_TEXT_DIM,0);
         if(!network_current(epoch))return;
-        if(!network_value(s_network.banner_message,banner_text?banner_text:"Network offline",epoch))return;
+        if(!network_value(s_network.banner_message,message,epoch))return;
     } else if(s_network.banner) {
-        ui_status_banner_set_simple(s_network.banner,connection,banner_text?banner_text:"Network offline");
+        ui_status_banner_set_simple(s_network.banner,connection,message);
         if(!network_current(epoch))return;
     }
     if(!network_value(s_network.wifi_name,wifi_text?wifi_text:ui_text("Offline"),epoch))return;
@@ -693,11 +704,11 @@ void ui_network_refresh_objects(
     if(!network_current(epoch))return;
     if(!network_value(s_network.wifi_ip,ip_text?ip_text:ui_text("--"),epoch))return;
     if(!network_value(s_network.moonraker_host,host_text?host_text:ui_text("--"),epoch))return;
-    if(!network_value(s_network.moonraker_state,moonraker_connected?ui_text("Connected"):ui_text("Disconnected"),epoch))return;
-    ui_value_set_color(s_network.moonraker_state,moonraker_connected?UI_OK_BRIGHT:UI_TEXT_DIM,0);
+    if(!network_value(s_network.moonraker_state,ui_text(printer_status),epoch))return;
+    ui_value_set_color(s_network.moonraker_state,printer_connected?UI_OK_BRIGHT:access_denied?UI_WARN:UI_TEXT_DIM,0);
     if(!network_current(epoch))return;
     char http[24];
-    if(http_code>0)snprintf(http,sizeof(http),"%d",http_code);else snprintf(http,sizeof(http),"--");
+    if(wifi_connected && http_code>0)snprintf(http,sizeof(http),"%d",http_code);else snprintf(http,sizeof(http),"--");
     if(!network_value(s_network.moonraker_http,http,epoch))return;
     network_value(s_network.networks_status,scan_status_text&&scan_status_text[0]?scan_status_text:ui_text("Ready to scan"),epoch);
 }

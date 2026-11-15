@@ -40,6 +40,12 @@ static void update_active_print(
     const moonraker_state_t *state,
     const dashboard_runtime_context_t *context)
 {
+    /* Cached layer metadata cannot stand in for a live printer snapshot. */
+    if (!state->moonraker_ok || !state->live_data_ok) {
+        ui_dashboard_set_active_print("--/--", "--:--", "--:--");
+        return;
+    }
+
     char layer[32];
     char elapsed[32];
     char remaining[32];
@@ -66,6 +72,10 @@ static void update_active_print(
             "%d/%d",
             display_layers.current,
             display_layers.total);
+    } else if (display_layers.current > 0) {
+        snprintf(layer, sizeof(layer), "%d/--", display_layers.current);
+    } else if (display_layers.total > 0) {
+        snprintf(layer, sizeof(layer), "--/%d", display_layers.total);
     } else {
         snprintf(layer, sizeof(layer), "--/--");
     }
@@ -77,7 +87,6 @@ static void update_active_print(
 
     if (context->remaining_seconds) {
         bool current = context->estimate_job_revision == state->print_job_revision &&
-                       state->moonraker_ok && state->live_data_ok &&
                        printer_controller_is_live_state(state->printer_state);
         printer_controller_format_hhmm(remaining, sizeof(remaining),
             current ? *context->remaining_seconds : -1);
@@ -192,10 +201,6 @@ void dashboard_runtime_controller_tick(
 
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
-    if (!state.moonraker_ok || !state.live_data_ok) {
-        state.progress = state.current_gcode_z = state.print_duration = -1.0;
-        state.current_layer = state.total_layer = -1;
-    }
 
     update_active_print(&state, context);
     update_live_preview(&state, context);

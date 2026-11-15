@@ -46,7 +46,11 @@ static void estimate_fixture(void)
         lv_dropdown_set_options_static(*fields[i],"Zero\nOne\nTwo\nThree");
         lv_dropdown_set_selected(*fields[i],i+1);estimate_field_own(*fields[i]);
     }
-    s_estimate_status=lv_label_create(s_estimate_dialog);lv_label_set_text(s_estimate_status,"Retained");estimate_field_own(s_estimate_status);
+    lv_obj_t *body=lv_obj_create(s_estimate_dialog);
+    lv_obj_set_size(body,220,60);
+    lv_obj_set_scroll_dir(body,LV_DIR_VER);
+    lv_obj_set_pos(lv_obj_create(body),0,150);
+    s_estimate_status=lv_label_create(body);lv_obj_set_y(s_estimate_status,110);lv_label_set_text(s_estimate_status,"Retained");estimate_field_own(s_estimate_status);
     s_estimate_save=lv_button_create(s_estimate_dialog);estimate_field_own(s_estimate_save);
     lv_obj_add_event_cb(s_estimate_save,estimate_dialog_save,LV_EVENT_CLICKED,NULL);
 }
@@ -60,6 +64,10 @@ static void estimate_safety(void)
     lv_obj_remove_state(s_estimate_save,LV_STATE_DISABLED);
     estimate_store_ok=false;estimate_click();
     assert(estimate_writes==before+1&&s_estimate_dialog&&strstr(lv_label_get_text(s_estimate_status),"Could not save"));
+    lv_obj_t *body=lv_obj_get_parent(s_estimate_status);
+    lv_area_t feedback,viewport;
+    lv_obj_get_coords(s_estimate_status,&feedback);lv_obj_get_content_coords(body,&viewport);
+    assert(lv_obj_get_scroll_y(body)>0&&feedback.y1>=viewport.y1&&feedback.y2<=viewport.y2);
     assert(captured_estimate.progress==1&&captured_estimate.remaining_sources==2&&captured_estimate.eta_sources==3);
     estimate_store_ok=true;estimate_store_hook=estimate_click;estimate_click();
     assert(estimate_writes==before+2&&!s_estimate_dialog);
@@ -92,6 +100,7 @@ static void build_controls(void)
     s_brightness_value=lv_label_create(settings_panel);lv_label_set_text(s_brightness_value,"CURRENT");
     lv_obj_add_event_cb(s_brightness_slider,settings_brightness_changed_cb,LV_EVENT_VALUE_CHANGED,NULL);
     lv_obj_add_event_cb(s_brightness_slider,settings_brightness_save_cb,LV_EVENT_RELEASED,NULL);
+    s_brightness_hint=lv_label_create(settings_panel);settings_display_field_own(s_brightness_hint);
     settings_display_field_own(s_brightness_slider);settings_display_field_own(s_brightness_value);
     s_timezone_label=lv_label_create(settings_panel);lv_label_set_text(s_timezone_label,"Old zone");settings_display_field_own(s_timezone_label);
     s_reboot_action=lv_button_create(settings_panel);settings_display_field_own(s_reboot_action);lv_obj_add_event_cb(s_reboot_action,settings_reboot_cb,LV_EVENT_CLICKED,NULL);
@@ -120,15 +129,17 @@ int main(void)
         unsigned sets=hardware_sets;hardware_hook=nested_preview;preview(40);assert(hardware_sets==sets+1&&s_display_brightness_percent==40&&s_sleep_timeout_minutes==0);
         fail_open=true;before=commits;release();assert(commits==before&&s_saved_display_brightness_percent==100);fail_open=false;
         fail_set=true;release();assert(commits==before&&s_saved_display_brightness_percent==100);fail_set=false;
-        fail_commit=true;release();assert(s_saved_display_brightness_percent==100&&s_display_brightness_percent==40);fail_commit=false;
+        fail_commit=true;release();assert(s_saved_display_brightness_percent==100&&s_display_brightness_percent==40);assert(strstr(lv_label_get_text(s_brightness_hint),"Not saved"));fail_commit=false;
         before=commits;storage_hook=nested_save;release();assert(commits==before+1&&stored_brightness==40&&s_saved_display_brightness_percent==40);
+        assert(!strcmp(lv_label_get_text(s_brightness_hint),"Display backlight level"));
         release();assert(commits==before+1);
         hardware_hook=replace_page;preview(60);assert(s_brightness_value&&!strcmp(lv_label_get_text(s_brightness_value),"CURRENT")&&s_display_brightness_percent==60);
         storage_hook=replace_page;release();assert(stored_brightness==60&&s_saved_display_brightness_percent==60&&!strcmp(lv_label_get_text(s_brightness_value),"CURRENT"));ui_settings_refresh();assert(!strcmp(lv_label_get_text(s_timezone_label),"Central Europe"));assert(lv_slider_get_value(s_brightness_slider)==60&&!strcmp(lv_label_get_text(s_brightness_value),"60%"));
         lv_obj_delete(s_brightness_value);assert(!s_brightness_value);preview(70);release();assert(stored_brightness==70);
         lv_obj_delete(s_brightness_slider);assert(!s_brightness_slider);settings_brightness_changed_cb(NULL);settings_brightness_save_cb(NULL);
-        fail_commit=true;before=warnings;sleep_tap();assert(s_sleep_timeout_minutes==0&&stored_sleep==0&&warnings==before+1&&!strcmp(lv_label_get_text(settings_sleep_label),"OFF"));fail_commit=false;
-        sleep_tap();assert(s_sleep_timeout_minutes==5&&stored_sleep==5);
+        fail_commit=true;before=warnings;sleep_tap();assert(s_sleep_timeout_minutes==0&&stored_sleep==0&&warnings==before+1&&!strcmp(lv_label_get_text(settings_sleep_label),"OFF / Not saved"));fail_commit=false;
+        ui_settings_refresh();assert(!strcmp(lv_label_get_text(settings_sleep_label),"OFF / Not saved"));
+        sleep_tap();assert(s_sleep_timeout_minutes==5&&stored_sleep==5&&!strcmp(lv_label_get_text(settings_sleep_label),"5 MIN"));
         storage_hook=replace_page;sleep_tap();assert(s_sleep_timeout_minutes==15&&stored_sleep==15&&settings_sleep_label);ui_settings_refresh();assert(!strcmp(lv_label_get_text(settings_sleep_label),"15 MIN"));
         sleep_tap();assert(s_sleep_timeout_minutes==30);sleep_tap();assert(s_sleep_timeout_minutes==0);
         lv_obj_delete(settings_sleep_label);assert(!settings_sleep_label);before=commits;settings_sleep_card_cb(NULL);assert(commits==before);

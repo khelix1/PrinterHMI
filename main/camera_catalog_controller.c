@@ -27,6 +27,12 @@ static bool valid_url(const char *url)
            strncmp(url, "https://", 8) == 0;
 }
 
+static bool complete_text(const char *text, size_t length, size_t capacity)
+{
+    return length > 0 && length <= capacity &&
+        memchr(text, '\0', length) == text + length - 1;
+}
+
 static void load_camera_name(int profile, size_t camera, char *name, size_t size)
 {
     snprintf(name, size, "Camera %u", (unsigned)(camera + 1));
@@ -35,7 +41,8 @@ static void load_camera_name(int profile, size_t camera, char *name, size_t size
     char key[16];
     camera_name_key(key, sizeof(key), profile, camera);
     size_t length = size;
-    if (nvs_get_str(handle, key, name, &length) != ESP_OK || !name[0]) {
+    if (nvs_get_str(handle, key, name, &length) != ESP_OK ||
+        !complete_text(name, length, size) || !name[0]) {
         snprintf(name, size, "Camera %u", (unsigned)(camera + 1));
     }
     nvs_close(handle);
@@ -53,7 +60,7 @@ static void load_view(int profile_index, size_t camera_index,
     char key[16];
     uint8_t packed = 0;
     view_key(key, sizeof(key), profile_index, camera_index);
-    if (nvs_get_u8(handle, key, &packed) == ESP_OK) {
+    if (nvs_get_u8(handle, key, &packed) == ESP_OK && (packed & 0xf0U) == 0) {
         entry->rotation = (unsigned)(packed & 0x03U) * 90U;
         entry->mirror_horizontal = (packed & 0x04U) != 0;
         entry->mirror_vertical = (packed & 0x08U) != 0;
@@ -88,7 +95,9 @@ bool camera_catalog_get(int profile_index, size_t camera_index,
     size_t length = sizeof(entry->stream_url);
     esp_err_t error = nvs_get_str(handle, key, entry->stream_url, &length);
     nvs_close(handle);
-    if (error != ESP_OK || !valid_url(entry->stream_url)) {
+    if (error != ESP_OK ||
+        !complete_text(entry->stream_url, length, sizeof(entry->stream_url)) ||
+        !valid_url(entry->stream_url)) {
         memset(entry->stream_url, 0, sizeof(entry->stream_url));
         return error == ESP_ERR_NVS_NOT_FOUND;
     }
@@ -173,16 +182,17 @@ size_t camera_catalog_default(int profile_index)
     if (!valid_profile(profile_index)) return 0;
 
     uint8_t saved = 0;
+    bool have_saved = false;
     nvs_handle_t handle;
     if (nvs_open(CAMERA_NVS_NAMESPACE, NVS_READONLY, &handle) == ESP_OK) {
         char key[16];
         camera_default_key(key, sizeof(key), profile_index);
-        (void)nvs_get_u8(handle, key, &saved);
+        have_saved = nvs_get_u8(handle, key, &saved) == ESP_OK;
         nvs_close(handle);
     }
 
     camera_catalog_entry_t entry = {0};
-    if (saved < CAMERA_CATALOG_MAX_CAMERAS &&
+    if (have_saved && saved < CAMERA_CATALOG_MAX_CAMERAS &&
         camera_catalog_get(profile_index, saved, &entry) && entry.configured) {
         return saved;
     }
@@ -225,6 +235,11 @@ bool camera_catalog_set_view(int profile_index, size_t camera_index,
     if (!valid_profile(profile_index) ||
         camera_index >= CAMERA_CATALOG_MAX_CAMERAS ||
         rotation % 90U != 0 || rotation > 270U) return false;
+    /* A delayed save must not recreate preferences for a removed camera. */
+    camera_catalog_entry_t entry;
+    if (!camera_catalog_get(profile_index, camera_index, &entry) ||
+        !entry.configured) return false;
+
     uint8_t packed = (uint8_t)(rotation / 90U);
     if (mirror_horizontal) packed |= 0x04U;
     if (mirror_vertical) packed |= 0x08U;

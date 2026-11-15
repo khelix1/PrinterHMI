@@ -29,9 +29,14 @@ static ui_drybox_program_t s_active_program =
 static const char *drybox_banner_text_from_state(
     const moonraker_state_t *state)
 {
-    if (!state) {
+    if (!state || !state->moonraker_ok) {
         return "DRYBOX OFFLINE";
     }
+
+    if (!strcmp(state->printer_state, "shutdown") || !strcmp(state->printer_state, "error"))
+        return "DRYBOX PRINTER FAULT";
+    if (printer_connection_reason(state)[0])
+        return "DRYBOX WAITING FOR KLIPPER";
 
     const moonraker_capabilities_t *capabilities =
         &state->capabilities;
@@ -47,9 +52,7 @@ static const char *drybox_banner_text_from_state(
         return "DRYBOX UNAVAILABLE";
     }
 
-    if (printer_connection_reason(state)[0]) {
-        return "DRYBOX OFFLINE";
-    }
+    if (!capabilities->discovered && !available) return "DRYBOX CHECKING";
 
     if (state->heater_on) {
         return "DRYBOX HEATING";

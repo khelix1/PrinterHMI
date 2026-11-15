@@ -221,6 +221,7 @@ int main(void){
   settle(d);unsigned before=flushes;
   for(int i=0;i<6;i++){lv_tick_inc(500);lv_timer_handler();}
   assert(invalidations==0 && flushes==before && notifications==notified_before);
+  assert(ui_printer_chooser_is_open());
   known[0]=online[0]=true;ui_printer_chooser_refresh();
   assert(!strcmp(lv_label_get_text(s_cards[0].status),"Connecting..."));
   online[0]=false;ui_printer_chooser_refresh();
@@ -258,7 +259,15 @@ int main(void){
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"Offline"));
   assert(lv_color_eq(lv_obj_get_style_text_color(s_cards[1].status,0),
    theme==UI_THEME_CLASSIC?UI_TEXT_ERROR:UI_DANGER_BRIGHT));
-  known[1]=false;ui_printer_chooser_refresh();assert(!strcmp(lv_label_get_text(s_cards[1].status),"Verifying..."));
+  strcpy(health[1],"shutdown");ui_printer_chooser_refresh();
+  assert(!strcmp(lv_label_get_text(s_cards[1].status),"Klipper shutdown"));
+  strcpy(health[1],"error");ui_printer_chooser_refresh();
+  assert(!strcmp(lv_label_get_text(s_cards[1].status),"Klipper error"));
+  known[1]=false;strcpy(health[1],"startup");ui_printer_chooser_refresh();
+  assert(!strcmp(lv_label_get_text(s_cards[1].status),"Waiting for Klipper"));
+  health[1][0]=0;ui_printer_chooser_refresh();
+  assert(!strcmp(lv_label_get_text(s_cards[1].status),"Checking..."));
+  assert(lv_color_eq(lv_obj_get_style_text_color(s_cards[1].status,0),UI_TEXT_DIM));
   known[1]=online[1]=fresh[1]=true;snprintf(health[1],32,"paused");ui_printer_chooser_refresh();
   assert(!strcmp(lv_label_get_text(s_cards[1].status),"Paused"));
   snprintf(health[1],32,"printing");ui_printer_chooser_refresh();

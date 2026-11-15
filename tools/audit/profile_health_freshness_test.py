@@ -15,7 +15,8 @@ fixture = r'''
 #include <string.h>
 #include "moonraker_config_controller.h"
 #include "printer_profile_health.h"
-static uint32_t generation=1;
+static uint32_t generation=1,revisions[4];
+uint32_t moonraker_config_connection_revision(int i){return revisions[i];}
 static int64_t now=1000000;
 static moonraker_profile_t profiles[4]={{.configured=true,.host="a.local",.port=7125},{.configured=true,.host="b.local",.port=7126}};
 size_t strlcpy(char*d,const char*s,size_t n){size_t len=strlen(s);if(n)snprintf(d,n,"%s",s);return len;}
@@ -61,6 +62,17 @@ int main(void){
  assert(!printer_profile_health_live_state_fresh(1,5000000));
  printer_profile_health_report_live_state(1,true,"paused");
  assert(printer_profile_health_get(1,&known)&&known&&printer_profile_health_live_state_fresh(1,5000000));
+ revisions[1]++; /* Key or TLS edit with the same host and port. */
+ assert(!printer_profile_health_get(1,&known)&&!known);
+ assert(!printer_profile_health_live_state_fresh(1,5000000));
+ assert(!printer_profile_health_get_live_state(1,state,sizeof(state))&&!state[0]);
+ printer_profile_health_set_verifying(1);
+ assert(!printer_profile_health_get(1,&known)&&!known);
+ assert(printer_profile_health_get_live_state(1,state,sizeof(state))&&!strcmp(state,"startup"));
+ printer_profile_health_set_live_state(1,true,false,"shutdown");
+ assert(!printer_profile_health_get(1,&known)&&known);
+ assert(printer_profile_health_get_live_state(1,state,sizeof(state))&&!strcmp(state,"shutdown"));
+ assert(!printer_profile_health_live_state_fresh(1,5000000));
  puts("PASS: authoritative/demo freshness, explicit offline/unknown clearing, preserved endpoint health and background failure hysteresis");
 }
 '''

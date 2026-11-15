@@ -54,6 +54,8 @@ const char *moonraker_config_active_profile_name(void);
  * Network transactions use this to reject stale responses.
  */
 uint32_t moonraker_config_generation(void);
+/* Changes only when this slot's saved connection settings change. */
+uint32_t moonraker_config_connection_revision(int profile_index);
 
 /* Partial/failed loads protect the saved collection from ordinary edits until
  * a complete successful reload or explicit validated backup replacement. */

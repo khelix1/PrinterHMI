@@ -50,9 +50,19 @@ int main(void) {
     assert(r.valid&&r.current==12); /* External starts still get a fallback. */
     r=simple_resolve(-1,40,-1,20,.5,.5,true);
     assert(r.valid&&r.current==20);
+    r=simple_resolve(-1,40,-1,20,.5,NAN,true);
+    assert(!r.valid&&r.current==-1&&r.total==40);
+    r=simple_resolve(-1,-1,-1,20,.5,-1,true);
+    assert(!r.valid&&r.current==-1&&r.total==40);
+    r=simple_resolve(-1,40,-1,20,.5,0,true);
+    assert(r.valid&&r.current==1);
     r=simple_resolve(-1,-1,50,0,0,.5,false);
     assert(!r.valid&&r.current==0);
     r=simple_resolve(0,40,6,20,.5,0,true);
+    assert(r.valid&&r.current==12);
+    r=simple_resolve(0,40,6,20,.5,NAN,true);
+    assert(r.valid&&r.current==12);
+    r=simple_resolve(0,40,-1,20,.5,0,true);
     assert(r.valid&&r.current==0);
     printer_layer_metadata_t metadata={.object_height=10,.layer_height=.2,.first_layer_height=.4};
     r=printer_layer_resolver_resolve(-1,-1,.6,&metadata,.2,true);
@@ -62,6 +72,10 @@ int main(void) {
     assert(r.current==2&&r.total==57);
     r=printer_layer_resolver_resolve(7,99,100,&metadata,.1,false);
     assert(r.current==7&&r.total==99);
+    r=printer_layer_resolver_resolve(58,-1,.6,&metadata,.8,true);
+    assert(!r.valid&&r.current==58&&r.total==-1);
+    r=printer_layer_resolver_resolve(58,60,.6,&metadata,.8,true);
+    assert(r.valid&&r.current==58&&r.total==60);
     metadata.total_layers=0;metadata.object_height=10.01;metadata.first_layer_height=.2;
     r=printer_layer_resolver_resolve(-1,-1,.2,&metadata,.1,true);
     assert(r.current==1&&r.total==51);

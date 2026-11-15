@@ -9,7 +9,7 @@ void printer_controller_format_status_symbol_text(char *out,
                                                   bool live_data_ok);
 
 const char *printer_controller_status_text(const char *state);
-const char *printer_controller_machine_banner_text(const char *state, bool moonraker_ok);
+const char *printer_controller_machine_banner_text(const char *state, bool moonraker_ok, bool live_data_ok);
 
 
 bool printer_controller_state_is(const char *state, const char *want);

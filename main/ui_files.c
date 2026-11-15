@@ -184,7 +184,7 @@ void ui_files_set_status(const char *text)
         ui_page_state_show(s_files_state,
                                UI_PAGE_STATE_LOADING,
                                "Loading files",
-                               "Requesting the G-code library from Moonraker.");
+                               "Getting the file list from the active printer.");
     } else if (strstr(message, "current search")) {
         ui_page_state_show(s_files_state, UI_PAGE_STATE_EMPTY,
                            "No search results",
@@ -195,9 +195,13 @@ void ui_files_set_status(const char *text)
                                "No files found",
                                strstr(message, "this folder")
                                    ? "This folder is empty. Go up to browse another folder."
-                                   : "Upload G-code through Moonraker, then refresh.");
+                                   : "Upload a G-code file to the printer, then tap Refresh.");
+    } else if (strncmp(message, "Access denied.", sizeof("Access denied.") - 1) == 0) {
+        ui_page_state_show(s_files_state, UI_PAGE_STATE_ERROR,
+                           "Access denied", message + sizeof("Access denied."));
     } else if (strstr(message, "host") ||
                strstr(message, "WiFi") ||
+               strstr(message, "Wi-Fi") ||
                strstr(message, "offline")) {
         ui_page_state_show(s_files_state,
                                UI_PAGE_STATE_OFFLINE,

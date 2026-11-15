@@ -62,8 +62,15 @@ void printer_controller_format_status_symbol_text(char *out,
         snprintf(out, out_len, LV_SYMBOL_PLAY " PRINTING");
     } else if (printer_controller_is_paused(state)) {
         snprintf(out, out_len, LV_SYMBOL_PAUSE " PAUSED");
-    } else {
+    } else if (printer_controller_state_is(state, "complete")) {
+        snprintf(out, out_len, LV_SYMBOL_OK " PRINT COMPLETE");
+    } else if (printer_controller_state_is(state, "cancelled")) {
+        snprintf(out, out_len, "PRINT CANCELLED");
+    } else if (printer_controller_state_is(state, "ready") ||
+               printer_controller_state_is(state, "standby")) {
         snprintf(out, out_len, LV_SYMBOL_OK " READY");
+    } else {
+        snprintf(out, out_len, "STATUS UNAVAILABLE");
     }
 }
 
@@ -76,13 +83,19 @@ const char *printer_controller_status_text(const char *state)
     return state && state[0] ? state : "--";
 }
 
-const char *printer_controller_machine_banner_text(const char *state, bool moonraker_ok)
+const char *printer_controller_machine_banner_text(const char *state, bool moonraker_ok, bool live_data_ok)
 {
+    if (!moonraker_ok) return "MACHINE OFFLINE";
+    if (printer_controller_state_is(state, "shutdown")) return "KLIPPER SHUTDOWN";
+    if (printer_controller_is_error(state)) return "KLIPPER ERROR";
+    if (!live_data_ok) return "WAITING FOR KLIPPER";
     if (printer_controller_is_printing(state)) return "MACHINE PRINTING";
     if (printer_controller_is_paused(state)) return "MACHINE PAUSED";
-    if (printer_controller_is_ready(state)) return "MACHINE READY";
-    if (printer_controller_is_error(state)) return "MACHINE ERROR";
-    return moonraker_ok ? "MACHINE CONNECTED" : "MACHINE OFFLINE";
+    if (printer_controller_state_is(state, "complete")) return "PRINT COMPLETE";
+    if (printer_controller_state_is(state, "cancelled")) return "PRINT CANCELLED";
+    if (printer_controller_state_is(state, "ready") ||
+        printer_controller_state_is(state, "standby")) return "MACHINE READY";
+    return "MACHINE CONNECTED";
 }
 
 

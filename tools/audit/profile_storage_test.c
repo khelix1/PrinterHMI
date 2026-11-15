@@ -181,8 +181,19 @@ int main(void){
     assert(!lookup("p1_c1",false)&&!lookup("p1_n0",false)&&!lookup("p1_n1",false));
     assert(!lookup("p1_v0",false)&&!lookup("p1_v1",false)&&!lookup("p1_cdef",false));
     assert(!strcmp(lookup("p0_c1",false)->text,"http://keep.local/camera"));
+    uint32_t connection_rev=moonraker_config_connection_revision(1);
+    uint32_t active_gen=moonraker_config_generation();
     set("p1_v0",1,2,NULL);
     assert(moonraker_config_save_profile(1,"Renamed printer","new.local",7127,""));
     assert(lookup("p1_v0",false)->number==2);
+    assert(moonraker_config_connection_revision(1)==connection_rev);
+    assert(moonraker_config_save_profile(1,"Renamed printer","new.local",7127,"changed-key"));
+    assert(moonraker_config_connection_revision(1)==++connection_rev);
+    assert(moonraker_config_set_transport_security(1,true));
+    assert(moonraker_config_connection_revision(1)==++connection_rev);
+    commit_failure=-9;
+    assert(!moonraker_config_save_profile(1,"Renamed printer","new.local",7127,"unsaved"));
+    assert(moonraker_config_connection_revision(1)==connection_rev);
+    assert(moonraker_config_generation()==active_gen);
     puts("PASS: reused-slot camera cleanup and retry; unused-profile camera refusal, printer-name boundaries and round-trip; profile write failure preserves API key and RAM; camera edits, schema errors, legacy migration, TLS failures, incomplete-load write protection, legacy-read errors, recovery replacement and generation ownership checked");
 }

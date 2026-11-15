@@ -487,16 +487,12 @@ static void release_catalog_task(void *argument)
     esp_http_client_cleanup(client);
 
     if (result != ESP_OK || status != 200) {
-        char message[128];
-        snprintf(
-            message,
-            sizeof(message),
-            "GitHub request failed (%d: %s)",
-            status,
-            esp_err_to_name(result));
+        ESP_LOGW(TAG, "GitHub request failed (%d: %s)", status, esp_err_to_name(result));
         free(catalog);
         free(response);
-        catalog_fail(message);
+        catalog_fail(status == 429 || status == 403
+            ? "GitHub refused the request. Wait a moment, then tap Retry."
+            : "Could not reach GitHub releases. Check Wi-Fi and tap Retry.");
         vTaskDeleteWithCaps(NULL);
         return;
     }
@@ -504,7 +500,7 @@ static void release_catalog_task(void *argument)
     if (capture.overflow) {
         free(catalog);
         free(response);
-        catalog_fail("GitHub response exceeded 256 KiB or contained NUL bytes");
+        catalog_fail("GitHub returned an unreadable release list. Tap Retry.");
         vTaskDeleteWithCaps(NULL);
         return;
     }
@@ -576,7 +572,7 @@ bool ota_release_catalog_start(void)
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
     if (created != pdPASS) {
-        catalog_fail("Could not start release catalog task");
+        catalog_fail("Could not start the update check. Tap Retry.");
         return false;
     }
 

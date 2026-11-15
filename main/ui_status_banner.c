@@ -99,7 +99,7 @@ static ui_status_kind_t banner_state_kind(
      */
     if (strstr(state_text, "ERROR") ||
         strstr(state_text, "FAULT") ||
-        strstr(state_text, "CANCEL") ||
+        strstr(state_text, "SHUTDOWN") ||
         strstr(state_text, "OFFLINE") ||
         strstr(state_text, "DISCONNECTED") ||
         strstr(state_text, "NO CONNECTION")) {
@@ -111,7 +111,8 @@ static ui_status_kind_t banner_state_kind(
      */
     if (strstr(state_text, "PAUSED") ||
         strstr(state_text, "PAUSE") ||
-        strstr(state_text, "HEATING")) {
+        strstr(state_text, "HEATING") ||
+        strstr(state_text, "CANCEL")) {
         return UI_STATUS_WARNING;
     }
 

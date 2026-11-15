@@ -39,16 +39,19 @@ static void check_paused_eta(void)
  dashboard_live_controller_push_banner_estimate(true,&estimate,42);
  assert(!strcmp(eta_text,"ETA paused"));
  dashboard_live_controller_push_banner_estimate(true,&estimate,41);
- assert(!strcmp(eta_text,"ETA --:--"));
+ assert(!strcmp(eta_text,"ETA paused")&&!strcmp(progress_text,"--%"));
  dashboard_live_controller_push_banner_estimate(false,&estimate,42);
- assert(!strcmp(eta_text,"ETA --:--"));
+ assert(!strcmp(eta_text,"--"));
  strcpy(snapshot.printer_state,"printing");
  dashboard_live_controller_push_banner_estimate(true,&estimate,42);
  assert(!strcmp(eta_text,"ETA 12:31 AM +1d"));
  estimate.eta_remaining=-1;
+ eta_now=0;
  strcpy(snapshot.printer_state,"paused");
  dashboard_live_controller_push_banner_estimate(true,&estimate,42);
- assert(!strcmp(eta_text,"ETA --:--"));
+ assert(!strcmp(eta_text,"ETA paused"));
+ dashboard_live_controller_push_banner(true);
+ assert(!strcmp(eta_text,"ETA paused"));
 }
 static bool machine_online,filament_online;
 void moonraker_state_snapshot(moonraker_state_t *out){*out=snapshot;}
@@ -69,14 +72,32 @@ int main(void){lv_init();
    assert(!strstr(banner,"READY")&&!strstr(banner,"PRINTING")&&!strstr(banner,"PAUSED"));
    if(!reachable)assert(strstr(banner,"OFFLINE"));
    else if(i==0)assert(strstr(banner,"SHUTDOWN"));
+   const char *machine=printer_controller_machine_banner_text(states[i],reachable,false);
+   assert(!strcmp(machine,!reachable?"MACHINE OFFLINE":i==0?"KLIPPER SHUTDOWN":
+      i==1?"KLIPPER ERROR":"WAITING FOR KLIPPER"));
+   assert(!strcmp(eta_text,"--"));
    for(unsigned j=0;j<7;j++)assert(strstr(readings[j],"--"));
-   assert(!machine_online&&!filament_online&&!strcmp(file_text,"No active print")&&!strcmp(progress_text,"--%"));
+   assert(!machine_online&&!filament_online&&!strcmp(file_text,"Print status unavailable")&&!strcmp(progress_text,"--%"));
   }
   snapshot.moonraker_ok=snapshot.live_data_ok=true;strcpy(snapshot.printer_state,"printing");
   dashboard_live_controller_push_banner(true);dashboard_live_controller_push_machine();
   assert(strstr(banner,"PRINTING")&&strstr(readings[0],"205")&&machine_online&&filament_online&&!strcmp(progress_text,"72%"));
+  assert(!strcmp(printer_controller_machine_banner_text("printing",true,true),"MACHINE PRINTING"));
+  strcpy(snapshot.printer_state,"complete");snapshot.progress=-1;
+  dashboard_live_controller_push_banner(true);
+  assert(strstr(banner,"PRINT COMPLETE")&&!strcmp(eta_text,"--")&&!strcmp(progress_text,"100%"));
+  assert(!strcmp(file_text,"another-print.gcode"));
+  assert(!strcmp(printer_controller_machine_banner_text("complete",true,true),"PRINT COMPLETE"));
+  strcpy(snapshot.printer_state,"cancelled");snapshot.progress=.72;
+  dashboard_live_controller_push_banner(true);
+  assert(strstr(banner,"PRINT CANCELLED")&&!strcmp(eta_text,"--")&&!strcmp(progress_text,"--%"));
+  assert(!strcmp(printer_controller_machine_banner_text("cancelled",true,true),"PRINT CANCELLED"));
+  strcpy(snapshot.printer_state,"--");
+  dashboard_live_controller_push_banner(true);
+  assert(strstr(banner,"STATUS UNAVAILABLE"));
+  strcpy(snapshot.printer_state,"printing");
   dashboard_live_controller_push_banner(false);
-  assert(strstr(banner,"OFFLINE")&&!strcmp(file_text,"No active print")&&!strcmp(progress_text,"--%"));
+  assert(strstr(banner,"OFFLINE")&&!strcmp(file_text,"Print status unavailable")&&!strcmp(progress_text,"--%"));
   const double invalid[]={-1.0,1.01,1e300,INFINITY,NAN};
   for(unsigned j=0;j<sizeof(invalid)/sizeof(*invalid);++j){
    snapshot.progress=invalid[j];dashboard_live_controller_push_banner(true);

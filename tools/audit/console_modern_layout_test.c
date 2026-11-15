@@ -120,7 +120,13 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   assert(sends==send_count&&s_command_popup);same(s_command_input,long_command);
   long_command[CONSOLE_COMMAND_MAX]=0;lv_textarea_set_text(s_command_input,long_command);send_command_cb(NULL);
   assert(sends==send_count+1&&!s_command_popup&&!strcmp(sent,long_command));
-  state.live_data_ok=false;strcpy(state.printer_state,"error");open_command_cb(NULL);assert(s_command_popup);lv_textarea_set_text(s_command_input,"RESTART");send_command_cb(NULL);assert(!s_command_popup&&!strcmp(sent,"RESTART"));reset_filters_cb(NULL);
+  state.live_data_ok=false;strcpy(state.printer_state,"startup");update_connection();
+  assert(strstr(lv_label_get_text(s_connection),"Waiting for Klipper"));
+  strcpy(state.printer_state,"shutdown");update_connection();
+  assert(strstr(lv_label_get_text(s_connection),"Klipper shutdown"));
+  strcpy(state.printer_state,"error");update_connection();
+  assert(strstr(lv_label_get_text(s_connection),"Klipper error"));
+  open_command_cb(NULL);assert(s_command_popup);lv_textarea_set_text(s_command_input,"RESTART");send_command_cb(NULL);assert(!s_command_popup&&!strcmp(sent,"RESTART"));reset_filters_cb(NULL);
   open_command_cb(NULL);lv_textarea_set_text(s_command_input,"  STATUS  ");lv_obj_t*editor=s_command_popup;open_command_cb(NULL);assert(s_command_popup==editor&&!strcmp(lv_textarea_get_text(s_command_input),"  STATUS  "));unsigned before=sends;send_hook=retire_send;send_command_cb(NULL);send_hook=NULL;assert(sends==before+1&&!s_command_popup&&!s_command_feedback&&!s_command_send);
   open_command_cb(NULL);lv_textarea_set_text(s_command_input,"STATUS");before=sends;send_hook=switch_send;send_command_cb(NULL);send_hook=NULL;assert(sends==before+1&&s_command_popup);send_command_cb(NULL);assert(sends==before+1);close_command_popup();
   for(unsigned i=0;i<10;i++){

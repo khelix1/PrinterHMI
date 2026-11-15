@@ -33,8 +33,6 @@ static void appearance_field_deleted(lv_event_t *event)
 }
 static void appearance_field_own(lv_obj_t *field)
 {if(field)lv_obj_add_event_cb(field,appearance_field_deleted,LV_EVENT_DELETE,NULL);}
-static void appearance_feedback(const char *text)
-{if(s_feedback){ui_value_set_text(s_feedback,text);lv_obj_scroll_to_view(s_feedback,LV_ANIM_OFF);}}
 static bool appearance_target(lv_event_t *event,appearance_kind_t kind,unsigned index,unsigned count)
 {
     return event && lv_event_get_code(event)==LV_EVENT_CLICKED &&
@@ -100,7 +98,7 @@ static bool appearance_schedule_apply(void)
     if(lv_async_call(appearance_apply_async, NULL)!=LV_RESULT_OK) {
         /* Do not persist a change without a queued safe rebuild. */
         s_change_pending=false;s_pending_cb=NULL;
-        appearance_feedback("Could not queue refresh. Your choice was not saved; try again.");
+        ui_value_reveal_text(s_feedback, "Could not queue refresh. Your choice was not saved; try again.");
         ESP_LOGE(TAG,"Could not schedule appearance refresh");
         return false;
     }
@@ -168,7 +166,7 @@ static void accent_select_cb(lv_event_t *event)
     s_apply_dispatching=false;
     if (!accepted) {
         appearance_cancel_apply();
-        if(epoch==s_appearance_epoch)appearance_feedback("Could not save this choice. Try again or Close.");
+        if(epoch==s_appearance_epoch)ui_value_reveal_text(s_feedback, "Could not save this choice. Try again or Close.");
         ESP_LOGE(TAG, "Could not select accent %d", (int)accent);
         return;
     }
@@ -227,7 +225,7 @@ static void density_select_cb(lv_event_t *event)
     s_apply_dispatching=false;
     if (!accepted) {
         appearance_cancel_apply();
-        if(epoch==s_appearance_epoch)appearance_feedback("Could not save this choice. Try again or Close.");
+        if(epoch==s_appearance_epoch)ui_value_reveal_text(s_feedback, "Could not save this choice. Try again or Close.");
         ESP_LOGE(TAG, "Could not select density %d", (int)density);
         return;
     }
@@ -293,7 +291,7 @@ static void accessibility_toggle_cb(lv_event_t *event)
     s_apply_dispatching=false;
     if (!accepted) {
         appearance_cancel_apply();
-        if(epoch==s_appearance_epoch)appearance_feedback("Could not save this choice. Try again or Close.");
+        if(epoch==s_appearance_epoch)ui_value_reveal_text(s_feedback, "Could not save this choice. Try again or Close.");
         ESP_LOGE(TAG, "Could not save accessibility option %d", option);
         return;
     }

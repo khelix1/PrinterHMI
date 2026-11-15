@@ -110,8 +110,9 @@ static bool profile_command_ready(lv_obj_t *feedback)
 {
     const char *reason = profile_reason();
     if (!reason[0]) return true;
-    ui_value_set_text(feedback, reason);
+    uint32_t epoch = s_epoch;
     ui_bed_mesh_profiles_refresh_availability();
+    if (s_epoch == epoch) ui_value_reveal_text(feedback, reason);
     return false;
 }
 
@@ -264,6 +265,7 @@ static bool dispatch_profile_command(lv_obj_t *popup, lv_obj_t *feedback, const 
     if (!accepted) {
         ui_value_set_text(feedback, "Request was not accepted. Your selection is retained. Retry when connected.");
         ui_bed_mesh_profiles_refresh_availability();
+        if (feedback && s_epoch == epoch) lv_obj_scroll_to_view(feedback, LV_ANIM_OFF);
         return false;
     }
     return true;
@@ -274,7 +276,7 @@ static void load_selected_profile_cb(lv_event_t *event)
     if (!s.profile_popup || s_dispatching || !profile_action_event(event, s.actions[1])) return;
     const char *name = selected_profile_name();
     if (!valid_profile_name_ui(name) || !reported_profile(name)) {
-        ui_value_set_text(s.connection_label, "Select a reported profile. Close and reopen to refresh the list.");
+        ui_value_reveal_text(s.connection_label, "Select a reported profile. Close and reopen to refresh the list.");
         return;
     }
     char command[128];
@@ -289,7 +291,7 @@ static void confirmed_profile_command(lv_event_t *event, bool removing)
     const char *operation = removing ? "REMOVE" : "SAVE";
     if ((!strcmp(operation, "REMOVE") && !reported_profile(s.pending_profile_name)) ||
         (!strcmp(operation, "SAVE") && !s.mesh_valid)) {
-        ui_value_set_text(s.confirm_connection_label, s_review_unavailable);
+        ui_value_reveal_text(s.confirm_connection_label, s_review_unavailable);
         return;
     }
     char command[128];
@@ -335,7 +337,7 @@ static void save_name_continue_cb(lv_event_t *event)
     if (!profile_command_ready(s.editor_feedback)) return;
     const char *name = lv_textarea_get_text(s.profile_name_input);
     if (!valid_profile_name_ui(name)) {
-        ui_value_set_text(s.editor_feedback,s_name_error);
+        ui_value_reveal_text(s.editor_feedback,s_name_error);
         return;
     }
     memcpy(s.pending_profile_name, name, strlen(name) + 1);
@@ -371,7 +373,7 @@ static void save_as_profile_cb(lv_event_t *event)
     if (s.profile_confirm) { lv_obj_move_foreground(s.profile_confirm); return; }
     if (s.profile_editor) { lv_obj_move_foreground(s.profile_editor); return; }
     if (!profile_command_ready(s.connection_label)) return;
-    if (!s.mesh_valid) { ui_value_set_text(s.connection_label, "No current mesh is available to save."); return; }
+    if (!s.mesh_valid) { ui_value_reveal_text(s.connection_label, "No current mesh is available to save."); return; }
     s.profile_editor = ui_form_dialog(ui_text("Save bed mesh profile"), 760, 560, UI_POPUP_STANDARD);
     if (!s.profile_editor) return;
     ui_form_divide_title(s.profile_editor);

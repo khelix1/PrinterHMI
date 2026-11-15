@@ -95,16 +95,26 @@ static void stats(void)
 {
     if(!s.stats)return;
     moonraker_state_t live;moonraker_state_snapshot(&live);
-    const char *reason=s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_connection_reason(&live);
-    if(s.owner_generation!=moonraker_config_generation()||!s.mesh.valid){
-        ui_value_set_text(s.stats,reason[0]?reason:"No active bed mesh. Calibrate or load a profile.");
+    bool same_printer = s.owner_generation == moonraker_config_generation();
+    const char *reason = !same_printer ? "Printer changed. Reopen Bed Mesh." :
+        !live.moonraker_ok ? "Printer offline." :
+        !strcmp(live.printer_state, "shutdown") || !strcmp(live.printer_state, "error")
+            ? "Printer fault." :
+        printer_connection_reason(&live)[0] ? "Waiting for Klipper." : "";
+    if (!same_printer || !s.mesh.valid) {
+        const char *message = reason[0] ? reason :
+            printer_idle_reason(&live)[0] ? "No active mesh yet." :
+            s.mesh.profile_count ? "No active mesh. Load a saved profile or calibrate." :
+            "No active mesh. Calibrate to create one.";
+        ui_value_set_text(s.stats, ui_text(message));
         if(s.metrics)ui_value_set_text(s.metrics,"");
         return;
     }
     char summary[160];
-    snprintf(summary,sizeof(summary),"Profile %s | %u x %u | Z %.0fx%s",
+    snprintf(summary,sizeof(summary),"%s%s%s | %u x %u | Z %.0fx%s",
+        reason, reason[0] ? " Last reported mesh: " : "Profile ",
         s.mesh.profile_name[0]?s.mesh.profile_name:"Current mesh",s.mesh.cols,s.mesh.rows,s.zscale,
-        reason[0]?" | Last reported mesh":s.mesh.truncated?" | Truncated":"");
+        s.mesh.truncated?" | Truncated":"");
     ui_value_set_text(s.stats,summary);
     if(s.metrics){
         char height[128];

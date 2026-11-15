@@ -41,11 +41,15 @@ int main(void){
  lv_init();lv_display_t *display=lv_display_create(1024,600);static uint16_t pixels[1024*50];lv_display_set_buffers(display,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_color_format(display,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(display,flush);
  for(unsigned theme=0;theme<5;theme++){
   ui_theme_set_active(theme);live.moonraker_ok=live.live_data_ok=true;strcpy(live.printer_state,"printing");available=false;unsigned sent=sends;ui_bed_mesh_show(command);assert(!s.mesh.valid&&lv_obj_has_state(s.calibrate_button,LV_STATE_DISABLED));
+  assert(!strcmp(lv_label_get_text(s.stats),"No active mesh yet."));
+  live.live_data_ok=false;mesh_connection_refresh(NULL);
+  assert(!strcmp(lv_label_get_text(s.stats),"Waiting for Klipper."));
+  live.live_data_ok=true;
   available=true;unsigned before=renders;lv_tick_inc(260);lv_timer_handler();assert(s.mesh.valid&&renders==before+1&&strstr(lv_label_get_text(s.stats),"printing_mesh")&&!strstr(lv_label_get_text(s.stats),"wait"));assert(lv_label_get_text(s.metrics)[0]);
   before=renders;lv_tick_inc(260);lv_timer_handler();assert(renders==before);fixture[4]+=.01f;lv_tick_inc(260);lv_timer_handler();assert(renders==before+1&&s.values[4]==fixture[4]);calibrate_cb(NULL);confirm_calibrate_cb(NULL);assert(!s.calibrate_confirm&&sends==sent);
   strcpy(live.printer_state,"paused");mesh_connection_refresh(NULL);assert(s.mesh.valid&&strstr(lv_label_get_text(s.stats),"printing_mesh"));calibrate_cb(NULL);assert(!s.calibrate_confirm&&sends==sent);
   strcpy(live.printer_state,"ready");mesh_connection_refresh(NULL);assert(!lv_obj_has_state(s.calibrate_button,LV_STATE_DISABLED));calibrate_cb(NULL);assert(s.calibrate_confirm);strcpy(live.printer_state,"printing");confirm_calibrate_cb(NULL);assert(sends==sent);close_calibrate_confirm_cb(NULL);
-  live.moonraker_ok=false;mesh_connection_refresh(NULL);assert(s.mesh.valid&&strstr(lv_label_get_text(s.stats),"Last reported mesh"));live.moonraker_ok=true;
+  live.moonraker_ok=false;mesh_connection_refresh(NULL);assert(s.mesh.valid&&!strncmp(lv_label_get_text(s.stats),"Printer offline. Last reported mesh",35));live.moonraker_ok=true;
   generation++;before=renders;fixture[4]+=.01f;mesh_connection_refresh(NULL);assert(renders==before&&strstr(lv_label_get_text(s.stats),"Printer changed")&&lv_obj_has_state(s.calibrate_button,LV_STATE_DISABLED));ui_bed_mesh_close();assert(!s.popup&&!s.values&&!s.buf&&!s.connection_timer);lv_obj_clean(lv_layer_top());
  }
  lv_display_delete(display);lv_deinit();puts("PASS: five-theme live mesh viewing during printing/paused, late mesh arrival, unchanged snapshot suppression, cached/offline labeling, owner fence and calibration command restrictions");

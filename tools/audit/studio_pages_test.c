@@ -122,6 +122,10 @@ static void run(void){
  ui_printer_info_cards_refresh_live(r,&cards,.999,205,210,60,60,80,3600,NULL,true,NULL);
  assert(!strcmp(lv_label_get_text(cards.progress),"Progress 99%"));
  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,true,NULL);
+ ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,-1,336,true,NULL);
+ assert(!strcmp(lv_label_get_text(layer),"-- / 336"));
+ ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,215,336,false,NULL);
+ assert(!strcmp(lv_label_get_text(layer),"-- / --"));
  ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,215,336,true,NULL);
  children_inside(r);assert(!lv_obj_has_flag(r,LV_OBJ_FLAG_SCROLLABLE));snapshot("printer-native");
  assert(lv_obj_get_y(s_studio_position)>lv_obj_get_height(s_preview_box));
@@ -318,7 +322,7 @@ static void run(void){
 
 #else
 #include "ui_settings_components.c"
-static void run(void){lv_obj_t *r=page_root();studio_text(r,"Settings",0,0,500,UI_FONT_TITLE,UI_TEXT);lv_obj_t *body=studio_plane(r,0,66,976,358);lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_t *section=ui_settings_section_create(body,"Display",0,332);ui_settings_section_add_percent_slider_row(section,"Brightness","Adjust the display backlight",69,10,100,52,clicked);ui_settings_section_add_row(section,"Theme","Choose the interface", "STUDIO Dark",120,clicked);ui_settings_section_add_row(section,"Text size","Choose the reading size","Standard",188,clicked);ui_settings_section_add_action_row(section,"Calibration","Adjust panel touch alignment","Calibrate",256,clicked,false);children_inside(section);snapshot("settings-components-native");lv_obj_delete(r);}
+static void run(void){lv_obj_t *r=page_root();studio_text(r,"Settings",0,0,500,UI_FONT_TITLE,UI_TEXT);lv_obj_t *body=studio_plane(r,0,66,976,358);lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_t *section=ui_settings_section_create(body,"Display",0,332);ui_settings_section_add_percent_slider_row(section,"Brightness","Adjust the display backlight",69,10,100,52,clicked,NULL);ui_settings_section_add_row(section,"Theme","Choose the interface", "STUDIO Dark",120,clicked);ui_settings_section_add_row(section,"Text size","Choose the reading size","Standard",188,clicked);ui_settings_section_add_action_row(section,"Calibration","Adjust panel touch alignment","Calibrate",256,clicked,false);children_inside(section);snapshot("settings-components-native");lv_obj_delete(r);}
 #endif
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);ui_theme_set_active(UI_THEME_STUDIO_DARK);ui_theme_set_density(UI_DENSITY_COMFORTABLE);ui_theme_set_accessibility((ui_accessibility_t){0});ui_apply_root_style(lv_screen_active());state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"standby");strcpy(state.homed_axes,"xyz");state.toolhead_position_valid=true;state.toolhead_x=120;state.toolhead_y=120;state.toolhead_z=1.2;for(unsigned theme=0;theme<5;theme++){
 #if defined(TEST_DRYBOX) || defined(TEST_BED_MESH)

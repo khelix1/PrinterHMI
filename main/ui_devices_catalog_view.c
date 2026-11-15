@@ -1,6 +1,7 @@
 #include "ui_devices_catalog_view.h"
 #include "ui_text.h"
 #include "ui_text_fit.h"
+#include "ui_value_update.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -13,6 +14,7 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 #include "moonraker_config_controller.h"
+#include "printer_connection_policy.h"
 
 #define DEVICE_FILTER_COUNT 8
 #define DEVICE_UI_MAX_VISIBLE 12
@@ -329,6 +331,33 @@ static void update_pagination_controls(
 }
 
 
+static void update_catalog_banner(const device_catalog_status_t *status)
+{
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    const char *message = NULL;
+    char count[64];
+
+    if (s_devices->owner_generation != moonraker_config_generation())
+        message = "Printer changed";
+    else if (!state.moonraker_ok)
+        message = "Printer offline";
+    else if (!strcmp(state.printer_state, "shutdown") || !strcmp(state.printer_state, "error"))
+        message = "Printer needs attention";
+    else if (printer_connection_reason(&state)[0])
+        message = "Waiting for Klipper";
+    else if (!status->discovered)
+        message = "Loading devices...";
+    else if (status->truncated)
+        lv_snprintf(count, sizeof(count), "%u of %u devices",
+            (unsigned)status->stored_count, (unsigned)status->total_object_count);
+    else
+        lv_snprintf(count, sizeof(count), "%u devices", (unsigned)status->stored_count);
+
+    if (ui_value_set_text(s_devices->banner_status, message ? ui_text(message) : count))
+        ui_text_fit_single_line(s_devices->banner_status, UI_FONT_CAPTION);
+}
+
 static void render_catalog(void)
 {
     if (!s_devices || !s_devices->root || !s_devices->list) {
@@ -347,37 +376,13 @@ static void render_catalog(void)
 
     ui_devices_live_values_clear();
 
-    char banner[64];
-
-    if (!status.discovered) {
-        lv_snprintf(
-            banner,
-            sizeof(banner),
-            "Waiting for printer");
-    } else if (status.truncated) {
-        lv_snprintf(
-            banner,
-            sizeof(banner),
-            "%u of %u objects",
-            (unsigned)status.stored_count,
-            (unsigned)status.total_object_count);
-    } else {
-        lv_snprintf(
-            banner,
-            sizeof(banner),
-            "%u objects",
-            (unsigned)status.stored_count);
-    }
-
-    lv_label_set_text(
-        s_devices->banner_status,
-        banner);
-    ui_text_fit_single_line(s_devices->banner_status, UI_FONT_CAPTION);
+    update_catalog_banner(&status);
+    s_devices->rendered_generation = status.generation;
 
     if (!status.discovered) {
         if (!s_devices->empty) s_devices->empty = devices_label(
             s_devices->list,
-            "Waiting for the active printer's WebSocket capability discovery.",
+            "The device list will appear when it is available.",
             UI_FONT_BODY_LARGE,
             UI_TEXT_DIM,
             20,
@@ -387,7 +392,7 @@ static void render_catalog(void)
         lv_label_set_long_mode(s_devices->empty, LV_LABEL_LONG_WRAP);
         lv_obj_t *waiting = s_devices->empty;
         lv_obj_remove_flag(waiting, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(waiting, "Waiting for the active printer's WebSocket capability discovery.");
+        lv_label_set_text(waiting, "The device list will appear when it is available.");
         lv_obj_set_style_text_align(
             waiting,
             LV_TEXT_ALIGN_CENTER,
@@ -472,9 +477,6 @@ static void render_catalog(void)
         }
     }
 
-    s_devices->rendered_generation =
-        status.generation;
-
     ui_devices_live_values_update();
 }
 
@@ -495,6 +497,7 @@ static void devices_refresh_timer_cb(
         return;
     }
 
+    update_catalog_banner(&status);
     ui_devices_live_values_update();
 }
 

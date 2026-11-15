@@ -13,7 +13,8 @@ void dashboard_live_controller_push_banner_estimate(bool moonraker_ok,
     moonraker_state_t state_snapshot;
     moonraker_state_snapshot(&state_snapshot);
 
-    if (!moonraker_ok || !state_snapshot.moonraker_ok || !state_snapshot.live_data_ok) {
+    bool live = moonraker_ok && state_snapshot.moonraker_ok && state_snapshot.live_data_ok;
+    if (!live) {
         state_snapshot.printer_file[0] = '\0';
         state_snapshot.progress = -1.0;
         state_snapshot.print_duration = -1.0;
@@ -44,13 +45,14 @@ void dashboard_live_controller_push_banner_estimate(bool moonraker_ok,
         snprintf(
             file,
             sizeof(file),
-            "No active print");
+            "%s", live ? "No active print" : "Print status unavailable");
     }
 
-    bool live = moonraker_ok && state_snapshot.moonraker_ok && state_snapshot.live_data_ok;
     bool current_estimate = estimate && job_revision == state_snapshot.print_job_revision;
     double fraction = estimate ? (current_estimate && live ? estimate->progress : -1) : state_snapshot.progress;
-    int percent = printer_controller_progress_percent(fraction);
+    bool cancelled = live && printer_controller_state_is(state_snapshot.printer_state, "cancelled");
+    bool complete = live && printer_controller_state_is(state_snapshot.printer_state, "complete");
+    int percent = cancelled ? -1 : (complete ? 100 : printer_controller_progress_percent(fraction));
     if (percent >= 0) {
         snprintf(
             progress,
@@ -65,7 +67,8 @@ void dashboard_live_controller_push_banner_estimate(bool moonraker_ok,
     }
 
     snprintf(eta_clock, sizeof(eta_clock), "--:--");
-    if (live && printer_controller_is_live_state(state_snapshot.printer_state)) {
+    bool paused = live && printer_controller_is_paused(state_snapshot.printer_state);
+    if (live && !paused && printer_controller_is_live_state(state_snapshot.printer_state)) {
         if (estimate && current_estimate) {
             printer_controller_format_eta_seconds(eta_clock, sizeof(eta_clock), estimate->eta_remaining);
         } else if (!estimate && state_snapshot.progress > 0.01 && state_snapshot.progress < 0.999) {
@@ -75,7 +78,9 @@ void dashboard_live_controller_push_banner_estimate(bool moonraker_ok,
     }
     /* The remaining print time is still useful while paused, but a finish
      * clock would assume the printer resumes immediately and drift each minute. */
-    if (printer_controller_is_paused(state_snapshot.printer_state) && strcmp(eta_clock, "--:--") != 0)
+    if (!live || cancelled || complete)
+        snprintf(eta, sizeof(eta), "--");
+    else if (paused)
         snprintf(eta, sizeof(eta), "ETA paused");
     else
         snprintf(eta, sizeof(eta), "ETA %s", eta_clock);

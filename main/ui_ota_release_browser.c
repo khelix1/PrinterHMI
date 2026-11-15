@@ -41,7 +41,7 @@ static bool s_installing = false;
 static char s_rendered_error[128];
 static uint32_t s_browser_epoch;
 static bool s_catalog_rendering, s_refresh_dispatching;
-static bool s_custom_pending;
+static bool s_custom_pending, s_check_start_failed;
 static lv_obj_t *s_custom_owner;
 static void custom_transition(void *data);
 
@@ -83,7 +83,7 @@ static void browser_close(void)
     s_popup=s_confirm=s_status=s_list=s_stable_tab=s_nightly_tab=s_refresh_button=NULL;
     s_timer=NULL;
     if(s_custom_pending)lv_async_call_cancel(custom_transition,NULL);
-    s_custom_pending=false;s_custom_owner=NULL;
+    s_custom_pending=false;s_custom_owner=NULL;s_check_start_failed=false;
     s_row_count=0;memset(s_channel_scroll,0,sizeof(s_channel_scroll));
     s_start_fn=NULL;s_custom_fn=NULL;s_channel=OTA_RELEASE_CHANNEL_STABLE;
     s_rendered_state=OTA_RELEASE_CATALOG_IDLE;s_rendered_count=SIZE_MAX;
@@ -340,7 +340,7 @@ static void render_catalog_impl(
     }
 
     if (snapshot->state != OTA_RELEASE_CATALOG_READY) {
-        lv_label_set_text(s_status, "Release catalog is idle. Tap Refresh to load firmware releases.");
+        lv_label_set_text(s_status, "Tap Refresh to check for firmware releases.");
         return;
     }
 
@@ -390,7 +390,19 @@ static void timer_cb(lv_timer_t *timer)
     s_catalog_rendering=true;
     ota_release_catalog_snapshot_t snapshot;
     ota_release_catalog_snapshot(&snapshot);
-    if(epoch==s_browser_epoch)render_catalog_impl(&snapshot);
+    if(epoch==s_browser_epoch) {
+        if (!s_timer) {
+            snapshot.state = OTA_RELEASE_CATALOG_ERROR;
+            snprintf(snapshot.error, sizeof(snapshot.error), "%s",
+                ui_text("Could not prepare the update check. Tap Retry."));
+        } else if (s_check_start_failed && snapshot.state != OTA_RELEASE_CATALOG_LOADING &&
+            snapshot.state != OTA_RELEASE_CATALOG_ERROR) {
+            snapshot.state = OTA_RELEASE_CATALOG_ERROR;
+            snprintf(snapshot.error, sizeof(snapshot.error),
+                "%s", ui_text("Could not start the update check. Tap Retry."));
+        }
+        render_catalog_impl(&snapshot);
+    }
     s_catalog_rendering=false;
 }
 
@@ -428,14 +440,28 @@ static void refresh_cb(lv_event_t *event)
     if(!s_popup || !s_list || s_refresh_dispatching)return;
     uint32_t epoch=s_browser_epoch;
     s_refresh_dispatching=true;
+    if (!s_timer) {
+        s_timer = lv_timer_create(timer_cb, 200, NULL);
+        if (!s_timer) {
+            timer_cb(NULL);
+            goto done;
+        }
+    }
     ota_release_catalog_snapshot_t snapshot;
     ota_release_catalog_snapshot(&snapshot);
-    if(epoch!=s_browser_epoch || snapshot.state==OTA_RELEASE_CATALOG_LOADING)goto done;
+    if(epoch!=s_browser_epoch)goto done;
+    if(snapshot.state==OTA_RELEASE_CATALOG_LOADING) {
+        timer_cb(s_timer);
+        goto done;
+    }
     confirm_close();
     if(epoch!=s_browser_epoch || !s_popup)goto done;
     s_rendered_state=OTA_RELEASE_CATALOG_IDLE;s_rendered_count=SIZE_MAX;
-    (void)ota_release_catalog_start();
-    if(epoch==s_browser_epoch)timer_cb(s_timer);
+    bool started = ota_release_catalog_start();
+    if(epoch==s_browser_epoch) {
+        s_check_start_failed = !started;
+        timer_cb(s_timer);
+    }
  done:
     s_refresh_dispatching=false;
 }
@@ -477,7 +503,8 @@ void ui_ota_release_browser_show(
         lv_obj_move_foreground(s_popup);
         return;
     }
-    ++s_browser_epoch;
+    uint32_t epoch = ++s_browser_epoch;
+    s_check_start_failed = false;
     s_start_fn=start_cb;s_custom_fn=custom_cb_fn;
     ui_ota_popup_quiesce_camera();
 
@@ -524,9 +551,13 @@ void ui_ota_release_browser_show(
      * explicitly requests newer releases; initial load/retry remains async. */
     ota_release_catalog_snapshot_t snapshot;
     ota_release_catalog_snapshot(&snapshot);
-    if (snapshot.state != OTA_RELEASE_CATALOG_READY &&
+    if (s_timer && snapshot.state != OTA_RELEASE_CATALOG_READY &&
         snapshot.state != OTA_RELEASE_CATALOG_LOADING)
-        (void)ota_release_catalog_start();
+    {
+        bool started = ota_release_catalog_start();
+        if (epoch != s_browser_epoch) return;
+        s_check_start_failed = !started;
+    }
     timer_cb(s_timer);
     ui_ota_finish(s_popup);
     if(s_stable_tab)ui_text_fit_single_line(lv_obj_get_child(s_stable_tab,0),UI_FONT_BODY);

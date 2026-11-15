@@ -7,7 +7,15 @@ size_t strlcpy(char*,const char*,size_t);
 #define readdir profile_test_readdir
 #define closedir profile_test_closedir
 #define lv_textarea_set_text profile_test_textarea_set_text
+#include "lvgl.h"
+static bool reject_profile_poll;
+static lv_timer_t *profile_test_timer_create(lv_timer_cb_t callback, uint32_t period, void *data)
+{
+ return reject_profile_poll ? NULL : lv_timer_create(callback,period,data);
+}
+#define lv_timer_create profile_test_timer_create
 #include "ui_printer_profiles.c"
+#undef lv_timer_create
 #include "keyboard_layout_checks.h"
 #undef opendir
 #undef readdir
@@ -317,6 +325,8 @@ static void profile_draft_safety(void)
 {
  reset();test_ready=false;test_accept=true;ui_printer_profiles_show_for_slot(0,active_changed,discover);manager_edit_cb(NULL);
  unsigned before=test_starts;int persisted=saves;
+ reject_profile_poll=true;editor_test_cb(NULL);reject_profile_poll=false;
+ assert(test_starts==before&&!s_editor_test_timer&&strstr(lv_label_get_text(s_editor_status),"Try again"));
  test_start_hook=nested_test;editor_test_cb(NULL);test_start_hook=NULL;
  assert(test_starts==before+1&&saves==persisted&&s_editor_test_timer);
  editor_test_cb(NULL);assert(test_starts==before+1);
@@ -540,6 +550,10 @@ static void profile_camera_operation_safety(void)
  camera_camera_fixture_open();camera_set_hook=camera_save_delete_name;editor_camera_save_cb(NULL);camera_set_hook=NULL;
  assert(s_editor_camera_popup&&!s_editor_camera_name&&!strcmp(s_editor_camera_url,"http://draft.local/stream"));
  camera_camera_fixture_open();tests=camera_test_starts;finds=camera_find_starts;
+ reject_profile_poll=true;editor_camera_test_cb(NULL);
+ assert(camera_test_starts==tests&&!s_editor_camera_test_timer&&strstr(lv_label_get_text(s_editor_camera_status),"Try again"));
+ editor_camera_discover_cb(NULL);reject_profile_poll=false;
+ assert(camera_find_starts==finds&&!s_editor_camera_discovery_timer&&strstr(lv_label_get_text(s_editor_camera_status),"Try again"));
  camera_test_start_hook=camera_operation_nested;editor_camera_test_cb(NULL);camera_test_start_hook=NULL;
  camera_find_start_hook=camera_operation_nested;editor_camera_discover_cb(NULL);camera_find_start_hook=NULL;
  assert(camera_test_starts==tests+1&&camera_find_starts==finds+1&&s_editor_camera_test_timer&&s_editor_camera_discovery_timer);
@@ -627,7 +641,10 @@ static void profile_security_safety(void)
  fake=lv_button_create(picker);lv_obj_add_event_cb(fake,editor_security_pem_selected_cb,LV_EVENT_CLICKED,NULL);click(fake);assert(imports==before);lv_obj_delete(fake);
  lv_obj_add_state(s_pem_close,LV_STATE_DISABLED);editor_pem_picker_close_cb(NULL);assert(s_editor_pem_picker==picker);
  lv_obj_remove_state(s_pem_close,LV_STATE_DISABLED);
- import_ok=false;click(s_pem_rows[0]);assert(imports==before+1&&s_editor_pem_picker==picker&&strstr(lv_label_get_text(s_pem_status),"failed"));layout(picker);
+ lv_obj_update_layout(picker);lv_obj_scroll_to_y(s_pem_body,lv_obj_get_scroll_bottom(s_pem_body),LV_ANIM_OFF);
+ assert(lv_obj_get_scroll_y(s_pem_body)>0);
+ import_ok=false;click(s_pem_rows[EDITOR_PEM_MAX_FILES-1]);assert(imports==before+1&&s_editor_pem_picker==picker&&strstr(lv_label_get_text(s_pem_status),"failed"));
+ lv_obj_update_layout(picker);inside(s_pem_status,s_pem_body);layout(picker);
  editor_security_pem_picker_open_cb(NULL);assert(s_editor_pem_picker==picker&&strstr(lv_label_get_text(s_pem_status),"failed"));
  import_ok=true;import_hook=security_import_nested;lv_textarea_set_text(s_editor_port,"7125");click(s_pem_rows[1]);import_hook=NULL;
  assert(imports==before+2&&imported_profile==0&&strstr(imported_path,"_2.pem")&&s_editor_secure&&!s_editor_pem_picker&&!s_editor_security_popup);

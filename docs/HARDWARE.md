@@ -2,7 +2,7 @@
 
 ## Supported target
 
-PrinterHMI v7.3.79-dev targets the JC1060P470C-I/W operator panel built around the
+PrinterHMI v7.3.115-dev targets the JC1060P470C-I/W operator panel built around the
 ESP32-P4.
 
 | Function | Hardware |

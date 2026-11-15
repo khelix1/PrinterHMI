@@ -156,6 +156,15 @@ static void page_lifetime(void)
  /* Root teardown owns its timer and dialogs even outside the normal Hide path. */
  for(unsigned i=0;i<3;i++){
   unsigned idle_timers=diagnostic_timers();ui_calibration_show(NULL,send_command);
+  moonraker_state_t previous = state;
+  state.moonraker_ok=true;state.live_data_ok=false;strcpy(state.printer_state,"shutdown");
+  calibration_refresh_timer_cb(NULL);
+  assert(!strcmp(lv_label_get_text(s_calibration->banner_status),"Klipper shutdown"));
+  assert(lv_obj_has_state(s_calibration->probe_z_button,LV_STATE_DISABLED));
+  strcpy(state.printer_state,"startup");calibration_refresh_timer_cb(NULL);
+  assert(!strcmp(lv_label_get_text(s_calibration->banner_status),"Waiting for Klipper"));
+  state=previous;calibration_refresh_timer_cb(NULL);
+  assert(!lv_obj_has_state(s_calibration->probe_z_button,LV_STATE_DISABLED));
   probe_z_button_cb(NULL);axis_twist_button_cb(NULL);
   assert(s_calibration->probe_popup&&s_calibration->axis_twist_popup);
   lv_obj_delete(s_calibration->root);
@@ -295,11 +304,11 @@ static lv_result_t reserve_async(lv_async_cb_t cb,void *data){return async_rejec
 #include "ota_ui_controller.c"
 static ota_release_catalog_snapshot_t catalog;
 static unsigned catalog_fetches,chosen_updates,cancel_updates,catalog_reads;
-static bool catalog_start_loading;
+static bool catalog_start_loading, catalog_start_rejected;
 static void (*catalog_hook)(void);
 static char chosen_url[256];
 void ota_release_catalog_snapshot(ota_release_catalog_snapshot_t *out){*out=catalog;}
-bool ota_release_catalog_start(void){catalog_fetches++;if(catalog_start_loading)catalog.state=OTA_RELEASE_CATALOG_LOADING;return true;}
+bool ota_release_catalog_start(void){catalog_fetches++;if(catalog_start_rejected)return false;if(catalog_start_loading)catalog.state=OTA_RELEASE_CATALOG_LOADING;return true;}
 bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
  catalog_reads++;if(catalog_hook){void(*hook)(void)=catalog_hook;catalog_hook=NULL;hook();}
  if(index>=4)return false;
@@ -309,7 +318,14 @@ bool ota_release_catalog_entry(size_t index,ota_release_entry_t *out){
  strcpy(out->notes,"Long release notes describing this update and everything the operator needs to know. Settings and printer profiles are retained. Review the selected build before installing.");
  strcpy(out->published,"2026-10-10");snprintf(out->asset_url,sizeof(out->asset_url),"https://fixture/fw%u.bin",(unsigned)index);out->asset_size=2500000;return true;
 }
+static bool catalog_timer_rejected;
+static lv_timer_t *catalog_timer_create(lv_timer_cb_t callback, uint32_t period, void *data)
+{
+ return catalog_timer_rejected ? NULL : lv_timer_create(callback,period,data);
+}
+#define lv_timer_create catalog_timer_create
 #include "ui_ota_release_browser.c"
+#undef lv_timer_create
 #undef lv_async_call
 static void chosen_update(const char *url){chosen_updates++;snprintf(chosen_url,sizeof(chosen_url),"%s",url);}
 static void cancel_update(void){cancel_updates++;}
@@ -410,7 +426,31 @@ static void run(void){
  ui_ota_release_browser_show(chosen_update,NULL);catalog.state=OTA_RELEASE_CATALOG_ERROR;strcpy(catalog.error,"Could not retrieve releases. Check the network.");timer_cb(s_timer);assert(strstr(lv_label_get_text(s_status),"network"));assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_refresh_button,0)),"Retry"));
  catalog_start_loading=true;unsigned fetches=catalog_fetches;click(s_refresh_button);assert(catalog_fetches==fetches+1&&lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&!lv_obj_get_child_count(s_list));refresh_cb(NULL);assert(catalog_fetches==fetches+1);
  catalog.state=OTA_RELEASE_CATALOG_READY;catalog.count=0;timer_cb(s_timer);assert(!lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED)&&strstr(lv_label_get_text(s_status),"No compatible"));
- catalog.state=OTA_RELEASE_CATALOG_IDLE;timer_cb(s_timer);assert(strstr(lv_label_get_text(s_status),"idle"));browser_close();catalog_start_loading=false;
+ catalog.state=OTA_RELEASE_CATALOG_IDLE;timer_cb(s_timer);assert(strstr(lv_label_get_text(s_status),"Tap Refresh"));
+ catalog_start_rejected=true;click(s_refresh_button);
+ assert(strstr(lv_label_get_text(s_status),"Could not start"));
+ assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_refresh_button,0)),"Retry"));
+ catalog_start_rejected=false;click(s_refresh_button);
+ assert(lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED));
+ browser_close();
+ for (unsigned loading=0;loading<2;loading++) {
+  catalog.state=loading?OTA_RELEASE_CATALOG_LOADING:OTA_RELEASE_CATALOG_IDLE;
+  unsigned previous=catalog_fetches;
+  catalog_timer_rejected=true;
+  ui_ota_release_browser_show(chosen_update,NULL);
+  assert(s_popup&&!s_timer&&catalog_fetches==previous);
+  assert(strstr(lv_label_get_text(s_status),"Could not prepare"));
+  assert(!lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED));
+  assert(!strcmp(lv_label_get_text(lv_obj_get_child(s_refresh_button,0)),"Retry"));
+  click(s_refresh_button);assert(!s_timer&&catalog_fetches==previous);
+  catalog_timer_rejected=false;
+  click(s_refresh_button);
+  assert(s_timer&&catalog_fetches==previous+!loading&&lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED));
+  catalog.state=OTA_RELEASE_CATALOG_READY;catalog.count=4;timer_cb(s_timer);
+  assert(lv_obj_get_child_count(s_list)==4&&!lv_obj_has_state(s_refresh_button,LV_STATE_DISABLED));
+  browser_close();
+ }
+ catalog_start_loading=false;
  for(unsigned cycle=0;cycle<12;cycle++){
   ui_ota_release_browser_show(chosen_update,ota_open_custom_url_bridge);
   assert(strstr(lv_label_get_text(lv_obj_get_child(ui_ota_body(s_popup),0)),"Installed: Custom"));

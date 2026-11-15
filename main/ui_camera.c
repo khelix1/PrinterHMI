@@ -100,10 +100,15 @@ static uint32_t s_camera_window_tick = 0;
 static unsigned s_camera_frame_count = 0;
 
 
+static bool camera_status_is_unavailable(const char *text)
+{
+    return text && strncmp(text, "Camera unavailable", sizeof("Camera unavailable") - 1) == 0;
+}
+
 static void camera_set_status(const char *text)
 {
     if (s_retry_button) {
-        bool retry = text && strstr(text, "Camera unavailable") && !s_fullscreen;
+        bool retry = camera_status_is_unavailable(text) && !s_fullscreen;
         if (retry) lv_obj_remove_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s_retry_button, LV_OBJ_FLAG_HIDDEN);
     }
@@ -246,7 +251,7 @@ static void camera_mark_unavailable(void)
     camera_release_frame();
     if(!camera_ui_current(&context))return;
     s_camera_last_frame_tick = 0;
-    camera_set_status("Camera unavailable. Reconnecting...");
+    camera_set_status("Camera unavailable. Retrying automatically.");
 }
 
 
@@ -655,10 +660,13 @@ static void camera_poll_cb(lv_timer_t *timer)
     }
     bool started=camera_stream_start(selected.stream_url);
     if(!camera_ui_current(&context))goto finished;
-    if(!started)camera_set_status("Camera unavailable. Retrying...");
+    if(!started)camera_set_status("Camera unavailable. Retrying automatically.");
     else{
         s_camera_stream_started_tick=now;
-        camera_set_status("Connecting to camera stream...");
+        /* Starting the worker is not a recovered feed. Keep the Retry
+         * action visible until a frame arrives or the user retries. */
+        if (!s_status || !camera_status_is_unavailable(lv_label_get_text(s_status)))
+            camera_set_status("Waiting for a camera frame...");
     }
 finished:
     heap_caps_free(pixels);
@@ -993,7 +1001,7 @@ static bool camera_show_page(void)
     lv_obj_set_width(s_status, UI_PAGE_ROOT_WIDTH - 40);
     lv_obj_set_pos(s_status, 20, 106);
     lv_label_set_long_mode(s_status, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(s_status, ui_text("Connecting to configured camera..."));
+    lv_label_set_text(s_status, ui_text("Opening camera..."));
 
     if(ui_theme_is_studio())camera_set_viewport(false);
     return camera_show_ready();

@@ -181,7 +181,7 @@ static const char *chooser_display_status(const char *raw)
         {"error","Error"}, {"shutdown","Shutdown"},
         {"CHECKING...","Checking..."}, {"CONNECTING...","Connecting..."},
         {"VERIFYING...","Verifying..."}, {"OFFLINE / RETRYING","Offline / retrying"},
-        {"KLIPPER SHUTDOWN","Klipper shutdown"}, {"WAITING FOR KLIPPER","Waiting for Klipper"},
+        {"KLIPPER SHUTDOWN","Klipper shutdown"}, {"KLIPPER ERROR","Klipper error"}, {"WAITING FOR KLIPPER","Waiting for Klipper"},
         {"ONLINE","Online"}, {"OFFLINE","Offline"}
     };
     for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);++i)
@@ -510,16 +510,15 @@ static void refresh_cards(void)
                 status_text = !known ? "CHECKING..."
                     : (health_online && initial_state ? "CONNECTING..."
                        : "OFFLINE / RETRYING");
-            } else if (!strcmp(state->printer_state, "shutdown") ||
-                       !strcmp(state->printer_state, "error")) {
+            } else if (!strcmp(state->printer_state, "error")) {
+                status_text = "KLIPPER ERROR";
+            } else if (!strcmp(state->printer_state, "shutdown")) {
                 status_text = "KLIPPER SHUTDOWN";
             } else {
                 status_text = "WAITING FOR KLIPPER";
             }
         } else {
             bool has_live_state =
-                known &&
-                online &&
                 printer_profile_health_get_live_state(
                     index, inactive_state, sizeof(inactive_state));
             if(!chooser_current(&context))goto finished;
@@ -535,9 +534,11 @@ static void refresh_cards(void)
             /* Preserve a previously confirmed state during the normal freshness
              * window and while the next background probe is in flight. */
             status_text = !known
-                ? "VERIFYING..."
+                ? (has_live_state && !strcmp(inactive_state, "startup")
+                    ? "WAITING FOR KLIPPER" : "CHECKING...")
                 : (!online
-                    ? "OFFLINE"
+                    ? (!strcmp(inactive_state, "shutdown") ? "KLIPPER SHUTDOWN"
+                        : (!strcmp(inactive_state, "error") ? "KLIPPER ERROR" : "OFFLINE"))
                     : (verifying
                         ? "VERIFYING..."
                         : (has_live_state
@@ -547,13 +548,11 @@ static void refresh_cards(void)
 
         set_status_text(card, chooser_display_status(status_text));
         if(!chooser_current(&context))goto finished;
-        if ((index == active && !state->moonraker_ok &&
+        if (!strcmp(status_text, "WAITING FOR KLIPPER") ||
+            (index == active && !state->moonraker_ok &&
              (!known || (health_online && (!state->printer_state[0] ||
               !strcmp(state->printer_state, "--"))))) ||
-            (index != active &&
-             known &&
-             online &&
-             !status_online)) {
+            (index != active && !status_online && (!known || online))) {
             ui_value_set_color(card->status, UI_TEXT_DIM, 0);
         } else {
             apply_status_style(card->status, true, status_online);
@@ -704,4 +703,9 @@ void ui_printer_chooser_hide(void)
     chooser_retire();
     if(root)lv_obj_delete(root);
     chooser_flush_show();
+}
+
+bool ui_printer_chooser_is_open(void)
+{
+    return s_root != NULL || s_show_pending;
 }

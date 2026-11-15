@@ -22,6 +22,20 @@ static const char *TAG = "moonraker_config";
 static moonraker_profile_t
     s_profiles[MOONRAKER_CONFIG_MAX_PROFILES];
 
+static uint32_t s_connection_revision[MOONRAKER_CONFIG_MAX_PROFILES];
+
+static void advance_connection_revision(int index)
+{
+    __atomic_add_fetch(&s_connection_revision[index], 1u, __ATOMIC_RELEASE);
+}
+
+static bool same_connection(const moonraker_profile_t *a, const moonraker_profile_t *b)
+{
+    return a->configured == b->configured && a->port == b->port &&
+        a->secure_transport == b->secure_transport &&
+        !strcmp(a->host, b->host) && !strcmp(a->api_key, b->api_key);
+}
+
 static int s_active_profile = 0;
 /* An incomplete read must never be written back as an empty/default profile.
  * A successful reload or explicit complete backup replacement clears this. */
@@ -761,6 +775,12 @@ uint32_t moonraker_config_generation(void)
 }
 
 
+uint32_t moonraker_config_connection_revision(int index)
+{
+    return valid_profile_index(index)
+        ? __atomic_load_n(&s_connection_revision[index], __ATOMIC_ACQUIRE) : 0;
+}
+
 const moonraker_profile_t *moonraker_config_profile(
     int profile_index)
 {
@@ -882,6 +902,8 @@ bool moonraker_config_save_profile(
         advance_configuration_generation();
     }
 
+    if (!same_connection(&previous, &updated)) advance_connection_revision(profile_index);
+
     ESP_LOGI(
         TAG,
         "Saved profile %d: %s (%s:%d)",
@@ -902,6 +924,7 @@ bool moonraker_config_set_transport_security(int profile_index, bool secure)
     bool previous = s_profiles[profile_index].secure_transport;
     s_profiles[profile_index].secure_transport = secure;
     if (!persist_collection()) { s_profiles[profile_index].secure_transport = previous; return false; }
+    advance_connection_revision(profile_index);
     if (profile_index == s_active_profile) advance_configuration_generation();
     return true;
 }
@@ -953,6 +976,11 @@ bool moonraker_config_delete_profile(
             previous_active;
 
         return false;
+    }
+
+    for (int i = 0; i < MOONRAKER_CONFIG_MAX_PROFILES; ++i) {
+        if (!same_connection(&previous_profiles[i], &s_profiles[i]))
+            advance_connection_revision(i);
     }
 
     if (active_profile_affected) {
@@ -1036,6 +1064,11 @@ bool moonraker_config_replace_profiles(
             previous_active;
 
         return false;
+    }
+
+    for (int i = 0; i < MOONRAKER_CONFIG_MAX_PROFILES; ++i) {
+        if (!same_connection(&previous_profiles[i], &s_profiles[i]))
+            advance_connection_revision(i);
     }
 
     if (changed) {

@@ -13,7 +13,7 @@ void network_status_controller_refresh(
     const char *banner_text,
     bool got_ip,
     const char *connected_ssid,
-    const char *selected_ssid,
+    const char *configured_ssid,
     const char *ip_text,
     bool moonraker_ok,
     const char *moonraker_host,

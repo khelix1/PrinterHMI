@@ -166,6 +166,23 @@ static void set_status(const char *text)
         lv_label_set_text(s_status, text ? text : "");
     }
 }
+/* Allocate before dispatch, and keep the timer private until the action
+ * accepts and its original Setup page still owns the result. */
+static lv_timer_t *setup_reserve_poll(lv_timer_cb_t callback, uint32_t period)
+{
+    lv_timer_t *poll = lv_timer_create(callback, period, NULL);
+    if (poll) lv_timer_pause(poll);
+    else set_status("Unable to prepare this operation. Try again.");
+    return poll;
+}
+
+static void setup_start_poll(lv_timer_t *poll)
+{
+    s_poll = poll;
+    lv_timer_reset(poll);
+    lv_timer_resume(poll);
+}
+
 static void setup_refresh_completion_state(void);
 static bool setup_record_step(onboarding_step_t step, uint32_t epoch);
 static bool setup_save_display(int brightness, uint8_t sleep);
@@ -939,21 +956,29 @@ static void wifi_scan_open(void)
     s_wifi_list=setup_results_list(s_stage);
     setup_watch(s_wifi_list);
     setup_action(s_actions,"Scan again",UI_POPUP_ACTION_SECONDARY,wifi_scan_open_cb);
-    if(!async_result_start(&s_wifi_scan_slot)){s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;}
+    lv_timer_t *poll = setup_reserve_poll(wifi_scan_ready, 120);
+    if (!poll) return;
+    if(!async_result_start(&s_wifi_scan_slot)){setup_start_poll(poll);return;}
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if(demo_mode_enabled()) {
         s_wifi_count=1;strlcpy(s_wifi[0].ssid,"Demo network",sizeof(s_wifi[0].ssid));s_wifi[0].rssi=-48;
-        s_wifi_scan_failed=false;async_result_publish(&s_wifi_scan_slot);s_poll=lv_timer_create(wifi_scan_ready,120,NULL);return;
+        s_wifi_scan_failed=false;async_result_publish(&s_wifi_scan_slot);setup_start_poll(poll);return;
     }
 #endif
     s_wifi_count = 0;
     s_wifi_scan_failed = false;
-    if (xTaskCreate(wifi_scan_task, "setup_wifi_scan", 4096, NULL, 4, NULL) != pdPASS) {
-        async_result_release(&s_wifi_scan_slot);
-        set_status("Unable to start Wi-Fi scan. Try again.");
+    uint32_t epoch = s_setup_epoch;
+    s_setup_dispatching = true;
+    bool started = xTaskCreate(wifi_scan_task, "setup_wifi_scan", 4096, NULL, 4, NULL) == pdPASS;
+    s_setup_dispatching = s_appearance_pending;
+    if (!started) async_result_release(&s_wifi_scan_slot);
+    bool current = setup_current(epoch);
+    if (!current || !started) {
+        lv_timer_delete(poll);
+        if (current) set_status("Unable to start Wi-Fi scan. Try again.");
         return;
     }
-    s_poll = lv_timer_create(wifi_scan_ready, 120, NULL);
+    setup_start_poll(poll);
 }
 
 static void wifi_return_timer(lv_timer_t *timer)
@@ -985,16 +1010,19 @@ static void wifi_verify(lv_timer_t *timer)
         }
         return;
     }
-    delete_poll();
     s_wifi_done = true;
+    lv_timer_set_cb(s_poll, wifi_return_timer);
+    lv_timer_set_period(s_poll, 700);
+    lv_timer_reset(s_poll);
     set_status("Wi-Fi verified. Returning to Setup center...");
-    s_poll = lv_timer_create(wifi_return_timer, 700, NULL);
 }
 
 static void wifi_save_cb(lv_event_t *event)
 {
     if(s_poll || !s_password || !s_selected_ssid[0] || !s_wifi_connect ||
         !setup_action_current(event,s_wifi_connect_action,true))return;
+    lv_timer_t *poll = setup_reserve_poll(wifi_verify, 250);
+    if (!poll) return;
     char password[64],ssid[33];
     strlcpy(password,lv_textarea_get_text(s_password),sizeof(password));
     strlcpy(ssid,s_selected_ssid,sizeof(ssid));
@@ -1004,12 +1032,14 @@ static void wifi_save_cb(lv_event_t *event)
     bool accepted=connect(ssid,password);
     volatile char *secret=password;for(size_t i=0;i<sizeof(password);++i)secret[i]=0;
     s_setup_dispatching=s_appearance_pending;
-    if(!setup_current(epoch))return;
-    if (!accepted) { set_status("Could not start the connection. Check the password and try again."); return; }
-    set_status("Connecting and verifying Wi-Fi...");
-    delete_poll();
+    if (!setup_current(epoch) || !accepted) {
+        lv_timer_delete(poll);
+        if (setup_current(epoch)) set_status("Could not start the connection. Check the password and try again.");
+        return;
+    }
     s_wifi_verify_tick = lv_tick_get();
-    s_poll = lv_timer_create(wifi_verify, 250, NULL);
+    setup_start_poll(poll);
+    set_status("Connecting and verifying Wi-Fi...");
 }
 
 
@@ -1185,13 +1215,18 @@ static void camera_selected_cb(lv_event_t *event)
     set_status(detail);
     camera_actions(false);
     epoch=s_setup_epoch;
+    lv_timer_t *poll = setup_reserve_poll(camera_test_poll, 150);
+    if (!poll) return;
     s_setup_dispatching=true;
     bool started=camera_test_start(entry.stream_url);
     s_setup_dispatching=s_appearance_pending;
-    if(!setup_current(epoch) || owner!=moonraker_config_generation())return;
-    if (!started) { set_status("Could not start the camera test. Wait and select the camera again."); return; }
-    delete_poll();
-    s_poll = lv_timer_create(camera_test_poll, 150, NULL);
+    bool current = setup_current(epoch) && owner == moonraker_config_generation();
+    if (!current || !started) {
+        lv_timer_delete(poll);
+        if (current) set_status("Could not start the camera test. Wait and select the camera again.");
+        return;
+    }
+    setup_start_poll(poll);
     camera_scan_busy("Testing...");
 }
 
@@ -1263,15 +1298,18 @@ static void camera_open(void)
     }
     moonraker_profile_t selected=*printer;
     uint32_t epoch=s_setup_epoch,owner=s_camera_owner;
+    lv_timer_t *poll = setup_reserve_poll(camera_discovery_poll, 150);
+    if (!poll) return;
     s_setup_dispatching=true;
     bool started=camera_discovery_start(selected.host,selected.port,selected.api_key);
     s_setup_dispatching=s_appearance_pending;
-    if(!setup_current(epoch) || owner!=moonraker_config_generation())return;
-    if (!started) {
-        set_status("Could not start camera discovery. Wait and tap Scan again.");
+    bool current = setup_current(epoch) && owner == moonraker_config_generation();
+    if (!current || !started) {
+        lv_timer_delete(poll);
+        if (current) set_status("Could not start camera discovery. Wait and tap Scan again.");
         return;
     }
-    s_poll = lv_timer_create(camera_discovery_poll, 150, NULL);
+    setup_start_poll(poll);
     camera_scan_busy("Scanning...");
 }
 

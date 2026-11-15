@@ -50,6 +50,7 @@ static int s_saved_display_brightness_percent = 100;
 #define SETTINGS_NVS_SLEEP_KEY "sleep_min"
 
 static uint8_t s_sleep_timeout_minutes = 0;
+static bool s_sleep_save_failed;
 static lv_timer_t *s_sleep_timer = NULL;
 static lv_obj_t *s_sleep_wake_overlay = NULL;
 static bool s_display_sleeping = false;
@@ -58,6 +59,8 @@ static lv_obj_t *s_theme_label = NULL;
 static lv_obj_t *s_notifications_label;
 static ui_settings_theme_rebuild_cb_t s_theme_rebuild_cb = NULL;
 static lv_obj_t *s_settings_content;
+static lv_obj_t *s_brightness_hint;
+static bool s_brightness_save_failed;
 static lv_obj_t *s_brightness_slider,*s_brightness_value,*s_sleep_action,*s_reboot_action;
 static uint32_t s_settings_page_epoch;
 static bool s_display_io_dispatching,s_wake_pending;
@@ -116,7 +119,7 @@ static void estimate_dialog_save(lv_event_t *event)
     s_estimate_saving = false;
     if (epoch != s_estimate_epoch || !s_estimate_dialog) return;
     if (saved) estimate_dialog_close(NULL);
-    else if (s_estimate_status) lv_label_set_text(s_estimate_status, "Could not save. Try again.");
+    else ui_value_reveal_text(s_estimate_status, "Could not save. Try again.");
 }
 
 static lv_obj_t *estimate_dropdown(lv_obj_t *body, const char *label, const char *options, unsigned selected)
@@ -160,7 +163,7 @@ static void settings_print_estimate_cb(lv_event_t *event)
 static void settings_display_field_deleted(lv_event_t *event)
 {
     lv_obj_t *target=lv_event_get_target_obj(event);
-    lv_obj_t **fields[]={&s_brightness_slider,&s_brightness_value,&s_sleep_action,&settings_sleep_label,&s_timezone_label,&s_theme_label,&s_notifications_label,&s_settings_content,&s_reboot_action};
+    lv_obj_t **fields[]={&s_brightness_slider,&s_brightness_value,&s_brightness_hint,&s_sleep_action,&settings_sleep_label,&s_timezone_label,&s_theme_label,&s_notifications_label,&s_settings_content,&s_reboot_action};
     for(size_t i=0;i<sizeof(fields)/sizeof(fields[0]);i++)if(*fields[i]==target)*fields[i]=NULL;
 }
 static void settings_display_field_own(lv_obj_t *field)
@@ -168,7 +171,7 @@ static void settings_display_field_own(lv_obj_t *field)
 static void settings_page_retire(void)
 {
     ++s_settings_page_epoch;
-    settings_panel=s_settings_content=s_brightness_slider=s_brightness_value=s_sleep_action=s_reboot_action=NULL;
+    settings_panel=s_settings_content=s_brightness_slider=s_brightness_value=s_brightness_hint=s_sleep_action=s_reboot_action=NULL;
     settings_sleep_label=s_timezone_label=s_theme_label=s_notifications_label=NULL;
     s_theme_rebuild_cb=NULL;
     settings_system_info_unbind();
@@ -282,6 +285,14 @@ static void settings_backup_cb(lv_event_t *event)
     ui_settings_backup_popup_show();
 }
 
+static void settings_refresh_brightness_hint(void)
+{
+    bool unsaved = s_brightness_save_failed &&
+        s_display_brightness_percent != s_saved_display_brightness_percent;
+    ui_value_set_text(s_brightness_hint, unsaved ?
+        "Not saved. Adjust to retry." : "Display backlight level");
+}
+
 static void settings_brightness_changed_cb(lv_event_t *e)
 {
     if(!settings_brightness_event(e,LV_EVENT_VALUE_CHANGED))return;
@@ -295,6 +306,7 @@ static void settings_brightness_changed_cb(lv_event_t *e)
         if(error!=ESP_OK)lv_slider_set_value(s_brightness_slider,s_display_brightness_percent,LV_ANIM_OFF);
         char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
         ui_value_set_text(s_brightness_value,value);
+        settings_refresh_brightness_hint();
         if(error!=ESP_OK)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT APPLIED","The previous brightness is retained. Try the slider again.");
     }
     s_display_io_dispatching=false;
@@ -315,8 +327,13 @@ static void settings_brightness_save_cb(lv_event_t *e)
         if(error==ESP_OK)error=nvs_commit(handle);
         nvs_close(handle);
     }
+    s_brightness_save_failed = error != ESP_OK;
     if(error==ESP_OK)s_saved_display_brightness_percent=requested;
-    else if(epoch==s_settings_page_epoch)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT SAVED","The live brightness is retained. Release the slider again to retry saving it.");
+    if(epoch==s_settings_page_epoch) {
+        settings_refresh_brightness_hint();
+        if(error!=ESP_OK)ui_toast_show(UI_STATUS_WARNING,"BRIGHTNESS NOT SAVED",
+            "Brightness changed for now. Adjust it again to retry saving.");
+    }
     s_display_io_dispatching=false;
 }
 
@@ -325,17 +342,17 @@ static const char *settings_sleep_timeout_text(void)
 {
     switch (s_sleep_timeout_minutes) {
         case 5:
-            return "5 MIN";
+            return s_sleep_save_failed ? "5 MIN / Not saved" : "5 MIN";
 
         case 15:
-            return "15 MIN";
+            return s_sleep_save_failed ? "15 MIN / Not saved" : "15 MIN";
 
         case 30:
-            return "30 MIN";
+            return s_sleep_save_failed ? "30 MIN / Not saved" : "30 MIN";
 
         case 0:
         default:
-            return "OFF";
+            return s_sleep_save_failed ? "OFF / Not saved" : "OFF";
     }
 }
 
@@ -1009,7 +1026,9 @@ void ui_settings_show_page(
             10,
             100,
             display_row_1,
-            settings_brightness_changed_cb);
+            settings_brightness_changed_cb, &s_brightness_hint);
+    settings_display_field_own(s_brightness_hint);
+    settings_refresh_brightness_hint();
 
     s_brightness_slider=brightness_slider;
     s_brightness_value=brightness_slider?lv_obj_get_user_data(brightness_slider):NULL;
@@ -1133,6 +1152,7 @@ void ui_settings_refresh(void)
         lv_slider_set_value(s_brightness_slider,s_display_brightness_percent,LV_ANIM_OFF);
     char value[16];snprintf(value,sizeof(value),"%d%%",s_display_brightness_percent);
     ui_value_set_text(s_brightness_value,value);
+    settings_refresh_brightness_hint();
     ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
     ui_value_set_text(s_timezone_label,timezone_config_selected_label());
 }
@@ -1203,6 +1223,7 @@ bool ui_settings_restore_display_preferences(
     s_saved_display_brightness_percent =
         brightness_percent;
 
+    s_sleep_save_failed = false;
     s_sleep_timeout_minutes =
         sleep_timeout_minutes;
 
@@ -1250,6 +1271,7 @@ void settings_sleep_card_cb(lv_event_t *e)
     uint32_t epoch=s_settings_page_epoch;
     s_display_io_dispatching=true;
     bool saved=settings_save_sleep_timeout(requested);
+    s_sleep_save_failed = !saved;
     if(saved)s_sleep_timeout_minutes=requested;
     if(epoch==s_settings_page_epoch){
         ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());

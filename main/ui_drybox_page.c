@@ -106,6 +106,9 @@ static bool drybox_banner_is_offline(const char *banner)
            !banner[0] ||
            text_contains(banner, "OFFLINE") ||
            text_contains(banner, "UNAVAILABLE") ||
+           text_contains(banner, "PRINTER FAULT") ||
+           text_contains(banner, "WAITING FOR KLIPPER") ||
+           text_contains(banner, "CHECKING") ||
            text_contains(banner, "DISCONNECTED") ||
            text_contains(banner, "NO CONNECTION") ||
            text_contains(banner, "NOT CONNECTED");
@@ -113,7 +116,11 @@ static bool drybox_banner_is_offline(const char *banner)
 
 static const char *drybox_status_text(const char *banner)
 {
-    if (text_contains(banner, "UNAVAILABLE")) return "Unavailable";
+    if (text_contains(banner, "PRINTER CHANGED")) return "Printer changed";
+    if (text_contains(banner, "PRINTER FAULT")) return "Printer fault";
+    if (text_contains(banner, "WAITING FOR KLIPPER")) return "Waiting for Klipper";
+    if (text_contains(banner, "CHECKING")) return "Checking drybox";
+    if (text_contains(banner, "UNAVAILABLE")) return "Not configured";
     if (drybox_banner_is_offline(banner)) return "Offline";
     if (text_contains(banner, "ACTIVE") ||
         text_contains(banner, "DRYING")) return "Drying";
@@ -902,8 +909,7 @@ void ui_drybox_page_refresh(
         lv_obj_t *banner_box =
             lv_obj_get_parent(page->banner_label);
 
-        const char *display_text =
-            online ? banner : "DRYBOX OFFLINE";
+        const char *display_text = banner;
 
         /*
          * ERROR / OFFLINE       = red
@@ -918,7 +924,9 @@ void ui_drybox_page_refresh(
             UI_STATUS_INFO;
 
         if (!online) {
-            banner_kind = UI_STATUS_DANGER;
+            banner_kind = text_contains(banner, "OFFLINE") ||
+                text_contains(banner, "DISCONNECTED") || text_contains(banner, "FAULT")
+                ? UI_STATUS_DANGER : UI_STATUS_NEUTRAL;
         } else if (text_contains(banner, "ACTIVE") ||
                    text_contains(banner, "DRYING")) {
             banner_kind = UI_STATUS_OK;
@@ -990,7 +998,7 @@ void ui_drybox_page_refresh(
         }
 
         if (page->heater_label) {
-            ui_value_set_text(page->heater_label, ui_text("Offline"));
+            ui_value_set_text(page->heater_label, ui_text("Unavailable"));
             set_label_color(page->heater_label, UI_TEXT_DIM);
         }
 

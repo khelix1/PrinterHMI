@@ -46,6 +46,10 @@ int main(void){
  strcpy(live.printer_state,"printing");strcpy(live.printer_file,"job.gcode");strcpy(selected,"job.gcode");strcpy(path,"job.png");
  dashboard_runtime_controller_tick(&context);
  assert(!strcmp(layer,"12/40")&&!strcmp(elapsed,"00:20")&&!strcmp(remaining,"0:20")&&!strcmp(last,"PRINTING")&&preview_calls==1&&!cleanups);
+ live.current_layer=41;live.total_layer=-1;
+ dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"41/--"));
+ live.current_layer=-1;live.total_layer=40;live.current_gcode_z=-1;live.progress=-1;
+ dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"--/40"));
  /* START_PRINT advances file bytes while probing, but has not deposited filament. */
  live.current_layer=0;live.total_layer=40;live.print_duration=0;live.progress=.04;
  live.estimate_sample.filament_valid=true;live.estimate_sample.filament_used=0;
@@ -77,10 +81,10 @@ int main(void){
  live.progress=0;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"0/40"));
  live.current_layer=-1;live.current_gcode_z=6;live.progress=.5;
  strcpy(live.printer_state,"paused");dashboard_runtime_controller_tick(&context);assert(!strcmp(last,"PAUSED")&&!cleanups);
- live.live_data_ok=false;dashboard_runtime_controller_tick(&context);assert(!strcmp(elapsed,"--:--")&&!strcmp(last,"WAITING FOR KLIPPER")&&!cleanups);
- live.moonraker_ok=false;context.preview_network_ready=false;unsigned before=preview_calls;dashboard_runtime_controller_tick(&context);assert(!strcmp(last,"OFFLINE")&&preview_calls==before&&!cleanups);
+ live.live_data_ok=false;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"--/--")&&!strcmp(elapsed,"--:--")&&!strcmp(remaining,"--:--")&&!strcmp(last,"WAITING FOR KLIPPER")&&!cleanups);
+ live.moonraker_ok=false;context.preview_network_ready=false;unsigned before=preview_calls;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"--/--")&&!strcmp(last,"OFFLINE")&&preview_calls==before&&!cleanups);
  /* Reconnection to an active print is not print completion. */
- live.live_data_ok=live.moonraker_ok=true;strcpy(live.printer_state,"printing");context.preview_network_ready=true;dashboard_runtime_controller_tick(&context);assert(!strcmp(last,"PRINTING")&&!cleanups);
+ live.live_data_ok=live.moonraker_ok=true;strcpy(live.printer_state,"printing");context.preview_network_ready=true;dashboard_runtime_controller_tick(&context);assert(!strcmp(layer,"12/40")&&!strcmp(last,"PRINTING")&&!cleanups);
  dashboard_image=lv_image_create(lv_screen_active());lv_obj_add_event_cb(dashboard_image,image_deleted,LV_EVENT_DELETE,NULL);
  strcpy(live.printer_state,"ready");dashboard_runtime_controller_tick(&context);
  assert(!dashboard_image&&deletions==1&&cleanups==1&&placeholders==1&&!selected[0]&&!path[0]);

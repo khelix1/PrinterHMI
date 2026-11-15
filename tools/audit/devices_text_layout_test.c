@@ -77,8 +77,8 @@ if(ui_theme_is_studio()){
 assert(lv_obj_get_scrollbar_mode(s_devices->list)==LV_SCROLLBAR_MODE_OFF);
 lv_obj_t *value=s_devices->rows[0].value;
 assert(strstr(lv_label_get_text(value),"205.0"));
-state.moonraker_ok=false;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"Unavailable"));
-state.moonraker_ok=true;strcpy(state.printer_state,"shutdown");ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"Unavailable"));
+state.moonraker_ok=false;devices_refresh_timer_cb(s_devices->refresh_timer);assert(strstr(lv_label_get_text(banner),"Printer offline"));assert(!strcmp(lv_label_get_text(value),"Unavailable"));
+state.moonraker_ok=true;strcpy(state.printer_state,"shutdown");devices_refresh_timer_cb(s_devices->refresh_timer);assert(strstr(lv_label_get_text(banner),"Printer needs attention"));assert(!strcmp(lv_label_get_text(value),"Unavailable"));
 strcpy(state.printer_state,"printing");ui_devices_live_values_update();assert(strstr(lv_label_get_text(value),"205.0"));
 strcpy(state.printer_state,"ready");
 owner_generation++;ui_devices_live_values_update();assert(!strcmp(lv_label_get_text(value),"Unavailable"));

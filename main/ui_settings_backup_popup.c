@@ -27,6 +27,7 @@ static lv_obj_t *s_export_progress_popup = NULL;
 static lv_obj_t *s_export_progress_status = NULL;
 static lv_obj_t *s_export_progress_value = NULL;
 static lv_obj_t *s_export_progress_bar = NULL;
+static lv_obj_t *s_progress_hint = NULL;
 static lv_timer_t *s_export_progress_timer = NULL;
 static bool s_export_progress_complete_pending = false;
 static bool s_export_progress_is_restore_verify = false;
@@ -79,6 +80,7 @@ static void backup_field_deleted(lv_event_t *event)
     else if (target == s_export_progress_status) s_export_progress_status = NULL;
     else if (target == s_export_progress_value) s_export_progress_value = NULL;
     else if (target == s_export_progress_bar) s_export_progress_bar = NULL;
+    else if (target == s_progress_hint) s_progress_hint = NULL;
     else if (target == s_progress_close) s_progress_close = NULL;
     else return;
     ++s_backup_epoch;
@@ -128,7 +130,7 @@ static void backup_dialog_deleted(lv_event_t *event)
     if(popup==s_export_progress_popup) {
         if(s_export_progress_timer)lv_timer_delete(s_export_progress_timer);
         s_export_progress_timer=NULL;s_export_progress_popup=NULL;s_export_progress_status=NULL;
-        s_export_progress_value=NULL;s_export_progress_bar=NULL;s_progress_close=NULL;
+        s_export_progress_value=NULL;s_export_progress_bar=NULL;s_progress_close=NULL;s_progress_hint=NULL;
         if(s_export_progress_is_restore_verify)secure_clear(s_restore_passphrase,sizeof(s_restore_passphrase));
         s_export_progress_is_restore_verify=false;s_export_progress_complete_pending=false;
     }
@@ -139,16 +141,13 @@ static void backup_dialog_own(lv_obj_t *popup)
     lv_obj_set_style_pad_row(popup,8,0);++s_backup_epoch;lv_obj_add_event_cb(popup,backup_dialog_deleted,LV_EVENT_DELETE,NULL);}
 static void secret_status(const char *text)
 {
-    if(s_secret_status){ui_value_set_text(s_secret_status,text);lv_obj_scroll_to_view(s_secret_status,LV_ANIM_OFF);}
+    ui_value_reveal_text(s_secret_status,text);
 }
 
 
 static void set_status(const char *text)
 {
-    if (s_status) {
-        ui_value_set_text(s_status, text ? text : ui_text(""));
-        lv_obj_scroll_to_view(s_status,LV_ANIM_OFF);
-    }
+    ui_value_reveal_text(s_status, text);
 }
 
 
@@ -205,8 +204,9 @@ static void backup_cb(lv_event_t *event)
     if (!backup_operation_begin()) return;
     if(!show_sync_progress("Saving plain backup")){s_backup_dispatching=false;set_status("Could not open backup progress. Try again.");return;}
     uint32_t epoch = s_backup_epoch;
-    char status[192];
+    char status[192]={0};
     bool saved=settings_backup_export_with_progress(sync_progress_cb,&epoch,status,sizeof(status));
+    if(!status[0] && !saved)snprintf(status,sizeof(status),"Could not save the backup. Check the SD card and try again.");
     if(epoch==s_backup_epoch)finish_sync_progress(saved,status);
     s_backup_dispatching = false;
     if (epoch == s_backup_epoch) set_status(status);
@@ -225,7 +225,9 @@ static void restore_confirm_cb(lv_event_t *event)
     (void)event;
     if (!s_restore_confirmation || !backup_operation_begin()) return;
     if(!show_sync_progress(s_pending_encrypted_restore?"Restoring encrypted backup":"Restoring plain backup")){
-        s_backup_dispatching=false;if(s_restore_status)ui_value_set_text(s_restore_status,"Could not open restore progress. Try again.");return;
+        s_backup_dispatching=false;
+        ui_value_reveal_text(s_restore_status,"Could not open restore progress. Try again.");
+        return;
     }
     uint32_t epoch = s_backup_epoch;
     lv_obj_t *parent = s_popup;
@@ -239,7 +241,7 @@ static void restore_confirm_cb(lv_event_t *event)
     if (epoch != s_backup_epoch) return;
     finish_sync_progress(restored,status);
     if(restored){close_restore_confirmation();if(s_backup_epoch==epoch+1 && s_popup==parent)set_status(status);}
-    else if(s_restore_status){ui_value_set_text(s_restore_status,status);lv_obj_scroll_to_view(s_restore_status,LV_ANIM_OFF);}
+    else ui_value_reveal_text(s_restore_status,status);
 }
 
 
@@ -314,7 +316,7 @@ static void close_export_progress_popup(void)
     lv_obj_t *popup = s_export_progress_popup;
     bool clear_secret = s_export_progress_is_restore_verify;
     s_export_progress_timer = NULL;
-    s_export_progress_popup = s_export_progress_status = s_export_progress_value = s_export_progress_bar = s_progress_close = NULL;
+    s_export_progress_popup = s_export_progress_status = s_export_progress_value = s_export_progress_bar = s_progress_close = s_progress_hint = NULL;
     s_export_progress_complete_pending = s_export_progress_is_restore_verify = false;
     if (clear_secret) secure_clear(s_restore_passphrase, sizeof(s_restore_passphrase));
     if (timer) lv_timer_delete(timer);
@@ -415,7 +417,8 @@ static void show_backup_progress(const char *title,const char *status,bool monit
     s_export_progress_value=ui_form_text(body,"Working",UI_FONT_BODY_LARGE,UI_ACCENT_BRIGHT);
     s_export_progress_bar=lv_bar_create(body);lv_obj_set_size(s_export_progress_bar,LV_PCT(100),24);
     lv_bar_set_range(s_export_progress_bar,0,100);lv_bar_set_value(s_export_progress_bar,10,LV_ANIM_OFF);
-    ui_form_text(body,"Keep power connected until the backup operation finishes.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    s_progress_hint=ui_form_text(body,"Keep power connected until the backup operation finishes.",UI_FONT_CAPTION,UI_TEXT_DIM);
+    backup_field_own(s_progress_hint);
     s_export_progress_pulse=0;
     if(monitor)s_export_progress_timer=lv_timer_create(export_progress_timer_cb,150,NULL);
     if(!restore_verify){
@@ -463,7 +466,12 @@ static void sync_progress_cb(settings_backup_stage_t stage,void *user_data)
 static void finish_sync_progress(bool succeeded,const char *status)
 {
     if(s_export_progress_status)ui_value_set_text(s_export_progress_status,status);
-    if(s_export_progress_value)ui_value_set_text(s_export_progress_value,succeeded?"Complete":"Failed - review the message");
+    if(s_export_progress_value) {
+        ui_value_set_text(s_export_progress_value,succeeded?"Complete":"Operation failed");
+        ui_value_set_color(s_export_progress_value,succeeded?UI_OK_BRIGHT:UI_DANGER_BRIGHT,0);
+    }
+    if(s_progress_hint)lv_obj_add_flag(s_progress_hint,LV_OBJ_FLAG_HIDDEN);
+    if(!succeeded && s_export_progress_bar)lv_obj_add_flag(s_export_progress_bar,LV_OBJ_FLAG_HIDDEN);
     if(succeeded&&s_export_progress_bar)lv_bar_set_value(s_export_progress_bar,100,LV_ANIM_OFF);
     if(s_progress_close)lv_obj_remove_state(s_progress_close,LV_STATE_DISABLED);
     lv_refr_now(NULL);
@@ -579,10 +587,7 @@ static void remove_confirm_cb(lv_event_t *event)
     if (removed) {
         close_remove_confirmation();
         if (s_backup_epoch == epoch + 1 && parent == s_popup) set_status(status);
-    } else if(s_remove_status) {
-        ui_value_set_text(s_remove_status,status);
-        lv_obj_scroll_to_view(s_remove_status,LV_ANIM_OFF);
-    }
+    } else ui_value_reveal_text(s_remove_status,status);
 }
 
 

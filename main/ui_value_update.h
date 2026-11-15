@@ -17,6 +17,15 @@ static inline bool ui_value_set_text(lv_obj_t *label, const char *text)
     return true;
 }
 
+/* Reveal feedback for an explicit action. Periodic status updates should use
+ * ui_value_set_text to avoid moving a list while the user is reading it. */
+static inline void ui_value_reveal_text(lv_obj_t *label, const char *text)
+{
+    if (!label) return;
+    ui_value_set_text(label, text);
+    lv_obj_scroll_to_view(label, LV_ANIM_OFF);
+}
+
 /* Preserve a local color override even if it currently equals an inherited
  * theme color; otherwise a later theme change could silently alter the value.
  */

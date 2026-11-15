@@ -68,17 +68,20 @@ static ui_status_kind_t printer_banner_status_kind(
      * OFFLINE     -> danger
      */
     if (strcmp(state, "PRINTING") == 0 ||
-        strcmp(state, "COMPLETE") == 0) {
+        strcmp(state, "COMPLETE") == 0 ||
+        strcmp(state, "PRINT COMPLETE") == 0) {
         return UI_STATUS_OK;
     }
 
-    if (strcmp(state, "PAUSED") == 0) {
+    if (strcmp(state, "PAUSED") == 0 || strcmp(state, "PRINT CANCELLED") == 0) {
         return UI_STATUS_WARNING;
     }
 
     if (strcmp(state, "ERROR") == 0 ||
         strcmp(state, "OFFLINE") == 0 ||
-        strcmp(state, "DISCONNECTED") == 0) {
+        strcmp(state, "DISCONNECTED") == 0 ||
+        strcmp(state, "KLIPPER SHUTDOWN") == 0 || strcmp(state, "KLIPPER ERROR") == 0 ||
+        strcmp(state, "MACHINE OFFLINE") == 0) {
         return UI_STATUS_DANGER;
     }
 

@@ -54,6 +54,13 @@ int main(void){
    s.banner_text="DISCONNECTED";ui_drybox_page_refresh(&p,&s);same(p.humidity_label,"--.-");color(p.humidity_label,UI_TEXT_DIM);
    assert(lv_obj_has_state(s_program_buttons[DRYBOX_PROGRAM_PLA],LV_STATE_DISABLED));assert(!lv_bar_get_value(s_humidity_bar));
    lv_refr_now(d);invalidations=0;for(int i=0;i<100;i++)ui_drybox_page_refresh(&p,&s);assert(!invalidations);
+   const char *unavailable[]={"DRYBOX UNAVAILABLE","DRYBOX CHECKING","DRYBOX WAITING FOR KLIPPER","DRYBOX PRINTER FAULT"};
+   const char *status_labels[]={"Not configured","Checking drybox","Waiting for Klipper","Printer fault"};
+   for(unsigned i=0;i<4;i++){
+    s.banner_text=unavailable[i];ui_drybox_page_refresh(&p,&s);
+    same(p.banner_label,status_labels[i]);same(p.heater_label,"Unavailable");
+    assert(lv_obj_has_state(s_program_buttons[DRYBOX_PROGRAM_PLA],LV_STATE_DISABLED));
+   }
    s.banner_text="READY";s.active_program=UI_DRYBOX_PROGRAM_PETG;s.heater_on=false;s.fan_speed=0;s.heater_target=0;
    ui_drybox_page_refresh(&p,&s);color(p.humidity_label,UI_ACCENT_CYAN);same(s_program_status_label,"PETG active");same(p.heater_label,"Off");same(p.fan_label,"0 %");color(p.target_label,UI_TEXT_DIM);
    const float humidity[]={9,10,25,40,120,-4};const char *conditions[]={"Very dry","Ideal","Moderate","High","High","Very dry"};

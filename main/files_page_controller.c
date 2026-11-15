@@ -38,7 +38,7 @@ typedef enum {
 static printer_file_entry_t *s_entries;
 static size_t s_entry_count;
 static bool s_index_ready;
-static uint32_t s_index_generation;
+static uint32_t s_files_generation;
 static char s_folder[PRINTER_FILES_MAX_PATH];
 static char s_search[64];
 static file_sort_mode_t s_sort_mode;
@@ -76,32 +76,60 @@ static int compare_name(const void *left, const void *right)
 {
     const printer_file_entry_t *a = *(const printer_file_entry_t * const *)left;
     const printer_file_entry_t *b = *(const printer_file_entry_t * const *)right;
-    return strcasecmp(a->path, b->path);
+    int order = strcasecmp(a->path, b->path);
+    return order ? order : strcmp(a->path, b->path);
 }
 
 static int compare_newest(const void *left, const void *right)
 {
     const printer_file_entry_t *a = *(const printer_file_entry_t * const *)left;
     const printer_file_entry_t *b = *(const printer_file_entry_t * const *)right;
-    return a->modified < b->modified ? 1 : (a->modified > b->modified ? -1 : 0);
+    return a->modified < b->modified ? 1 : (a->modified > b->modified ? -1 : compare_name(left, right));
 }
 
 static int compare_size(const void *left, const void *right)
 {
     const printer_file_entry_t *a = *(const printer_file_entry_t * const *)left;
     const printer_file_entry_t *b = *(const printer_file_entry_t * const *)right;
-    return a->size < b->size ? 1 : (a->size > b->size ? -1 : 0);
+    return a->size < b->size ? 1 : (a->size > b->size ? -1 : compare_name(left, right));
 }
+
+typedef struct {
+    const char *path;
+    size_t length;
+} folder_span_t;
 
 static int compare_folder_name(const void *left, const void *right)
 {
-    return strcasecmp((const char *)left, (const char *)right);
+    const folder_span_t *a = left;
+    const folder_span_t *b = right;
+    size_t common = a->length < b->length ? a->length : b->length;
+    int order = strncasecmp(a->path, b->path, common);
+    if (order) return order;
+    if (a->length != b->length) return a->length < b->length ? -1 : 1;
+    return memcmp(a->path, b->path, common);
+}
+
+static void reconcile_folder(void)
+{
+    /* A full index may have omitted files from this folder. */
+    if (s_entry_count >= FILES_PAGE_ENTRY_CAPACITY) return;
+    while (s_folder[0]) {
+        size_t length = strlen(s_folder);
+        for (size_t i = 0; i < s_entry_count; ++i) {
+            const char *path = s_entries[i].path;
+            if (strncmp(path, s_folder, length) == 0 && path[length] == '/') return;
+        }
+        char *slash = strrchr(s_folder, '/');
+        if (slash) *slash = '\0';
+        else s_folder[0] = '\0';
+    }
 }
 
 static void render_entries(void)
 {
     /* Search/sort must not replace an in-flight/error state with cached rows. */
-    if (!s_index_ready || s_index_generation != moonraker_config_generation()) return;
+    if (!s_index_ready || s_files_generation != moonraker_config_generation()) return;
     ui_files_clear_rows();
     ui_files_set_breadcrumb(s_folder);
     ui_files_set_search_text(s_search);
@@ -111,7 +139,7 @@ static void render_entries(void)
 
     printer_file_entry_t *visible[FILES_PAGE_ENTRY_CAPACITY];
     size_t visible_count = 0;
-    char folders[24][80];
+    folder_span_t folders[FILES_PAGE_ENTRY_CAPACITY];
     size_t folder_count = 0;
     size_t prefix_length = strlen(s_folder);
 
@@ -135,20 +163,19 @@ static void render_entries(void)
 
         const char *slash = strchr(path, '/');
         if (slash) {
-            size_t length = (size_t)(slash - path);
-            if (length == 0 || length >= sizeof(folders[0])) continue;
-            char name[80];
-            memcpy(name, path, length);
-            name[length] = '\0';
+            if (slash == path) continue;
+            const char *full_path = s_entries[i].path;
+            size_t length = (size_t)(slash - full_path);
             bool duplicate = false;
             for (size_t f = 0; f < folder_count; ++f) {
-                if (strcasecmp(folders[f], name) == 0) duplicate = true;
+                if (folders[f].length == length &&
+                    memcmp(folders[f].path, full_path, length) == 0) {
+                    duplicate = true;
+                    break;
+                }
             }
-            if (!duplicate && folder_count < 24 && contains_ci(name, s_search)) {
-                snprintf(folders[folder_count++], sizeof(folders[0]), "%s", name);
-            }
-        } else if (contains_ci(path, s_search) &&
-                   visible_count < FILES_PAGE_ENTRY_CAPACITY) {
+            if (!duplicate) folders[folder_count++] = (folder_span_t){full_path, length};
+        } else {
             visible[visible_count++] = &s_entries[i];
         }
     }
@@ -161,15 +188,10 @@ static void render_entries(void)
     int y = 0;
     for (size_t i = 0; i < folder_count; ++i) {
         char full_path[PRINTER_FILES_MAX_PATH];
-        full_path[0] = '\0';
-
-        if (s_folder[0]) {
-            strlcpy(full_path, s_folder, sizeof(full_path));
-            strlcat(full_path, "/", sizeof(full_path));
-        }
-
-        strlcat(full_path, folders[i], sizeof(full_path));
-        ui_files_add_folder_button(folders[i], full_path, y);
+        memcpy(full_path, folders[i].path, folders[i].length);
+        full_path[folders[i].length] = '\0';
+        ui_files_add_folder_button(full_path + (prefix_length ? prefix_length + 1 : 0),
+                                   full_path, y);
         y += ui_theme_density_metric(66, 78, 90);
     }
     for (size_t i = 0; i < visible_count; ++i) {
@@ -214,7 +236,8 @@ void files_page_controller_cycle_sort(void)
 void files_page_controller_open_folder(const char *path)
 {
     char next[sizeof(s_folder)];
-    snprintf(next, sizeof(next), "%s", path ? path : "");
+    int length = snprintf(next, sizeof(next), "%s", path ? path : "");
+    if (length < 0 || (size_t)length >= sizeof(next)) return;
     if (!strcmp(s_folder, next)) return;
     memcpy(s_folder, next, strlen(next) + 1);
     render_entries();
@@ -317,10 +340,15 @@ static bool files_load_launch(files_load_job_t *job)
 static void files_load_publish(files_load_job_t *job)
 {
     if (!job->fetched) {
-        char message[160];
-        snprintf(message, sizeof(message), "File list failed.\nHTTP %d\n%s",
-                 job->http_code, job->body ? esp_err_to_name(job->error) :
-                 "Unable to allocate file-list buffer.");
+        const char *message;
+        if (job->http_code == 401 || job->http_code == 403)
+            message = "Access denied. Check the printer profile credentials, then tap Refresh.";
+        else if (!job->body)
+            message = "Not enough memory to load files. Tap Refresh to try again.";
+        else if (job->http_code <= 0)
+            message = "The file list request did not complete. Check the printer connection, then tap Refresh.";
+        else
+            message = "The printer did not provide a file list. Tap Refresh to try again.";
         ui_files_set_status(message);
         return;
     }
@@ -335,10 +363,10 @@ static void files_load_publish(files_load_job_t *job)
         return;
     }
     s_entry_count = count > 0 ? (size_t)count : 0;
+    reconcile_folder();
     files_row_preview_begin(job->host, job->port, job->api_key,
                             job->sd_available, s_entries, s_entry_count,
                             files_page_controller_preview_ready);
-    s_index_generation = job->generation;
     s_index_ready = true;
     render_entries();
 }
@@ -363,7 +391,7 @@ static void files_load_poll(lv_timer_t *timer)
             job->page != ui_files_get_popup() || !job->page) files_load_free(job);
         else if (!files_load_launch(job)) {
             files_load_free(job);
-            ui_files_set_status("Unable to start file-list worker.");
+            ui_files_set_status("Could not start loading files. Tap Refresh to try again.");
         }
     }
     if (!s_load_busy && !s_pending_load) {
@@ -380,7 +408,9 @@ void files_page_controller_reload(
     s_index_ready = false;
     s_entry_count = 0;
     ui_files_clear_rows();
-    if (s_index_generation != moonraker_config_generation()) {
+    const uint32_t generation = moonraker_config_generation();
+    if (s_files_generation != generation) {
+        s_files_generation = generation;
         s_folder[0] = s_search[0] = '\0';
         ui_files_set_breadcrumb(s_folder);
         ui_files_set_search_text(s_search);
@@ -388,34 +418,34 @@ void files_page_controller_reload(
     files_load_free(s_pending_load);
     s_pending_load = NULL;
     if (!wifi_connected) {
-        ui_files_set_status("WiFi offline. Connect before loading files.");
+        ui_files_set_status("Wi-Fi offline. Connect the tablet to Wi-Fi, then tap Refresh.");
         return;
     }
     if (!moonraker_connected) {
-        ui_files_set_status("Moonraker offline. Check the active printer.");
+        ui_files_set_status("Printer offline. Check the active printer, then tap Refresh.");
         return;
     }
     if (!host || !host[0]) {
-        ui_files_set_status("Moonraker host is not configured.");
+        ui_files_set_status("Printer host is not configured. Set the address in Printers, then tap Refresh.");
         return;
     }
     ui_files_set_browser_callbacks(files_page_controller_set_search,
         files_page_controller_cycle_sort, files_page_controller_open_folder,
         files_page_controller_up_folder);
     if (!ensure_entries()) {
-        ui_files_set_status("Unable to allocate the file browser index.");
+        ui_files_set_status("Not enough memory to open the file list. Tap Refresh to try again.");
         return;
     }
     files_load_job_t *job = heap_caps_calloc(1, sizeof(*job),
                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!job) {
-        ui_files_set_status("Unable to allocate file-list job.");
+        ui_files_set_status("Not enough memory to load files. Tap Refresh to try again.");
         return;
     }
     snprintf(job->host, sizeof(job->host), "%s", host);
     snprintf(job->api_key, sizeof(job->api_key), "%s", api_key ? api_key : "");
     job->port = port;
-    job->generation = moonraker_config_generation();
+    job->generation = generation;
     job->request = s_load_request;
     job->page = ui_files_get_popup();
     job->sd_available = sd_available;
@@ -423,7 +453,7 @@ void files_page_controller_reload(
     if (s_load_busy) s_pending_load = job;
     else if (!files_load_launch(job)) {
         files_load_free(job);
-        ui_files_set_status("Unable to start file-list worker.");
+        ui_files_set_status("Could not start loading files. Tap Refresh to try again.");
     }
 }
 

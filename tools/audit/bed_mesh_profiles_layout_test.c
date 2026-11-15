@@ -195,7 +195,13 @@ int main(void){
   }
   lv_obj_t*initial=s.profile_popup;ui_bed_mesh_profiles_show_cb(NULL);assert(s.profile_popup==initial);
   if(!narrow&&density==1&&large)capture(theme,"list");
+  lv_obj_t *body=lv_obj_get_parent(s.connection_label);
+  lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);assert(lv_obj_get_scroll_y(body)>0);
   unsigned before=sends;tap(pointer,s.actions[1]);assert(sends==before+1&&s.profile_popup==initial&&strstr(lv_label_get_text(s.connection_label),"not accepted"));
+  lv_obj_update_layout(initial);inside(s.connection_label,body);
+  lv_obj_scroll_to_y(body,lv_obj_get_scroll_y(body)+lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);
+  int32_t reading_scroll=lv_obj_get_scroll_y(body);
+  ui_bed_mesh_profiles_refresh_availability();assert(lv_obj_get_scroll_y(body)==reading_scroll);
   /* Reordering a live snapshot must not change the name bound to a visible row. */
   char original[BED_MESH_PROFILE_NAME_MAX];strcpy(original,names[0]);char tmp[BED_MESH_PROFILE_NAME_MAX];strcpy(tmp,names[0]);strcpy(names[0],names[1]);strcpy(names[1],tmp);ui_bed_mesh_profiles_update(&mesh);assert(strstr(lv_label_get_text(s.connection_label),"not accepted"));
   accept=true;send_hook=reenter_load;load_selected_profile_cb(NULL);assert(sends==before+2&&!s.profile_popup);char expected[160];snprintf(expected,sizeof(expected),"BED_MESH_PROFILE LOAD=%s",original);assert(!strcmp(last_command,expected));send_hook=NULL;

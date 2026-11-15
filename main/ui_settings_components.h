@@ -33,7 +33,8 @@ lv_obj_t *ui_settings_section_add_percent_slider_row(
     int minimum,
     int maximum,
     int y,
-    lv_event_cb_t event_cb);
+    lv_event_cb_t event_cb,
+    lv_obj_t **description_out);
 
 lv_obj_t *ui_settings_section_add_action_row(
     lv_obj_t *section,

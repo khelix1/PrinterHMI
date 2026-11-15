@@ -191,7 +191,7 @@ static void rebuild_output(void)
     lv_label_set_long_mode(s_rows->empty,LV_LABEL_LONG_WRAP);
     ui_apply_custom_label_style(s_rows->empty,UI_FONT_BODY,UI_TEXT_DIM);}
         lv_obj_remove_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN);
-        ui_value_set_text(s_rows->empty,count?"No entries match these filters.":"Console history is empty.");
+        ui_value_set_text(s_rows->empty,count?"No entries match. Tap Reset filters to see all entries.":"No console entries yet.");
     }else if(s_rows->empty)lv_obj_add_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN);
     lv_obj_update_layout(s_output);
     s_programmatic_scroll=true;
@@ -209,12 +209,17 @@ static void update_connection(void)
 {
     if(!s_connection)return;
     moonraker_state_t state;moonraker_state_snapshot(&state);
+    /* Console stays usable over Moonraker for Klipper recovery commands. */
     bool live=state.moonraker_ok;
+    const char *status = !live ? "Offline" :
+        !strcmp(state.printer_state, "shutdown") ? "Klipper shutdown" :
+        !strcmp(state.printer_state, "error") ? "Klipper error" :
+        !state.live_data_ok ? "Waiting for Klipper" : "Connected";
     const char *name=moonraker_config_active_profile_name();
-    char caption[192];snprintf(caption,sizeof(caption),"%s | %s",name&&name[0]?name:"Active printer",live?"Connected":"Offline");
+    char caption[192];snprintf(caption,sizeof(caption),"%s | %s",name&&name[0]?name:"Active printer",ui_text(status));
     if(ui_value_set_text(s_connection,caption)){ui_text_fit_single_line(s_connection,UI_FONT_CAPTION);
     lv_label_set_long_mode(s_connection,LV_LABEL_LONG_CLIP);}
-    ui_value_set_color(s_connection,live?UI_OK_BRIGHT:UI_DANGER_BRIGHT,0);
+    ui_value_set_color(s_connection,!live?UI_DANGER_BRIGHT:state.live_data_ok&&!strcmp(status,"Connected")?UI_OK_BRIGHT:UI_WARN,0);
     bool owner_ok=!s_command_popup || s_command_owner==moonraker_config_generation();
     bool ready=live && owner_ok && s_command_input && !s_command_dispatching;
     if(s_command_feedback) {

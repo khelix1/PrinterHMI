@@ -44,6 +44,7 @@ typedef struct {
     bool editing_search;
     lv_obj_t *rows[MACRO_CONTROLLER_MAX_MACROS];
     lv_obj_t *empty;
+    const char *connection_message;
     char query[48];
     char pending_command[MACRO_COMMAND_MAX];
     lv_timer_t *refresh_timer;
@@ -536,6 +537,17 @@ static void macro_button_cb(lv_event_t *event)
 }
 
 
+static const char *macro_connection_message(void)
+{
+    moonraker_state_t live;
+    moonraker_state_snapshot(&live);
+    if (!live.moonraker_ok) return "Printer offline";
+    if (!strcmp(live.printer_state, "shutdown") || !strcmp(live.printer_state, "error"))
+        return "Printer needs attention";
+    if (printer_connection_reason(&live)[0]) return "Waiting for Klipper";
+    return NULL;
+}
+
 static void rebuild_macro_list(void)
 {
     if (!s_list) {
@@ -549,15 +561,18 @@ static void rebuild_macro_list(void)
     macro_controller_status_t status;
     macro_controller_status(&status);
     s_rendered_generation = status.generation;
+    s_macros->connection_message = macro_connection_message();
 
     if (s_status) {
         char status_text[96];
 
-        if (!status.discovered) {
+        if (s_macros->connection_message) {
+            snprintf(status_text, sizeof(status_text), "%s", ui_text(s_macros->connection_message));
+        } else if (!status.discovered) {
             snprintf(
                 status_text,
                 sizeof(status_text),
-                "Waiting for printer discovery");
+                "%s", ui_text("Loading macros..."));
         } else if (status.truncated) {
             snprintf(
                 status_text,
@@ -587,7 +602,9 @@ static void rebuild_macro_list(void)
             empty,
             status.discovered
                 ? ui_text("No public macros were reported by this printer.")
-                : ui_text("Waiting for Moonraker object discovery..."));
+                : ui_text(s_macros->connection_message
+                    ? "Macro list will load when the printer is ready."
+                    : "Getting the macro list from the printer."));
         lv_obj_set_width(empty, lv_pct(100));
         lv_obj_set_style_text_align(
             empty,
@@ -647,7 +664,7 @@ static void rebuild_macro_list(void)
     }
     }
     lv_obj_send_event(s_list, LV_EVENT_SIZE_CHANGED, NULL);
-    if (s_macros->query[0]) {
+    if (s_macros->query[0] && !s_macros->connection_message && s_status) {
         char text[96];
         snprintf(text, sizeof(text), "%u match%s: %.47s", (unsigned)displayed, displayed==1?"":"es", s_macros->query);
         lv_label_set_text(s_status, text);
@@ -675,8 +692,11 @@ static void refresh_timer_cb(lv_timer_t *timer)
         for(size_t i=0;i<MACRO_CONTROLLER_MAX_MACROS;i++)if(s_macros->rows[i])lv_obj_add_state(s_macros->rows[i],LV_STATE_DISABLED);
         macro_feedback(UI_STATUS_WARNING,"Printer changed","Reopen Macros for this printer.");return;
     }
-    if (status.generation !=
-        s_rendered_generation) {
+    const char *previous = s_macros->connection_message;
+    const char *current = macro_connection_message();
+    bool connection_changed = (previous == NULL) != (current == NULL) ||
+        (previous && current && strcmp(previous, current) != 0);
+    if (connection_changed || status.generation != s_rendered_generation) {
         rebuild_macro_list();
     }
 }

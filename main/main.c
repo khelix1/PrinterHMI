@@ -633,6 +633,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGW(TAG, "STA_DISCONNECTED: reason=%u (%s), retry=%d/%d",
                  event->reason, wifi_reason_name(event->reason), s_retry_num, MAXIMUM_RETRY);
         s_got_ip = false;
+        printer_profile_preview_worker_set_network_ready(false);
 
         if (!s_wifi_credentials_configured) {
             safe_copy(
@@ -654,6 +655,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         s_ip = event->ip_info.ip;
         s_got_ip = true;
+        printer_profile_preview_worker_set_network_ready(true);
         s_retry_num = 0;
         wifi_status[0] = '\0';
         ESP_LOGI(TAG, "GOT_IP");
@@ -661,6 +663,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         if (s_wifi_event_group) xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_LOST_IP) {
         s_got_ip = false;
+        printer_profile_preview_worker_set_network_ready(false);
         safe_copy(wifi_status, sizeof(wifi_status), "Network: lost IP");
         ESP_LOGW(TAG, "LOST_IP");
     }
@@ -1479,7 +1482,7 @@ static void ui_network_refresh_bridge(void)
         network_banner_text(),
         s_got_ip,
         connected_wifi_ssid,
-        ui_network_tools_selected_wifi_ssid,
+        saved_wifi_ssid,
         ip_buf,
         s_moonraker_ok,
         moonraker_config_host(),
@@ -1938,7 +1941,7 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
 
         .banner_text = printer_controller_machine_banner_text(
             telemetry_state.printer_state,
-            telemetry_state.moonraker_ok),
+            telemetry_state.moonraker_ok, telemetry_state.live_data_ok),
         .printer_state = telemetry_state.printer_state,
         .printer_file = telemetry_state.printer_file,
         .selected_preview_file = thumbnail_session_selected_file(),
@@ -2046,7 +2049,7 @@ static const char *printer_banner_text(void)
     moonraker_state_snapshot(&state);
     return printer_controller_machine_banner_text(
         state.printer_state,
-        state.moonraker_ok);
+        state.moonraker_ok, state.live_data_ok);
 }
 
 
@@ -3591,6 +3594,7 @@ static void hmi_runtime_task(void *arg)
             if (esp_netif_get_ip_info(s_sta_netif, &ip) == ESP_OK && ip.ip.addr != 0) {
                 s_ip = ip.ip;
                 s_got_ip = true;
+                printer_profile_preview_worker_set_network_ready(true);
                 wifi_status[0] = '\0';
 
                 if (!sd_mount_attempted) {
@@ -3680,9 +3684,12 @@ static void hmi_runtime_task(void *arg)
             .last_print_state_size =
                 sizeof(last_dashboard_print_state),
 
+            /* The active thumbnail downloader pauses the WebSocket for
+             * exclusive network access. Keep that work behind the chooser
+             * so startup status can settle before downloading a preview. */
             .preview_network_ready =
                 s_got_ip && s_moonraker_ok && !exclusive_network &&
-                !ui_files_detail_is_open(),
+                !ui_printer_chooser_is_open() && !ui_files_detail_is_open(),
 
             .set_live_target =
                 thumbnail_preview_coordinator_set_live_target,

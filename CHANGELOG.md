@@ -1,5 +1,151 @@
 # Changelog
 
+## [7.3.115-dev] - 2026-11-15
+
+- Keep Firmware releases retryable when the panel cannot allocate its result timer.
+
+## [7.3.114-dev] - 2026-11-15
+
+- Keep printer profile connection tests, camera tests, and camera searches retryable if the panel cannot prepare to track the result.
+
+## [7.3.113-dev] - 2026-11-15
+
+- Keep Setup Wi-Fi scans, connection verification, camera discovery, and stream tests retryable if the panel cannot allocate a result timer.
+
+## [7.3.112-dev] - 2026-11-15
+
+- Bring failed print estimate saves, printer profile and certificate errors, backup restore startup failures, and rejected Bed Mesh actions into view.
+
+## [7.3.111-dev] - 2026-11-15
+
+- Bring Settings dialog errors into view when a save, theme refresh, theme removal, or reset fails.
+
+## [7.3.110-dev] - 2026-11-14
+
+- Keep sleep timeout save failures visible beside the unchanged setting until a save succeeds.
+
+## [7.3.109-dev] - 2026-11-14
+
+- Keep an inline brightness warning visible when the live change could not be saved.
+
+## [7.3.108-dev] - 2026-11-14
+
+- Clearly mark finished backup and restore operations and remove the progress bar after failures.
+
+## [7.3.107-dev] - 2026-11-14
+
+- Explain firmware release check failures and offer Retry when the check cannot start.
+
+## [7.3.106-dev] - 2026-11-14
+
+- Explain why Calibration controls are disabled and retain the current status when revisiting the page.
+
+## [7.3.105-dev] - 2026-11-14
+
+- Clarify Bed Mesh empty and disconnected states. Show actions that are available and label the last reported mesh before the profile name.
+
+## [7.3.104-dev] - 2026-11-14
+
+- Distinguish a drybox that is not configured from Klipper startup, printer faults and lost connections.
+
+## [7.3.103-dev] - 2026-11-14
+
+- Show live connection status in Devices even when the device list has not changed.
+
+## [7.3.102-dev] - 2026-11-14
+
+- Keep Camera Retry available while automatic reconnect waits for a usable frame.
+
+## [7.3.101-dev] - 2026-11-14
+
+- Show Klipper readiness and faults in Console, and explain how to recover from an empty filtered view.
+
+## [7.3.100-dev] - 2026-11-14
+
+- Show distinct Macros messages when a printer is offline, waiting for Klipper, or loading the macro catalog.
+
+## [7.3.99-dev] - 2026-11-14
+
+- Give Files clear retry guidance for missing Wi-Fi, unavailable printers, access denial and file list failures.
+
+## [7.3.98-dev] - 2026-11-14
+
+- Separate Wi-Fi and printer connection status on Network. Show a credential hint for an HTTP access denial and clear old HTTP codes when Wi-Fi drops.
+
+## [7.3.97-dev] - 2026-11-14
+
+- Show completed and cancelled prints explicitly on Dashboard and Printer. Clear the ETA for both outcomes and avoid showing stale progress after cancellation.
+
+## [7.3.96-dev] - 2026-11-14
+
+- Show when Dashboard print status is unavailable, and distinguish Klipper startup and faults from lost connections in the chooser and machine banners.
+
+## [7.3.95-dev] - 2026-11-14
+
+- Retire cached printer health, pending probe results and retry delays when a profile’s connection settings change.
+
+## [7.3.94-dev] - 2026-11-14
+
+- Keep HTTP errors and rejected status payloads from marking inactive printers offline. Measure retry delays from the end of the request.
+
+## [7.3.93-dev] - 2026-11-14
+
+- Discard printer status and preview requests from before a tablet Wi-Fi reconnect. Reset the inactive worker retry timers when it observes the new connection.
+
+## [7.3.92-dev] - 2026-11-14
+
+- Verify printer status before downloading chooser previews. Defer the active print thumbnail while the chooser is open and ignore inactive probe results when the tablet loses its network.
+
+## [7.3.91-dev] - 2026-11-14
+
+- Keep the known total layer visible on Dashboard and Printer while the current layer is unknown. Clear Printer layer counts when offline.
+
+## [7.3.90-dev] - 2026-11-11
+
+- Preserve the reported current layer when it exceeds the estimated total. Dashboard and Printer show the known current layer with an unknown total.
+
+## [7.3.89-dev] - 2026-11-11
+
+- Allow a Z-based layer estimate after printing starts even if Klipper reports layer zero and file progress is unavailable.
+
+## [7.3.88-dev] - 2026-11-11
+
+- Show an unknown layer during a live print when only the total layer count is known.
+
+## [7.3.87-dev] - 2026-11-11
+
+- Hide Dashboard print metrics until live telemetry is available. Cached layer metadata can no longer display layer zero during a disconnect.
+
+## [7.3.86-dev] - 2026-11-11
+
+- Show a paused ETA whenever live printer status confirms a pause, even without a valid clock or current estimate.
+
+## [7.3.85-dev] - 2026-11-11
+
+- Preserve Files search when retrying a failed first load on the same printer.
+
+## [7.3.84-dev] - 2026-11-11
+
+- Return to the nearest listed parent when a successful Files refresh no longer contains the open folder. Keep the current search and avoid guessing when the index is full.
+- Reject overlong folder paths instead of silently truncating them.
+
+## [7.3.83-dev] - 2026-11-11
+
+- Show case-distinct and long folder names in Files, and remove the separate 24-folder display cap.
+- Break date and size sort ties by filename.
+
+## [7.3.82-dev] - 2026-11-11
+
+- Fall back to the first available camera when the saved default cannot be read, and ignore invalid camera view flags.
+
+## [7.3.81-dev] - 2026-11-11
+
+- Validate saved camera strings before use. An invalid label falls back to the numbered name; an invalid URL leaves the camera unavailable.
+
+## [7.3.80-dev] - 2026-11-11
+
+- Refuse camera view saves when the camera is missing or its saved URL cannot be read.
+
 ## [7.3.79-dev] - 2026-11-10
 
 - Clear a removed camera’s rotation, mirror settings, and saved default selection if it was the default. Ordinary camera edits retain these settings.

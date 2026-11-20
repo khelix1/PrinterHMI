@@ -29,7 +29,8 @@ typedef struct {
     lv_obj_t *surface_grid_button;
     lv_obj_t *surface_grid_label;
     lv_obj_t *calibrate_confirm;
-    lv_obj_t *calibrate_button;
+    lv_obj_t *calibrate_button, *calibrate_start, *calibrate_feedback;
+    lv_obj_t *profiles_button;
     lv_timer_t *connection_timer;
     uint32_t owner_generation;
     uint16_t *buf;
@@ -42,6 +43,13 @@ typedef struct {
     ui_bed_mesh_command_cb_t command;
 } ui_t;
 static ui_t s;
+static bool calibration_dispatching;
+static uint32_t viewer_epoch;
+static struct {
+    bool pending, expired;
+    uint32_t owner, revision, started;
+} calibration;
+#define MESH_CALIBRATION_WAIT_MS 120000u
 
 void printerhmi_bed_mesh_multitouch_update(
     uint8_t count,
@@ -81,7 +89,27 @@ static void render(void)
     ui_bed_mesh_renderer_render(&config);
 }
 
+static void calibration_progress(const moonraker_state_t *live)
+{
+    if (calibration.owner != moonraker_config_generation()) {
+        calibration.pending = calibration.expired = false;
+        return;
+    }
+    if (!calibration.pending && !calibration.expired) return;
+    if (live->moonraker_ok && live->live_data_ok &&
+        s.owner_generation == calibration.owner && s.mesh.valid &&
+        s.mesh.mesh_revision != calibration.revision) {
+        calibration.pending = calibration.expired = false;
+    } else if (calibration.pending && lv_tick_elaps(calibration.started) >= MESH_CALIBRATION_WAIT_MS) {
+        calibration.pending = false;
+        calibration.expired = true;
+    }
+}
+
 static const char *mesh_action_reason(void){
+    if(calibration_dispatching || (calibration.pending && calibration.owner == s.owner_generation))
+        return "Waiting for a new mesh.";
+    if(!s.connection_timer)return "Live updates unavailable. Reopen Bed Mesh.";
     moonraker_state_t live;moonraker_state_snapshot(&live);
     return s.owner_generation!=moonraker_config_generation()?"Printer changed - reopen Bed Mesh.":printer_idle_reason(&live);
 }
@@ -97,10 +125,18 @@ static void stats(void)
     moonraker_state_t live;moonraker_state_snapshot(&live);
     bool same_printer = s.owner_generation == moonraker_config_generation();
     const char *reason = !same_printer ? "Printer changed. Reopen Bed Mesh." :
+        !s.connection_timer ? "Live updates unavailable. Reopen Bed Mesh." :
         !live.moonraker_ok ? "Printer offline." :
         !strcmp(live.printer_state, "shutdown") || !strcmp(live.printer_state, "error")
             ? "Printer fault." :
         printer_connection_reason(&live)[0] ? "Waiting for Klipper." : "";
+    calibration_progress(&live);
+    if (same_printer && !reason[0] && (calibration.pending || calibration.expired)) {
+        ui_value_set_text(s.stats, calibration.pending ?
+            "Calibration requested. Waiting for a new mesh..." :
+            "No new mesh reported. Check Console before retrying.");
+        return;
+    }
     if (!same_printer || !s.mesh.valid) {
         const char *message = reason[0] ? reason :
             printer_idle_reason(&live)[0] ? "No active mesh yet." :
@@ -110,7 +146,7 @@ static void stats(void)
         if(s.metrics)ui_value_set_text(s.metrics,"");
         return;
     }
-    char summary[160];
+    char summary[512];
     snprintf(summary,sizeof(summary),"%s%s%s | %u x %u | Z %.0fx%s",
         reason, reason[0] ? " Last reported mesh: " : "Profile ",
         s.mesh.profile_name[0]?s.mesh.profile_name:"Current mesh",s.mesh.cols,s.mesh.rows,s.zscale,
@@ -124,11 +160,19 @@ static void stats(void)
     }
 }
 static void mesh_connection_refresh(lv_timer_t *timer){
-    (void)timer;if(!s.popup)return;
-    if(s.calibrate_button){if(mesh_action_reason()[0])lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
-    ui_bed_mesh_profiles_refresh_availability();
+    if(!s.popup || (timer && timer != s.connection_timer))return;
     if(s.owner_generation==moonraker_config_generation())ui_bed_mesh_refresh();
     stats();
+    const bool blocked = mesh_action_reason()[0] != '\0' || ui_bed_mesh_profiles_is_open();
+    if(s.calibrate_button){if(blocked)lv_obj_add_state(s.calibrate_button,LV_STATE_DISABLED);else lv_obj_remove_state(s.calibrate_button,LV_STATE_DISABLED);}
+    if(s.profiles_button) {
+        if(!s.connection_timer || s.owner_generation != moonraker_config_generation() ||
+           s.calibrate_confirm || calibration_dispatching ||
+           (calibration.pending && calibration.owner == s.owner_generation))
+            lv_obj_add_state(s.profiles_button,LV_STATE_DISABLED);
+        else lv_obj_remove_state(s.profiles_button,LV_STATE_DISABLED);
+    }
+    ui_bed_mesh_profiles_refresh_availability();
 }
 static uint32_t mesh_content_hash(void){
     uint32_t hash=2166136261u;const unsigned char *bytes=(const unsigned char *)s.values;size_t count=s.mesh.valid?(size_t)s.mesh.rows*s.mesh.cols*sizeof(float):0;
@@ -231,37 +275,75 @@ static void minus_cb(lv_event_t *e)
     ui_bed_mesh_gestures_zoom_out();
 }
 
+static void calibration_ref_deleted(lv_event_t *event)
+{
+    lv_obj_t *target = lv_event_get_target_obj(event);
+    if (target == s.calibrate_start) s.calibrate_start = NULL;
+    if (target == s.calibrate_feedback) s.calibrate_feedback = NULL;
+    if (target == s.calibrate_confirm) {
+        s.calibrate_confirm = s.calibrate_start = s.calibrate_feedback = NULL;
+    }
+}
+
 static void close_calibrate_confirm_cb(lv_event_t *e)
 {
     (void)e;
-
-    if (s.calibrate_confirm) {
-        lv_obj_t *popup = s.calibrate_confirm;
-        s.calibrate_confirm = NULL;
-        lv_obj_delete(popup);
-    }
+    if (s.calibrate_confirm) lv_obj_delete(s.calibrate_confirm);
 }
 
 static void confirm_calibrate_cb(lv_event_t *e)
 {
-    (void)e;
-
-    if(mesh_action_reason()[0]){ui_cal_dialog_notice(UI_STATUS_WARNING,"BED MESH NOT READY",mesh_action_reason());return;}
-    /*
-     * Preserve the command callback before closing the modal. The mesh
-     * viewer remains open so its live snapshot can refresh after probing.
-     */
-    ui_bed_mesh_command_cb_t command = s.command;
-    close_calibrate_confirm_cb(NULL);
-
-    if (command) {
-        command("BED_MESH_CALIBRATE");
+    if (!s.calibrate_confirm || ui_bed_mesh_profiles_is_open() || !s.calibrate_start || lv_obj_has_state(s.calibrate_start, LV_STATE_DISABLED) || calibration_dispatching ||
+        (e && (lv_event_get_code(e) != LV_EVENT_CLICKED ||
+            lv_event_get_target_obj(e) != s.calibrate_start ||
+            lv_event_get_current_target_obj(e) != s.calibrate_start))) return;
+    uint32_t owner = s.owner_generation, epoch = viewer_epoch;
+    lv_obj_t *review = s.calibrate_confirm;
+    ui_bed_mesh_refresh();
+    if (epoch != viewer_epoch || review != s.calibrate_confirm || !s.calibrate_start ||
+        ui_bed_mesh_profiles_is_open() ||
+        lv_obj_has_state(s.calibrate_start, LV_STATE_DISABLED)) return;
+    const char *reason = mesh_action_reason();
+    if (reason[0]) { ui_value_set_text(s.calibrate_feedback, reason); return; }
+    uint32_t revision = s.mesh.mesh_revision;
+    calibration_dispatching = true;
+    bool sent = s.command && s.command("BED_MESH_CALIBRATE");
+    calibration_dispatching = false;
+    if (sent && owner == moonraker_config_generation()) {
+        calibration.owner = owner;
+        calibration.revision = revision;
+        calibration.started = lv_tick_get();
+        calibration.pending = true;
+        calibration.expired = false;
     }
+    if (epoch != viewer_epoch || review != s.calibrate_confirm ||
+        owner != moonraker_config_generation()) return;
+    if (sent) close_calibrate_confirm_cb(NULL);
+    else ui_value_set_text(s.calibrate_feedback, "Request not accepted. Check Console and retry.");
+    mesh_connection_refresh(NULL);
+}
+
+static bool mesh_button_click(lv_event_t *event, lv_obj_t *button)
+{
+    return button && !lv_obj_has_state(button, LV_STATE_DISABLED) &&
+        (!event || (lv_event_get_code(event) == LV_EVENT_CLICKED &&
+         lv_event_get_target_obj(event) == button &&
+         lv_event_get_current_target_obj(event) == button));
+}
+
+static void open_profiles_cb(lv_event_t *event)
+{
+    if (!mesh_button_click(event, s.profiles_button) || !s.popup || !s.connection_timer ||
+        s.calibrate_confirm || calibration_dispatching ||
+        (calibration.pending && calibration.owner == s.owner_generation) ||
+        s.owner_generation != moonraker_config_generation()) return;
+    ui_bed_mesh_profiles_show_cb(event);
+    mesh_connection_refresh(NULL);
 }
 
 static void calibrate_cb(lv_event_t *e)
 {
-    (void)e;
+    if (!mesh_button_click(e, s.calibrate_button) || ui_bed_mesh_profiles_is_open()) return;
 
     if(mesh_action_reason()[0]){stats();return;}
     if (s.calibrate_confirm) {
@@ -278,6 +360,7 @@ static void calibrate_cb(lv_event_t *e)
     if (height > 340) height = 340;
     s.calibrate_confirm = ui_popup_create(parent, width, height, UI_POPUP_DANGER);
     if (!s.calibrate_confirm) return;
+    lv_obj_add_event_cb(s.calibrate_confirm, calibration_ref_deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_flex_flow(s.calibrate_confirm, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s.calibrate_confirm, UI_PAD_POPUP, 0);
     lv_obj_set_style_pad_row(s.calibrate_confirm, UI_GAP_ROW, 0);
@@ -302,6 +385,8 @@ static void calibrate_cb(lv_event_t *e)
         "Make sure the bed is clear and the printer is ready.",
         UI_FONT_CAPTION, UI_TEXT_MUTED);
     lv_obj_set_style_text_line_space(readiness, 4, 0);
+    s.calibrate_feedback = readiness;
+    lv_obj_add_event_cb(readiness, calibration_ref_deleted, LV_EVENT_DELETE, NULL);
 
     lv_obj_t *footer = lv_obj_create(s.calibrate_confirm);
     ui_responsive_column(footer);
@@ -311,13 +396,15 @@ static void calibrate_cb(lv_event_t *e)
     lv_obj_set_style_pad_column(footer, UI_GAP_ROW, 0);
     ui_form_action(s.calibrate_confirm, UI_BUTTON_CANCEL, LV_SYMBOL_LEFT " Back",
         close_calibrate_confirm_cb, NULL);
-    ui_form_action(s.calibrate_confirm, UI_BUTTON_DANGER, LV_SYMBOL_PLAY " Start probing",
+    s.calibrate_start = ui_form_action(s.calibrate_confirm, UI_BUTTON_DANGER, LV_SYMBOL_PLAY " Start probing",
         confirm_calibrate_cb, NULL);
+    if (s.calibrate_start) lv_obj_add_event_cb(s.calibrate_start, calibration_ref_deleted, LV_EVENT_DELETE, NULL);
     ui_form_finish(s.calibrate_confirm);
 }
 
 void ui_bed_mesh_close(void)
 {
+    ++viewer_epoch;
     /*
      * The shared confirmation is a top-layer sibling, not a child of the
      * mesh viewer. Close it first so no modal surface can outlive its owner.
@@ -374,7 +461,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
     lv_obj_add_event_cb(s.popup,mesh_deleted,LV_EVENT_DELETE,NULL);
     ui_bed_mesh_profiles_init(
         s.popup,
-        s.command);
+        s.command, ui_bed_mesh_refresh);
 
     lv_obj_set_size(
         s.popup,
@@ -508,7 +595,7 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         calibrate_cb,
         NULL,
         NULL);
-    ui_popup_add_action_aligned(
+    s.profiles_button=ui_popup_add_action_aligned(
         s.popup,
         UI_POPUP_ACTION_SECONDARY,
         "Profiles",
@@ -517,10 +604,10 @@ void ui_bed_mesh_show(ui_bed_mesh_command_cb_t command)
         LV_ALIGN_BOTTOM_RIGHT,
         -634,
         -12,
-        ui_bed_mesh_profiles_show_cb,
+        open_profiles_cb,
         NULL,
         NULL);
 
-    ui_bed_mesh_refresh();
-    s.connection_timer=lv_timer_create(mesh_connection_refresh,250,NULL);mesh_connection_refresh(NULL);
+    s.connection_timer=lv_timer_create(mesh_connection_refresh,250,NULL);
+    mesh_connection_refresh(NULL);
 }

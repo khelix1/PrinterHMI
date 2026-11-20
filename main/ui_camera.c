@@ -251,6 +251,8 @@ static void camera_mark_unavailable(void)
     camera_release_frame();
     if(!camera_ui_current(&context))return;
     s_camera_last_frame_tick = 0;
+    s_camera_window_tick = 0;
+    s_camera_frame_count = 0;
     camera_set_status("Camera unavailable. Retrying automatically.");
 }
 
@@ -560,7 +562,7 @@ static void camera_configure_cb(lv_event_t *event)
 
 static void camera_poll_cb(lv_timer_t *timer)
 {
-    if(s_camera_show_depth || s_camera_polling || !camera_page_active() || (timer && timer!=s_refresh_timer))return;
+    if(!s_refresh_timer || s_camera_show_depth || s_camera_polling || !camera_page_active() || (timer && timer!=s_refresh_timer))return;
     s_camera_polling=true;
     camera_ui_context_t context=camera_ui_context();
     uint32_t now=lv_tick_get();
@@ -674,9 +676,17 @@ finished:
 }
 
 
+static bool camera_poll_ready(void)
+{
+    if (!camera_page_active()) return false;
+    if (!s_refresh_timer) s_refresh_timer = lv_timer_create(camera_poll_cb,100,NULL);
+    if (!s_refresh_timer) camera_set_status("Camera unavailable. Tap Retry.");
+    return s_refresh_timer != NULL;
+}
+
 static void camera_retry_cb(lv_event_t *event)
 {
-    if(!camera_owned_action(event,s_retry_button))return;
+    if(!camera_owned_action(event,s_retry_button) || !camera_poll_ready())return;
     ++s_camera_ui_epoch;
     camera_ui_context_t context=camera_ui_context();
     s_camera_dialog_dispatching=true;
@@ -693,7 +703,11 @@ finished:
 
 static void camera_start(void)
 {
-    if(!camera_page_active() || !s_refresh_timer)return;
+    if (!camera_page_active()) return;
+    if (!s_refresh_timer) {
+        camera_set_status("Camera unavailable. Tap Retry.");
+        return;
+    }
     camera_ui_context_t context=camera_ui_context();
     lv_timer_t *timer=s_refresh_timer;
     camera_set_status("Connecting to camera stream...");
@@ -833,7 +847,7 @@ static void camera_picker_select_cb(lv_event_t *event)
     camera_set_status("Connecting to selected camera...");
     if(!camera_review_current(&context,popup,epoch,false))goto finished;
     camera_picker_close_cb(NULL);
-    if(camera_ui_current(&context))camera_poll_cb(NULL);
+    if(camera_ui_current(&context) && camera_poll_ready())camera_poll_cb(NULL);
 finished:
     s_camera_dialog_dispatching=false;
 }
@@ -1015,7 +1029,7 @@ void ui_camera_show(void)
 
 void ui_camera_show_fullscreen(void)
 {
-    if(camera_show_page() && camera_page_active() && !s_fullscreen)camera_set_viewport(true);
+    if(camera_show_page() && camera_page_active() && s_refresh_timer && !s_fullscreen)camera_set_viewport(true);
 }
 
 

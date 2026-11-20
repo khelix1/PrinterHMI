@@ -1,5 +1,223 @@
 # Changelog
 
+## [7.3.164-dev] - 2026-11-20
+
+- Keep the Studio bed temperature at the single-nozzle size on both Dashboard and Printer.
+- Use the same current/target display for the bed and single nozzle on both Studio pages.
+
+## [7.3.163-dev] - 2026-11-20
+
+- Keep Studio Dashboard and Printer temperatures at consistent sizes as readings change.
+
+## [7.3.162-dev] - 2026-11-20
+
+- Keep the Studio Dashboard bed and single-nozzle temperatures at the original large size, with targets below.
+
+## [7.3.161-dev] - 2026-11-20
+
+- Match the single-nozzle temperature size to the bed in Studio.
+- Show current and target temperatures to one decimal place on Dashboard and Printer.
+
+## [7.3.160-dev] - 2026-11-20
+
+- Restore the large bed temperature on Studio Dashboard and Printer while keeping the current/target format.
+
+## [7.3.159-dev] - 2026-11-20
+
+- Match the bed and single-nozzle temperature displays to the tool list on Dashboard and Printer.
+
+## [7.3.158-dev] - 2026-11-20
+
+- Size the tool readings on Dashboard and Printer to the number of detected hotends.
+- Keep the full Printer progress percentage visible at 100%.
+
+## [7.3.157-dev] - 2026-11-20
+
+- Show current and target temperatures for up to four detected hotends on Dashboard and Printer.
+- Give Printer progress a clearer percentage and a progress bar.
+
+## [7.3.156-dev] - 2026-11-19
+
+- Open Console before loading retained history and show recent messages first when Follow is on.
+
+## [7.3.155-dev] - 2026-11-19
+
+- Make Console temperature visibility explicit and filter reports with custom sensor IDs.
+
+## [7.3.154-dev] - 2026-11-19
+
+- Keep Console and calibration history reads ordered while new messages arrive.
+- Reuse unchanged Console rows on refresh.
+
+## [7.3.153-dev] - 2026-11-19
+
+- Retain up to 256 Console output entries in PSRAM, with a 64-entry internal memory fallback.
+
+## [7.3.152-dev] - 2026-11-19
+
+- Close the TMC driver dropdown when live data is lost or the driver list changes.
+- Guard Motion Diagnostics actions and measurement editor events against stale or unrelated controls.
+
+## [7.3.151-dev] - 2026-11-19
+
+- Keep Bed Mesh calibration and profile dialogs from overlapping.
+- Recheck printer ownership, network availability and live idle state immediately before sending Bed Mesh commands.
+
+## [7.3.150-dev] - 2026-11-19
+
+- Keep rejected Bed Mesh calibration confirmations open for retry.
+- Show pending calibration, prevent overlapping requests after reopening, and report when a new mesh has not arrived.
+
+## [7.3.149-dev] - 2026-11-18
+
+- Recheck live Bed Mesh data on confirmation and require a fresh review if the mesh changed or the profile disappeared.
+- Block Load while a Bed Mesh editor or confirmation is open.
+
+## [7.3.148-dev] - 2026-11-18
+
+- Keep brief active and background connection interruptions from generating offline/reconnected notification pairs; sustained loss warns after ten seconds.
+- Preserve the distinction between a reachable Moonraker and a disconnected Klipper, with a specific warning if Klipper remains disconnected.
+
+## [7.3.147-dev] - 2026-11-17
+
+- Show the active extruder in filament recovery and block stale actions if the tool changes.
+- Recheck readiness immediately before dispatch and follow live print status after Resume.
+
+## [7.3.146-dev] - 2026-11-17
+
+- Record normal print completion in Event History without opening a notification.
+- Preserve Moonraker reachability when printer telemetry goes stale on a connected socket.
+
+## [7.3.145-dev] - 2026-11-17
+
+- Keep manual probe and Axis Twist adjustments open after rejected moves, accepts or aborts.
+- Recheck printer ownership for manual actions, homing and capability for Probe Accuracy, and the active tool for PA tower setup.
+
+## [7.3.144-dev] - 2026-11-17
+
+- Revalidate the active confirmation and printer before sending PID, custom macro, screw tilt and gantry leveling commands.
+- Start result tracking only after the command passes those checks so an abandoned confirmation leaves prior results intact.
+
+## [7.3.143-dev] - 2026-11-17
+
+- Keep read-only resonance and sensor checks from completing or enabling Save based on unrelated console save hints.
+- Verify the confirmation, current results and active printer again before sending SAVE_CONFIG.
+
+## [7.3.142-dev] - 2026-11-17
+
+- Guard Shaper, Resonance and Sensor dispatch against stale dialogs and unrelated clicks.
+
+## [7.3.141-dev] - 2026-11-17
+
+- Choose X, Y, or both axes before running Input Shaper calibration.
+
+## [7.3.140-dev] - 2026-11-17
+
+- Show the Shaper calibration action when Klipper advertises SHAPER_CALIBRATE.
+
+## [7.3.139-dev] - 2026-11-16
+
+- Clear stalled Dashboard camera frames and report stream startup failures.
+- Restart Camera FPS measurement after a feed interruption.
+
+## [7.3.138-dev] - 2026-11-16
+
+- Reject oversized Wi-Fi passwords in Network without truncating input.
+- Keep Setup Review in sync with Wi-Fi address readiness and handle full-length network names consistently.
+
+## [7.3.137-dev] - 2026-11-16
+
+- Require an address before verifying Setup Wi-Fi and reject passwords that would be truncated.
+- Keep Setup navigation and Continue/Skip actions bound to their current controls.
+
+## [7.3.136-dev] - 2026-11-16
+
+- Recover the saved sleep timeout if its timer cannot start.
+- Show retry feedback when the theme chooser cannot open, and visible validation for oversized update URLs.
+
+## [7.3.135-dev] - 2026-11-16
+
+- Offer manual Event History refresh if live follow cannot start.
+- Label static Printers and Tools status when live update timers cannot start, and retry when opened again.
+
+## [7.3.134-dev] - 2026-11-16
+
+- Report print completion when telemetry resumes for the same observed job and Moonraker stayed reachable.
+
+## [7.3.133-dev] - 2026-11-15
+
+- Keep live telemetry gaps from triggering Offline notices while Moonraker is reachable.
+
+## [7.3.132-dev] - 2026-11-15
+
+- Suppress duplicate print completion notices and history entries when printer status briefly changes after a job finishes.
+
+## [7.3.131-dev] - 2026-11-14
+
+- Disable macro actions and label Devices readings as a snapshot if live refresh cannot start.
+
+## [7.3.130-dev] - 2026-11-15
+
+- Keep the last reported bed mesh inspectable and disable printer actions if refresh cannot start.
+- Restore coverage of live Tools diagnostic transitions in the host test.
+
+## [7.3.129-dev] - 2026-11-15
+
+- Mark Console live updates unavailable and disable command entry if refresh cannot start.
+
+## [7.3.128-dev] - 2026-11-15
+
+- Keep filament recovery target controls and sensor readings in sync with recovery availability.
+
+## [7.3.127-dev] - 2026-11-15
+
+- Keep Toolhead commands disabled when live readings cannot refresh.
+
+## [7.3.126-dev] - 2026-11-15
+
+- Keep hotend and filament sensor actions unavailable when live refresh cannot start.
+
+## [7.3.125-dev] - 2026-11-15
+
+- Handle refresh startup failure in Probe Accuracy, Motion Limits, TMC diagnostics, and the axis distance calculator.
+
+## [7.3.124-dev] - 2026-11-15
+
+- Explain when Live Endstops cannot start refreshing and skip the unmonitored query.
+
+## [7.3.123-dev] - 2026-11-15
+
+- Disable filament recovery commands if live refresh cannot start, and retain action ownership during refresh.
+
+## [7.3.122-dev] - 2026-11-15
+
+- Disable Lighting controls if refresh cannot start, and clear stale readings when live lighting data is unavailable.
+
+## [7.3.121-dev] - 2026-11-15
+
+- Keep file print review and expanded details retryable after popup allocation failure, and ignore actions from unrelated or deleted print controls.
+
+## [7.3.120-dev] - 2026-11-15
+
+- Show retry feedback and skip metadata fetch when Files cannot open file details.
+
+## [7.3.119-dev] - 2026-11-15
+
+- Reserve result timers before starting Dashboard preview rendering and file thumbnail downloads.
+
+## [7.3.118-dev] - 2026-11-15
+
+- Keep Dashboard camera startup retryable when its refresh timer cannot open.
+- Retire the Files result timer when the list worker cannot start.
+
+## [7.3.117-dev] - 2026-11-15
+
+- Keep the Camera page retryable when it cannot allocate its refresh timer.
+
+## [7.3.116-dev] - 2026-11-15
+
+- Keep encrypted backup and restore verification retryable when progress tracking cannot open.
+
 ## [7.3.115-dev] - 2026-11-15
 
 - Keep Firmware releases retryable when the panel cannot allocate its result timer.

@@ -46,8 +46,17 @@ bool theme_manager_remove_custom(size_t index){removed_calls++;removed_index=ind
 static void changed(void){assert(!s_theme_popup&&!s_custom_theme_popup&&!s_custom_remove_popup);changed_calls++;}
 static void reset(void){count=8;active_custom=false;fail_select=fail_remove=false;active_theme=UI_THEME_OPERATOR;for(unsigned i=0;i<8;i++){snprintf(summaries[i].id,33,"theme_%u",i);memset(summaries[i].name,'A'+i,40);summaries[i].name[40]=0;memset(summaries[i].author,'a'+i,40);summaries[i].author[40]=0;memset(summaries[i].description,'x',120);summaries[i].description[120]=0;summaries[i].base_theme=i==7?UI_THEME_STUDIO_DARK:(ui_theme_id_t)(i%3);summaries[i].preview_background=0x102030;summaries[i].preview_card=0x304050;summaries[i].preview_text=0xeeeeee;summaries[i].preview_accent=0x33ccff;}}
 static void pump(void){lv_tick_inc(20);lv_timer_handler();}
+static unsigned theme_warnings;
+void ui_toast_show(ui_status_kind_t kind,const char *title,const char *detail)
+{
+    assert(kind==UI_STATUS_WARNING&&strstr(title,"unavailable")&&strstr(detail,"retry"));
+    theme_warnings++;
+}
 static void open_theme(void){
  assert(!s_theme_popup && !s_theme_open_pending);
+ unsigned warnings=theme_warnings;
+ reject_theme_async=true;ui_settings_popups_show_theme(changed);reject_theme_async=false;
+ assert(!s_theme_popup&&!s_theme_open_pending&&!s_theme_changed_cb&&theme_warnings==warnings+1);
  ui_settings_popups_show_theme(changed);
  assert(!s_theme_popup && s_theme_open_pending);
  ui_settings_popups_show_theme(changed); /* Rapid taps must queue only once. */

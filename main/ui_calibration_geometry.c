@@ -13,12 +13,15 @@
 static ui_calibration_geometry_context_t *s_geometry;
 static uint32_t s_geometry_epoch, s_screws_owner, s_gantry_owner;
 static bool s_geometry_dispatching, s_gantry_requested, s_screws_rendered;
+static lv_obj_t *s_screws_run_action;
+static lv_obj_t *s_gantry_run_action;
 static lv_obj_t *s_screws_feedback, *s_gantry_feedback;
 
 static void retire_screws(void)
 {
     ++s_geometry_epoch;
     s_screws_feedback = NULL;
+    s_screws_run_action = NULL;
     s_screws_rendered = false;
     if (s_geometry) {
         *s_geometry->screws_popup = NULL;
@@ -29,6 +32,7 @@ static void retire_gantry(void)
 {
     ++s_geometry_epoch;
     s_gantry_feedback = NULL;
+    s_gantry_run_action = NULL;
     s_gantry_requested = false;
     if (s_geometry) *s_geometry->gantry_popup = NULL;
 }
@@ -180,7 +184,9 @@ static void refresh_screws_results(void)
 
 static void run_screws_tilt_cb(lv_event_t *event)
 {
-    (void)event;
+    if (!event || !s_screws_run_action || lv_event_get_target_obj(event) != s_screws_run_action ||
+        lv_event_get_current_target_obj(event) != s_screws_run_action ||
+        lv_obj_has_state(s_screws_run_action, LV_STATE_DISABLED)) return;
     if (!s_geometry || !*s_geometry->screws_popup ||
         *s_geometry->screws_results_label || s_geometry_dispatching ||
         s_screws_owner != moonraker_config_generation()) return;
@@ -191,9 +197,23 @@ static void run_screws_tilt_cb(lv_event_t *event)
     ui_calibration_geometry_context_t *context = s_geometry;
     lv_obj_t *popup = *context->screws_popup;
     uint32_t epoch = s_geometry_epoch, owner = s_screws_owner;
-    calibration_session_controller_begin_screws_tilt(console_controller_latest_sequence());
-    console_controller_add_command(command);
+    lv_obj_t *action = s_screws_run_action;
     s_geometry_dispatching = true;
+    console_controller_add_command(command);
+    if (s_geometry != context || s_geometry_epoch != epoch ||
+        *context->screws_popup != popup || owner != moonraker_config_generation() ||
+        s_screws_run_action != action || !lv_obj_is_valid(action) ||
+        lv_obj_has_state(action, LV_STATE_DISABLED)) {
+        s_geometry_dispatching = false;
+        return;
+    }
+    reason = geometry_run_reason(false);
+    if (reason[0]) {
+        s_geometry_dispatching = false;
+        ui_value_set_text(s_screws_feedback, reason);
+        return;
+    }
+    calibration_session_controller_begin_screws_tilt(console_controller_latest_sequence());
     bool sent = context->send_gcode && context->send_gcode(command);
     s_geometry_dispatching = false;
     if (s_geometry != context || s_geometry_epoch != epoch ||
@@ -288,7 +308,7 @@ static void screws_tilt_button_cb(
 
     ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_screws_popup_cb, NULL, NULL);
 
-    ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_screws_tilt_cb, NULL, NULL);
+    s_screws_run_action = ui_cal_dialog_action(*s_geometry->screws_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_screws_tilt_cb, NULL, NULL);
 }
 
 
@@ -317,7 +337,9 @@ static void close_gantry_level_popup_cb(
 
 static void run_gantry_level_cb(lv_event_t *event)
 {
-    (void)event;
+    if (!event || !s_gantry_run_action || lv_event_get_target_obj(event) != s_gantry_run_action ||
+        lv_event_get_current_target_obj(event) != s_gantry_run_action ||
+        lv_obj_has_state(s_gantry_run_action, LV_STATE_DISABLED)) return;
     if (!s_geometry || !*s_geometry->gantry_popup || s_geometry_dispatching ||
         s_gantry_requested || s_gantry_owner != moonraker_config_generation()) return;
     const char *reason = geometry_run_reason(true);
@@ -331,8 +353,22 @@ static void run_gantry_level_cb(lv_event_t *event)
     ui_calibration_geometry_context_t *context = s_geometry;
     lv_obj_t *popup = *context->gantry_popup;
     uint32_t epoch = s_geometry_epoch, owner = s_gantry_owner;
-    console_controller_add_command(command);
+    lv_obj_t *action = s_gantry_run_action;
     s_geometry_dispatching = true;
+    console_controller_add_command(command);
+    if (s_geometry != context || s_geometry_epoch != epoch ||
+        *context->gantry_popup != popup || owner != moonraker_config_generation() ||
+        s_gantry_run_action != action || !lv_obj_is_valid(action) ||
+        lv_obj_has_state(action, LV_STATE_DISABLED)) {
+        s_geometry_dispatching = false;
+        return;
+    }
+    reason = geometry_run_reason(true);
+    if (reason[0]) {
+        s_geometry_dispatching = false;
+        ui_value_set_text(s_gantry_feedback, reason);
+        return;
+    }
     bool sent = context->send_gcode && context->send_gcode(command);
     s_geometry_dispatching = false;
     if (s_geometry != context || s_geometry_epoch != epoch ||
@@ -438,7 +474,7 @@ static void gantry_level_button_cb(
 
     ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_gantry_level_popup_cb, NULL, NULL);
 
-    ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_gantry_level_cb, NULL, NULL);
+    s_gantry_run_action = ui_cal_dialog_action(*s_geometry->gantry_popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_gantry_level_cb, NULL, NULL);
 }
 
 

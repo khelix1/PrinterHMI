@@ -325,13 +325,18 @@ static bool files_load_launch(files_load_job_t *job)
 {
     if (!s_load_results) s_load_results = xQueueCreate(1, sizeof(job));
     if (!s_load_results) return false;
-    if (!s_load_timer) s_load_timer = lv_timer_create(files_load_poll, 50, NULL);
+    const bool needs_timer = s_load_timer == NULL;
+    if (needs_timer) s_load_timer = lv_timer_create(files_load_poll, 50, NULL);
     if (!s_load_timer) return false;
     s_load_busy = true;
     if (xTaskCreatePinnedToCoreWithCaps(files_load_worker, "files_load", 8192,
             job, 3, NULL, 0,
             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
         s_load_busy = false;
+        if (needs_timer) {
+            lv_timer_delete(s_load_timer);
+            s_load_timer = NULL;
+        }
         return false;
     }
     return true;

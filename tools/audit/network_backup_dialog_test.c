@@ -7,14 +7,21 @@
 #include "keyboard_layout_checks.h"
 #include "network_wifi_scan.c"
 #include "ui_form_dialog.h"
-static bool reject_restore_progress;
+static bool reject_restore_progress, reject_encrypted_progress, reject_backup_timer;
+static lv_timer_t *test_backup_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+    return reject_backup_timer ? NULL : lv_timer_create(cb,period,data);
+}
 static lv_obj_t *test_backup_dialog(const char *title,int width,int height,ui_popup_kind_t kind)
 {
     if(reject_restore_progress && !strcmp(title,"Restoring plain backup"))return NULL;
+    if(reject_encrypted_progress && (!strcmp(title,"Verifying backup") || !strcmp(title,"Saving encrypted backup")))return NULL;
     return ui_form_dialog(title,width,height,kind);
 }
 #define ui_form_dialog test_backup_dialog
+#define lv_timer_create test_backup_timer
 #include "ui_settings_backup_popup.c"
+#undef lv_timer_create
 #undef ui_form_dialog
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t*d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -119,7 +126,12 @@ static void network(void)
     char copy[65];ui_network_tools_wifi_password_copy_owned(copy,sizeof(copy));assert(!strcmp(copy,"wifi-secret"));
     assert(strstr(lv_label_get_text(s_wifi_password_status),"failed"));
     lv_obj_delete(s_wifi_scan_popup);assert(!s_wifi_scan_popup&&!s_wifi_scan_list&&!s_wifi_selected_btn&&!s_wifi_password_popup&&!s_wifi_password_textarea&&!s_wifi_password_status);
-    ui_network_tools_wifi_password_show_owned("fixture",noop,password_nested);unsigned saves=password_saves;owned_password_save(NULL);assert(password_saves==saves+1);lv_obj_t *keyboard=lv_obj_get_child(s_wifi_password_popup,2);
+    ui_network_tools_wifi_password_show_owned("fixture",noop,password_nested);unsigned saves=password_saves;
+    char oversized[67];for(unsigned i=0;i<66;i+=2){oversized[i]=(char)0xc3;oversized[i+1]=(char)0xa9;}oversized[66]=0;
+    lv_textarea_set_text(s_wifi_password_textarea,oversized);owned_password_save(NULL);
+    assert(password_saves==saves&&strstr(lv_label_get_text(s_wifi_password_status),"too long"));
+    assert(!strcmp(lv_textarea_get_text(s_wifi_password_textarea),oversized));
+    lv_textarea_set_text(s_wifi_password_textarea,"wifi-secret");owned_password_save(NULL);assert(password_saves==saves+1);lv_obj_t *keyboard=lv_obj_get_child(s_wifi_password_popup,2);
     lv_obj_delete(s_wifi_password_textarea);assert(!s_wifi_password_textarea&&lv_keyboard_get_textarea(keyboard)==NULL);
     owned_password_save(NULL);assert(password_saves==saves+1);ui_network_tools_wifi_password_copy_owned(copy,sizeof(copy));assert(!copy[0]);ui_network_tools_wifi_password_close_owned();
     network_wifi_scan_render_results(&s_wifi_scan_popup,&s_wifi_scan_status_label,&s_wifi_scan_list,&s_wifi_selected_btn,scan_status,sizeof(scan_status),aps,2,2,noop,selected);
@@ -197,6 +209,11 @@ static void backup(void)
     secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"96 UTF-8 bytes")&&worker_starts==before&&!s_restore_passphrase[0]);
     close_secret_popup(false);show_secret_popup(false);
     lv_textarea_set_text(s_secret_input,passphrase);lv_textarea_set_text(s_secret_confirm,passphrase);
+    reject_encrypted_progress=true;secret_submit_cb(NULL);reject_encrypted_progress=false;
+    assert(worker_starts==before&&s_secret_popup&&!s_export_progress_popup&&!s_export_progress_timer);
+    assert(strstr(lv_label_get_text(s_secret_status),"Try again")&&!strcmp(lv_textarea_get_text(s_secret_confirm),passphrase));
+    reject_backup_timer=true;secret_submit_cb(NULL);reject_backup_timer=false;
+    assert(worker_starts==before&&s_secret_popup&&!s_export_progress_popup&&!s_export_progress_timer);
     worker_allowed=false;secret_submit_cb(NULL);assert(s_secret_popup&&strstr(lv_label_get_text(s_secret_status),"busy"));
     lv_textarea_set_text(s_secret_confirm,"different");assert(strstr(lv_label_get_text(s_secret_status),"busy"));
     lv_textarea_set_text(s_secret_confirm,passphrase);assert(strstr(lv_label_get_text(s_secret_status),"busy"));
@@ -234,6 +251,8 @@ static void backup(void)
     show_secret_popup(true);layout(s_secret_popup);before=worker_starts;
     secret_submit_cb(NULL);assert(strstr(lv_label_get_text(s_secret_status),"12 UTF-8 bytes"));
     lv_textarea_set_text(s_secret_input,passphrase);assert(!lv_label_get_text(s_secret_status)[0]&&worker_starts==before);
+    reject_backup_timer=true;secret_submit_cb(NULL);reject_backup_timer=false;
+    assert(worker_starts==before&&s_secret_popup&&!s_export_progress_popup&&!s_restore_passphrase[0]);
     secret_submit_cb(NULL);
     assert(!s_secret_popup&&s_export_progress_popup&&!strcmp(s_restore_passphrase,passphrase));
     worker_state=SETTINGS_BACKUP_ENCRYPTED_WORKER_SUCCEEDED;export_progress_timer_cb(s_export_progress_timer);

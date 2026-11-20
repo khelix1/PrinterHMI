@@ -53,6 +53,17 @@ int main(void){
  assert(!moonraker_http_object_number(status,"fan","speed",100,&value)&&value==60);
  assert(moonraker_http_object_number(status,"gcode_move","speed_factor",100,&value)&&value==120);
  cJSON_Delete(response);
+ const char multi[]="{\"result\":{\"status\":{\"extruder\":{\"temperature\":201.5},"
+     "\"extruder2\":{\"temperature\":38,\"target\":0},\"extruder3\":{\"temperature\":42,\"target\":50},"
+     "\"toolhead\":{\"extruder\":\"extruder2\"}}}}";
+ response=moonraker_http_objects_parse(multi,sizeof(multi)-1,4095,&status);
+ assert(response&&status);
+ moonraker_hotend_t tools[MOONRAKER_MAX_HOTENDS];
+ assert(moonraker_http_hotends(status,tools)==3);
+ assert(!strcmp(tools[0].object_name,"extruder")&&tools[0].temperature==201.5&&tools[0].target==-999.0&&!tools[0].active);
+ assert(!strcmp(tools[1].object_name,"extruder2")&&tools[1].temperature==38&&tools[1].target==0&&tools[1].active);
+ assert(!strcmp(tools[2].object_name,"extruder3")&&tools[2].temperature==42&&tools[2].target==50&&!tools[2].active);
+ cJSON_Delete(response);
  assert(!moonraker_http_objects_parse(live,sizeof(live),4095,&status)&&!status);
  assert(!moonraker_http_objects_parse(live,sizeof(live)-1,20,&status)&&!status);
  const char wrong[]="{\"result\":{\"status\":[]}}";

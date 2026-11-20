@@ -21,7 +21,11 @@ void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void
 static size_t entries=64;
 size_t console_controller_count(void){return entries;}
 uint32_t console_controller_latest_sequence(void){return (uint32_t)entries;}
-bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;e->sequence=(uint32_t)i;snprintf(e->message,sizeof(e->message),"Message %u",(unsigned)i);return true;}
+bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;e->sequence=(uint32_t)(entries-i);snprintf(e->message,sizeof(e->message),"Message %u",(unsigned)i);return true;}
+size_t console_controller_window(uint32_t *newest){*newest=console_controller_latest_sequence();return entries;}
+bool console_controller_get_sequence(uint32_t seq,console_entry_t *e){
+ return seq && console_controller_get(console_sequence_distance(console_controller_latest_sequence(),seq),e);
+}
 void console_controller_clear(void){entries=0;}
 size_t console_controller_history_count(void){return 0;}
 bool console_controller_history_get(size_t i,char *o,size_t n){(void)i;(void)o;(void)n;return false;}

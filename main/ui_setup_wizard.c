@@ -1,3 +1,4 @@
+#include "wifi_scan_results.h"
 #ifdef PRINTERHMI_DEMO_RUNTIME
 #include "demo_mode.h"
 #include "demo_setup.h"
@@ -95,6 +96,7 @@ static void setup_cancel_appearance(void)
      * transport/persistence callback retains its own dispatch protection. */
     s_setup_dispatching = false;
 }
+static lv_obj_t *s_next_action, *s_skip_action;
 static lv_obj_t *s_wifi_connect_action, *s_camera_use_action, *s_camera_scan_action, *s_finish_action;
 static lv_obj_t *s_wifi_rows[SETUP_MAX_WIFI], *s_camera_rows[CAMERA_CATALOG_MAX_CAMERAS];
 static void delete_poll(void);
@@ -119,7 +121,7 @@ static void setup_field_deleted(lv_event_t *event)
     if(object==s_setup_content || object==s_stage || object==s_wifi_list || object==s_camera_list)delete_poll();
     lv_obj_t **fields[]={&s_status,&s_name,&s_password,&s_keyboard,&s_wifi_list,
         &s_camera_list,&s_options_list,&s_brightness_slider,&s_brightness_value,&s_back_action,&s_setup_content,&s_stage,&s_actions,&s_summary,
-        &s_wifi_connect_action,&s_camera_use_action,&s_camera_scan_action,&s_finish_action};
+        &s_wifi_connect_action,&s_camera_use_action,&s_camera_scan_action,&s_finish_action,&s_next_action,&s_skip_action};
     bool retired=false;
     for (unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);++i)
         if (*fields[i]==object) { *fields[i]=NULL; retired=true; }
@@ -186,12 +188,12 @@ static void setup_start_poll(lv_timer_t *poll)
 static void setup_refresh_completion_state(void);
 static bool setup_record_step(onboarding_step_t step, uint32_t epoch);
 static bool setup_save_display(int brightness, uint8_t sleep);
+static bool setup_wifi_has_address(void);
 
 
 static void setup_next_cb(lv_event_t *event)
 {
-    (void)event;
-    if(!s_center || !s_setup_content || s_setup_dispatching)return;
+    if(!setup_action_current(event,s_next_action,false))return;
     uint32_t epoch=s_setup_epoch;
     if(s_setup_step==SETUP_STEP_WELCOME && !setup_record_step(ONBOARDING_STEP_WELCOME,epoch))return;
     if(s_setup_step==SETUP_STEP_TIMEZONE) {
@@ -210,32 +212,31 @@ static void setup_next_cb(lv_event_t *event)
 
 static void setup_skip_cb(lv_event_t *event)
 {
-    (void)event;
-    if(!s_center || !s_setup_content || s_setup_dispatching)return;
+    if(!setup_action_current(event,s_skip_action,false))return;
     if (s_setup_step < SETUP_STEP_COMPLETE) {
         setup_render_step(s_setup_step+1);
     }
 }
 
 static void setup_select_welcome_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_WELCOME); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_WELCOME],false))setup_render_step(SETUP_STEP_WELCOME); }
 static void setup_select_wifi_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_WIFI); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_WIFI],false))setup_render_step(SETUP_STEP_WIFI); }
 static void setup_back_cb(lv_event_t *event)
 {
     if(setup_action_current(event,s_back_action,false) && s_setup_step>0)
         setup_render_step(s_setup_step-1);
 }
 static void setup_select_timezone_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_TIMEZONE); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_TIMEZONE],false))setup_render_step(SETUP_STEP_TIMEZONE); }
 static void setup_select_display_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_DISPLAY); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_DISPLAY],false))setup_render_step(SETUP_STEP_DISPLAY); }
 static void setup_select_printer_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_PRINTER); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_PRINTER],false))setup_render_step(SETUP_STEP_PRINTER); }
 static void setup_select_camera_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_CAMERA); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_CAMERA],false))setup_render_step(SETUP_STEP_CAMERA); }
 static void setup_select_complete_cb(lv_event_t *event)
-{ (void)event; if(!s_setup_dispatching)setup_render_step(SETUP_STEP_COMPLETE); }
+{ if(setup_action_current(event,s_nav[SETUP_STEP_COMPLETE],false))setup_render_step(SETUP_STEP_COMPLETE); }
 
 static bool setup_clear_content(void)
 {
@@ -249,6 +250,7 @@ static bool setup_clear_content(void)
     s_name = NULL;
     s_wifi_list = NULL;
     s_camera_list = s_options_list = s_brightness_slider = s_brightness_value = NULL;
+    s_next_action=s_skip_action=NULL;
     s_wifi_connect_action=s_camera_use_action=s_camera_scan_action=s_finish_action=NULL;
     s_camera_verified=false;
     memset(s_wifi_rows,0,sizeof(s_wifi_rows));
@@ -374,9 +376,11 @@ static void setup_add_next_buttons(bool allow_skip)
 {
     if(allow_skip) {
         lv_obj_t *skip=setup_action(s_actions,"Skip for now",UI_POPUP_ACTION_SECONDARY,setup_skip_cb);
+        s_skip_action=skip;setup_watch(skip);
         lv_obj_set_width(skip,LV_PCT(48));lv_obj_set_flex_grow(skip,1);
     }
     lv_obj_t *next=setup_action(s_actions,"Continue",UI_POPUP_ACTION_CONFIRM,setup_next_cb);
+    s_next_action=next;setup_watch(next);
     lv_obj_set_width(next,allow_skip?LV_PCT(48):LV_PCT(100));lv_obj_set_flex_grow(next,1);
 }
 
@@ -608,7 +612,8 @@ static bool setup_network_content(void)
     char address[32];
     if(has_ip)snprintf(address,sizeof(address),IPSTR,IP2STR(&ip.ip));
     else snprintf(address,sizeof(address),"%s",connected?"Waiting for an address":"Not connected");
-    setup_connection_fact("Wi-Fi network",connected?(const char*)ap.ssid:"No network connected");
+    char ssid[33];
+    setup_connection_fact("Wi-Fi network",connected && wifi_scan_copy_ssid(ssid,ap.ssid)?ssid:"No network connected");
     setup_connection_fact("Display address",address);
     lv_obj_t *row=setup_plane(s_stage,LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_t *find=setup_action(row,connected?"Change network":"Find a network",UI_POPUP_ACTION_SECONDARY,center_wifi_cb);
@@ -678,16 +683,23 @@ static bool setup_review_content(bool final)
     int index=moonraker_config_active_profile_index();
     wifi_ap_record_t network={0};
     s_setup_dispatching=true;
-    bool connected;
+    bool connected, has_address;
 #ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled())connected=demo_setup_network((char*)network.ssid,sizeof(network.ssid));else
+    if(demo_mode_enabled())has_address=connected=demo_setup_network((char*)network.ssid,sizeof(network.ssid));else
 #endif
-    connected=esp_wifi_sta_get_ap_info(&network)==ESP_OK;
+    {
+        connected=esp_wifi_sta_get_ap_info(&network)==ESP_OK;
+        has_address=connected && setup_current(epoch) && setup_wifi_has_address();
+    }
     s_setup_dispatching=s_appearance_pending;
     if(!setup_current(epoch) || generation!=moonraker_config_generation() || index!=moonraker_config_active_profile_index())return false;
     const moonraker_profile_t *printer=moonraker_config_profile(index);
     bool configured=printer && printer->configured;
-    setup_review_row("Wi-Fi",connected?(const char*)network.ssid:"Choose a network",connected,false,LV_SYMBOL_OK " Connected");
+    char ssid[33];
+    const char *wifi_detail=!connected?"Choose a network":
+        !has_address?"Waiting for an address":
+        wifi_scan_copy_ssid(ssid,network.ssid)?ssid:"Network connected";
+    setup_review_row("Wi-Fi",wifi_detail,has_address,false,LV_SYMBOL_OK " Connected");
     setup_review_row("Printer",configured?(printer->name[0]?printer->name:"Active profile"):"Add a printer",configured,false,LV_SYMBOL_OK " Saved");
     setup_review_row("Camera",s_camera_done?"Camera configured":"Add later",s_camera_done,true,LV_SYMBOL_OK " Saved");
     if(final) {
@@ -748,6 +760,7 @@ static void center_deleted(lv_event_t *event)
     s_wifi_list=s_camera_list=s_summary=s_options_list=s_brightness_slider=s_brightness_value=s_back_action=NULL;
     memset(s_nav,0,sizeof(s_nav));
     memset(s_wifi_rows,0,sizeof(s_wifi_rows));memset(s_camera_rows,0,sizeof(s_camera_rows));
+    s_next_action=s_skip_action=NULL;
     s_wifi_connect_action=s_camera_use_action=s_camera_scan_action=s_finish_action=NULL;
     s_wifi_connect=NULL;s_appearance_changed=NULL;s_camera_verified=false;
 }
@@ -812,6 +825,7 @@ void ui_setup_wizard_close(void)
         ++s_setup_epoch;
         s_center=s_setup_content=s_stage=s_actions=s_status=s_name=s_password=s_keyboard=NULL;
         s_wifi_list=s_camera_list=s_summary=s_options_list=s_brightness_slider=s_brightness_value=s_back_action=NULL;
+        s_next_action=s_skip_action=NULL;
         s_wifi_connect_action=s_camera_use_action=s_camera_scan_action=s_finish_action=NULL;
         memset(s_nav,0,sizeof(s_nav));memset(s_wifi_rows,0,sizeof(s_wifi_rows));
         memset(s_camera_rows,0,sizeof(s_camera_rows));
@@ -853,10 +867,7 @@ static void wifi_scan_task(void *ignored)
             if (esp_wifi_scan_get_ap_records(&count, records) == ESP_OK) {
                 s_wifi_scan_failed = false;
                 for (uint16_t i = 0; i < count; ++i) {
-                    if (!records[i].ssid[0]) continue;
-                    strlcpy(s_wifi[s_wifi_count].ssid,
-                            (const char *)records[i].ssid,
-                            sizeof(s_wifi[s_wifi_count].ssid));
+                    if (!wifi_scan_copy_ssid(s_wifi[s_wifi_count].ssid,records[i].ssid)) continue;
                     s_wifi[s_wifi_count++].rssi = records[i].rssi;
                 }
             }
@@ -991,22 +1002,33 @@ static void wifi_return_timer(lv_timer_t *timer)
     setup_render_step(SETUP_STEP_WIFI);
 }
 
+static bool setup_wifi_has_address(void)
+{
+    esp_netif_ip_info_t ip={0};
+    esp_netif_t *netif=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    return netif && esp_netif_get_ip_info(netif,&ip)==ESP_OK && ip.ip.addr!=0;
+}
+
 static void wifi_verify(lv_timer_t *timer)
 {
     if(!s_poll || (timer && timer!=s_poll) || !s_center || s_setup_dispatching)return;
     uint32_t epoch=s_setup_epoch;
-    wifi_ap_record_t info;
+    wifi_ap_record_t info={0};
+    bool has_address=false;
     esp_err_t result;
 #ifdef PRINTERHMI_DEMO_RUNTIME
-    if(demo_mode_enabled())result=demo_setup_network((char*)info.ssid,sizeof(info.ssid))?ESP_OK:ESP_FAIL;else
+    if(demo_mode_enabled()){has_address=demo_setup_network((char*)info.ssid,sizeof(info.ssid));result=has_address?ESP_OK:ESP_FAIL;}else
 #endif
-    result=esp_wifi_sta_get_ap_info(&info);
+    {
+        result=esp_wifi_sta_get_ap_info(&info);
+        if(setup_current(epoch) && result==ESP_OK)has_address=setup_wifi_has_address();
+    }
     if(!setup_current(epoch))return;
     if (result != ESP_OK ||
-        strcmp((const char *)info.ssid, s_selected_ssid)) {
+        strncmp((const char *)info.ssid, s_selected_ssid,sizeof(s_selected_ssid)-1) || !has_address) {
         if (lv_tick_get() - s_wifi_verify_tick >= 30000) {
             delete_poll();
-            set_status("Wi-Fi verification timed out. Check the password and tap Connect to retry.");
+            set_status("Wi-Fi verification timed out. Check the password and network address, then tap Connect to retry.");
         }
         return;
     }
@@ -1021,10 +1043,15 @@ static void wifi_save_cb(lv_event_t *event)
 {
     if(s_poll || !s_password || !s_selected_ssid[0] || !s_wifi_connect ||
         !setup_action_current(event,s_wifi_connect_action,true))return;
+    const char *input=lv_textarea_get_text(s_password);
+    char password[64],ssid[33];
+    if(strlen(input)>=sizeof(password)){
+        set_status("Wi-Fi password is too long. Use at most 63 bytes.");
+        return;
+    }
     lv_timer_t *poll = setup_reserve_poll(wifi_verify, 250);
     if (!poll) return;
-    char password[64],ssid[33];
-    strlcpy(password,lv_textarea_get_text(s_password),sizeof(password));
+    strlcpy(password,input,sizeof(password));
     strlcpy(ssid,s_selected_ssid,sizeof(ssid));
     ui_setup_wizard_wifi_connect_cb_t connect=s_wifi_connect;
     uint32_t epoch=s_setup_epoch;
@@ -1145,7 +1172,7 @@ static void camera_save_cb(lv_event_t *event)
 static void camera_actions(bool verified)
 {
     if(!s_actions)return;
-    s_camera_use_action=s_camera_scan_action=NULL;
+    s_camera_use_action=s_camera_scan_action=s_skip_action=NULL;
     lv_obj_clean(s_actions);
     lv_obj_t *action=setup_action(s_actions,verified?"Use camera":"Scan again",
         verified?UI_POPUP_ACTION_CONFIRM:UI_POPUP_ACTION_SECONDARY,
@@ -1155,6 +1182,7 @@ static void camera_actions(bool verified)
     lv_obj_set_width(action,LV_PCT(48));lv_obj_set_flex_grow(action,1);
     const char *saved_url=moonraker_config_camera_stream_url(moonraker_config_active_profile_index());
     lv_obj_t *skip=setup_action(s_actions,saved_url && saved_url[0]?"Continue":"Skip camera",UI_POPUP_ACTION_SECONDARY,setup_skip_cb);
+    s_skip_action=skip;setup_watch(skip);
     lv_obj_set_width(skip,LV_PCT(48));lv_obj_set_flex_grow(skip,1);
     lv_obj_update_layout(s_center);setup_fit_actions(s_actions);
 }
@@ -1319,7 +1347,7 @@ static bool setup_wifi_is_ready(void)
 #ifdef PRINTERHMI_DEMO_RUNTIME
     if(demo_mode_enabled())return demo_setup_network((char*)info.ssid,sizeof(info.ssid));
 #endif
-    return esp_wifi_sta_get_ap_info(&info) == ESP_OK;
+    return esp_wifi_sta_get_ap_info(&info) == ESP_OK && setup_wifi_has_address();
 }
 
 

@@ -70,10 +70,16 @@ static void close_popup(void)
 }
 static void close_cb(lv_event_t *event) { (void)event; close_popup(); }
 
+static bool probe_available(void)
+{
+    return s_button && !lv_obj_has_flag(s_button, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void run_cb(lv_event_t *event)
 {
-    if (event && (lv_event_get_code(event) != LV_EVENT_CLICKED || lv_event_get_target_obj(event) != s_run)) return;
-    if (!s_popup || !s_samples || !s_run || s_dispatching || accepted_pending()) return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        lv_event_get_target_obj(event) != s_run || lv_event_get_current_target_obj(event) != s_run) return;
+    if (!s_popup || !s_status_timer || !s_samples || !s_run || !probe_available() || s_dispatching || accepted_pending()) return;
     uint32_t owner = s_owner, epoch = s_epoch;
     if (owner != moonraker_config_generation()) { refresh_status(NULL); return; }
     static const unsigned samples[] = {5, 10, 20};
@@ -88,19 +94,27 @@ static void run_cb(lv_event_t *event)
     }
     moonraker_state_t state;
     moonraker_state_snapshot(&state);
-    if (printer_idle_reason(&state)[0] || !strchr(state.homed_axes, 'x') ||
+    if (!probe_available() || printer_idle_reason(&state)[0] || !strchr(state.homed_axes, 'x') ||
         !strchr(state.homed_axes, 'y') || !strchr(state.homed_axes, 'z')) {
         s_dispatching = false; refresh_status(NULL); return;
     }
     char command[48];
     snprintf(command, sizeof(command), "PROBE_ACCURACY SAMPLES=%u", samples[selected]);
+    console_controller_add_command(command);
+    if (!s_popup || epoch != s_epoch || owner != moonraker_config_generation()) {
+        s_dispatching = false; return;
+    }
+    moonraker_state_snapshot(&state);
+    if (!probe_available() || printer_idle_reason(&state)[0] || !strchr(state.homed_axes, 'x') ||
+        !strchr(state.homed_axes, 'y') || !strchr(state.homed_axes, 'z') ||
+        lv_dropdown_get_selected(s_samples) != selected) {
+        s_dispatching = false; refresh_status(NULL); return;
+    }
     s_send_failed = false;
     calibration_session_controller_begin(CALIBRATION_SESSION_PROBE_ACCURACY,
         console_controller_latest_sequence());
     calibration_session_snapshot_t started;
     calibration_session_controller_snapshot(&started);
-    if (!s_popup || epoch != s_epoch || owner != moonraker_config_generation()) { s_dispatching = false; return; }
-    console_controller_add_command(command);
     if (!s_popup || epoch != s_epoch || owner != moonraker_config_generation()) { s_dispatching = false; return; }
     bool sent = send && send(command);
     s_dispatching = false;
@@ -133,6 +147,8 @@ static void refresh_status(lv_timer_t *timer)
     bool pending = accepted_pending();
     bool homed = strchr(state.homed_axes, 'x') && strchr(state.homed_axes, 'y') && strchr(state.homed_axes, 'z');
     const char *text = !same ? "Printer changed. Close and reopen the probe check." :
+        !s_status_timer ? "Live refresh unavailable. Close and reopen the probe check." :
+        !probe_available() ? "Probe accuracy is no longer available on this printer." :
         !live ? "Printer offline. Homing status unavailable." :
         !idle ? "Probe checks require an idle, ready printer." :
         !homed ? "Home XYZ first, then position the probe over a clear bed area." :
@@ -140,7 +156,7 @@ static void refresh_status(lv_timer_t *timer)
         s_send_failed ? "Request was not accepted. Check the connection and tap Run check to retry." :
         "XYZ homed. Verify the current position before running.";
     ui_value_set_text(s_status, text);
-    if (same && live && idle && homed && !s_dispatching && !pending && s_popup_send && s_samples) lv_obj_remove_state(s_run, LV_STATE_DISABLED);
+    if (s_status_timer && same && probe_available() && live && idle && homed && !s_dispatching && !pending && s_popup_send && s_samples) lv_obj_remove_state(s_run, LV_STATE_DISABLED);
     else lv_obj_add_state(s_run, LV_STATE_DISABLED);
 }
 
@@ -205,6 +221,7 @@ void ui_probe_accuracy_refresh(bool available)
     if (!s_button) return;
     if (available) lv_obj_clear_flag(s_button, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(s_button, LV_OBJ_FLAG_HIDDEN);
+    if (s_popup) refresh_status(NULL);
 }
 void ui_probe_accuracy_hide(void)
 {

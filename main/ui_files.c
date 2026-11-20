@@ -1215,9 +1215,12 @@ static void detail_deleted(lv_event_t *event)
     /* Notify the loader/thumbnail owner after UI references are retired. */
     if (cancel) cancel();
 }
+static void detail_field_deleted(lv_event_t *event);
+
 static void detail_watch(lv_obj_t *label)
 {
     s_detail_connection_label=label;
+    lv_obj_add_event_cb(s_detail_start_button,detail_field_deleted,LV_EVENT_DELETE,NULL);
     lv_label_set_text(label,"");
     lv_obj_add_flag(label,LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(s_file_detail_popup,detail_deleted,LV_EVENT_DELETE,NULL);
@@ -1227,8 +1230,12 @@ static void detail_watch(lv_obj_t *label)
 
 static void print_confirm_deleted(lv_event_t *event)
 {
-    if(lv_event_get_target_obj(event)==s_print_confirm_popup) {
+    lv_obj_t *target=lv_event_get_target_obj(event);
+    if(target==s_print_confirm_popup) {
         s_print_confirm_popup=NULL;s_print_accept_button=NULL;s_print_connection_label=NULL;
+    } else {
+        if(target==s_print_accept_button)s_print_accept_button=NULL;
+        if(target==s_print_connection_label)s_print_connection_label=NULL;
     }
 }
 
@@ -1296,10 +1303,16 @@ void ui_files_print_feedback(const char *message)
     else if(s_detail_info_label) ui_value_set_text(s_detail_info_label,message);
 }
 
+static bool detail_action_matches(lv_event_t *event, lv_obj_t *button)
+{
+    return button && (!event || (lv_event_get_code(event)==LV_EVENT_CLICKED &&
+        lv_event_get_target_obj(event)==button && lv_event_get_current_target_obj(event)==button));
+}
+
 static void print_confirm_accept(lv_event_t *event)
 {
-    (void)event;
-    if(!s_print_confirm_popup || s_files_print_dispatching)return;
+    if(!s_print_confirm_popup || s_files_print_dispatching ||
+       !detail_action_matches(event,s_print_accept_button))return;
     detail_connection_refresh(NULL);
     bool ready=s_detail_filename && s_detail_start_cb && s_detail_start_button &&
         !lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED);
@@ -1343,7 +1356,7 @@ static void print_confirm_accept(lv_event_t *event)
 
 static void detail_start_event_cb(lv_event_t *event)
 {
-    (void)event;
+    if(!detail_action_matches(event,s_detail_start_button))return;
     detail_connection_refresh(NULL);
     if(s_files_print_dispatching || s_print_confirm_popup || !s_detail_filename || !s_detail_start_cb ||
        !s_detail_start_button || lv_obj_has_state(s_detail_start_button,LV_STATE_DISABLED))return;
@@ -1352,7 +1365,10 @@ static void detail_start_event_cb(lv_event_t *event)
     if(width>640)width=640;
     if(height>340)height=340;
     s_print_confirm_popup=ui_popup_create(lv_layer_top(),width,height,UI_POPUP_STANDARD);
-    if(!s_print_confirm_popup)return;
+    if(!s_print_confirm_popup) {
+        ui_toast_show(UI_STATUS_WARNING,"Print review unavailable","Tap Print to try again.");
+        return;
+    }
     lv_obj_add_event_cb(s_print_confirm_popup,print_confirm_deleted,LV_EVENT_DELETE,NULL);
     s_print_confirm_profile=moonraker_config_active_profile_index();
     s_print_confirm_generation=moonraker_config_generation();
@@ -1380,6 +1396,7 @@ static void detail_start_event_cb(lv_event_t *event)
     lv_obj_set_style_text_line_space(file,4,0);
     lv_obj_t *hint=lv_label_create(body);
     s_print_connection_label=hint;
+    lv_obj_add_event_cb(hint,print_confirm_deleted,LV_EVENT_DELETE,NULL);
     lv_label_set_text(hint,"The selected printer will run this G-code file.");
     ui_apply_custom_label_style(hint,UI_FONT_CAPTION,UI_TEXT_DIM);lv_obj_set_width(hint,LV_PCT(100));
     lv_label_set_long_mode(hint,LV_LABEL_LONG_WRAP);lv_obj_set_style_text_line_space(hint,4,0);
@@ -1391,7 +1408,9 @@ static void detail_start_event_cb(lv_event_t *event)
     lv_obj_set_flex_grow(cancel,1);
     lv_obj_t *start=ui_popup_add_action_at(footer,UI_POPUP_ACTION_CONFIRM,"Start print",0,0,LV_PCT(48),48,print_confirm_accept,NULL,NULL);
     lv_obj_set_flex_grow(start,1);
-    s_print_accept_button=start;detail_connection_refresh(NULL);
+    s_print_accept_button=start;
+    lv_obj_add_event_cb(start,print_confirm_deleted,LV_EVENT_DELETE,NULL);
+    detail_connection_refresh(NULL);
 }
 
 static void file_metadata_scroll_style(lv_obj_t *body)
@@ -1459,6 +1478,7 @@ static char *file_detail_display_text(const char *metadata)
 static void detail_field_deleted(lv_event_t *event)
 {
     lv_obj_t *object=lv_event_get_target_obj(event);
+    if(object==s_detail_start_button)s_detail_start_button=NULL;
     if(object==s_detail_more_button)s_detail_more_button=NULL;
     if(object==s_detail_cancel_button)s_detail_cancel_button=NULL;
     if(object==s_detail_preview_box)s_detail_preview_box=NULL;
@@ -1533,7 +1553,10 @@ static void studio_metadata_open(lv_event_t *e)
     if (width > 640) width = 640;
     if (height > 440) height = 440;
     s_studio_metadata_popup=ui_popup_create(lv_layer_top(),width,height,UI_POPUP_STANDARD);
-    if(!s_studio_metadata_popup)return;
+    if(!s_studio_metadata_popup) {
+        ui_toast_show(UI_STATUS_WARNING,"File details unavailable","Tap Details to try again.");
+        return;
+    }
     lv_obj_add_event_cb(s_studio_metadata_popup,studio_metadata_deleted,LV_EVENT_DELETE,NULL);
     lv_obj_set_flex_flow(s_studio_metadata_popup, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_studio_metadata_popup, UI_PAD_POPUP, 0);
@@ -1566,6 +1589,8 @@ void ui_files_show_detail_popup(const char *filename_text,
                                     ui_files_detail_cb_t cancel_cb,
                                     ui_files_start_cb_t start_cb)
 {
+    if (thumb_box_out) *thumb_box_out = NULL;
+    if (thumb_view_out) *thumb_view_out = NULL;
     ui_files_close_detail_popup();
     const char *selected_name=filename_text && filename_text[0]?filename_text:"Unnamed file";
     s_detail_filename=malloc(strlen(selected_name)+1);
@@ -1576,14 +1601,6 @@ void ui_files_show_detail_popup(const char *filename_text,
     s_detail_start_cb = start_cb;
     s_detail_generation=moonraker_config_generation();
     s_detail_metadata_ready=false;
-
-    if (thumb_box_out) {
-        *thumb_box_out = NULL;
-    }
-
-    if (thumb_view_out) {
-        *thumb_view_out = NULL;
-    }
 
     if(ui_theme_is_studio() && s_printer_file_popup) {
         if(s_studio_file_hint)lv_obj_add_flag(s_studio_file_hint,LV_OBJ_FLAG_HIDDEN);
@@ -1625,7 +1642,7 @@ void ui_files_show_detail_popup(const char *filename_text,
     if(width>760)width=760;
     if(height>500)height=500;
     s_file_detail_popup=ui_popup_create(lv_screen_active(),width,height,UI_POPUP_STANDARD);
-    if(!s_file_detail_popup)return;
+    if(!s_file_detail_popup){ui_files_close_detail_popup();return;}
     lv_obj_set_flex_flow(s_file_detail_popup,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_all(s_file_detail_popup,16,0);
     lv_obj_set_style_pad_row(s_file_detail_popup,UI_GAP_ROW,0);

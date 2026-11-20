@@ -1,7 +1,15 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "lvgl.h"
+static bool reject_sleep_timer;
+static lv_timer_t *sleep_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+    return reject_sleep_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create sleep_test_timer
 #include "ui_settings.c"
+#undef lv_timer_create
 const char *timezone_config_selected_label(void){return "Central Europe";}
 static bool fail_brightness,fail_off,fail_open,fail_set,fail_commit;
 static unsigned hardware_sets,hardware_offs,commits,warnings,reboot_reviews;
@@ -121,6 +129,14 @@ int main(void)
 {
     lv_init();lv_display_t *display=lv_display_create(1024,600);static uint8_t pixels[1024*20*2];
     lv_display_set_color_format(display,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(display,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(display,flush);
+    reject_sleep_timer=true;stored_sleep=15;ui_settings_module_init();build_controls();
+    assert(!s_sleep_timer&&strstr(lv_label_get_text(settings_sleep_label),"Unavailable"));
+    unsigned initial_commits=commits;
+    sleep_tap();assert(commits==initial_commits&&stored_sleep==15);
+    assert(!ui_settings_restore_display_preferences(55,30)&&commits==initial_commits);
+    reject_sleep_timer=false;sleep_tap();
+    assert(s_sleep_timer&&commits==initial_commits&&!strcmp(lv_label_get_text(settings_sleep_label),"15 MIN"));
+    hide_settings_tab();stored_sleep=0;
     ui_settings_module_init();lv_timer_t *timer=s_sleep_timer;ui_settings_module_init();assert(s_sleep_timer==timer&&hardware_brightness==100);
     for(unsigned width=0;width<3;width++){
         lv_display_set_resolution(display,(int[]){1024,640,480}[width],width==2?400:600);

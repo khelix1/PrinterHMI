@@ -30,23 +30,33 @@ static bool numeric(const char **text)
     return true;
 }
 
-/* Recognize complete numeric M105-style reports, not arbitrary heater messages. */
+static bool field_char(char c)
+{
+    return isalnum((unsigned char)c) || c == '_' || c == '-' || c == '.';
+}
+
+/* Custom Klipper IDs can accompany standard fields or report current/target. */
 static bool temperature_report(const char *text)
 {
     spaces(&text);
     if (!strncmp(text, "//", 2)) { text += 2; spaces(&text); }
-    if (!strncmp(text, "ok", 2) && isspace((unsigned char)text[2])) {
+    if (tolower((unsigned char)text[0]) == 'o' &&
+        tolower((unsigned char)text[1]) == 'k' && isspace((unsigned char)text[2])) {
         text += 2; spaces(&text);
     }
     bool temperature = false;
     while (*text) {
-        bool heater = *text == 'T' || *text == 'B';
-        if (heater) {
-            ++text;
-            while (isdigit((unsigned char)*text)) ++text;
-        } else if (*text != '@') return false;
+        const char *key = text;
+        if (isalpha((unsigned char)*text)) {
+            do { ++text; } while (field_char(*text));
+        }
+        const char *key_end = text;
         bool power = *text == '@';
+        if (key == key_end && !power) return false;
         if (power) ++text;
+        bool heater = *key == 'T' || *key == 'B' || *key == 'C';
+        for (const char *p = key + 1; heater && p < key_end; ++p)
+            heater = isdigit((unsigned char)*p);
         if (*text++ != ':') return false;
         spaces(&text);
         if (!numeric(&text)) return false;
@@ -54,8 +64,10 @@ static bool temperature_report(const char *text)
         const char *end = text;
         spaces(&text);
         if (*text == '/') {
+            if (power) return false;
             ++text; spaces(&text);
             if (!numeric(&text)) return false;
+            temperature = true;
             end = text; spaces(&text);
         }
         if (*text && end == text) return false;

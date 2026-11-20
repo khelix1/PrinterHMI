@@ -33,6 +33,17 @@ static lv_timer_t *s_refresh_timer = NULL;
 static ui_console_command_cb_t s_command_callback = NULL;
 static uint32_t s_rendered_sequence = 0;
 static size_t s_rendered_count = 0;
+enum {
+    CONSOLE_REFRESH_MS = 250,
+    CONSOLE_LOAD_MS = 50,
+    CONSOLE_LOAD_ROWS = 16,
+    CONSOLE_LOAD_READS = 48,
+};
+static struct {
+    size_t count, scanned, visible;
+    uint32_t newest;
+    bool pending, started, newest_first;
+} s_load;
 static size_t s_history_cursor = SIZE_MAX;
 typedef struct {
     lv_obj_t *rows[CONSOLE_LOG_CAPACITY];
@@ -154,55 +165,161 @@ static void format_entry_time(
 }
 
 
+typedef struct {
+    int32_t y, anchor_y;
+    uint32_t anchor;
+} console_scroll_t;
+
+static console_scroll_t capture_scroll(size_t count)
+{
+    console_scroll_t scroll = { .y = lv_obj_get_scroll_y(s_output) };
+    if (s_follow) return scroll;
+    lv_area_t viewport;
+    lv_obj_get_coords(s_output, &viewport);
+    for (size_t i = 0; i < count; ++i) {
+        lv_obj_t *row = s_rows->rows[i];
+        if (!row || lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN)) continue;
+        lv_area_t area;
+        lv_obj_get_coords(row, &area);
+        if (area.y2 >= viewport.y1) {
+            scroll.anchor = s_row_sequence[i];
+            scroll.anchor_y = area.y1;
+            break;
+        }
+    }
+    return scroll;
+}
+
+static void restore_scroll(console_scroll_t scroll, size_t visible)
+{
+    s_programmatic_scroll = true;
+    lv_obj_update_layout(s_output);
+    if (s_follow) {
+        scroll.y = lv_obj_get_scroll_y(s_output) + lv_obj_get_scroll_bottom(s_output);
+    } else if (scroll.anchor) {
+        scroll.y = 0;
+        for (size_t i = 0; i < visible; ++i) {
+            if (s_row_sequence[i] != scroll.anchor) continue;
+            lv_area_t area;
+            lv_obj_get_coords(s_rows->rows[i], &area);
+            scroll.y = lv_obj_get_scroll_y(s_output) + area.y1 - scroll.anchor_y;
+            break;
+        }
+    }
+    lv_obj_scroll_to_y(s_output, scroll.y, LV_ANIM_OFF);
+    s_programmatic_scroll = false;
+}
+
+static lv_obj_t *write_row(lv_obj_t *label, const console_entry_t *entry)
+{
+    if (!label) {
+        label = lv_label_create(s_output);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_obj_set_height(label, LV_SIZE_CONTENT);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    }
+    char stamp[24], line[256];
+    format_entry_time(entry, stamp, sizeof(stamp));
+    snprintf(line, sizeof(line), "%s  %s  %s", stamp, entry_prefix(entry->type), entry->message);
+    ui_value_set_text(label, line);
+    ui_apply_custom_label_style(label, UI_FONT_CAPTION, entry_color(entry->type));
+    return label;
+}
+
+static void show_history_count(size_t visible, size_t count)
+{
+    char text[40];
+    snprintf(text, sizeof(text), "%u / %u", (unsigned)visible, (unsigned)count);
+    ui_value_set_text(s_filter_count, text);
+    if (!visible) {
+        if (!s_rows->empty) {
+            s_rows->empty = lv_label_create(s_output);
+            lv_obj_set_width(s_rows->empty, LV_PCT(100));
+            lv_label_set_long_mode(s_rows->empty, LV_LABEL_LONG_WRAP);
+            ui_apply_custom_label_style(s_rows->empty, UI_FONT_BODY, UI_TEXT_DIM);
+        }
+        lv_obj_remove_flag(s_rows->empty, LV_OBJ_FLAG_HIDDEN);
+        ui_value_set_text(s_rows->empty, count ?
+            "No entries match. Tap Reset filters to see all entries." : "No console entries yet.");
+    } else if (s_rows->empty) {
+        lv_obj_add_flag(s_rows->empty, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void finish_initial_load(void)
+{
+    s_load.pending = false;
+    lv_timer_set_period(s_refresh_timer, CONSOLE_REFRESH_MS);
+}
+
+static void load_initial_rows(void)
+{
+    struct { lv_obj_t *row; uint32_t seq; } batch[CONSOLE_LOAD_ROWS];
+    size_t added = 0;
+    if (!s_load.started) {
+        s_load.count = console_controller_window(&s_load.newest);
+        if (s_load.count > CONSOLE_LOG_CAPACITY) s_load.count = CONSOLE_LOG_CAPACITY;
+        s_load.started = true;
+    }
+    console_scroll_t scroll = capture_scroll(s_load.visible);
+    for (size_t reads = 0; reads < CONSOLE_LOAD_READS &&
+        added < CONSOLE_LOAD_ROWS && s_load.scanned < s_load.count; ++reads) {
+        size_t i = s_load.scanned++;
+        size_t offset = s_load.newest_first ? i : s_load.count - 1 - i;
+        console_entry_t entry;
+        if (!console_controller_get_sequence(console_sequence_at(s_load.newest, offset), &entry) ||
+            !console_filter_matches(&entry, s_filter, s_query, s_hide_temperatures)) continue;
+        lv_obj_t *row = write_row(NULL, &entry);
+        if (s_load.newest_first) lv_obj_move_to_index(row, 0);
+        batch[added].row = row;
+        batch[added++].seq = entry.sequence;
+    }
+
+    size_t slot = s_load.visible;
+    if (added && s_load.newest_first) {
+        memmove(s_rows->rows + added, s_rows->rows, slot * sizeof(s_rows->rows[0]));
+        memmove(s_row_sequence + added, s_row_sequence, slot * sizeof(s_row_sequence[0]));
+        slot = 0;
+    }
+    for (size_t i = 0; i < added; ++i) {
+        size_t from = s_load.newest_first ? added - 1 - i : i;
+        s_rows->rows[slot + i] = batch[from].row;
+        s_row_sequence[slot + i] = batch[from].seq;
+    }
+    s_load.visible += added;
+
+    if (s_load.scanned == s_load.count) {
+        s_rendered_count = s_load.count;
+        s_rendered_sequence = s_load.newest;
+        finish_initial_load();
+        show_history_count(s_load.visible, s_load.count);
+    }
+    if (added || !s_load.pending) restore_scroll(scroll, s_load.visible);
+}
+
 static void rebuild_output(void)
 {
     if (!s_output) return;
-    int32_t scroll_y = lv_obj_get_scroll_y(s_output), anchor_y = 0;
-    uint32_t anchor = 0;
-    lv_area_t viewport; lv_obj_get_coords(s_output, &viewport);
-    if (!s_follow) for (size_t i=0;i<s_rendered_count && i<CONSOLE_LOG_CAPACITY;i++) {
-        lv_obj_t *row=s_rows->rows[i]; if(!row || lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN)) continue;
-        lv_area_t area;lv_obj_get_coords(row,&area);
-        if(area.y2>=viewport.y1){anchor=s_row_sequence[i];anchor_y=area.y1;break;}
-    }
-    size_t count=console_controller_count(), visible=0;
-    s_rendered_count=count; s_rendered_sequence=console_controller_latest_sequence();
-    for(size_t i=0;i<count;i++) {
+    console_scroll_t scroll = capture_scroll(s_load.pending ? s_load.visible : s_rendered_count);
+    if (s_load.pending) finish_initial_load();
+    uint32_t newest;
+    size_t count = console_controller_window(&newest), visible = 0;
+    s_rendered_count = count;
+    s_rendered_sequence = newest;
+    for (size_t i = 0; i < count && visible < CONSOLE_LOG_CAPACITY; ++i) {
         console_entry_t entry;
-        if(!console_controller_get(count-1-i,&entry) || !console_filter_matches(&entry,s_filter,s_query,s_hide_temperatures))continue;
-        char stamp[24],line[256];format_entry_time(&entry,stamp,sizeof(stamp));
-        snprintf(line,sizeof(line),"%s  %s  %s",stamp,entry_prefix(entry.type),entry.message);
-        lv_obj_t *label=s_rows->rows[visible];
-        if(!label){label=lv_label_create(s_output);
-    s_rows->rows[visible]=label;lv_obj_set_width(label,LV_PCT(100));
-    lv_obj_set_height(label,LV_SIZE_CONTENT);
-    lv_label_set_long_mode(label,LV_LABEL_LONG_WRAP);}
-        ui_value_set_text(label,line);
-    lv_obj_remove_flag(label,LV_OBJ_FLAG_HIDDEN);
-        ui_apply_custom_label_style(label,UI_FONT_CAPTION,entry_color(entry.type));
-        s_row_sequence[visible++]=entry.sequence;
+        if (!console_controller_get_sequence(console_sequence_at(newest, count - 1 - i), &entry) ||
+            !console_filter_matches(&entry, s_filter, s_query, s_hide_temperatures)) continue;
+        lv_obj_t *label = s_rows->rows[visible];
+        if (!label || s_row_sequence[visible] != entry.sequence)
+            s_rows->rows[visible] = label = write_row(label, &entry);
+        lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+        s_row_sequence[visible++] = entry.sequence;
     }
-    char count_text[40];snprintf(count_text,sizeof(count_text),"%u / %u",(unsigned)visible,(unsigned)count);
-    ui_value_set_text(s_filter_count,count_text);
-    for(size_t i=visible;i<CONSOLE_LOG_CAPACITY;i++)if(s_rows->rows[i])lv_obj_add_flag(s_rows->rows[i],LV_OBJ_FLAG_HIDDEN);
-    if(!visible){
-        if(!s_rows->empty){s_rows->empty=lv_label_create(s_output);
-    lv_obj_set_width(s_rows->empty,LV_PCT(100));
-    lv_label_set_long_mode(s_rows->empty,LV_LABEL_LONG_WRAP);
-    ui_apply_custom_label_style(s_rows->empty,UI_FONT_BODY,UI_TEXT_DIM);}
-        lv_obj_remove_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN);
-        ui_value_set_text(s_rows->empty,count?"No entries match. Tap Reset filters to see all entries.":"No console entries yet.");
-    }else if(s_rows->empty)lv_obj_add_flag(s_rows->empty,LV_OBJ_FLAG_HIDDEN);
-    lv_obj_update_layout(s_output);
-    s_programmatic_scroll=true;
-    if(s_follow)lv_obj_scroll_to_y(s_output,lv_obj_get_scroll_y(s_output)+lv_obj_get_scroll_bottom(s_output),LV_ANIM_OFF);
-    else {
-        bool found=false;
-        if(anchor)for(size_t i=0;i<visible;i++)if(s_row_sequence[i]==anchor){lv_area_t area;lv_obj_get_coords(s_rows->rows[i],&area);scroll_y=lv_obj_get_scroll_y(s_output)+area.y1-anchor_y;found=true;break;}
-        if(anchor&&!found)scroll_y=0; /* Oldest retained row if the ring evicted the anchor. */
-        lv_obj_scroll_to_y(s_output,scroll_y,LV_ANIM_OFF);
-    }
-    s_programmatic_scroll=false;
+    for (size_t i = visible; i < CONSOLE_LOG_CAPACITY; ++i)
+        if (s_rows->rows[i]) lv_obj_add_flag(s_rows->rows[i], LV_OBJ_FLAG_HIDDEN);
+    show_history_count(visible, count);
+    restore_scroll(scroll, visible);
 }
 
 static void update_connection(void)
@@ -211,7 +328,7 @@ static void update_connection(void)
     moonraker_state_t state;moonraker_state_snapshot(&state);
     /* Console stays usable over Moonraker for Klipper recovery commands. */
     bool live=state.moonraker_ok;
-    const char *status = !live ? "Offline" :
+    const char *status = !s_refresh_timer ? "Live updates unavailable. Reopen Console." : !live ? "Offline" :
         !strcmp(state.printer_state, "shutdown") ? "Klipper shutdown" :
         !strcmp(state.printer_state, "error") ? "Klipper error" :
         !state.live_data_ok ? "Waiting for Klipper" : "Connected";
@@ -219,16 +336,18 @@ static void update_connection(void)
     char caption[192];snprintf(caption,sizeof(caption),"%s | %s",name&&name[0]?name:"Active printer",ui_text(status));
     if(ui_value_set_text(s_connection,caption)){ui_text_fit_single_line(s_connection,UI_FONT_CAPTION);
     lv_label_set_long_mode(s_connection,LV_LABEL_LONG_CLIP);}
-    ui_value_set_color(s_connection,!live?UI_DANGER_BRIGHT:state.live_data_ok&&!strcmp(status,"Connected")?UI_OK_BRIGHT:UI_WARN,0);
+    ui_value_set_color(s_connection,!s_refresh_timer?UI_WARN:!live?UI_DANGER_BRIGHT:state.live_data_ok&&!strcmp(status,"Connected")?UI_OK_BRIGHT:UI_WARN,0);
     bool owner_ok=!s_command_popup || s_command_owner==moonraker_config_generation();
-    bool ready=live && owner_ok && s_command_input && !s_command_dispatching;
+    bool command_available=s_refresh_timer && live;
+    bool ready=command_available && owner_ok && s_command_input && !s_command_dispatching;
     if(s_command_feedback) {
         if(!owner_ok)ui_value_set_text(s_command_feedback,"Printer changed. Close and reopen this editor.");
+        else if(!s_refresh_timer)ui_value_set_text(s_command_feedback,"Live updates unavailable. Reopen Console.");
         else if(!live)ui_value_set_text(s_command_feedback,"Printer offline. Reconnect before sending.");
         else if(!strcmp(lv_label_get_text(s_command_feedback),"Printer offline. Reconnect before sending."))ui_value_set_text(s_command_feedback,"Commands run immediately on this printer.");
         ui_value_set_color(s_command_feedback,ready&&!strcmp(lv_label_get_text(s_command_feedback),"Commands run immediately on this printer.")?UI_TEXT_DIM:UI_WARN,0);
     }
-    if(s_command_button && lv_obj_has_state(s_command_button,LV_STATE_DISABLED)==live){if(live)lv_obj_remove_state(s_command_button,LV_STATE_DISABLED);else lv_obj_add_state(s_command_button,LV_STATE_DISABLED);}
+    if(s_command_button && lv_obj_has_state(s_command_button,LV_STATE_DISABLED)==command_available){if(command_available)lv_obj_remove_state(s_command_button,LV_STATE_DISABLED);else lv_obj_add_state(s_command_button,LV_STATE_DISABLED);}
     if(s_command_send && lv_obj_has_state(s_command_send,LV_STATE_DISABLED)==ready){if(ready)lv_obj_remove_state(s_command_send,LV_STATE_DISABLED);else lv_obj_add_state(s_command_send,LV_STATE_DISABLED);}
 }
 
@@ -238,9 +357,14 @@ static void refresh_timer_cb(lv_timer_t *timer)
         return;
     }
 
-    size_t count = console_controller_count();
-    uint32_t sequence =
-        console_controller_latest_sequence();
+    if (s_load.pending) {
+        load_initial_rows();
+        update_connection();
+        return;
+    }
+
+    uint32_t sequence;
+    size_t count = console_controller_window(&sequence);
 
     if (count != s_rendered_count ||
         sequence != s_rendered_sequence) {
@@ -279,6 +403,10 @@ static void follow_cb(lv_event_t *event)
     if (!s_root || s_command_dispatching) return;
     s_follow = !s_follow;
     update_follow_button();
+    if (s_load.pending) {
+        if (s_follow) restore_scroll((console_scroll_t){0}, s_load.visible);
+        return;
+    }
     rebuild_output();
 }
 
@@ -397,7 +525,7 @@ static void filter_cb(lv_event_t *event)
 static void update_temperature_button(void)
 {
     if (!s_root || !s_temperature_label || !s_temperature_button) return;
-    lv_label_set_text(s_temperature_label, s_hide_temperatures ? "Temps hidden" : "Temps shown");
+    lv_label_set_text(s_temperature_label, s_hide_temperatures ? "Show temps" : "Hide temps");
     ui_button_apply_kind(s_temperature_button,UI_BUTTON_OUTLINED);
     ui_button_set_filter_active(s_temperature_button,s_hide_temperatures);
     ui_text_fit_single_line(s_temperature_label,UI_FONT_BODY_LARGE);
@@ -434,7 +562,7 @@ static void create_filters(void)
     lv_dropdown_set_options(s_filter_dropdown,"All entries\nErrors + warnings\nErrors\nWarnings\nCommands\nResponses\nSystem");
     lv_dropdown_set_selected(s_filter_dropdown,(uint32_t)s_filter);
     lv_obj_add_event_cb(s_filter_dropdown,filter_cb,LV_EVENT_VALUE_CHANGED,NULL);
-    s_temperature_button=console_action(s_filters,"Temps shown",UI_BUTTON_OUTLINED,160,temperature_cb);
+    s_temperature_button=console_action(s_filters,"Hide temps",UI_BUTTON_OUTLINED,160,temperature_cb);
     s_temperature_label=lv_obj_get_child(s_temperature_button,0);update_temperature_button();
     lv_obj_t *search=console_action(s_filters,"Search",UI_BUTTON_OUTLINED,104,search_cb);
     s_search_label=lv_obj_get_child(search,0);
@@ -497,7 +625,7 @@ static void send_command_cb(lv_event_t *event)
     }
 
     moonraker_state_t state;moonraker_state_snapshot(&state);
-    if(s_command_owner!=moonraker_config_generation() || !state.moonraker_ok){
+    if(!s_refresh_timer || s_command_owner!=moonraker_config_generation() || !state.moonraker_ok){
         update_connection();
     return;
     }
@@ -580,7 +708,7 @@ static void command_value_changed(lv_event_t *event)
 
 static void open_command_cb(lv_event_t *event)
 {
-    (void)event;if(!s_root || s_command_dispatching)return;
+    (void)event;if(!s_root || !s_refresh_timer || s_command_dispatching)return;
     if(s_command_popup){lv_obj_move_foreground(s_command_popup);
     return;}
     moonraker_state_t state;moonraker_state_snapshot(&state);if(!state.moonraker_ok){update_connection();
@@ -626,10 +754,12 @@ void ui_console_show(ui_console_command_cb_t command_callback)
     if (s_command_dispatching) return;
     if(!console_rows_init())return;
     s_command_callback=command_callback;
-    if(s_root){rebuild_output();
-    update_connection();
-    lv_obj_move_foreground(s_root);
-    return;}
+    if (s_root) {
+        if (!s_refresh_timer) rebuild_output();
+        update_connection();
+        lv_obj_move_foreground(s_root);
+        return;
+    }
     s_root=lv_obj_create(lv_screen_active());
     lv_obj_add_event_cb(s_root,console_deleted,LV_EVENT_DELETE,NULL);
     ui_apply_root_style(s_root);
@@ -680,9 +810,16 @@ void ui_console_show(ui_console_command_cb_t command_callback)
     s_follow_label=lv_obj_get_child(s_follow_button,0);
     console_action(s_footer,"Clear",UI_BUTTON_DANGER,96,clear_cb);
     update_follow_button();
-    rebuild_output();
+    s_refresh_timer = lv_timer_create(refresh_timer_cb, CONSOLE_LOAD_MS, NULL);
+    if (s_refresh_timer) {
+        /* Let the shell and Console controls render before building history rows. */
+        s_load.newest_first = s_follow;
+        s_load.pending = true;
+        ui_value_set_text(s_filter_count, "Loading...");
+    } else {
+        rebuild_output();
+    }
     update_connection();
-    s_refresh_timer=lv_timer_create(refresh_timer_cb,250,NULL);
 }
 
 
@@ -702,6 +839,7 @@ void ui_console_hide(void)
     s_command_callback = NULL;
     s_rendered_sequence = 0;
     s_rendered_count = 0;
+    memset(&s_load, 0, sizeof(s_load));
     close_command_popup();
     close_search_popup();
     if (timer) lv_timer_delete(timer);

@@ -5,7 +5,8 @@
 #include <stdint.h>
 #include <time.h>
 
-#define CONSOLE_LOG_CAPACITY 64
+#define CONSOLE_LOG_CAPACITY 256
+#define CONSOLE_LOG_FALLBACK_CAPACITY 64
 #define CONSOLE_MESSAGE_MAX 192
 #define CONSOLE_HISTORY_CAPACITY 16
 #define CONSOLE_COMMAND_MAX 256
@@ -28,7 +29,7 @@ typedef struct {
 
 /*
  * Allocates one bounded permanent store in PSRAM, with internal RAM as a
- * fallback. The store is retained for the entire application lifetime.
+ * fallback at reduced capacity. The store is retained until reboot.
  */
 bool console_controller_init(void);
 
@@ -41,6 +42,22 @@ void console_controller_add_command(const char *command);
 
 size_t console_controller_count(void);
 uint32_t console_controller_latest_sequence(void);
+
+/* Capture the bounds together, then read by sequence so new writes cannot
+ * shift the positions being read. An evicted entry is simply unavailable. */
+size_t console_controller_window(uint32_t *newest);
+bool console_controller_get_sequence(uint32_t sequence, console_entry_t *out);
+
+static inline uint32_t console_sequence_distance(uint32_t newer, uint32_t older)
+{
+    return newer >= older ? newer - older : UINT32_MAX - older + newer;
+}
+
+static inline uint32_t console_sequence_at(uint32_t newest, size_t offset)
+{
+    return offset < newest ? newest - (uint32_t)offset :
+        UINT32_MAX - ((uint32_t)offset - newest);
+}
 
 /* Entries and command history are returned newest first. */
 bool console_controller_get(

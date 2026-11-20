@@ -6,7 +6,14 @@
 #include "moonraker.h"
 #include "ui_devices.h"
 #include "ui_endstop_status.h"
+static bool reject_devices_timer;
+static lv_timer_t *devices_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_devices_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create devices_test_timer
 #include "ui_devices_catalog_view.c"
+#undef lv_timer_create
 static device_descriptor_t entries[96];static device_catalog_status_t status;
 static moonraker_state_t state;
 static uint32_t owner_generation=1;
@@ -163,6 +170,12 @@ for(int cycle=0;cycle<5;cycle++){
  before=graph_calls;lv_obj_t *button=lv_obj_get_parent(find(s_devices->root,ui_theme_is_studio()?"Graphs":"Telemetry"));lv_obj_send_event(button,LV_EVENT_CLICKED,NULL);assert(graph_calls==before);
  ui_devices_show(open_graphs);assert(s_devices->owner_generation==owner_generation);ui_devices_hide();assert(timer_count()==timers);
 }
+reject_devices_timer=true;ui_devices_show(open_graphs);reject_devices_timer=false;
+assert(s_devices->root&&!s_devices->refresh_timer);
+assert(strstr(lv_label_get_text(s_devices->banner_status),"Snapshot only"));
+ui_devices_hide();ui_devices_show(open_graphs);
+assert(s_devices->refresh_timer&&!strstr(lv_label_get_text(s_devices->banner_status),"Snapshot only"));
+ui_devices_hide();assert(timer_count()==timers);
 /* Live labels and their owner may also be retired independently. */
 root=lv_obj_create(lv_screen_active());value=lv_label_create(root);ui_devices_live_values_init(root);ui_devices_live_values_register(0,value,0);lv_obj_delete(value);ui_devices_live_values_update();lv_obj_delete(root);ui_devices_live_values_update();ui_devices_live_values_close();
 }

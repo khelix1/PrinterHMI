@@ -45,6 +45,8 @@ typedef struct {
     double progress;
     double nozzle_temp;
     double nozzle_target;
+    const moonraker_hotend_t *hotends;
+    size_t hotend_count;
     double bed_temp;
     double bed_target;
     double part_fan_speed;

@@ -87,6 +87,16 @@ int main(void) {
     }
     post("// Custom calibration sample complete; 'save_config' to persist", CONSOLE_ENTRY_RESPONSE);
     assert(snapshot().completed && snapshot().save_available);
+    const calibration_session_kind_t diagnostics[] = {
+        CALIBRATION_SESSION_RESONANCE_TEST, CALIBRATION_SESSION_ACCELEROMETER_CHECK
+    };
+    for (size_t i = 0; i < sizeof(diagnostics) / sizeof(diagnostics[0]); ++i) {
+        begin(diagnostics[i]);
+        post("// The SAVE_CONFIG command will update the printer config file", CONSOLE_ENTRY_RESPONSE);
+        assert(!snapshot().completed && !snapshot().save_available);
+    }
+    post("// Axes noise for xy-axis accelerometer: 2.0, 3.0, 4.0", CONSOLE_ENTRY_RESPONSE);
+    assert(snapshot().completed && !snapshot().save_available);
     /* A successful TEST_RESONANCES writes its final CSV, without SAVE_CONFIG. */
     begin(CALIBRATION_SESSION_RESONANCE_TEST);
     post("// Testing frequency 20 Hz", CONSOLE_ENTRY_RESPONSE);

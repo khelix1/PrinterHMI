@@ -10,10 +10,18 @@
 #include "ui_widgets.h"
 #include "ui_studio_layout.h"
 #include "ui_theme_preview.h"
+static bool reject_console_timer;
+static lv_timer_t *console_test_timer(lv_timer_cb_t cb, uint32_t period, void *data)
+{
+    return reject_console_timer ? NULL : lv_timer_create(cb, period, data);
+}
+#define lv_timer_create console_test_timer
 #include "ui_console.c"
+#undef lv_timer_create
 static moonraker_state_t state;
 static uint32_t generation=1,sequence=64;
 static size_t entries=64;
+static bool temperature_rows;
 static unsigned sends,invalidations;
 static bool accept=true,long_messages;
 static void (*send_hook)(void),(*log_hook)(void),(*error_hook)(void),(*history_hook)(void);
@@ -28,7 +36,17 @@ void moonraker_state_snapshot(moonraker_state_t *o){*o=state;}
 void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void)t;(void)d;}
 size_t console_controller_count(void){return entries;}
 uint32_t console_controller_latest_sequence(void){return sequence;}
-bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->sequence=sequence-(uint32_t)i;e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;snprintf(e->message,sizeof(e->message),"Message %u%.170s",e->sequence,long_messages?" | LONG TOKEN ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 followed by a complete multiline response that must wrap and remain readable at large text sizes.":"");return true;}
+bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->sequence=sequence-(uint32_t)i;if(temperature_rows){
+ const char *reports[]={"OK T0:210.0 /210.0","chamber_sensor:28.0 /0.0","T0:210.0 /210.0"};
+ e->type=i==2?CONSOLE_ENTRY_WARNING:CONSOLE_ENTRY_RESPONSE;
+ snprintf(e->message,sizeof(e->message),"%s",reports[i%3]);return true;
+ }e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;snprintf(e->message,sizeof(e->message),"Message %u%.170s",e->sequence,long_messages?" | LONG TOKEN ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 followed by a complete multiline response that must wrap and remain readable at large text sizes.":"");return true;}
+size_t console_controller_window(uint32_t *newest){*newest=console_controller_latest_sequence();return entries;}
+static bool add_during_read;
+bool console_controller_get_sequence(uint32_t seq,console_entry_t *e){
+ if(add_during_read){add_during_read=false;++sequence;}
+ return seq && console_controller_get(console_sequence_distance(console_controller_latest_sequence(),seq),e);
+}
 void console_controller_clear(void){entries=0;sequence++;}
 size_t console_controller_history_count(void){return 2;}
 bool console_controller_history_get(size_t i,char *o,size_t n){if(history_hook){void(*hook)(void)=history_hook;history_hook=NULL;hook();}if(i>=2)return false;snprintf(o,n,"%s",i?"M105":"STATUS");return true;}
@@ -91,8 +109,10 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
    assert(lv_color_eq(lv_obj_get_style_border_color(s_output,0),UI_BORDER));
   }
   assert(!lv_obj_has_state(s_temperature_button,LV_STATE_CHECKED));
-  temperature_cb(NULL);assert(s_hide_temperatures && lv_obj_has_state(s_temperature_button,LV_STATE_CHECKED));
-  temperature_cb(NULL);assert(!s_hide_temperatures && !lv_obj_has_state(s_temperature_button,LV_STATE_CHECKED));
+  click(s_temperature_button);assert(s_hide_temperatures && lv_obj_has_state(s_temperature_button,LV_STATE_CHECKED));
+  assert(!strcmp(lv_label_get_text(s_temperature_label),"Show temps"));
+  click(s_temperature_button);assert(!s_hide_temperatures && !lv_obj_has_state(s_temperature_button,LV_STATE_CHECKED));
+  assert(!strcmp(lv_label_get_text(s_temperature_label),"Hide temps"));
   assert(!strcmp(lv_label_get_text(s_search_label),"Search"));
   assert(s_rows->rows[63]);assert(lv_label_get_long_mode(s_rows->rows[0])==LV_LABEL_LONG_WRAP);assert(lv_obj_get_height(s_rows->rows[0])>UI_FONT_CAPTION->line_height);capture("console");
   lv_obj_t *first=s_rows->rows[0];s_follow=false;lv_obj_scroll_to_y(s_output,200,LV_ANIM_OFF);lv_obj_update_layout(s_root);int scroll=lv_obj_get_scroll_y(s_output);rebuild_output();assert(scroll==lv_obj_get_scroll_y(s_output)&&s_rows->rows[0]==first);
@@ -145,4 +165,73 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   search_cb(NULL);lv_obj_delete(s_search_input);assert(!s_search_input&&lv_keyboard_get_textarea(s_search_keyboard)==NULL);search_done_cb(NULL);close_search_popup();
   ui_console_hide();assert(!s_root&&!s_refresh_timer&&!lv_obj_get_child_count(lv_layer_top()));press_catalog();
  }
+ state=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true};
+ unsigned before=sends, baseline=timer_count();
+ reject_console_timer=true;ui_console_show(send);reject_console_timer=false;
+ assert(s_root&&!s_refresh_timer&&strstr(lv_label_get_text(s_connection),"Reopen Console"));
+ assert(lv_obj_has_state(s_command_button,LV_STATE_DISABLED));
+ open_command_cb(NULL);send_command_cb(NULL);assert(!s_command_popup&&sends==before);
+ reset_filters_cb(NULL);assert(s_output);
+ ui_console_hide();assert(timer_count()==baseline);
+ ui_console_show(send);assert(s_refresh_timer&&!lv_obj_has_state(s_command_button,LV_STATE_DISABLED));
+ open_command_cb(NULL);assert(s_command_popup);lv_textarea_set_text(s_command_input,"STATUS");
+ send_command_cb(NULL);assert(sends==before+1);
+ ui_console_hide();assert(timer_count()==baseline);
+ entries=sequence=CONSOLE_LOG_CAPACITY;s_filter=CONSOLE_FILTER_ALL;s_query[0]=0;
+ s_hide_temperatures=false;s_follow=true;ui_console_show(send);
+ assert(s_load.pending&&!lv_obj_get_child_count(s_output));
+ lv_refr_now(d); /* The page can paint before it creates any history labels. */
+ assert(s_load.pending&&!lv_obj_get_child_count(s_output));
+ lv_tick_inc(CONSOLE_LOAD_MS);lv_timer_handler();
+ assert(s_load.pending&&s_load.visible==CONSOLE_LOAD_ROWS);
+ assert(s_row_sequence[0]==CONSOLE_LOG_CAPACITY-CONSOLE_LOAD_ROWS+1);
+ assert(s_row_sequence[CONSOLE_LOAD_ROWS-1]==CONSOLE_LOG_CAPACITY);
+ lv_obj_t *newest_row=s_rows->rows[CONSOLE_LOAD_ROWS-1];
+ s_follow=false;
+ lv_area_t vp, anchor_area;
+ lv_obj_get_coords(s_output,&vp);
+ size_t i=0;
+ do {lv_obj_get_coords(s_rows->rows[i++],&anchor_area);} while(i<CONSOLE_LOAD_ROWS&&anchor_area.y2<vp.y1);
+ assert(anchor_area.y2>=vp.y1);
+ lv_obj_t *anchor_row=s_rows->rows[i-1];
+ int32_t anchor_y=anchor_area.y1;
+ refresh_timer_cb(s_refresh_timer);
+ lv_obj_get_coords(anchor_row,&anchor_area);
+ assert(anchor_area.y1==anchor_y);
+ while(s_load.pending)refresh_timer_cb(s_refresh_timer);
+ assert(s_rows->rows[CONSOLE_LOG_CAPACITY-1]==newest_row);
+ for(size_t i=0;i<CONSOLE_LOG_CAPACITY;i++){
+  assert(s_row_sequence[i]==i+1);
+  assert(lv_obj_get_child(s_output,(int32_t)i)==s_rows->rows[i]);
+ }
+ ui_console_hide();s_follow=false;ui_console_show(send);
+ refresh_timer_cb(s_refresh_timer);
+ assert(s_load.pending&&s_row_sequence[0]==1&&s_row_sequence[CONSOLE_LOAD_ROWS-1]==CONSOLE_LOAD_ROWS);
+ ui_console_hide();assert(!s_load.pending&&!s_refresh_timer&&timer_count()==baseline);
+ ui_console_show(send);
+ while(s_load.pending)refresh_timer_cb(s_refresh_timer);
+ assert(s_row_sequence[0]==1&&s_row_sequence[CONSOLE_LOG_CAPACITY-1]==CONSOLE_LOG_CAPACITY);
+ snprintf(s_query,sizeof(s_query),"Message 1");rebuild_output();
+ assert(s_row_sequence[0]==1&&strstr(lv_label_get_text(s_rows->rows[0]),"Message 1"));
+ s_query[0]=0;add_during_read=true;rebuild_output();
+ assert(s_rendered_sequence==CONSOLE_LOG_CAPACITY);
+ assert(s_row_sequence[0]==2&&s_row_sequence[CONSOLE_LOG_CAPACITY-2]==CONSOLE_LOG_CAPACITY);
+ refresh_timer_cb(NULL);
+ assert(s_row_sequence[0]==2&&s_row_sequence[CONSOLE_LOG_CAPACITY-1]==CONSOLE_LOG_CAPACITY+1);
+
+ temperature_rows=true;entries=3;sequence+=3;rebuild_output();
+ assert(!strcmp(lv_label_get_text(s_filter_count),"3 / 3"));
+ assert(strstr(lv_label_get_text(s_rows->rows[1]),"chamber_sensor"));
+ click(s_temperature_button);
+ assert(!strcmp(lv_label_get_text(s_filter_count),"1 / 3"));
+ assert(s_row_sequence[0]==sequence-2);
+ assert(lv_obj_has_flag(s_rows->rows[1],LV_OBJ_FLAG_HIDDEN));
+ click(s_temperature_button);
+ assert(!strcmp(lv_label_get_text(s_filter_count),"3 / 3"));
+ assert(!lv_obj_has_flag(s_rows->rows[1],LV_OBJ_FLAG_HIDDEN));
+ assert(strstr(lv_label_get_text(s_rows->rows[1]),"chamber_sensor"));
+ click(s_temperature_button);reset_filters_cb(NULL);
+ assert(!s_hide_temperatures&&!strcmp(lv_label_get_text(s_filter_count),"3 / 3"));
+
+ ui_console_hide();
  lv_display_delete(d);lv_deinit();puts("PASS: Console layouts/history/filters/editor, owner/offline send guards, rejection retention, reentrant send, timer-balanced external deletion, stale callbacks, no-op refresh and pressed/focused/checked/disabled button frames across themes/densities/text sizes/viewports");return 0;}

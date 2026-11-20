@@ -61,9 +61,43 @@ static void safe_copy(char *d,size_t n,const char *s){snprintf(d,n,"%s",s);}
 bool ui_dashboard_thumb_canvas_matches(const char *file){return ui_active_print_thumb_canvas_matches(file);}
 static void (*render_hook)(void);
 static bool checked_render(const lv_image_dsc_t *source,uint16_t *out,int w,int h,int *pw,int *ph){bool ok=thumbnail_render_to_rgb565_aspect(source,out,w,h,pw,ph);if(render_hook){void(*hook)(void)=render_hook;render_hook=NULL;hook();}return ok;}
+typedef int BaseType_t;
+#define pdPASS 1
+static bool reject_timer,reject_worker,s_popup_thumb_start_pending,download_busy;
+static bool s_got_ip=true,s_moonraker_ok=true,sd_card_ok=true;
+static unsigned render_starts,download_starts;
+enum { THUMB_TARGET_LIVE, THUMB_TARGET_POPUP };
+static int printer_thumb_target=THUMB_TARGET_POPUP;
+static lv_timer_t *thumb_poll_timer;
+static const char *preview_label;
+static void printer_thumb_set_label(const char *label){preview_label=label;}
+static void printer_thumb_ui_poll_cb(lv_timer_t *timer){(void)timer;}
+static const char *thumbnail_session_selected_thumbnail_path(void){return "preview.png";}
+static const char *moonraker_config_host(void){return "printer";}
+static int moonraker_config_port(void){return 7125;}
+static bool thumbnail_manager_force_refresh(void){return false;}
+static bool thumbnail_manager_task_running(void){return download_busy;}
+static void thumbnail_manager_mark_pending(void){}
+static void thumbnail_manager_mark_failed(void){}
+static bool thumbnail_manager_start_download_task(const char *h,int p,const char *f,const char *path,bool force,bool sd)
+{
+ (void)h;(void)p;(void)f;(void)path;(void)force;(void)sd;
+ assert(thumb_poll_timer);download_starts++;return !reject_worker;
+}
+static BaseType_t xTaskCreatePinnedToCore(void (*fn)(void *),const char *name,unsigned stack,void *arg,int priority,void *handle,int core)
+{
+ (void)fn;(void)name;(void)stack;(void)arg;(void)priority;(void)handle;(void)core;
+ assert(dash_thumb_render_timer);render_starts++;return !reject_worker;
+}
+static lv_timer_t *preview_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create preview_test_timer
 #define thumbnail_render_to_rgb565_aspect checked_render
 #include "aspect_dashboard_functions.h"
 #undef thumbnail_render_to_rgb565_aspect
+#undef lv_timer_create
 static void change_profile(void){config_generation++;}
 static void change_file(void){strcpy(selected_file,"other.gcode");}
 static void replace_panel(void){lv_obj_delete(card);card=ui_active_print_create_profile(lv_screen_active(),&(ui_dashboard_rect_t){0,0,600,350},&ui_dashboard_layout_profile_for_theme(ui_theme_get_active())->active_content);}
@@ -71,6 +105,22 @@ static void replace_panel(void){lv_obj_delete(card);card=ui_active_print_create_
 static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){(void)a;(void)p;lv_display_flush_ready(d);}
 int main(void){
  lv_init();lv_display_t *display=lv_display_create(1024,600);static uint8_t pixels[1024*40*2];lv_display_set_color_format(display,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(display,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(display,flush);
+ reject_timer=true;
+ dash_thumb_start_render_task();printer_thumb_start_delayed();
+ assert(!render_starts&&!download_starts&&!dash_thumb_render_timer&&!thumb_poll_timer);
+ assert(!s_popup_thumb_start_pending&&!strcmp(preview_label,"PREVIEW UNAVAILABLE"));
+ reject_timer=false;reject_worker=true;
+ dash_thumb_start_render_task();printer_thumb_start_delayed();
+ assert(render_starts==1&&download_starts==1&&!dash_thumb_render_timer&&!thumb_poll_timer);
+ assert(!dash_thumb_render_running&&!s_popup_thumb_start_pending&&strstr(preview_label,"TASK FAIL"));
+ reject_worker=false;s_got_ip=false;
+ printer_thumb_start_delayed();assert(download_starts==1&&thumb_poll_timer&&s_popup_thumb_start_pending);
+ lv_timer_t *waiting=thumb_poll_timer;s_got_ip=true;download_busy=true;
+ printer_thumb_start_delayed();assert(download_starts==1&&thumb_poll_timer==waiting&&s_popup_thumb_start_pending);
+ download_busy=false;printer_thumb_start_delayed();assert(download_starts==2&&thumb_poll_timer==waiting&&!s_popup_thumb_start_pending);
+ lv_timer_delete(waiting);thumb_poll_timer=NULL;
+ dash_thumb_start_render_task();assert(render_starts==2&&dash_thumb_render_timer&&dash_thumb_render_running);
+ lv_timer_delete(dash_thumb_render_timer);dash_thumb_render_timer=NULL;dash_thumb_render_running=false;
  static uint16_t source[286*215];source[0]=0x4321;
  for(unsigned theme=0;theme<5;theme++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});

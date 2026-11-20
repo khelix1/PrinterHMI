@@ -6,6 +6,7 @@
 #include "moonraker_config_controller.h"
 #include "ui_filament_recovery.h"
 #include "ui_text.h"
+#include "ui_hotend_readings.h"
 #include "ui_popup.h"
 #include "ui_form_dialog.h"
 #include "ui_theme.h"
@@ -1335,7 +1336,7 @@ static bool hotend_name_safe(const char *name)
 }
 static bool hotend_live_here(void)
 {
-    return s_hotend_owner == moonraker_config_generation() &&
+    return s_hotend_refresh_timer && s_hotend_owner == moonraker_config_generation() &&
         s_hotend_list_state.moonraker_ok && s_hotend_list_state.live_data_ok;
 }
 static void hotend_activate_deleted(lv_event_t *event)
@@ -1409,6 +1410,9 @@ static void hotend_activate_event_cb(lv_event_t *event)
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
         !s_hotend_list_popup || s_hotend_dispatching || s_hotend_pending) return;
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= s_hotend_row_count || !s_hotend_activate_buttons[index] ||
+        lv_event_get_target_obj(event) != s_hotend_activate_buttons[index] ||
+        lv_event_get_current_target_obj(event) != s_hotend_activate_buttons[index]) return;
     moonraker_state_snapshot(&s_hotend_list_state);
     const moonraker_hotend_t *hotend = hotend_row(index);
     if (!hotend_live_here() || printer_connection_reason(&s_hotend_list_state)[0] || !hotend || hotend->active || !hotend_name_safe(hotend->object_name) ||
@@ -1423,7 +1427,7 @@ static void hotend_activate_event_cb(lv_event_t *event)
     ++s_hotend_epoch;
     lv_obj_add_event_cb(s_hotend_activate_popup, hotend_activate_deleted, LV_EVENT_DELETE, NULL);
     char title[48], text[180];
-    snprintf(title, sizeof(title), "Activate T%u?", (unsigned)index);
+    snprintf(title, sizeof(title), "Activate T%u?", ui_hotend_number(hotend, index));
     lv_obj_t *body = control_layout(s_hotend_activate_popup, title);
     snprintf(text, sizeof(text), "Make %s the active Klipper hotend?\n\n"
         "This does not move or park a physical toolchanger.", s_hotend_confirm_name);
@@ -1482,7 +1486,7 @@ static void refresh_hotend_list(lv_timer_t *timer)
             continue;
         }
         char name[64], temperature[64];
-        snprintf(name, sizeof(name), "T%u %s(%s)", (unsigned)i, hotend->active ? "Active " : "", hotend->object_name);
+        snprintf(name, sizeof(name), "T%u %s(%s)", ui_hotend_number(hotend, i), hotend->active ? "Active " : "", hotend->object_name);
         ui_value_set_text(s_hotend_name_labels[i], name);
         ui_value_set_color(s_hotend_name_labels[i], hotend->active ? UI_OK_BRIGHT : UI_TEXT_DIM, 0);
         if (hotend->temperature > -100.0) snprintf(temperature, sizeof(temperature), "%.1f / %.1f C", hotend->temperature, hotend->target);
@@ -1537,6 +1541,9 @@ static void hotend_temperature_event_cb(lv_event_t *event)
         !s_hotend_list_popup || s_hotend_dispatching || s_hotend_pending) return;
 
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= s_hotend_row_count || !s_hotend_temp_buttons[index] ||
+        lv_event_get_target_obj(event) != s_hotend_temp_buttons[index] ||
+        lv_event_get_current_target_obj(event) != s_hotend_temp_buttons[index]) return;
     moonraker_state_snapshot(&s_hotend_list_state);
     const moonraker_hotend_t *selected = hotend_row(index);
     if (!hotend_live_here() || !selected || !hotend_name_safe(selected->object_name)) return;
@@ -1566,7 +1573,7 @@ static void hotend_temperature_event_cb(lv_event_t *event)
         s_hotend_title,
         sizeof(s_hotend_title),
         "T%u temperature",
-        (unsigned)index);
+        ui_hotend_number(&hotend, index));
 
     snprintf(
         s_hotend_custom_prefix,
@@ -1682,8 +1689,8 @@ void ui_printer_popups_show_hotends(ui_printer_popups_send_gcode_cb_t send_cb,
     lv_obj_t *footer = control_footer(s_hotend_list_popup);
     ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 170, 48, close_hotend_list_cb, NULL, NULL);
-    refresh_hotend_list(NULL);
     s_hotend_refresh_timer = lv_timer_create(refresh_hotend_list, 500, NULL);
+    refresh_hotend_list(NULL);
 }
 
 void ui_printer_popups_show_part_fan(
@@ -1922,7 +1929,7 @@ static void refresh_filament_list(lv_timer_t *timer)
     const char *reason = printer_connection_reason(&state);
     bool owns = s_filament_owner == moonraker_config_generation();
     for (size_t i = 0; i < s_filament_row_count; ++i) {
-        const moonraker_filament_sensor_t *sensor = owns && s_filament_list_state.discovered ? filament_row_sensor(i) : NULL;
+        const moonraker_filament_sensor_t *sensor = owns && s_filament_refresh_timer && s_filament_list_state.discovered ? filament_row_sensor(i) : NULL;
         lv_obj_t *button = s_filament_toggle_buttons[i], *label = s_filament_toggle_labels[i];
         if (!sensor) {
             ui_value_set_text(s_filament_status_labels[i], owns ? "Unavailable - reopen" : "Printer changed - reopen");
@@ -1964,7 +1971,7 @@ static void refresh_filament_list(lv_timer_t *timer)
 static void filament_toggle_event_cb(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED ||
-        !s_filament_list_popup || s_filament_dispatching) return;
+        !s_filament_list_popup || !s_filament_refresh_timer || s_filament_dispatching) return;
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
     if (index >= s_filament_row_count ||
         lv_event_get_target(event) != s_filament_toggle_buttons[index]) return;
@@ -2081,8 +2088,8 @@ void ui_printer_popups_show_filament_sensors(ui_printer_popups_send_gcode_cb_t s
     lv_obj_t *footer = control_footer(s_filament_list_popup);
     ui_popup_add_action_at(footer, UI_POPUP_ACTION_CLOSE, LV_SYMBOL_CLOSE " Close",
         0, 0, 170, 48, close_filament_list_cb, NULL, NULL);
-    refresh_filament_list(NULL);
     s_filament_refresh_timer = lv_timer_create(refresh_filament_list, 500, NULL);
+    refresh_filament_list(NULL);
 }
 
 void ui_printer_popups_close_all(void)

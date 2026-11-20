@@ -4327,3 +4327,121 @@ Run `profiles_layout_test.py`. Inject timer allocation failure in the profile co
 ## Firmware release result timer (v7.3.115-dev)
 
 Run `calibration_dialog_layout_test.py`. Reject timer creation with the catalog idle and with a check already running. Verify that Retry stays available, no worker starts without a timer, and recovering the timer displays the completed catalog without starting duplicate work.
+
+## Encrypted backup progress startup (v7.3.116-dev)
+
+Run `network_backup_dialog_test.py`. Reject the progress dialog or timer and verify that the passphrase form stays open without starting the worker. Verify that a subsequent attempt can complete or return to retry.
+
+## Camera refresh timer recovery (v7.3.117-dev)
+
+Run `camera_pipeline_test.py`. Reject timer allocation when launching fullscreen and when returning from Setup. Verify Retry remains visible, the stream does not start without a poller, and Retry recovers once allocation succeeds.
+
+## Dashboard camera and Files startup (v7.3.118-dev)
+
+Run `dashboard_camera_safety_test.py` for rejected timer allocation and a successful Retry. Run `files_load_worker_test.py` for direct and queued task creation failures, with no timer or job left behind.
+
+## Preview worker startup (v7.3.119-dev)
+
+Run `aspect_preview_pipeline_test.py` to cover timer and worker creation failures, reuse of the file thumbnail timer while waiting for connectivity or an earlier download, and successful startup after failure.
+
+## File details startup failure (v7.3.120-dev)
+
+Run `responsive_layout_test.py`. Reject filename and dialog allocation, then verify cleared preview handles, retired actions, and successful reopening.
+
+## File review retry and control ownership (v7.3.121-dev)
+
+Run `responsive_layout_test.py --variant FILES`. Reject print review and expanded details construction, verify retry feedback, and check that unrelated or deleted controls cannot open a review or start a print.
+
+## Lighting refresh failure (v7.3.122-dev)
+
+Run `case_lighting_ui_test.py`. Verify that timer allocation failure disables the controls without sending a command, reopening restores normal operation, and a profile change clears the previous reading.
+
+## Filament recovery refresh failure (v7.3.123-dev)
+
+Run `filament_recovery_test.py`. Reject timer allocation and verify all command controls are disabled, no command is sent, and reopening restores normal operation without leaking a timer.
+
+## Live Endstops refresh failure (v7.3.124-dev)
+
+Run `calibration_dialog_layout_test.py --variant ENDSTOP` to check timer allocation failure, reopening, and query and timer cleanup.
+
+## Diagnostics refresh failure (v7.3.125-dev)
+
+Run `diagnostics_batch_safety_test.py` to verify that failed refresh blocks Probe Accuracy dispatch, marks motion readings unavailable, and leaves local calculations usable.
+
+## Hotend and filament sensor refresh failure (v7.3.126-dev)
+
+Run `hotend_layout_test.py` and `filament_sensor_safety_test.py` to verify that timer allocation failure disables actions and reopening restores refresh.
+
+## Toolhead refresh failure (v7.3.127-dev)
+
+Run `toolhead_dialog_safety_test.py` to check timer allocation failure, command suppression, and reopening.
+
+## Filament recovery target controls (v7.3.128-dev)
+
+Run `filament_recovery_test.py` to check refresh failure, print changes before a tap, reopening, and target adjustment during command cooldown.
+
+## Console refresh failure (v7.3.129-dev)
+
+Run `console_modern_layout_test.py` to confirm that failed refresh leaves history usable, disables command entry, and allows sending after a successful reopen.
+
+## Bed Mesh and Tools refresh (v7.3.130-dev)
+
+Run `bed_mesh_profiles_layout_test.py` and `tools_live_refresh_test.py` for cached mesh viewing, disabled actions when refresh cannot start, reopening, and live diagnostics transitions.
+
+## Macros and Devices refresh failure (v7.3.131-dev)
+
+Run `command_surfaces_safety_test.py` and `devices_text_layout_test.py` to verify unavailable refresh states and recovery after reopening.
+
+## Print completion notification deduplication (v7.3.132-dev)
+
+Run `notifications_test.py` to check completion after status churn, dismissal, Quiet history, and subsequent jobs with an unread completion.
+
+## Printer reachability notices (v7.3.133-dev)
+
+Run `notifications_test.py` to verify telemetry gaps after print completion, true connection loss, and recovery across all notification levels.
+
+## Completion across a telemetry gap (v7.3.134-dev)
+
+Run `notifications_test.py` to verify completion on the first fresh sample for the same file, deduplication, and suppression across a disconnect, file change, or printer switch.
+
+## Operator page refresh fallbacks (v7.3.135-dev)
+
+Run `chooser_refresh_test.py`, `event_history_layout_test.py`, and `responsive_layout_test.py` to exercise timer failure, manual refresh, and reopening.
+
+## Settings recovery and update validation (v7.3.136-dev)
+
+Run `display_settings_safety_test.py`, `theme_dialog_layout_test.py`, and `calibration_dialog_layout_test.py --variant OTAFAILURE` for timer retry, chooser scheduling failure, and oversized URL rejection.
+
+## Setup Wi-Fi and navigation (v7.3.137-dev)
+
+Run `setup_center_layout_test.py` to check address readiness, oversized password rejection, and navigation event ownership.
+
+## Network and Setup Wi-Fi checks (v7.3.138-dev)
+
+Run `network_backup_dialog_test.py` and `setup_center_layout_test.py` for password byte limits, scan results, and address readiness.
+
+## Camera feed recovery (v7.3.139-dev)
+
+Run `dashboard_camera_safety_test.py` and `camera_pipeline_test.py` for stale frame retirement, startup failures, frame recovery, and fresh FPS measurement.
+
+## Advertised Shaper command (v7.3.140-dev)
+
+Run `calibration_dialog_layout_test.py --variant MOTION` to verify command-based Shaper availability with incomplete device discovery.
+
+## Connection interruption notices (v7.3.148-dev)
+
+Run notifications_test.py and connection_refresh_race_test.py. Verify six-second active/background interruptions produce no notification pair, sustained loss warns at ten seconds in Quiet as well as other levels, and Klipper lifecycle disconnect/ready preserves Moonraker reachability.
+
+
+### Dashboard and Printer tool readings and progress
+
+- With one hotend, confirm both pages retain the single Nozzle display. With two
+  to four hotends, compare each displayed current/target pair with Moonraker.
+  Switch the active tool and confirm only the highlight changes. Test a catalog
+  with a gap, such as `extruder` and `extruder2`.
+- On Printer, tap the tool readings to open the named hotend controls. The same
+  readings on Dashboard are display-only.
+- Verify Printer progress at 0%, mid-print and 100%. Disconnect or switch
+  profiles and check that old tool temperatures and progress disappear.
+- Run `studio_layout_test.py`, `studio_pages_test.py --variant PRINTER`,
+  `hotend_layout_test.py`, and `printer_files_input_test.py` for host coverage.

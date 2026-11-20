@@ -97,7 +97,13 @@ bool moonraker_live_transport_fetch(
     char url[512];
     const char *ca_pem = NULL;
     if (!moonraker_transport_security_build_http_url_for_endpoint(
-            host, port, "/printer/objects/query?temperature_sensor%20drybox_center&sht3x%20drybox_env&heater_generic%20drybox_heater&fan_generic%20drybox_fan&gcode_macro%20DRYBOX_VARS&print_stats&motion_report&display_status&virtual_sdcard&gcode_move&fan&extruder&heater_bed&toolhead&webhooks", url, sizeof(url), &ca_pem)) {
+            host, port,
+            "/printer/objects/query?temperature_sensor%20drybox_center&sht3x%20drybox_env"
+            "&heater_generic%20drybox_heater&fan_generic%20drybox_fan&gcode_macro%20DRYBOX_VARS"
+            "&print_stats&motion_report&display_status&virtual_sdcard&gcode_move&fan"
+            "&extruder=temperature,target&extruder1=temperature,target"
+            "&extruder2=temperature,target&extruder3=temperature,target&heater_bed&toolhead&webhooks",
+            url, sizeof(url), &ca_pem)) {
         ESP_LOGE(TAG, "Live-object URL was truncated");
         return false;
     }

@@ -209,6 +209,7 @@ static void macro_field_deleted(lv_event_t *event)
 }
 static const char *reviewed_macro_reason(void)
 {
+    if (!s_refresh_timer) return "Live updates unavailable. Reopen Macros.";
     if (s_macros->pending_owner != moonraker_config_generation())
         return "Printer changed. Cancel and reopen the macro.";
     moonraker_state_t state;
@@ -265,7 +266,7 @@ static void rebuild_macro_list(void);
 static void macro_favorite_cb(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_LONG_PRESSED ||
-        !s_macros || !s_root || s_macro_dispatching || s_confirm ||
+        !s_macros || !s_root || !s_refresh_timer || s_macro_dispatching || s_confirm ||
         s_macros->root_owner != moonraker_config_generation()) return;
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
@@ -488,7 +489,7 @@ static void review_macro_cb(lv_event_t *event)
 
 static void macro_button_cb(lv_event_t *event)
 {
-    if (!event || lv_event_get_code(event)!=LV_EVENT_SHORT_CLICKED || !s_macros || !s_root || s_macro_dispatching || s_macros->root_owner!=moonraker_config_generation()) return;
+    if (!event || lv_event_get_code(event)!=LV_EVENT_SHORT_CLICKED || !s_macros || !s_root || !s_refresh_timer || s_macro_dispatching || s_macros->root_owner!=moonraker_config_generation()) return;
     if (s_confirm) { lv_obj_move_foreground(s_confirm); if(s_macros->editor)lv_obj_move_foreground(s_macros->editor); return; }
     uintptr_t encoded = (uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
     macro_controller_status_t status;
@@ -539,6 +540,7 @@ static void macro_button_cb(lv_event_t *event)
 
 static const char *macro_connection_message(void)
 {
+    if (!s_refresh_timer) return "Live updates unavailable. Reopen Macros.";
     moonraker_state_t live;
     moonraker_state_snapshot(&live);
     if (!live.moonraker_ok) return "Printer offline";
@@ -602,7 +604,7 @@ static void rebuild_macro_list(void)
             empty,
             status.discovered
                 ? ui_text("No public macros were reported by this printer.")
-                : ui_text(s_macros->connection_message
+                : ui_text(!s_refresh_timer ? "Macro list could not refresh." : s_macros->connection_message
                     ? "Macro list will load when the printer is ready."
                     : "Getting the macro list from the printer."));
         lv_obj_set_width(empty, lv_pct(100));
@@ -649,6 +651,7 @@ static void rebuild_macro_list(void)
             lv_obj_add_event_cb(button, macro_favorite_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
         lv_obj_remove_flag(button, LV_OBJ_FLAG_HIDDEN);
+        if (!s_refresh_timer) lv_obj_add_state(button, LV_STATE_DISABLED);
         lv_obj_set_user_data(button, (void *)(uintptr_t)(index + 1));
         lv_obj_t *icon = lv_obj_get_child(button, 0);
         lv_obj_t *label = lv_obj_get_child(button, 1);
@@ -818,13 +821,12 @@ void ui_macros_show(
     }
     lv_obj_update_layout(s_root);
 
-    rebuild_macro_list();
-
     s_refresh_timer =
         lv_timer_create(
             refresh_timer_cb,
             500,
             NULL);
+    rebuild_macro_list();
 }
 
 

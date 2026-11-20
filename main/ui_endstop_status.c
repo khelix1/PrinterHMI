@@ -49,6 +49,10 @@ static void close_cb(lv_event_t *event) { (void)event; ui_endstop_status_close()
 static void refresh(lv_timer_t *timer)
 {
     if (s_query_dispatching || (timer && timer != s_timer) || !s_popup || !s_body) return;
+    if (!s_timer) {
+        ui_value_set_text(s_body, "Live refresh unavailable. Close and reopen Endstops.");
+        return;
+    }
     uint32_t epoch = s_epoch, owner = s_owner;
     if (s_owner != moonraker_config_generation()) {
         endstop_status_controller_reset();

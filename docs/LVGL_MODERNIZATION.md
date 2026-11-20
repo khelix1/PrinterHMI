@@ -1840,7 +1840,7 @@ Follow behavior without a side scrollbar. Page, connection, filter and editor
 labels use sentence case; command strings and Console messages are untouched.
 
 Search keeps a stable label and uses the shared checked filter state. The hidden-
-temperatures filter uses the same checked styling and explicit Temps shown/hidden
+temperatures filter uses the same checked styling and explicit Hide temps/Show temps
 captions. Reset clears those checked states. Existing command ownership, offline
 handling, rejected-input retention, history anchoring, row reuse and send paths
 are unchanged. The frame audit now preserves pre-existing button state while

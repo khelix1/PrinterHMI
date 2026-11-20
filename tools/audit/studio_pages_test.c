@@ -24,7 +24,11 @@ void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void
 static size_t entries=64;
 size_t console_controller_count(void){return entries;}
 uint32_t console_controller_latest_sequence(void){return (uint32_t)entries;}
-bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;e->sequence=(uint32_t)i;snprintf(e->message,sizeof(e->message),"Message %u",(unsigned)i);return true;}
+bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;e->sequence=(uint32_t)(entries-i);snprintf(e->message,sizeof(e->message),"Message %u",(unsigned)i);return true;}
+size_t console_controller_window(uint32_t *newest){*newest=console_controller_latest_sequence();return entries;}
+bool console_controller_get_sequence(uint32_t seq,console_entry_t *e){
+ return seq && console_controller_get(console_sequence_distance(console_controller_latest_sequence(),seq),e);
+}
 void console_controller_clear(void){entries=0;}
 size_t console_controller_history_count(void){return 0;}
 bool console_controller_history_get(size_t i,char *o,size_t n){(void)i;(void)o;(void)n;return false;}
@@ -88,6 +92,69 @@ static void check_toolhead_offset(void){
  }
  ui_theme_set_active(UI_THEME_STUDIO_DARK);
 }
+static void check_printer_hotends(ui_printer_info_cards_t *cards)
+{
+ moonraker_hotend_t tools[]={{"extruder",205,210,true},{"extruder1",220,225,false},
+    {"extruder2",240,245,false},{"extruder3",27,0,false}};
+ lv_obj_t *card=lv_obj_get_parent(cards->nozzle);
+ ui_printer_info_cards_set_hotends(cards,tools,2,true);
+ assert(!strcmp(lv_label_get_text(cards->hotend_readings[1]),"T1 220.0/225.0°"));
+ assert(lv_obj_has_flag(cards->nozzle,LV_OBJ_FLAG_HIDDEN));
+ assert(lv_obj_has_flag(cards->hotend_readings[2],LV_OBJ_FLAG_HIDDEN));
+ int two_height=lv_obj_get_style_text_font(cards->hotend_readings[0],0)->line_height;
+ ui_printer_info_cards_set_hotends(cards,tools,3,true);
+ assert(lv_obj_has_flag(cards->hotend_readings[3],LV_OBJ_FLAG_HIDDEN));
+ ui_printer_info_cards_set_hotends(cards,tools,4,true);
+ int four_height=lv_obj_get_style_text_font(cards->hotend_readings[0],0)->line_height;
+ assert(two_height>=four_height);
+ if (cards->studio) {
+  assert(two_height>four_height);
+  assert(lv_obj_get_style_text_font(cards->bed,0)==ui_font_with_fallback(&ui_studio_font_48));
+  assert(!strcmp(lv_label_get_text(cards->bed_setpoint),"/60.0°"));
+  assert(lv_obj_has_flag(cards->nozzle_setpoint,LV_OBJ_FLAG_HIDDEN));
+ }
+ lv_obj_update_layout(card);children_inside(card);
+ for(size_t i=0;i<4;i++){
+  lv_obj_t *row=cards->hotend_readings[i];lv_point_t size;lv_area_t a,b;
+  assert(!lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN)&&!lv_obj_has_flag(row,LV_OBJ_FLAG_CLICKABLE));
+  lv_obj_get_coords(row,&a);lv_obj_get_coords(cards->tools_title,&b);assert(a.y1>b.y2);
+  const lv_font_t *f=lv_obj_get_style_text_font(row,0);
+  lv_text_get_size(&size,lv_label_get_text(row),f,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  assert(size.x<=lv_obj_get_width(row)&&size.y<=lv_obj_get_height(row));
+ }
+ assert(lv_obj_has_flag(card,LV_OBJ_FLAG_CLICKABLE));
+ assert(!strcmp(lv_label_get_text(cards->hotend_readings[3]),"T3 27.0/0.0°"));
+ ui_printer_info_cards_set_hotends(cards,tools,4,false);
+ assert(!strcmp(lv_label_get_text(cards->hotend_readings[3]),"T3 --/--°"));
+ ui_printer_info_cards_set_hotends(cards,tools,1,true);
+ assert(!lv_obj_has_flag(cards->nozzle,LV_OBJ_FLAG_HIDDEN));
+ assert(lv_obj_has_flag(cards->hotend_readings[1],LV_OBJ_FLAG_HIDDEN));
+ assert(lv_bar_get_value(cards->progress_bar)==64);
+ lv_area_t progress, bar, remaining;
+ lv_obj_get_coords(cards->progress,&progress);
+ lv_obj_get_coords(cards->progress_bar,&bar);
+ lv_obj_get_coords(cards->remaining,&remaining);
+ assert(progress.y2<bar.y1 || bar.x2<progress.x1);
+ if (cards->studio) assert(remaining.y2<progress.y1);
+}
+
+static void check_progress_fit(lv_obj_t *root, ui_printer_info_cards_t *cards)
+{
+ ui_printer_info_cards_refresh_live(root,cards,1.0,205,210,60,60,80,3600,NULL,true,NULL);
+ lv_obj_update_layout(root);
+ assert(!strcmp(lv_label_get_text(cards->progress),"100%"));
+ assert(lv_bar_get_value(cards->progress_bar)==100);
+ lv_obj_t *value=cards->progress;
+ const lv_font_t *font=lv_obj_get_style_text_font(value,0);
+ lv_point_t text;
+ lv_text_get_size(&text,lv_label_get_text(value),font,lv_obj_get_style_text_letter_space(value,0),
+     0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+ assert(text.x<=lv_obj_get_content_width(value)&&text.y<=lv_obj_get_content_height(value));
+ inside(value,lv_obj_get_parent(value));
+ inside(value,lv_screen_active());
+ inside(cards->progress_bar,lv_screen_active());
+}
+
 static void run(void){
  state.speed_factor=state.flow_factor=100;
  check_toolhead_offset();
@@ -120,8 +187,28 @@ static void run(void){
  lv_obj_update_layout(l.active_panel);
  assert(lv_obj_get_width(s_preview_box)==620 && lv_obj_get_height(s_preview_box)==240);
  ui_printer_info_cards_refresh_live(r,&cards,.999,205,210,60,60,80,3600,NULL,true,NULL);
- assert(!strcmp(lv_label_get_text(cards.progress),"Progress 99%"));
+ assert(!strcmp(lv_label_get_text(cards.progress),"99%"));
+ assert(lv_bar_get_value(cards.progress_bar)==99);
+ assert(!strcmp(lv_label_get_text(cards.nozzle),"205.0"));
+ assert(!strcmp(lv_label_get_text(cards.bed),"60.0"));
+ assert(lv_obj_get_style_text_font(cards.nozzle,0)==lv_obj_get_style_text_font(cards.bed,0));
+ ui_printer_info_cards_refresh_live(r,&cards,.64,205.3,-999,60.6,0,80,3600,NULL,true,NULL);
+ assert(!strcmp(lv_label_get_text(cards.nozzle),"205.3"));
+ assert(!strcmp(lv_label_get_text(cards.bed),"60.6"));
+ assert(!strcmp(lv_label_get_text(cards.nozzle_setpoint),"/--°"));
+ assert(!strcmp(lv_label_get_text(cards.bed_setpoint),"/0.0°"));
+ for (int i=0;i<10;i++) {
+  ui_printer_info_cards_refresh_live(r,&cards,.64,199.5+i*.1,210,59.5+i*.1,60,80,3600,NULL,true,NULL);
+  assert(lv_obj_get_style_text_font(cards.nozzle,0)==ui_font_with_fallback(&ui_studio_font_48));
+  assert(lv_obj_get_style_text_font(cards.bed,0)==ui_font_with_fallback(&ui_studio_font_48));
+ }
+ ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,false,NULL);
+ assert(!strcmp(lv_label_get_text(cards.nozzle),"--"));
+ assert(!strcmp(lv_label_get_text(cards.bed),"--"));
+ assert(!lv_obj_has_flag(lv_obj_get_parent(cards.bed),LV_OBJ_FLAG_CLICKABLE));
+ check_progress_fit(r,&cards);
  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,true,NULL);
+ check_printer_hotends(&cards);
  ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,-1,336,true,NULL);
  assert(!strcmp(lv_label_get_text(layer),"-- / 336"));
  ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,1,1,215,336,false,NULL);
@@ -151,10 +238,20 @@ static void run(void){
  ui_printer_actions_create(l.action_panel,&actions,clicked,open_toolhead);
  ui_printer_preview_create(l.active_panel);
  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,true,NULL);
+ check_printer_hotends(&cards);
  ui_printer_live_status_refresh(r,speed,flow,layer,filament,120,8.2,100,100,215,336,true,NULL);
  children_inside(r);
  snapshot("printer-operator-body-native");
  ui_printer_preview_destroy_refs();lv_obj_delete(r);
+ for (int theme=UI_THEME_CLASSIC;theme<UI_THEME_STUDIO_DARK;theme++) {
+  ui_theme_set_active(theme);
+  r=page_root();assert(ui_printer_layout_create(r,&l));
+  ui_printer_info_cards_create(l.status_panel,&cards,clicked,clicked,clicked);
+  check_progress_fit(r,&cards);
+  ui_printer_info_cards_refresh_live(r,&cards,.64,205,210,60,60,80,3600,NULL,true,NULL);
+  check_printer_hotends(&cards);
+  lv_obj_delete(r);
+ }
  ui_theme_set_active(UI_THEME_STUDIO_DARK);
 
 }
@@ -207,9 +304,10 @@ bool bed_mesh_controller_snapshot(bed_mesh_snapshot_t *out,float *v,size_t n,bed
  *out=(bed_mesh_snapshot_t){.valid=true,.rows=3,.cols=3,.mesh_max_x=200,.mesh_max_y=200,.minimum=-.2,.maximum=.2,.range=.4,.values=v};
  strcpy(out->profile_name,"Reference mesh");return true;
 }
-void ui_bed_mesh_profiles_init(lv_obj_t *owner,ui_bed_mesh_profiles_command_cb_t cb){(void)owner;(void)cb;}
+void ui_bed_mesh_profiles_init(lv_obj_t *owner,ui_bed_mesh_profiles_command_cb_t cb,void (*sync_mesh)(void)){(void)sync_mesh;(void)owner;(void)cb;}
 void ui_bed_mesh_profiles_update(const bed_mesh_snapshot_t *mesh){(void)mesh;}
 void ui_bed_mesh_profiles_show_cb(lv_event_t *e){(void)e;}
+bool ui_bed_mesh_profiles_is_open(void){return false;}
 void ui_bed_mesh_profiles_close(void){}
 void ui_bed_mesh_profiles_refresh_availability(void){}
 static void renderer_bounds(void){

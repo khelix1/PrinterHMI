@@ -272,6 +272,9 @@ void printer_ui_controller_refresh(
         ctx->remaining_seconds,
         ctx->moonraker_ok && ctx->live_data_ok,
         ctx->capabilities);
+    if (ctx->printer_panel)
+        ui_printer_info_cards_set_hotends(ctx->info_cards, ctx->hotends, ctx->hotend_count,
+            ctx->moonraker_ok && ctx->live_data_ok);
 
     printer_ui_controller_update_action_buttons(
         ctx->home_button,

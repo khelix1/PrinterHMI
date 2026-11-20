@@ -39,6 +39,48 @@ static void inside(lv_obj_t*c,lv_obj_t*p){lv_area_t a,b;lv_obj_get_coords(c,&a);
 static void labels(lv_obj_t*o){for(unsigned i=0;i<lv_obj_get_child_count(o);i++){lv_obj_t*c=lv_obj_get_child(o,i);if(lv_obj_has_flag(c,LV_OBJ_FLAG_HIDDEN))continue;inside(c,o);if(lv_obj_check_type(c,&lv_label_class)){const lv_font_t*f=lv_obj_get_style_text_font(c,0);if(!strchr(lv_label_get_text(c),'\n')) assert(lv_obj_get_height(c)<=f->line_height+lv_obj_get_style_pad_top(c,0)+lv_obj_get_style_pad_bottom(c,0));}else labels(c);}}
 static lv_obj_t *find(lv_obj_t*o,const char*t){if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),t))return o;for(unsigned i=0;i<lv_obj_get_child_count(o);i++){lv_obj_t*c=find(lv_obj_get_child(o,i),t);if(c)return c;}return NULL;}
 static void click(lv_obj_t*o){lv_obj_send_event(o,LV_EVENT_CLICKED,NULL);}
+static void check_hotends(lv_obj_t *panel)
+{
+ machine_status_ctx_t *ctx=lv_obj_get_user_data(panel);
+ moonraker_hotend_t tools[]={{"extruder",205,210,false},{"extruder1",220,225,true},
+    {"extruder2",240,245,false},{"extruder3",27,0,false}};
+ ui_machine_status_set_hotends(panel,tools,2,true);
+ assert(!strcmp(lv_label_get_text(ctx->hotend_readings[0]),"T0 205.0/210.0°"));
+ assert(!strcmp(lv_label_get_text(ctx->hotend_readings[1]),"T1 220.0/225.0°"));
+ assert(lv_obj_has_flag(ctx->hotend_readings[2],LV_OBJ_FLAG_HIDDEN));
+ assert(lv_color_eq(lv_obj_get_style_text_color(ctx->hotend_readings[1],0),UI_OK_BRIGHT));
+ int two_height=lv_obj_get_style_text_font(ctx->hotend_readings[0],0)->line_height;
+ ui_machine_status_set_hotends(panel,tools,3,true);
+ assert(lv_obj_has_flag(ctx->hotend_readings[3],LV_OBJ_FLAG_HIDDEN));
+ ui_machine_status_set_hotends(panel,tools,4,true);
+ if (ctx->studio) {
+  ui_studio_set_temperature(ctx->bed,ctx->bed_setpoint,"59.9/60.0°");
+  assert(lv_obj_get_style_text_font(ctx->bed,0)==ui_font_with_fallback(&ui_studio_font_48));
+  assert(!strcmp(lv_label_get_text(ctx->bed_setpoint),"/60.0°"));
+ }
+ int four_height=lv_obj_get_style_text_font(ctx->hotend_readings[0],0)->line_height;
+ assert(two_height>=four_height);
+ if (ctx->studio) assert(two_height>four_height);
+ lv_obj_update_layout(panel);
+ labels(panel);
+ lv_area_t bed;lv_obj_get_coords(ctx->bed,&bed);
+ for(size_t i=0;i<4;i++){
+  lv_obj_t *row=ctx->hotend_readings[i];lv_point_t size;lv_area_t a;
+  assert(!lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN));
+  const lv_font_t *f=lv_obj_get_style_text_font(row,0);
+  lv_text_get_size(&size,lv_label_get_text(row),f,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  assert(size.x<=lv_obj_get_width(row)&&size.y<=lv_obj_get_height(row));
+  lv_obj_get_coords(row,&a);assert(a.y2<bed.y1);
+ }
+ ui_machine_status_set_hotends(panel,tools,4,false);
+ assert(!strcmp(lv_label_get_text(ctx->hotend_readings[1]),"T1 --/--°"));
+ ui_machine_status_set_hotends(panel,tools+2,2,true);
+ assert(!strcmp(lv_label_get_text(ctx->hotend_readings[0]),"T2 240.0/245.0°"));
+ ui_machine_status_set_hotends(panel,tools,1,true);
+ assert(!lv_obj_has_flag(ctx->nozzle,LV_OBJ_FLAG_HIDDEN));
+ assert(lv_obj_has_flag(ctx->hotend_readings[0],LV_OBJ_FLAG_HIDDEN));
+}
+
 int main(void){
  lv_init();lv_display_t*d=lv_display_create(1024,600);static uint8_t buffer[1024*60*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
  lv_indev_t *pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_pointer);
@@ -53,12 +95,30 @@ int main(void){
   ui_status_banner_set(page.banner_host,"PRINTING","Spool holder.gcode","ETA 3:42 PM","64%");
   ui_active_print_set(page.active_print_host,"171 / 267","01:06","REM 00:38");
 
-  ui_machine_status_set(page.machine_status_host,"210.0 / 210.0 C","60.0 / 60.0 C","45.0 C","18.0 %RH","125 mm/s","8.3 mm3/s","65%");
-  ui_machine_status_set_active_hotend(page.machine_status_host,"Nozzle","210.0 / 210.0 C");
+  ui_machine_status_set(page.machine_status_host,"210.0/210.0°","60.0/60.0°","45.0 C","18.0 %RH","125 mm/s","8.3 mm3/s","65%");
   ui_machine_status_set_connection(page.machine_status_host,true);ui_machine_status_set_filament(page.machine_status_host,true,NULL);
 
   ui_command_bar_update("printing",true);lv_obj_update_layout(lv_screen_active());
   assert(lv_obj_get_width(page.root)==976&&lv_obj_get_height(page.root)==424);labels(page.root);
+  machine_status_ctx_t *thermal=lv_obj_get_user_data(page.machine_status_host);
+  assert(!strcmp(lv_label_get_text(thermal->nozzle),"210.0"));
+  assert(!strcmp(lv_label_get_text(thermal->nozzle_setpoint),"/210.0°"));
+  assert(!strcmp(lv_label_get_text(thermal->bed),"60.0"));
+  assert(!strcmp(lv_label_get_text(thermal->bed_setpoint),"/60.0°"));
+  assert(lv_obj_get_style_text_font(thermal->nozzle,0)==ui_font_with_fallback(&ui_studio_font_48));
+  assert(lv_obj_get_style_text_font(thermal->nozzle,0)==lv_obj_get_style_text_font(thermal->bed,0));
+  const char *decimal_pairs[]={"99.9/210.0°","100.0/210.0°","199.9/210.0°","200.0/210.0°","208.8/210.0°"};
+  for(size_t i=0;i<sizeof(decimal_pairs)/sizeof(decimal_pairs[0]);i++) {
+    ui_machine_status_set(page.machine_status_host,decimal_pairs[i],"60.0/60.0°",NULL,NULL,NULL,NULL,NULL);
+    assert(lv_obj_get_style_text_font(thermal->nozzle,0)==ui_font_with_fallback(&ui_studio_font_48));
+  }
+  ui_machine_status_set(page.machine_status_host,"210.0/210.0°","120.0/120.0°",NULL,NULL,NULL,NULL,NULL);
+  lv_obj_update_layout(page.machine_status_host);
+  lv_point_t reading;
+  lv_text_get_size(&reading,lv_label_get_text(thermal->bed),
+      lv_obj_get_style_text_font(thermal->bed,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  assert(reading.x<=lv_obj_get_width(thermal->bed));
+  check_hotends(page.machine_status_host);
   /* Three action routes retain their application contracts; paused swaps resume. */
   click(s_pause_button);assert(!strcmp(last_action,"PAUSE"));click(s_cancel_button);assert(!strcmp(last_action,"CANCEL_PRINT"));click(s_object_button);assert(!strcmp(last_action,"CANCEL_OBJECT"));
   ui_command_bar_update("paused",true);assert(lv_obj_has_flag(s_pause_button,LV_OBJ_FLAG_HIDDEN));assert(!lv_obj_has_flag(s_resume_button,LV_OBJ_FLAG_HIDDEN));click(s_resume_button);assert(!strcmp(last_action,"RESUME"));ui_command_bar_update("printing",true);
@@ -80,7 +140,7 @@ int main(void){
   assert(stop_calls==stop_before+2&&!strcmp(last_action,"M112"));
   lv_obj_t *close=find(lv_layer_top(),LV_SYMBOL_CLOSE " Close");assert(close);click(lv_obj_get_parent(close));
   /* Unknown/capability-less values remain explicit, never fake zero. */
-  ui_machine_status_set(page.machine_status_host,"-- / -- C","N/A","N/A","N/A","-- mm/s","-- mm3/s","N/A");machine_status_ctx_t*m=lv_obj_get_user_data(page.machine_status_host);assert(!strcmp(lv_label_get_text(m->nozzle),"--°"));assert(!strcmp(lv_label_get_text(m->bed),"N/A"));
+  ui_machine_status_set(page.machine_status_host,"--/--°","N/A","N/A","N/A","-- mm/s","-- mm3/s","N/A");machine_status_ctx_t*m=lv_obj_get_user_data(page.machine_status_host);assert(!strcmp(lv_label_get_text(m->nozzle),"--"));assert(!strcmp(lv_label_get_text(m->bed),"N/A"));
   ui_command_bar_update("standby",false);assert(lv_obj_has_state(s_pause_button,LV_STATE_DISABLED)&&lv_obj_has_state(s_cancel_button,LV_STATE_DISABLED));
   /* Overlay/root styles must not resize small nested empty-state widgets. */
   lv_obj_t*nested=lv_obj_create(page.root);lv_obj_set_size(nested,400,200);ui_apply_root_style(nested);assert(lv_obj_get_style_width(nested,0)==400);lv_obj_delete(nested);
@@ -94,9 +154,10 @@ int main(void){
   ui_dashboard_page_t page=ui_dashboard_page_create(lv_screen_active());
   ui_status_banner_set(page.banner_host,"PRINTING","Spool holder.gcode","ETA 3:42 PM","64%");
   ui_active_print_set(page.active_print_host,"171 / 267","01:06","REM 00:38");
-  ui_machine_status_set(page.machine_status_host,"210 / 210 C","60 / 60 C","45 C","18 %RH","125 mm/s","8.3 mm3/s","65%");
+  ui_machine_status_set(page.machine_status_host,"210.0/210.0°","60.0/60.0°","45 C","18 %RH","125 mm/s","8.3 mm3/s","65%");
   ui_machine_status_set_connection(page.machine_status_host,true);ui_machine_status_set_filament(page.machine_status_host,true,NULL);
   ui_command_bar_update("printing",true);lv_obj_update_layout(lv_screen_active());labels(page.root);
+  check_hotends(page.machine_status_host);
   active_print_ctx_t *active=lv_obj_get_user_data(page.active_print_host);
   lv_area_t preview,timing;lv_obj_get_coords(active->preview_box,&preview);lv_obj_get_coords(active->footer,&timing);assert(preview.y2<timing.y1);
   const lv_font_t *font=lv_obj_get_style_text_font(active->footer,0);lv_point_t measured;
@@ -111,7 +172,10 @@ int main(void){
  ui_theme_set_active(UI_THEME_STUDIO_DARK);lv_obj_t*aux=lv_obj_create(lv_screen_active());lv_obj_set_size(aux,854,528);ui_apply_surface_role(aux,UI_SURFACE_PAGE_DEEP);lv_obj_update_layout(aux);assert(lv_obj_get_height(aux)==424);assert(!lv_obj_has_flag(aux,LV_OBJ_FLAG_SCROLLABLE));lv_obj_delete(aux);
 
  for(unsigned theme=UI_THEME_CLASSIC;theme<=UI_THEME_STUDIO_DARK;theme++){
-  recovery_owner++;ui_theme_set_active(theme);ui_shell_create();ui_shell_create_nav();ui_shell_set_active_printer_name("Sermoon D1");lv_obj_update_layout(lv_screen_active());
+  recovery_owner++;ui_theme_set_active(theme);
+  ui_dashboard_page_t hotend_page=ui_dashboard_page_create(lv_screen_active());
+  check_hotends(hotend_page.machine_status_host);ui_dashboard_page_destroy(&hotend_page);
+  ui_shell_create();ui_shell_create_nav();ui_shell_set_active_printer_name("Sermoon D1");lv_obj_update_layout(lv_screen_active());
   lv_obj_t *button_label=find(lv_screen_active(),LV_SYMBOL_WARNING " E-STOP");assert(button_label);lv_area_t a;lv_obj_get_coords(lv_obj_get_parent(button_label),&a);
   unsigned before=stop_calls;tap(pointer,(a.x1+a.x2)/2,(a.y1+a.y2)/2);assert(stop_calls==before+1&&!strcmp(last_action,"M112"));
   assert(find(lv_layer_top(),"Stop request sent"));lv_obj_t *restart=find(lv_layer_top(),LV_SYMBOL_REFRESH " Restart Klipper");assert(restart);

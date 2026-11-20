@@ -17,6 +17,8 @@ typedef struct {
     lv_obj_t *button;
     lv_obj_t *popup;
     lv_obj_t *feedback;
+    lv_obj_t *drive[2];
+    char hotend[sizeof(((moonraker_state_t *)0)->active_hotend)];
     uint32_t owner;
     bool armed;
     ui_calibration_pa_send_gcode_cb_t send_gcode;
@@ -34,6 +36,7 @@ static void pa_retire_popup(void)
     ++s_pa_epoch;
     s_pa.popup = NULL;
     s_pa.feedback = NULL;
+    s_pa.drive[0] = s_pa.drive[1] = NULL;
     s_pa.armed = false;
 }
 
@@ -131,18 +134,13 @@ static void arm_tower_cb(
     lv_event_t *event)
 {
     if (!event || !s_pa.popup || s_pa.armed || s_pa_dispatching ||
-        s_pa.owner != moonraker_config_generation() || !workflow_ready()) {
-        return;
-    }
-
-    const char *factor =
-        (const char *)lv_event_get_user_data(event);
-
-    if (!factor ||
-        (strcmp(factor, ".005") != 0 &&
-         strcmp(factor, ".020") != 0)) {
-        return;
-    }
+        !s_pa.discovered || !s_pa.available ||
+        s_pa.owner != moonraker_config_generation()) return;
+    lv_obj_t *action = lv_event_get_target_obj(event);
+    if (!action || lv_event_get_current_target_obj(event) != action ||
+        (action != s_pa.drive[0] && action != s_pa.drive[1]) ||
+        lv_obj_has_state(action, LV_STATE_DISABLED)) return;
+    const char *factor = action == s_pa.drive[0] ? ".005" : ".020";
 
     char command[240];
     int written = lv_snprintf(
@@ -157,11 +155,24 @@ static void arm_tower_cb(
         return;
     }
 
-    console_controller_add_command(command);
     lv_obj_t *popup = s_pa.popup;
     uint32_t epoch = s_pa_epoch;
     uint32_t owner = s_pa.owner;
     s_pa_dispatching = true;
+    bool allowed = workflow_ready();
+    if (!allowed || s_pa_epoch != epoch || s_pa.popup != popup ||
+        owner != moonraker_config_generation()) goto stopped;
+    console_controller_add_command(command);
+    if (!workflow_ready() || s_pa_epoch != epoch || s_pa.popup != popup ||
+        owner != moonraker_config_generation() || !s_pa.discovered || !s_pa.available ||
+        !lv_obj_is_valid(action) || lv_obj_has_state(action, LV_STATE_DISABLED)) goto stopped;
+    moonraker_state_t state;
+    moonraker_state_snapshot(&state);
+    if (strcmp(s_pa.hotend, state.active_hotend) != 0) {
+        if (s_pa.feedback) lv_label_set_text(s_pa.feedback,
+            "Active extruder changed. Close and reopen to review the tower setup.");
+        goto stopped;
+    }
     bool sent = s_pa.send_gcode && s_pa.send_gcode(command);
     s_pa_dispatching = false;
     if (s_pa_epoch != epoch || s_pa.popup != popup ||
@@ -173,6 +184,10 @@ static void arm_tower_cb(
         return;
     }
     show_armed_popup(factor);
+    return;
+
+stopped:
+    s_pa_dispatching = false;
 }
 
 
@@ -213,13 +228,14 @@ static void button_cb(
     lv_obj_t *body=ui_cal_dialog_body(s_pa.popup);
     ui_cal_dialog_text(body,
         "Prepare a hollow-square PA tower. Disable dynamic acceleration and scarf seams before printing.");
+    snprintf(s_pa.hotend, sizeof(s_pa.hotend), "%s", state.active_hotend);
     char active[120];
     lv_snprintf(active,sizeof(active),"Active extruder: %s",state.active_hotend[0]?state.active_hotend:"extruder");
     ui_cal_dialog_caption(body,active);
     ui_cal_dialog_caption(body,"Choose the drive type. Runtime test limits change; printer.cfg is not written.");
     s_pa.feedback = ui_cal_dialog_caption(body, "");
-    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Direct drive"), 260, arm_tower_cb, (void *)ui_text(".005"), NULL);
-    ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Long Bowden"), 260, arm_tower_cb, (void *)ui_text(".020"), NULL);
+    s_pa.drive[0] = ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Direct drive"), 260, arm_tower_cb, NULL, NULL);
+    s_pa.drive[1] = ui_cal_dialog_choice(s_pa.popup, UI_POPUP_ACTION_CONFIRM, ui_text("Long Bowden"), 260, arm_tower_cb, NULL, NULL);
 
 
     ui_cal_dialog_action(s_pa.popup, UI_POPUP_ACTION_CLOSE, "Close", close_popup_cb, NULL, NULL);

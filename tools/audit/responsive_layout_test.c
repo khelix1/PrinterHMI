@@ -22,11 +22,23 @@ static uint32_t test_job_revision;
 void moonraker_state_snapshot(moonraker_state_t *s){memset(s,0,sizeof(*s));s->print_job_revision=test_job_revision;s->moonraker_ok=connected;s->live_data_ok=klipper_ready;snprintf(s->printer_state,sizeof(s->printer_state),"%s",test_printer_state);}
 static uint32_t config_generation=1;
 uint32_t moonraker_config_generation(void){return config_generation;}
-void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void)t;(void)d;}
+#ifdef TEST_FILES
+static const char *last_files_toast;
+#endif
+void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){
+ (void)k;(void)t;(void)d;
+#ifdef TEST_FILES
+ last_files_toast=t;
+#endif
+}
 static size_t entries=64;
 size_t console_controller_count(void){return entries;}
 uint32_t console_controller_latest_sequence(void){return (uint32_t)entries;}
-bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;e->sequence=(uint32_t)i;snprintf(e->message,sizeof(e->message),"Message %u",(unsigned)i);return true;}
+bool console_controller_get(size_t i,console_entry_t *e){if(i>=entries)return false;memset(e,0,sizeof(*e));e->type=i%2?CONSOLE_ENTRY_ERROR:CONSOLE_ENTRY_RESPONSE;e->sequence=(uint32_t)(entries-i);snprintf(e->message,sizeof(e->message),"Message %u",(unsigned)i);return true;}
+size_t console_controller_window(uint32_t *newest){*newest=console_controller_latest_sequence();return entries;}
+bool console_controller_get_sequence(uint32_t seq,console_entry_t *e){
+ return seq && console_controller_get(console_sequence_distance(console_controller_latest_sequence(),seq),e);
+}
 void console_controller_clear(void){entries=0;}
 size_t console_controller_history_count(void){return 0;}
 bool console_controller_history_get(size_t i,char *o,size_t n){(void)i;(void)o;(void)n;return false;}
@@ -54,7 +66,15 @@ static void cards(lv_obj_t *list){
 static case_lighting_snapshot_t test_light;
 int64_t esp_timer_get_time(void){return 1000000;}
 void case_lighting_snapshot(case_lighting_snapshot_t *out,int64_t now){(void)now;*out=test_light;}
+#include "lvgl.h"
+static bool reject_tools_timer;
+static lv_timer_t *tools_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_tools_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create tools_test_timer
 #include "ui_tools.c"
+#undef lv_timer_create
 static unsigned lighting_opens;
 static void lighting_open_fixture(void){lighting_opens++;}
 static void tools_symbol_check(void){
@@ -104,10 +124,23 @@ static void lighting_visibility_checks(void)
  test_light=(case_lighting_snapshot_t){.generation=config_generation};tools_connection_refresh(NULL);assert(lv_obj_has_flag(s_lighting_button,LV_OBJ_FLAG_HIDDEN));
  test_light.discovered=test_light.available=true;tools_connection_refresh(NULL);
 }
-static void run(int width){test_light=(case_lighting_snapshot_t){0};ui_tools_set_lighting_callback(lighting_open_fixture);ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);assert(s_lighting_button);lighting_visibility_checks();inside(s_lighting_button,s_root);unsigned old_lighting=lighting_opens;lv_obj_send_event(s_lighting_button,LV_EVENT_CLICKED,NULL);assert(lighting_opens==old_lighting+1);tools_symbol_check();tools_divider_check();if(!ui_theme_is_studio()){inside(s_banner,s_root);for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++)inside(lv_obj_get_child(s_banner,i),s_banner);}snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
+static void run(int width){reject_tools_timer=true;ui_tools_show();reject_tools_timer=false;assert(s_root&&!s_connection_timer&&strstr(lv_label_get_text(s_body_labels[0]),"Reopen Tools"));ui_tools_show();assert(s_root&&s_connection_timer&&!strstr(lv_label_get_text(s_body_labels[0]),"Reopen Tools"));ui_tools_hide();test_light=(case_lighting_snapshot_t){0};ui_tools_set_lighting_callback(lighting_open_fixture);ui_tools_show();connected=false;tools_connection_refresh(NULL);assert(strstr(lv_label_get_text(s_body_labels[0]),"Offline"));lv_obj_update_layout(s_root);cards(s_tiles);connected=true;tools_connection_refresh(NULL);lv_obj_set_width(s_root,width);lv_obj_update_layout(s_root);if(!ui_theme_is_studio())cards(s_tiles);else {inside(s_tiles,s_root);cards(s_tiles);}assert(lv_obj_get_child_count(s_tiles)==4);assert(s_lighting_button);lighting_visibility_checks();inside(s_lighting_button,s_root);unsigned old_lighting=lighting_opens;lv_obj_send_event(s_lighting_button,LV_EVENT_CLICKED,NULL);assert(lighting_opens==old_lighting+1);tools_symbol_check();tools_divider_check();if(!ui_theme_is_studio()){inside(s_banner,s_root);for(unsigned i=0;i<lv_obj_get_child_count(s_banner);i++)inside(lv_obj_get_child(s_banner,i),s_banner);}snapshot(s_root);ui_tools_hide();assert(!s_root && !s_tiles && !s_center_rule);}
 #elif defined(TEST_FILES)
 #include "ui_page_state.c"
+static bool reject_file_detail_name,reject_file_detail_popup;
+static void *files_test_malloc(size_t size)
+{
+ return reject_file_detail_name ? NULL : malloc(size);
+}
+static lv_obj_t *files_test_popup(lv_obj_t *parent,int32_t width,int32_t height,ui_popup_kind_t kind)
+{
+ return reject_file_detail_popup ? NULL : ui_popup_create(parent,width,height,kind);
+}
+#define malloc files_test_malloc
+#define ui_popup_create files_test_popup
 #include "ui_files.c"
+#undef ui_popup_create
+#undef malloc
 static void files_review_layout(lv_obj_t *popup)
 {
  lv_obj_update_layout(popup);
@@ -385,6 +418,8 @@ static void run(int width){
   lv_obj_update_layout(s_file_detail_popup);
   assert(!lv_obj_has_flag(s_detail_more_button,LV_OBJ_FLAG_HIDDEN) && lv_obj_get_width(s_detail_start_button)==128);
   assert(lv_obj_get_height(box)==128 && lv_image_get_transformed_height(resized_image)<=128);
+  reject_file_detail_popup=true;studio_metadata_open(NULL);reject_file_detail_popup=false;
+  assert(!s_studio_metadata_popup&&!strcmp(last_files_toast,"File details unavailable"));
   studio_metadata_open(NULL);assert(!ui_files_can_refresh_rows());assert(s_studio_metadata_popup && s_studio_metadata_label);
   files_review_layout(s_studio_metadata_popup);snapshot(s_studio_metadata_popup);
   for(uint32_t i=0;i<lv_obj_get_child_count(s_studio_metadata_popup);i++)inside(lv_obj_get_child(s_studio_metadata_popup,i),s_studio_metadata_popup);
@@ -755,11 +790,57 @@ static void snapshot(lv_obj_t *root){
 #endif
  snprintf(path,sizeof(path),"%s/%s-theme%u.ppm",folder,page,theme_case);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n%d %d\n255\n",a.x2-a.x1+1,a.y2-a.y1+1);for(int y=a.y1;y<=a.y2;y++)for(int x=a.x1;x<=a.x2;x++){uint16_t v=raster[y*1024+x];unsigned char c[3]={(unsigned char)(((v>>11)&31)*255/31),(unsigned char)(((v>>5)&63)*255/63),(unsigned char)((v&31)*255/31)};fwrite(c,1,3,f);}fclose(f);
 }
+#ifdef TEST_FILES
+static void file_detail_allocation_check(void)
+{
+ ui_theme_set_active(UI_THEME_OPERATOR);
+ ui_files_show();
+ lv_obj_t *box=NULL;
+ ui_thumbnail_t *view=NULL;
+ ui_files_show_detail_popup("test.gcode","Ready",&box,&view,cancel_job,start_job);
+ assert(ui_files_detail_is_open()&&box&&view);
+ reject_file_detail_name=true;
+ ui_files_show_detail_popup("test.gcode","Ready",&box,&view,cancel_job,start_job);
+ reject_file_detail_name=false;
+ assert(!ui_files_detail_is_open()&&!box&&!view&&!s_detail_filename&&!s_detail_start_cb);
+ reject_file_detail_popup=true;
+ ui_files_show_detail_popup("test.gcode","Ready",&box,&view,cancel_job,start_job);
+ reject_file_detail_popup=false;
+ assert(!ui_files_detail_is_open()&&!box&&!view&&!s_detail_filename&&!s_detail_start_cb&&!s_detail_cancel_cb);
+ ui_files_show_detail_popup("test.gcode","Ready",&box,&view,cancel_job,start_job);
+ assert(ui_files_detail_is_open()&&box&&view);
+ ui_files_update_detail_metadata("Ready",true);
+ unsigned before=start_attempts;
+ reject_file_detail_popup=true;
+ lv_obj_send_event(s_detail_start_button,LV_EVENT_CLICKED,NULL);
+ reject_file_detail_popup=false;
+ assert(!s_print_confirm_popup&&start_attempts==before&&!strcmp(last_files_toast,"Print review unavailable"));
+ lv_obj_t *foreign=lv_button_create(s_file_detail_popup);
+ lv_obj_add_event_cb(foreign,detail_start_event_cb,LV_EVENT_CLICKED,NULL);
+ lv_obj_send_event(foreign,LV_EVENT_CLICKED,NULL);
+ assert(!s_print_confirm_popup);
+ lv_obj_send_event(s_detail_start_button,LV_EVENT_CLICKED,NULL);
+ assert(s_print_confirm_popup);
+ lv_obj_add_event_cb(foreign,print_confirm_accept,LV_EVENT_CLICKED,NULL);
+ lv_obj_send_event(foreign,LV_EVENT_CLICKED,NULL);
+ assert(start_attempts==before);
+ lv_obj_delete(s_print_connection_label);
+ lv_obj_delete(s_print_accept_button);
+ detail_connection_refresh(NULL);print_confirm_accept(NULL);
+ assert(!s_print_connection_label&&!s_print_accept_button&&start_attempts==before);
+ print_confirm_cancel(NULL);
+ lv_obj_delete(s_detail_start_button);detail_start_event_cb(NULL);
+ assert(!s_detail_start_button&&!s_print_confirm_popup);
+ ui_files_hide();
+}
+
+#endif
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t buffer[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);
 #if defined(TEST_NETWORK)
  lv_display_add_event_cb(d,network_invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
 #endif
 #if defined(TEST_FILES)
+ file_detail_allocation_check();
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active((ui_theme_id_t)theme);ui_theme_set_density((ui_density_id_t)density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});
   if(getenv("FILES_SCROLL_DIAGNOSTIC") && (density!=1 || large))continue;

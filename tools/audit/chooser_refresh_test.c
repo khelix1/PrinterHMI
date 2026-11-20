@@ -2,7 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "lvgl.h"
+static bool reject_chooser_timer;
+static lv_timer_t *chooser_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_chooser_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create chooser_test_timer
 #include "ui_printer_chooser.c"
+#undef lv_timer_create
 
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -335,6 +343,11 @@ int main(void){
   assert(lv_display_get_event_count(d)==events);
   chooser_safety();assert(lv_display_get_event_count(d)==events);
  }
+ reject_chooser_timer=true;ui_printer_chooser_show(NULL,NULL);reject_chooser_timer=false;
+ assert(s_root&&!s_timer&&strstr(lv_label_get_text(s_title),"snapshot"));
+ lv_obj_t *prior=s_root;ui_printer_chooser_show(NULL,NULL);
+ assert(s_root==prior&&s_timer&&!strcmp(lv_label_get_text(s_title),"Printers"));
+ ui_printer_chooser_hide();assert(!s_timer&&!s_title);
  lv_indev_delete(pointer);lv_display_delete(d);lv_deinit();
  puts("PASS: Two-column chooser separators, aligned actions/previews, readable status/empty slots, active transitions and static long labels; 500ms chooser timers stay redraw-free when unchanged, all five themes/densities/text sizes, section/label bounds and active/inactive state lifetime, live status/preview/revision/profile updates, silent name/endpoint/status subjects, profile edits/empty slots/click routing, fallback repair and section/chooser teardown");
 }

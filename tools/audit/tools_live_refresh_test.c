@@ -55,6 +55,7 @@ int main(void){
   memset(s,0,sizeof(*s));memset(&motion,0,sizeof(motion));memset(&state,0,sizeof(state));generation++;s->owner=generation;motion.owner_generation=generation;
   s->popup=lv_obj_create(lv_screen_active());s->status=lv_label_create(s->popup);s->body=lv_label_create(s->popup);s->driver_selector=lv_dropdown_create(s->popup);
   for(unsigned i=0;i<4;i++)s->limits[i]=lv_label_create(s->popup);
+  s->timer=lv_timer_create(motion_refresh,500,NULL);assert(s->timer);
   s->view=VIEW_DRIVERS;state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"ready");
   motion.owner_generation=generation-1;motion_refresh(NULL);same(s->status,"Waiting for current printer readings.");assert(lv_obj_has_state(s->driver_selector,LV_STATE_DISABLED));quiet(d,motion_refresh);
   motion.owner_generation=generation;
@@ -70,6 +71,10 @@ int main(void){
   motion.limits[0]=250;motion_refresh(NULL);same(s->limits[0],"250.00 mm/s");generation++;motion_refresh(NULL);same(s->status,"Printer changed. Close and reopen.");quiet(d,motion_refresh);
   s->view=VIEW_DRIVERS;motion_refresh(NULL);quiet(d,motion_refresh);close_popup();assert(!s->popup && !s->status);
   s_popup=lv_obj_create(lv_screen_active());s_body=lv_label_create(s_popup);s_owner=generation;now=1000000;s_next_query=now+2000000;websocket=true;state.live_data_ok=true;strcpy(state.printer_state,"ready");
+  unsigned unavailable_requests=requests;
+  endstop_refresh(NULL);same(s_body,"Live refresh unavailable. Close and reopen Endstops.");
+  assert(requests==unavailable_requests);
+  s_timer=lv_timer_create(endstop_refresh,250,NULL);assert(s_timer);
   memset(&endstops,0,sizeof(endstops));endstops.valid=true;endstops.count=1;strcpy(endstops.items[0].name,"x");endstop_refresh(NULL);assert(strstr(lv_label_get_text(s_body),"x:  OPEN"));quiet(d,endstop_refresh);
   endstops.items[0].triggered=true;endstop_refresh(NULL);assert(strstr(lv_label_get_text(s_body),"x:  TRIGGERED"));quiet(d,endstop_refresh);
   unsigned before=requests;now=s_next_query;endstop_refresh(NULL);assert(requests==before+1);endstop_refresh(NULL);assert(requests==before+1);

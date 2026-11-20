@@ -69,13 +69,14 @@ code += r'''
 static bool s_got_ip=true,s_moonraker_ok,s_live_data_ok;
 static int s_moonraker_code;
 static char moonraker_status[128];
-static bool running=true,fresh_probe,inject_probe;
+static bool running=true,connected=true,fresh_probe,inject_probe;
 static unsigned polls;
 static void safe_copy(char *p,size_t n,const char *s){snprintf(p,n,"%s",s);}
 static void publish(const char *json){assert(moonraker_state_merge_websocket_json(json,strlen(json))!=MOONRAKER_WEBSOCKET_MESSAGE_IGNORED);}
 static void printing(void){publish("{\"result\":{\"status\":{\"webhooks\":{\"state\":\"ready\"},\"print_stats\":{\"state\":\"printing\",\"filename\":\"same.gcode\"}}}}");}
 static bool moonraker_live_websocket_fresh(int64_t age){assert(age==3000000);if(inject_probe){inject_probe=false;printing();}return fresh_probe;}
 static bool moonraker_live_websocket_running(void){return running;}
+static bool moonraker_live_websocket_connected(void){return connected;}
 static bool moonraker_get_live_objects(void){return true;}
 moonraker_poll_result_t moonraker_poll_run(int64_t now,bool wifi,bool busy,moonraker_poll_fetch_cb_t fn){(void)now;(void)wifi;(void)busy;(void)fn;polls++;return MOONRAKER_POLL_BUSY;}
 '''
@@ -98,6 +99,14 @@ int main(void){
  publish("{\"result\":{\"status\":{\"bed_mesh\":{\"mesh_matrix\":[[0,0],[0,0]],\"profiles\":{\"printer_B_plate\":{}}}}}}");
  assert(bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES)&&mesh.valid);
  assert(mesh.profile_count==1&&!strcmp(names[0],"printer_B_plate"));
+ uint32_t mesh_revision_before=mesh.mesh_revision;
+ publish("{\"result\":{\"status\":{\"bed_mesh\":{\"mesh_matrix\":[[0,0],[0,0]]}}}}");
+ assert(bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES));
+ assert(mesh.mesh_revision==mesh_revision_before);
+ publish("{\"result\":{\"status\":{\"bed_mesh\":{\"mesh_matrix\":[[0,0.1],[0,0]]}}}}");
+ assert(bed_mesh_controller_snapshot(&mesh,mesh_values,4,names,BED_MESH_MAX_PROFILES));
+ assert(mesh.mesh_revision!=mesh_revision_before);
+
  moonraker_state_reset();
  static moonraker_exclude_state_t objects;
  g_moonraker_exclude_state=&objects;
@@ -137,7 +146,8 @@ int main(void){
  now_us+=4000000;on_lock=printing;moonraker_live_poll_tasklet();
  assert(g_moonraker_state.moonraker_ok&&s_moonraker_ok&&s_websocket_status_us==now_us);
  now_us+=3000000;moonraker_live_poll_tasklet();assert(g_moonraker_state.moonraker_ok);
- now_us++;moonraker_live_poll_tasklet();assert(!g_moonraker_state.moonraker_ok&&!g_moonraker_state.live_data_ok&&!s_moonraker_ok&&!polls);
+ now_us++;moonraker_live_poll_tasklet();assert(g_moonraker_state.moonraker_ok&&!g_moonraker_state.live_data_ok&&s_moonraker_ok&&!polls);
+ connected=false;moonraker_live_poll_tasklet();assert(!s_moonraker_ok);connected=true;
  printing();moonraker_live_poll_tasklet();assert(s_moonraker_ok&&s_live_data_ok);
  /* A real disconnect wins immediately; fresh-probe lag cannot report online. */
  moonraker_state_set_connection(false,false);assert(!s_websocket_status_us);fresh_probe=true;
@@ -145,10 +155,14 @@ int main(void){
  fresh_probe=false;moonraker_state_reset();moonraker_live_poll_tasklet();assert(!s_moonraker_ok);
  printing();publish("{\"method\":\"notify_klippy_shutdown\"}");moonraker_live_poll_tasklet();
  assert(s_moonraker_ok&&!s_live_data_ok&&!strcmp(g_moonraker_state.printer_state,"shutdown"));
- publish("{\"method\":\"notify_klippy_disconnected\"}");moonraker_live_poll_tasklet();assert(!s_moonraker_ok&&!s_websocket_status_us);
+ publish("{\"method\":\"notify_klippy_disconnected\"}");moonraker_live_poll_tasklet();
+ assert(s_moonraker_ok&&!s_live_data_ok&&!s_websocket_status_us&&!strcmp(g_moonraker_state.printer_state,"disconnected"));
+ now_us+=11000000;moonraker_live_poll_tasklet();assert(s_moonraker_ok&&!s_live_data_ok);
+ publish("{\"method\":\"notify_klippy_ready\"}");moonraker_live_poll_tasklet();assert(s_moonraker_ok&&!s_live_data_ok);
+ printing();moonraker_live_poll_tasklet();assert(s_moonraker_ok&&s_live_data_ok);
  running=false;moonraker_live_poll_tasklet();assert(polls==1);
  /* Initial/future timestamps do not establish a valid recent sample. */
- g_moonraker_state.moonraker_ok=true;s_websocket_status_us=now_us+1;moonraker_state_expire_websocket(3000000);assert(!g_moonraker_state.moonraker_ok);
+ g_moonraker_state.moonraker_ok=true;s_websocket_status_us=now_us+1;moonraker_state_expire_websocket(3000000,false);assert(!g_moonraker_state.moonraker_ok);
  puts("PASS: real JSON publication survives both injected stale-probe races, equal frames renew freshness, three-second expiry/disconnect/profile reset retires the real mesh/profile cache, shutdown remains truthful, no competing HTTP poll while WebSocket owns reconnect");
 }
 '''

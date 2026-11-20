@@ -11,12 +11,14 @@
 static ui_calibration_custom_context_t *s_custom;
 static uint32_t s_custom_owner, s_custom_epoch;
 static bool s_custom_dispatching;
+static lv_obj_t *s_custom_run_action;
 static lv_obj_t *s_custom_feedback;
 
 static void custom_retire_popup(void)
 {
     ++s_custom_epoch;
     s_custom_feedback = NULL;
+    s_custom_run_action = NULL;
     if (s_custom) *s_custom->popup = NULL;
 }
 
@@ -93,15 +95,15 @@ static void close_custom_popup_cb(
 static void run_custom_macro_cb(
     lv_event_t *event)
 {
-    (void)event;
+    if (!event || !s_custom_run_action || lv_event_get_target_obj(event) != s_custom_run_action ||
+        lv_event_get_current_target_obj(event) != s_custom_run_action ||
+        lv_obj_has_state(s_custom_run_action, LV_STATE_DISABLED)) return;
 
     if (!s_custom || !*s_custom->popup || s_custom_dispatching ||
         s_custom_owner != moonraker_config_generation() || !s_custom->ready ||
         *s_custom->selected >=
             *s_custom->count ||
-        *s_custom->selected >= s_custom->names_capacity ||
-        !s_custom->ready(
-            "Custom calibration")) {
+        *s_custom->selected >= s_custom->names_capacity) {
         return;
     }
 
@@ -114,17 +116,32 @@ static void run_custom_macro_cb(
                 "The selected macro is no longer available. Close and select a detected macro again.");
         return;
     }
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_CUSTOM,
-        start_sequence);
-    console_controller_add_command(command);
     ui_calibration_custom_context_t *context = s_custom;
     lv_obj_t *popup = *context->popup;
     uint32_t epoch = s_custom_epoch;
     uint32_t owner = s_custom_owner;
+    lv_obj_t *action = s_custom_run_action;
     s_custom_dispatching = true;
+    console_controller_add_command(command);
+    if (s_custom != context || s_custom_epoch != epoch ||
+        *context->popup != popup || owner != moonraker_config_generation() ||
+        s_custom_run_action != action || !lv_obj_is_valid(action) ||
+        lv_obj_has_state(action, LV_STATE_DISABLED)) {
+        s_custom_dispatching = false;
+        return;
+    }
+    bool ready = context->ready("Custom calibration");
+    if (!ready || s_custom != context || s_custom_epoch != epoch ||
+        *context->popup != popup || owner != moonraker_config_generation() ||
+        s_custom_run_action != action || !lv_obj_is_valid(action) ||
+        lv_obj_has_state(action, LV_STATE_DISABLED) || !macro_controller_contains(command)) {
+        s_custom_dispatching = false;
+        return;
+    }
+    uint32_t start_sequence = console_controller_latest_sequence();
+    calibration_session_controller_begin(
+        CALIBRATION_SESSION_CUSTOM,
+        start_sequence);
     bool sent = context->send && context->send(command);
     s_custom_dispatching = false;
     if (s_custom != context || s_custom_epoch != epoch ||
@@ -184,7 +201,7 @@ static void custom_macro_selected_cb(
     s_custom_feedback = ui_cal_dialog_caption(body, "");
 
     ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", close_custom_popup_cb, NULL, NULL);
-    ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_custom_macro_cb, NULL, NULL);
+    s_custom_run_action = ui_cal_dialog_action(*s_custom->popup, UI_POPUP_ACTION_CONFIRM, LV_SYMBOL_PLAY " Run", run_custom_macro_cb, NULL, NULL);
 }
 
 

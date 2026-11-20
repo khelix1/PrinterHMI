@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix="aspect-preview-pipeline-") as directory
         subprocess.run(["ar","rcs",str(library),*objects],check=True)
     main_source=(root/"main/main.c").read_text()
     functions=[]
-    for name in ["dashboard_preview_current", "dashboard_show_loaded_thumbnail", "dashboard_apply_rendered_thumbnail", "dashboard_restore_active_profile_preview", "dash_thumb_render_task", "dash_thumb_render_ui_poll_cb"]:
+    for name in ["dashboard_preview_current", "dashboard_show_loaded_thumbnail", "dashboard_apply_rendered_thumbnail", "dashboard_restore_active_profile_preview", "dash_thumb_render_task", "dash_thumb_render_ui_poll_cb", "dash_thumb_start_render_task", "printer_thumb_start_delayed"]:
         signature="(lv_timer_t *t)" if name=="dash_thumb_render_ui_poll_cb" else "(uint32_t epoch,uint32_t generation,int profile,const char *file)" if name=="dashboard_preview_current" else "(void *arg)" if name=="dash_thumb_render_task" else "(void)"
         start=main_source.index(("static bool " if name=="dashboard_preview_current" else "static void ")+name+signature+"\n{")
         end=main_source.index("\n}\n",start)+3

@@ -2,6 +2,8 @@
 #include "ui_studio_layout.h"
 #include "ui_value_update.h"
 #include "ui_printer_info_cards.h"
+#include "ui_hotend_readings.h"
+#include "ui_studio_temperature.h"
 #include "ui_text.h"
 #include "printer_controller.h"
 #include <string.h>
@@ -99,25 +101,45 @@ void ui_printer_info_cards_create(
     if(ui_theme_is_studio()) {
         const char *names[]={"Nozzle","Bed"};
         lv_obj_t **values[]={&cards->nozzle,&cards->bed};
-        lv_obj_t **targets[]={&cards->nozzle_target,&cards->bed_target};
+        cards->studio = true;
         lv_event_cb_t callbacks[]={nozzle_cb,bed_cb};
         for(int i=0;i<2;i++) {
-            lv_obj_t *area=studio_plane(parent,0,i*142,336,136);
-            studio_text(area,names[i],12,0,312,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
-            *values[i]=studio_text(area,"--°",12,32,312,&ui_studio_font_48,UI_OK_BRIGHT);
-            *targets[i]=studio_text(area,"Target --°  •  Tap to set",12,94,312,UI_FONT_BODY,UI_TEXT_DIM);
+            lv_obj_t *area=studio_plane(parent,0,i*142,336,i ? 106 : 136);
+            lv_obj_t *title = studio_text(area,names[i],12,0,312,UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+            if (i == 0) {
+                cards->nozzle_title = title;
+                cards->tools_title = studio_text(area,"Tools  •  Tap to set",12,0,312,
+                    UI_FONT_BODY_LARGE,UI_TEXT_DIM);
+                ui_hotend_visible(cards->tools_title, false);
+                cards->hotend_layout = ui_studio_hotend_layout(12, 32);
+                ui_hotend_create_readings(area, cards->hotend_readings);
+            } else {
+                cards->bed_title = title;
+            }
+            *values[i]=ui_studio_temperature_reading(area,12,i ? 24 : 32,312);
+            lv_obj_t *setpoint=ui_studio_temperature_setpoint(area,12,i ? 82 : 92,312);
+            if (i == 0) cards->nozzle_setpoint = setpoint;
+            else cards->bed_setpoint = setpoint;
             if(callbacks[i]) {lv_obj_add_flag(area,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(area,callbacks[i],LV_EVENT_CLICKED,NULL);}
-            studio_rule(area,12,132,312,1);
+            studio_rule(area,12,i ? 104 : 132,312,1);
         }
-        lv_obj_t *fan_area=studio_plane(parent,12,294,94,40);
-        cards->part_fan=studio_text(fan_area,"--%",0,4,94,UI_FONT_VALUE_SMALL,UI_TEXT);
+        lv_obj_t *fan_area=studio_plane(parent,12,268,94,34);
+        cards->part_fan=studio_text(fan_area,"--%",0,0,94,UI_FONT_VALUE_SMALL,UI_TEXT);
         if(part_fan_cb) {lv_obj_add_flag(fan_area,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(fan_area,part_fan_cb,LV_EVENT_CLICKED,NULL);}
-        studio_text(parent,"Fan",12,276,94,UI_FONT_CAPTION,UI_TEXT_DIM);
-        cards->elapsed=studio_text(parent,"--:--",124,298,94,UI_FONT_VALUE_SMALL,UI_TEXT);
-        studio_text(parent,"Elapsed",124,276,94,UI_FONT_CAPTION,UI_TEXT_DIM);
-        cards->remaining=studio_text(parent,"--:--",236,298,100,UI_FONT_VALUE_SMALL,UI_TEXT);
-        studio_text(parent,"Remaining",236,276,100,UI_FONT_CAPTION,UI_TEXT_DIM);
-        cards->progress=studio_text(parent,"--%",12,332,324,UI_FONT_CAPTION,UI_TEXT_DIM);
+        studio_text(parent,"Fan",12,251,94,UI_FONT_CAPTION,UI_TEXT_DIM);
+        cards->elapsed=studio_text(parent,"--:--",124,268,94,UI_FONT_VALUE_SMALL,UI_TEXT);
+        studio_text(parent,"Elapsed",124,251,94,UI_FONT_CAPTION,UI_TEXT_DIM);
+        cards->remaining=studio_text(parent,"--:--",236,268,100,UI_FONT_VALUE_SMALL,UI_TEXT);
+        studio_text(parent,"Remaining",236,251,100,UI_FONT_CAPTION,UI_TEXT_DIM);
+        studio_rule(parent,12,304,312,1);
+        studio_text(parent,"Progress",12,308,180,UI_FONT_BODY,UI_TEXT_DIM);
+        cards->progress=studio_text(parent,"--%",204,306,116,UI_FONT_HEADING,UI_TEXT_BRIGHT);
+        lv_label_set_long_mode(cards->progress, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_align(cards->progress, LV_TEXT_ALIGN_RIGHT, 0);
+        cards->progress_bar = lv_bar_create(parent);
+        lv_obj_set_pos(cards->progress_bar, 12, 333);
+        lv_obj_set_size(cards->progress_bar, 180, 8);
+        ui_apply_progress_bar_style(cards->progress_bar);
         return;
     }
     lv_obj_update_layout(parent);
@@ -156,6 +178,12 @@ void ui_printer_info_cards_create(
          * Give it stronger typography than the other compact cards.
          */
         lv_obj_set_style_text_font(cards->progress, ui_font_with_fallback(UI_FONT_HEADING), 0);
+        lv_obj_t *box = lv_obj_get_parent(cards->progress);
+        lv_obj_align(cards->progress, LV_ALIGN_CENTER, 0, 7);
+        cards->progress_bar = lv_bar_create(box);
+        lv_obj_set_size(cards->progress_bar, card_width - 24, 6);
+        lv_obj_align(cards->progress_bar, LV_ALIGN_BOTTOM_MID, 0, -7);
+        ui_apply_progress_bar_style(cards->progress_bar);
         lv_obj_set_style_text_align(
             cards->progress,
             LV_TEXT_ALIGN_CENTER,
@@ -165,20 +193,42 @@ void ui_printer_info_cards_create(
     cards->nozzle = ui_create_operator_info_card(
         parent,
         "Nozzle",
-        "-- / -- C",
+        UI_TEMPERATURE_PAIR_UNKNOWN,
         card_x[1],
         card_y[1],
         card_width,
         card_height);
 
+    if (cards->nozzle) {
+        lv_obj_t *box = lv_obj_get_parent(cards->nozzle);
+        cards->nozzle_title = lv_obj_get_child(box, 0);
+        cards->tools_title = lv_label_create(box);
+        lv_label_set_text(cards->tools_title, ui_text("Tools"));
+        ui_apply_custom_label_style(cards->tools_title, &lv_font_montserrat_14, UI_TEXT_DIM);
+        lv_obj_set_style_text_font(cards->tools_title, ui_font_with_fallback(&lv_font_montserrat_14), 0);
+        lv_obj_align(cards->tools_title, LV_ALIGN_TOP_MID, 0, 3);
+        ui_hotend_visible(cards->tools_title, false);
+        cards->hotend_layout = (ui_hotend_layout_t){7, 21, card_width - 14,
+            card_height - 26, 1, 1, &lv_font_montserrat_22, &lv_font_montserrat_16};
+        ui_hotend_create_readings(box, cards->hotend_readings);
+    }
+
     cards->bed = ui_create_operator_info_card(
         parent,
         "Bed",
-        "-- / -- C",
+        UI_TEMPERATURE_PAIR_UNKNOWN,
         card_x[2],
         card_y[2],
         card_width,
         card_height);
+
+    lv_obj_t *thermal[] = {cards->nozzle, cards->bed};
+    for (size_t i = 0; i < sizeof(thermal) / sizeof(thermal[0]); ++i) {
+        if (!thermal[i]) continue;
+        lv_label_set_text(thermal[i], "888.8/888.8°");
+        ui_text_fit_single_line(thermal[i], UI_FONT_VALUE_SMALL);
+        lv_label_set_text(thermal[i], UI_TEMPERATURE_PAIR_UNKNOWN);
+    }
 
     cards->part_fan = ui_create_operator_info_card(
         parent,
@@ -310,21 +360,33 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
     }
 
     int percent = printer_controller_progress_percent(printer_progress);
-    if(cards->nozzle_target) {
+    if (cards->progress_bar)
+        lv_bar_set_value(cards->progress_bar, percent < 0 ? 0 : percent, LV_ANIM_OFF);
+    char pair[20];
+    ui_format_temperature_pair(pair, sizeof(pair), printer_nozzle_temp, printer_nozzle_target);
+    if (cards->studio)
+        ui_studio_set_temperature(cards->nozzle, cards->nozzle_setpoint, pair);
+    else
+        ui_value_set_text(cards->nozzle, pair);
+    ui_format_temperature_pair(pair, sizeof(pair), printer_bed_temp, printer_bed_target);
+    if (cards->studio) {
+        ui_studio_set_temperature(cards->bed, cards->bed_setpoint, pair);
+        ui_value_set_text(cards->nozzle_title, moonraker_ok ? "Nozzle  •  Tap to set" : "Nozzle");
+        ui_value_set_text(cards->bed_title, moonraker_ok ? "Bed  •  Tap to set" : "Bed");
+        ui_value_set_color(cards->nozzle, ui_temperature_current_valid(printer_nozzle_temp) ? UI_TEXT : UI_TEXT_DIM, 0);
+        ui_value_set_color(cards->bed, ui_temperature_current_valid(printer_bed_temp) ? UI_TEXT : UI_TEXT_DIM, 0);
         char t[64];
-        snprintf(t,sizeof(t),moonraker_ok && printer_nozzle_temp>-100 ? "%.0f°" : "--°",printer_nozzle_temp);ui_value_set_text(cards->nozzle,t);
-        snprintf(t,sizeof(t),moonraker_ok ? "Target %.0f°  •  Tap to set" : "Target --°",printer_nozzle_target);ui_value_set_text(cards->nozzle_target,t);
-        snprintf(t,sizeof(t),moonraker_ok && printer_bed_temp>-100 ? "%.0f°" : "--°",printer_bed_temp);ui_value_set_text(cards->bed,t);
-        snprintf(t,sizeof(t),moonraker_ok ? "Target %.0f°  •  Tap to set" : "Target --°",printer_bed_target);ui_value_set_text(cards->bed_target,t);
         snprintf(t,sizeof(t),moonraker_ok ? "%.0f%%" : "--%%",printer_part_fan_speed);ui_value_set_text(cards->part_fan,t);
-        if (percent >= 0) snprintf(t, sizeof(t), "Progress %d%%", percent);
-        else snprintf(t, sizeof(t), "%s", moonraker_ok ? "Progress --%" : "Offline");
+        if (percent >= 0) snprintf(t, sizeof(t), "%d%%", percent);
+        else snprintf(t, sizeof(t), "--%%");
         ui_value_set_text(cards->progress,t);
+        ui_value_set_color(cards->progress, progress_value_color(percent < 0 ? -1.0 : printer_progress), 0);
         printer_controller_format_hhmm(t,sizeof(t),moonraker_ok?printer_print_duration:-1);ui_value_set_text(cards->elapsed,t);
         ui_value_set_text(cards->remaining,printer_eta_text&&printer_eta_text[0]?printer_eta_text:"--:--");
         return;
     }
 
+    ui_value_set_text(cards->bed, pair);
     if (cards->progress) {
     char pbuf[32];
         if (percent >= 0) snprintf(pbuf, sizeof(pbuf), "%d%%", percent);
@@ -333,21 +395,10 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
         ui_value_set_color(cards->progress, progress_value_color(percent < 0 ? -1.0 : printer_progress), 0);
     }
 
-    if (cards->nozzle) {
-        char nbuf[32];
-        if (printer_nozzle_temp > -100.0) snprintf(nbuf, sizeof(nbuf), "%.1f/%.1f C", printer_nozzle_temp, printer_nozzle_target);
-        else snprintf(nbuf, sizeof(nbuf), "-- / -- C");
-        ui_value_set_text(cards->nozzle, nbuf);
+    if (cards->nozzle)
         ui_value_set_color(cards->nozzle, temp_value_color(printer_nozzle_temp, printer_nozzle_target), 0);
-    }
-
-    if (cards->bed) {
-        char bbuf[32];
-        if (printer_bed_temp > -100.0) snprintf(bbuf, sizeof(bbuf), "%.1f/%.1f C", printer_bed_temp, printer_bed_target);
-        else snprintf(bbuf, sizeof(bbuf), "-- / -- C");
-        ui_value_set_text(cards->bed, bbuf);
+    if (cards->bed)
         ui_value_set_color(cards->bed, temp_value_color(printer_bed_temp, printer_bed_target), 0);
-    }
 
     if (cards->part_fan) {
         char pfbuf[24];
@@ -376,8 +427,7 @@ void ui_printer_info_cards_refresh(lv_obj_t *printer_panel,
     if (cards->remaining) {
         ui_value_set_text(cards->remaining, (printer_eta_text && printer_eta_text[0]) ? printer_eta_text : ui_text("--:--"));
     }
-    lv_obj_t *values[] = { cards->progress, cards->nozzle, cards->bed,
-        cards->part_fan, cards->eta, cards->elapsed, cards->remaining };
+    lv_obj_t *values[] = { cards->progress, cards->part_fan, cards->eta, cards->elapsed, cards->remaining };
     for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
         if (values[i]) ui_text_fit_single_line(values[i],
             i == 0 ? UI_FONT_HEADING : UI_FONT_VALUE_SMALL);
@@ -522,8 +572,10 @@ void ui_printer_info_cards_refresh_live(
         apply_optional_card_capability(
             cards->bed,
             capabilities->has_heated_bed);
-        if (ui_theme_is_studio() && !capabilities->has_heated_bed && cards->bed_target)
-            ui_value_set_text(cards->bed_target, "Not available");
+        if (!capabilities->has_heated_bed && cards->bed_title) {
+            ui_value_set_text(cards->bed_title, "Bed");
+            ui_value_set_text(cards->bed_setpoint, "");
+        }
 
         apply_optional_card_capability(
             cards->part_fan,
@@ -532,4 +584,21 @@ void ui_printer_info_cards_refresh_live(
         apply_card_online_state(cards->bed, true);
         apply_card_online_state(cards->part_fan, true);
     }
+}
+
+void ui_printer_info_cards_set_hotends(ui_printer_info_cards_t *cards,
+    const moonraker_hotend_t *hotends, size_t count, bool online)
+{
+    if (!cards || !cards->nozzle) return;
+    bool multi = hotends && count > 1;
+    ui_hotend_visible(cards->nozzle_title, !multi);
+    ui_hotend_visible(cards->nozzle, !multi);
+    ui_hotend_visible(cards->nozzle_setpoint, !multi);
+    ui_hotend_visible(cards->tools_title, multi);
+    size_t layout_count = multi ? LV_MIN(count, MOONRAKER_MAX_HOTENDS) : 0;
+    if (cards->hotend_layout_count != layout_count) {
+        cards->hotend_layout_count = layout_count;
+        ui_hotend_layout_readings(cards->hotend_readings, &cards->hotend_layout, layout_count);
+    }
+    ui_hotend_update_readings(cards->hotend_readings, hotends, count, online);
 }

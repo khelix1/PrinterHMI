@@ -83,7 +83,7 @@ void ui_printer_toolhead_close(void)
 
 static void toolhead_send(const char *command)
 {
-    if (!s_toolhead_popup || s_toolhead_dispatching) return;
+    if (!s_toolhead_popup || !s_refresh_timer || s_toolhead_dispatching) return;
     if (s_toolhead_owner != moonraker_config_generation()) {
         ui_printer_toolhead_close();
         return;
@@ -135,7 +135,10 @@ static lv_obj_t *toolhead_button(lv_obj_t *parent, ui_button_kind_t kind,
     lv_obj_set_grid_cell(button, LV_GRID_ALIGN_STRETCH, column, 1,
         LV_GRID_ALIGN_START, row, 1);
     lv_obj_add_event_cb(button, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
-    if (callback) lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, (void *)value);
+    if (callback) {
+        lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, (void *)value);
+        if (!s_refresh_timer) lv_obj_add_state(button, LV_STATE_DISABLED);
+    }
     return button;
 }
 
@@ -321,6 +324,13 @@ static void refresh_live_labels(void)
         return;
     }
 
+    if (!s_refresh_timer) {
+        ui_value_set_text(s_position_label, "Live refresh unavailable. Reopen Toolhead.");
+        ui_value_set_text(s_homed_label, "Homed: --");
+        ui_value_set_text(s_offset_label, "-- mm");
+        return;
+    }
+
     if (s_position_label) {
         if (state.toolhead_position_valid) {
             char position[96];
@@ -478,6 +488,7 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
     s_xy_step50_btn = step50_btn;
     s_xy_step = jog_step;
     s_send_gcode = send_gcode_cb;
+    s_refresh_timer = lv_timer_create(refresh_timer_cb, 500, NULL);
 
     lv_obj_set_style_pad_all(popup, 12, 0);
     lv_obj_set_style_pad_row(popup, 8, 0);
@@ -560,7 +571,6 @@ void ui_printer_toolhead_show(lv_obj_t **step1_btn,
 
     apply_selected(s_tab_buttons[0], true);
     refresh_step_highlights();
-    s_refresh_timer = lv_timer_create(refresh_timer_cb, 500, NULL);
 
     ui_form_action(popup, UI_BUTTON_OUTLINED, LV_SYMBOL_CLOSE " Close", close_cb, NULL);
     ui_form_finish(popup);

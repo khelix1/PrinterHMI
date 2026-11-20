@@ -6,6 +6,7 @@
 #include "moonraker.h"
 #include "printer_controller.h"
 #include "ui_dashboard.h"
+#include "ui_temperature_reading.h"
 
 void dashboard_live_controller_push_banner_estimate(bool moonraker_ok,
     const print_estimate_result_t *estimate, uint32_t job_revision)
@@ -113,7 +114,6 @@ void dashboard_live_controller_push_machine(void)
     }
 
     char nozzle[32];
-    char hotend_name[32];
     char bed[32];
     char chamber[32];
     char humidity[32];
@@ -121,58 +121,12 @@ void dashboard_live_controller_push_machine(void)
     char flow[24];
     char fan[24];
 
-    if (state_snapshot.nozzle_temp > -100.0) {
-        snprintf(
-            nozzle,
-            sizeof(nozzle),
-            "%.1f / %.1f C",
-            state_snapshot.nozzle_temp,
-            state_snapshot.nozzle_target);
-    } else {
-        snprintf(
-            nozzle,
-            sizeof(nozzle),
-            "-- / -- C");
-    }
-
-    snprintf(
-        hotend_name,
-        sizeof(hotend_name),
-        "NOZZLE");
-
-    if (state_snapshot.hotend_count > 1) {
-        for (size_t i = 0;
-             i < state_snapshot.hotend_count;
-             ++i) {
-            if (!state_snapshot.hotends[i].active) {
-                continue;
-            }
-
-            snprintf(
-                hotend_name,
-                sizeof(hotend_name),
-                "T%u ACTIVE",
-                (unsigned)i);
-            break;
-        }
-    }
-
-    if (state_snapshot.capabilities.discovered &&
-        !state_snapshot.capabilities.has_heated_bed) {
+    ui_format_temperature_pair(nozzle, sizeof(nozzle),
+        state_snapshot.nozzle_temp, state_snapshot.nozzle_target);
+    if (state_snapshot.capabilities.discovered && !state_snapshot.capabilities.has_heated_bed)
         snprintf(bed, sizeof(bed), "N/A");
-    } else if (state_snapshot.bed_temp > -100.0) {
-        snprintf(
-            bed,
-            sizeof(bed),
-            "%.1f / %.1f C",
-            state_snapshot.bed_temp,
-            state_snapshot.bed_target);
-    } else {
-        snprintf(
-            bed,
-            sizeof(bed),
-            "-- / -- C");
-    }
+    else
+        ui_format_temperature_pair(bed, sizeof(bed), state_snapshot.bed_temp, state_snapshot.bed_target);
 
     /*
      * The Dashboard chamber field represents the drybox environmental air
@@ -265,9 +219,8 @@ void dashboard_live_controller_push_machine(void)
         flow,
         fan);
 
-    ui_dashboard_set_active_hotend(
-        hotend_name,
-        nozzle);
+    ui_dashboard_set_hotends(state_snapshot.hotends, state_snapshot.hotend_count,
+        state_snapshot.moonraker_ok && state_snapshot.live_data_ok);
 
     ui_dashboard_set_machine_connection(
         state_snapshot.moonraker_ok &&

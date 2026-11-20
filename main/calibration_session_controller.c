@@ -343,6 +343,15 @@ void calibration_session_controller_mark_error(
 }
 
 
+static bool kind_can_save_config(calibration_session_kind_t kind)
+{
+    return kind == CALIBRATION_SESSION_PID ||
+           kind == CALIBRATION_SESSION_PROBE_Z ||
+           kind == CALIBRATION_SESSION_INPUT_SHAPER ||
+           kind == CALIBRATION_SESSION_AXIS_TWIST ||
+           kind == CALIBRATION_SESSION_CUSTOM;
+}
+
 static bool generic_result_relevant(
     calibration_session_kind_t kind,
     const char *message)
@@ -355,7 +364,7 @@ static bool generic_result_relevant(
     if (kind == CALIBRATION_SESSION_PROBE_ACCURACY)
         return contains_case_insensitive(message, "probe accuracy results:");
 
-    if (mentions_save_config(message)) {
+    if (kind_can_save_config(kind) && mentions_save_config(message)) {
         return true;
     }
 
@@ -440,20 +449,22 @@ void calibration_session_controller_poll(void)
         return;
     }
 
-    size_t count = console_controller_count();
+    uint32_t newest;
+    size_t count = console_controller_window(&newest);
+    if (!count || newest == last_sequence) return;
 
     for (size_t offset = count; offset > 0; --offset) {
         console_entry_t entry;
 
-        if (!console_controller_get(offset - 1, &entry) ||
-            entry.sequence <= last_sequence) {
+        uint32_t sequence = console_sequence_at(newest, offset - 1);
+        uint32_t distance = console_sequence_distance(sequence, last_sequence);
+        if ((last_sequence && (!distance || distance > UINT32_MAX / 2)) ||
+            !console_controller_get_sequence(sequence, &entry)) {
             continue;
         }
 
         portENTER_CRITICAL(&s_lock);
-        if (entry.sequence > s_store->snapshot.last_sequence) {
-            s_store->snapshot.last_sequence = entry.sequence;
-        }
+        s_store->snapshot.last_sequence = entry.sequence;
         portEXIT_CRITICAL(&s_lock);
         last_sequence = entry.sequence;
 
@@ -485,7 +496,7 @@ void calibration_session_controller_poll(void)
         /* Warnings may be useful context, but cannot authorize persistence
          * or claim successful completion. Errors are handled above. */
         bool response = entry.type == CONSOLE_ENTRY_RESPONSE;
-        bool save_available = response && kind != CALIBRATION_SESSION_PROBE_ACCURACY &&
+        bool save_available = response && kind_can_save_config(kind) &&
             mentions_save_config(entry.message);
         bool completed = response &&
             (kind == CALIBRATION_SESSION_PROBE_ACCURACY || save_available ||

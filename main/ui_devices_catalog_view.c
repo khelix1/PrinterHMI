@@ -340,6 +340,8 @@ static void update_catalog_banner(const device_catalog_status_t *status)
 
     if (s_devices->owner_generation != moonraker_config_generation())
         message = "Printer changed";
+    else if (!s_devices->refresh_timer)
+        message = "Snapshot only. Reopen Devices.";
     else if (!state.moonraker_ok)
         message = "Printer offline";
     else if (!strcmp(state.printer_state, "shutdown") || !strcmp(state.printer_state, "error"))
@@ -770,12 +772,11 @@ void ui_devices_catalog_view_create(
     }
     s_devices->filter = DEVICE_FILTER_ALL;
     s_devices->rendered_generation = UINT32_MAX;
-    render_catalog();
-
     s_devices->refresh_timer = lv_timer_create(
         devices_refresh_timer_cb,
         500,
         NULL);
+    render_catalog();
 }
 
 

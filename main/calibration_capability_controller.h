@@ -16,6 +16,7 @@ typedef struct {
     bool axis_twist;
 
     bool input_shaper;
+    bool shaper_calibrate;
     bool accelerometer;
 
     bool hotend_pid;

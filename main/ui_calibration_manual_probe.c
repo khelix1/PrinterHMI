@@ -8,6 +8,8 @@
 typedef struct {
     lv_obj_t *popup;
     lv_obj_t *status_label;
+    lv_obj_t *steps[10];
+    lv_obj_t *abort_action, *accept_action;
     uint32_t owner;
     lv_event_cb_t step_cb;
     lv_event_cb_t abort_cb;
@@ -32,6 +34,10 @@ static void manual_probe_dispatch(lv_event_t *event, lv_event_cb_t callback)
 {
     if (!event || !s_probe.popup || !callback || s_probe_dispatching ||
         s_probe.owner != moonraker_config_generation()) return;
+    lv_obj_t *action = lv_event_get_target_obj(event);
+    if (!action || lv_event_get_code(event) != LV_EVENT_CLICKED ||
+        lv_event_get_current_target_obj(event) != action ||
+        lv_obj_has_state(action, LV_STATE_DISABLED)) return;
     s_probe_dispatching = true;
     callback(event); /* Preserve original event and TESTZ command user data. */
     s_probe_dispatching = false;
@@ -39,17 +45,25 @@ static void manual_probe_dispatch(lv_event_t *event, lv_event_cb_t callback)
 
 static void manual_probe_step(lv_event_t *event)
 {
-    manual_probe_dispatch(event, s_probe.step_cb);
+    if (!event) return;
+    for (size_t i = 0; i < sizeof(s_probe.steps) / sizeof(s_probe.steps[0]); ++i) {
+        if (s_probe.steps[i] && lv_event_get_target_obj(event) == s_probe.steps[i]) {
+            manual_probe_dispatch(event, s_probe.step_cb);
+            return;
+        }
+    }
 }
 
 static void manual_probe_abort(lv_event_t *event)
 {
-    manual_probe_dispatch(event, s_probe.abort_cb);
+    if (event && s_probe.abort_action && lv_event_get_target_obj(event) == s_probe.abort_action)
+        manual_probe_dispatch(event, s_probe.abort_cb);
 }
 
 static void manual_probe_accept(lv_event_t *event)
 {
-    manual_probe_dispatch(event, s_probe.accept_cb);
+    if (event && s_probe.accept_action && lv_event_get_target_obj(event) == s_probe.accept_action)
+        manual_probe_dispatch(event, s_probe.accept_cb);
 }
 
 
@@ -130,12 +144,12 @@ bool ui_calibration_manual_probe_show(
     for (size_t index = 0;
          index < sizeof(labels) / sizeof(labels[0]);
          ++index) {
-        ui_cal_dialog_choice(s_probe.popup, UI_POPUP_ACTION_CHOICE, labels[index], 120, manual_probe_step, (void *)commands[index], NULL);
+        s_probe.steps[index] = ui_cal_dialog_choice(s_probe.popup, UI_POPUP_ACTION_CHOICE, labels[index], 120, manual_probe_step, (void *)commands[index], NULL);
     }
 
 
-    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "Abort", manual_probe_abort, NULL, NULL);
-    ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "Accept", manual_probe_accept, NULL, NULL);
+    s_probe.abort_action = ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_DANGER, "Abort", manual_probe_abort, NULL, NULL);
+    s_probe.accept_action = ui_cal_dialog_action(s_probe.popup, UI_POPUP_ACTION_CONFIRM, accept_label ? accept_label : "Accept", manual_probe_accept, NULL, NULL);
 
     return true;
 }

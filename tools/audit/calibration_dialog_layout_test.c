@@ -40,7 +40,8 @@ uint32_t moonraker_config_generation(void){return owner;}
 void moonraker_state_snapshot(moonraker_state_t *o){*o=state;}
 void ui_toast_show(ui_status_kind_t k,const char *t,const char *d){(void)k;(void)t;(void)d;}
 uint32_t console_controller_latest_sequence(void){return 7;}
-void console_controller_add_command(const char *s){(void)s;}
+static void (*command_log_hook)(void);
+void console_controller_add_command(const char *s){(void)s;if(command_log_hook)command_log_hook();}
 void calibration_session_controller_begin(calibration_session_kind_t k,uint32_t seq){session.kind=k;session.start_sequence=seq;session.status=CALIBRATION_SESSION_WAITING;}
 void calibration_session_controller_begin_screws_tilt(uint32_t seq){calibration_session_controller_begin(CALIBRATION_SESSION_SCREWS_TILT,seq);}
 void calibration_session_controller_mark_error(const char *s){session.status=CALIBRATION_SESSION_ERROR;snprintf(session.results,sizeof(session.results),"%s",s);}
@@ -148,10 +149,20 @@ static void page_lifetime(void)
  assert(sends==before+3&&!ui_calibration_manual_probe_is_visible());close_axis_twist_popup();
  probe_z_button_cb(NULL);send_hook=page_close_during_send;run_probe_calibration_cb(NULL);send_hook=NULL;
  assert(sends==before+4&&!s_calibration->root&&!s_calibration->refresh_timer&&!lv_obj_get_child_count(lv_layer_top()));
+ /* Rejected manual actions leave the operator in control of the same session. */
+ ui_calibration_show(NULL,send_command);probe_z_button_cb(NULL);run_probe_calibration_cb(NULL);
+ assert(sends==before+5&&ui_calibration_manual_probe_is_visible());
+ lv_obj_t *manual=lv_obj_get_child(lv_layer_top(),-1);
+ unsigned resets=session_resets;send_accept=false;
+ click(choice(manual,0));click(action(manual,1));click(action(manual,0));
+ assert(sends==before+8&&ui_calibration_manual_probe_is_visible()&&session_resets==resets);
+ assert(session.status!=CALIBRATION_SESSION_ERROR);
+ command_log_hook=page_switch_during_send;click(choice(manual,0));command_log_hook=NULL;
+ assert(sends==before+8);ui_calibration_hide();send_accept=true;
  /* Rejected starts retain the existing results path and can be reopened. */
  ui_calibration_show(NULL,send_command);probe_z_button_cb(NULL);send_accept=false;
  run_probe_calibration_cb(NULL);send_accept=true;
- assert(sends==before+5&&!s_calibration->probe_popup&&s_calibration->calibration_results_popup);
+ assert(sends==before+9&&!s_calibration->probe_popup&&s_calibration->calibration_results_popup);
  ui_calibration_results_close();ui_calibration_hide();
  /* Root teardown owns its timer and dialogs even outside the normal Hide path. */
  for(unsigned i=0;i<3;i++){
@@ -465,6 +476,15 @@ static void run(void){
   lv_obj_t *url_footer=lv_obj_get_child(s_ota_popup,-1);
   lv_obj_t *url_button=lv_obj_get_child(url_footer,0),*child=lv_obj_get_child(url_button,0);
   lv_obj_add_flag(child,LV_OBJ_FLAG_EVENT_BUBBLE);lv_obj_send_event(child,LV_EVENT_SIZE_CHANGED,NULL);
+  char oversized[sizeof(s_deferred_start_url)+1];
+  memset(oversized,'x',sizeof(oversized)-1);oversized[sizeof(oversized)-1]=0;
+  uint32_t max_length=lv_textarea_get_max_length(s_ota_url_ta);
+  lv_textarea_set_max_length(s_ota_url_ta,sizeof(oversized));
+  lv_textarea_set_text(s_ota_url_ta,oversized);
+  start_cb(NULL);assert(s_ota_popup&&!s_deferred_start_popup);
+  assert(!strcmp(lv_textarea_get_text(s_ota_url_ta),oversized));
+  lv_textarea_set_max_length(s_ota_url_ta,max_length);
+  lv_textarea_set_text(s_ota_url_ta,"https://fixture/custom.bin");
   async_rejected=true;start_cb(NULL);assert(s_ota_popup&&!s_deferred_start_popup);
   assert(!strcmp(lv_textarea_get_text(s_ota_url_ta),"https://fixture/custom.bin"));async_rejected=false;
   if(cycle%3==0) {
@@ -508,10 +528,10 @@ static void run(void){
  assert(!popup&&!target_label&&!s_pid_feedback&&sends==2&&result_views==1&&strstr(command,"HEATER=extruder7 TARGET=210"));
  /* Same-printer reconnect can reset/replace catalogs without changing owner. */
  pid_warning();unsigned held=sends;uint32_t generation=owner;
- heater_catalog_ready=false;run_pid_tune_cb(NULL);
+ heater_catalog_ready=false;click(s_pid_run_action);
  assert(sends==held&&popup&&strstr(lv_label_get_text(s_pid_feedback),"no longer"));
- heater_catalog_ready=true;missing_heater=7;run_pid_tune_cb(NULL);assert(sends==held&&owner==generation);
- missing_heater=-1;reverse_heaters=true;run_pid_tune_cb(NULL);reverse_heaters=false;
+ heater_catalog_ready=true;missing_heater=7;click(s_pid_run_action);assert(sends==held&&owner==generation);
+ missing_heater=-1;reverse_heaters=true;click(s_pid_run_action);reverse_heaters=false;
  assert(sends==held+1&&!popup&&strstr(command,"HEATER=extruder7 TARGET=210"));
  /* Restore the counters used by the lifecycle cases below. */
  result_views=1;
@@ -521,8 +541,9 @@ static void run(void){
  assert(!pid_object_supported("heater_generic ")&&!pid_object_supported(""));
  unsigned before=sends;run_pid_tune_cb(NULL);assert(sends==before);
  for(unsigned i=0;i<10;i++){pid_warning();lv_obj_delete(popup);assert(!popup&&!target_label&&!s_pid_feedback);run_pid_tune_cb(NULL);assert(sends==before);}
- pid_warning();send_hook=pid_retire_during_send;run_pid_tune_cb(NULL);send_hook=NULL;assert(!popup&&sends==before+1&&result_views==1);
- pid_warning();send_hook=switch_during_send;run_pid_tune_cb(NULL);send_hook=NULL;assert(popup&&sends==before+2&&result_views==1);run_pid_tune_cb(NULL);assert(sends==before+2);ui_calibration_pid_close();
+ pid_warning();command_log_hook=pid_retire_during_send;click(s_pid_run_action);command_log_hook=NULL;assert(!popup&&sends==before);
+ pid_warning();send_hook=pid_retire_during_send;click(s_pid_run_action);send_hook=NULL;assert(!popup&&sends==before+1&&result_views==1);
+ pid_warning();send_hook=switch_during_send;click(s_pid_run_action);send_hook=NULL;assert(popup&&sends==before+2&&result_views==1);click(s_pid_run_action);assert(sends==before+2);ui_calibration_pid_close();
  motor_device=true;ui_calibration_pid_event(NULL);assert(count==7&&!strcmp(objects[0],"extruder1"));ui_calibration_pid_close();motor_device=false;
  context.heater_capacity=3;ui_calibration_pid_event(NULL);assert(count==3);ui_calibration_pid_close();
  ui_calibration_pid_init(NULL);
@@ -535,6 +556,9 @@ static void retiring_accept(lv_event_t *e){(void)e;manual_callbacks++;lv_obj_del
 static void reopen_during_dispatch(lv_event_t *e){(void)e;manual_callbacks++;ui_calibration_manual_probe_hide();assert(!ui_calibration_manual_probe_show("Manual probe","Draft","Accept",step_event,abort_event,accept_event));}
 static void run(void){
  assert(ui_calibration_manual_probe_show("Probe / Z offset","Use TESTZ steps toward (-) or away (+) from the bed. Use a paper test, then ACCEPT only when the offset is correct.","Accept",step_event,abort_event,accept_event));layout(s_probe.popup);
+ lv_obj_t *step_button=choice(s_probe.popup,0);
+ lv_obj_add_state(step_button,LV_STATE_DISABLED);click(step_button);assert(!steps);
+ lv_obj_remove_state(step_button,LV_STATE_DISABLED);
  for(unsigned i=0;i<10;i++){click(choice(s_probe.popup,i));}
  assert(steps==10&&!strcmp(command,"TESTZ Z=1.0"));
  ui_calibration_manual_probe_set_status("Point accepted. Wait for Klipper to finish moving to the next sample.");lv_obj_t *initial=s_probe.popup;
@@ -555,7 +579,7 @@ static void measurement_reenter(void){run_input_shaper_cb(NULL);run_acceleromete
 static void measurement_retire(void){lv_obj_delete(s_motion.input_shaper_popup);}
 static void measurement_switch(void){owner++;}
 static void run(void){
- lv_obj_t *card=lv_obj_create(lv_screen_active());lv_obj_set_size(card,390,190);ui_calibration_motion_create(card,send_command,ready,fixture_results,refresh_results);ui_calibration_motion_refresh(true,true,true);lv_obj_update_layout(card);for(unsigned i=0;i<3;i++){lv_obj_t *b=lv_obj_get_child(card,i);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(lv_obj_get_child(b,0))<=UI_FONT_BODY_LARGE->line_height);}
+ lv_obj_t *card=lv_obj_create(lv_screen_active());lv_obj_set_size(card,390,190);ui_calibration_motion_create(card,send_command,ready,fixture_results,refresh_results);ui_calibration_motion_refresh(true,true,true,false);lv_obj_update_layout(card);for(unsigned i=0;i<3;i++){lv_obj_t *b=lv_obj_get_child(card,i);inside(lv_obj_get_child(b,0),b);assert(lv_obj_get_height(lv_obj_get_child(b,0))<=UI_FONT_BODY_LARGE->line_height);}
  click(s_motion.input_shaper_button);layout(s_motion.input_shaper_popup);lv_obj_t *initial=s_motion.input_shaper_popup;click(s_motion.input_shaper_button);assert(initial==s_motion.input_shaper_popup);
  send_accept=false;click(action(s_motion.input_shaper_popup,1));assert(sends==1&&s_motion.input_shaper_popup&&result_views==0&&strstr(lv_label_get_text(s_shaper_feedback),"retained"));layout(s_motion.input_shaper_popup);
  send_accept=true;send_hook=measurement_reenter;click(action(s_motion.input_shaper_popup,1));send_hook=NULL;assert(sends==2&&!s_motion.input_shaper_popup&&!s_shaper_feedback&&result_views==1&&!strcmp(command,"SHAPER_CALIBRATE"));run_input_shaper_cb(NULL);assert(sends==2);
@@ -569,16 +593,42 @@ static void run(void){
   click(s_motion.resonance_test_button);lv_obj_delete(s_motion.resonance_test_popup);assert(!s_motion.resonance_test_popup&&!s_resonance_feedback);run_resonance_test_cb(NULL);
   click(s_motion.accelerometer_check_button);lv_obj_delete(s_motion.accelerometer_check_popup);assert(!s_motion.accelerometer_check_popup&&!s_sensor_feedback);run_accelerometer_check_cb(NULL);assert(sends==before);
  }
- click(s_motion.input_shaper_button);ui_calibration_motion_refresh(true,false,true);run_input_shaper_cb(NULL);assert(sends==before&&strstr(lv_label_get_text(s_shaper_feedback),"capabilities"));ui_calibration_motion_refresh(true,true,true);close_input_shaper_popup();
+ click(s_motion.input_shaper_button);ui_calibration_motion_refresh(true,false,true,false);run_input_shaper_cb(NULL);assert(sends==before&&strstr(lv_label_get_text(s_shaper_feedback),"capabilities"));ui_calibration_motion_refresh(true,true,true,false);close_input_shaper_popup();
  click(s_motion.input_shaper_button);state.live_data_ok=false;run_input_shaper_cb(NULL);assert(sends==before&&s_motion.input_shaper_popup);state.live_data_ok=true;close_input_shaper_popup();
  click(s_motion.input_shaper_button);send_hook=measurement_retire;run_input_shaper_cb(NULL);send_hook=NULL;assert(sends==before+1&&!s_motion.input_shaper_popup&&result_views==3);
  click(s_motion.input_shaper_button);send_hook=measurement_switch;run_input_shaper_cb(NULL);send_hook=NULL;assert(sends==before+2&&s_motion.input_shaper_popup&&result_views==3);run_input_shaper_cb(NULL);assert(sends==before+2);close_input_shaper_popup();
- lv_obj_delete(card);assert(!s_motion.input_shaper_button&&!s_motion.resonance_test_button&&!s_motion.accelerometer_check_button);ui_calibration_motion_refresh(true,true,true);ui_calibration_motion_hide();
+ ui_calibration_motion_refresh(false,false,false,true);
+ assert(!lv_obj_has_flag(s_motion.input_shaper_button,LV_OBJ_FLAG_HIDDEN));
+ assert(lv_obj_has_flag(s_motion.resonance_test_button,LV_OBJ_FLAG_HIDDEN));
+ click(s_motion.input_shaper_button);assert(s_motion.input_shaper_popup);
+ before=sends;run_input_shaper_cb(NULL);assert(sends==before+1&&!strcmp(command,"SHAPER_CALIBRATE"));
+ for(unsigned axis=1;axis<=2;++axis){
+  click(s_motion.input_shaper_button);assert(lv_dropdown_get_selected(s_shaper_axis)==0);
+  before=sends;lv_dropdown_set_selected(s_shaper_axis,axis);
+  assert(sends==before);layout(s_motion.input_shaper_popup);click(s_shaper_run);
+  assert(sends==before+1&&!strcmp(command,axis==1?"SHAPER_CALIBRATE AXIS=X":"SHAPER_CALIBRATE AXIS=Y"));
+  assert(!s_shaper_axis&&!s_shaper_run);
+ }
+ ui_calibration_motion_refresh(true,true,true,false);
+ before=sends;
+ click(s_motion.resonance_test_button);
+ lv_obj_add_state(s_resonance_run[0],LV_STATE_DISABLED);click(s_resonance_run[0]);assert(sends==before);
+ lv_obj_t *child=lv_obj_get_child(s_resonance_run[1],0);
+ lv_obj_add_flag(child,LV_OBJ_FLAG_EVENT_BUBBLE);click(child);assert(sends==before);
+ close_resonance_test_popup();
+ click(s_motion.accelerometer_check_button);lv_obj_delete(s_sensor_run);
+ run_accelerometer_check_cb(NULL);assert(sends==before);close_accelerometer_check_popup();
+ click(s_motion.input_shaper_button);lv_obj_delete(s_shaper_feedback);assert(!s_shaper_feedback);
+ send_accept=false;click(s_shaper_run);assert(sends==before+1&&s_motion.input_shaper_popup);
+ send_accept=true;command_log_hook=measurement_retire;click(s_shaper_run);command_log_hook=NULL;
+ assert(sends==before+1&&!s_motion.input_shaper_popup&&!s_motion_dispatching);
+ lv_obj_delete(card);assert(!s_motion.input_shaper_button&&!s_motion.resonance_test_button&&!s_motion.accelerometer_check_button);ui_calibration_motion_refresh(true,true,true,false);ui_calibration_motion_hide();
 }
 #elif defined(TEST_PROBE)
 #include "ui_probe_accuracy.c"
 static unsigned probe_results;
 static int probe_dispatch_mode;
+static void probe_unhome(void){state.homed_axes[0]=0;}
 void ui_calibration_results_show(const char *t,const char *text){(void)t;(void)text;probe_results++;}
 void ui_calibration_results_refresh(void){}
 static bool probe_send(const char *command_text)
@@ -606,6 +656,11 @@ static void run(void){
  assert(lv_obj_get_style_text_font(lv_dropdown_get_list(s_samples),0)==lv_obj_get_style_text_font(s_samples,0));
  lv_dropdown_close(s_samples);assert(!lv_obj_has_state(s_run,LV_STATE_DISABLED));
  state.homed_axes[0]=0;refresh_status(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(!sends);
+ strcpy(state.homed_axes,"xyz");refresh_status(NULL);
+ calibration_session_snapshot_t old=session;
+ command_log_hook=probe_unhome;click(s_run);command_log_hook=NULL;
+ assert(!sends&&s_popup&&lv_obj_has_state(s_run,LV_STATE_DISABLED));
+ assert(session.kind==old.kind&&session.status==old.status);
  strcpy(state.homed_axes,"xyz");refresh_status(NULL);click(s_run);
  assert(sends==1 && !strcmp(command,"PROBE_ACCURACY SAMPLES=20") && !s_popup && !s_status_timer && probe_results==1);
  run_cb(NULL);refresh_status(NULL);assert(sends==1 && diagnostic_timers()==baseline);
@@ -626,9 +681,21 @@ static void run(void){
  lv_obj_delete(card);assert(!s_button);ui_probe_accuracy_refresh(true);ui_probe_accuracy_hide();assert(diagnostic_timers()==baseline);
 }
 #elif defined(TEST_ENDSTOP)
+static bool reject_endstop_timer;
+static lv_timer_t *endstop_test_timer(lv_timer_cb_t callback,uint32_t period,void *data)
+{
+ return reject_endstop_timer ? NULL : lv_timer_create(callback,period,data);
+}
+#define lv_timer_create endstop_test_timer
 #include "ui_endstop_status.c"
+#undef lv_timer_create
 static void run(void){
  unsigned baseline=diagnostic_timers();
+ reject_endstop_timer=true;ui_endstop_status_show();reject_endstop_timer=false;
+ assert(s_popup&&!s_timer&&!queries&&!endstops.waiting);
+ assert(strstr(lv_label_get_text(s_body),"Close and reopen Endstops"));
+ refresh(NULL);assert(!queries);
+ click(action(s_popup,0));assert(!s_popup&&diagnostic_timers()==baseline);
  ui_endstop_status_show();layout(s_popup);assert(queries==1);
  lv_obj_t *initial=s_popup;lv_timer_t *initial_timer=s_timer;
  ui_endstop_status_show();assert(s_popup==initial && s_timer==initial_timer && queries==1);
@@ -653,6 +720,8 @@ static void save_reenter(void){run_save_config_cb(NULL);}
 static void save_retire_confirm(void){lv_obj_delete(*s_context->save_confirm_popup);}
 static void save_retire_results(void){lv_obj_delete(*s_context->results_popup);}
 static void save_switch_owner(void){owner++;}
+static void save_start_print(void){strcpy(state.printer_state,"printing");}
+static void save_repeat_click(void){click(s_save_action);}
 static void save_replace_session(void){session.generation++;}
 static void complete_session(void){session.status=CALIBRATION_SESSION_RESULTS;session.save_available=session.completed=true;session.generation++;strcpy(session.results,"Probe calibration complete.\nReview all measurements before saving.\n");}
 static void results_and_confirm(void){ui_calibration_results_show("Calibration results","Waiting for Klipper...");complete_session();ui_calibration_results_refresh();click(*s_context->apply_restart_button);}
@@ -675,31 +744,43 @@ static void run(void){
  }
  strcpy(state.printer_state,"ready");ui_calibration_results_refresh();
  session.generation++;ui_calibration_results_refresh();assert(lv_obj_has_state(s_save_action,LV_STATE_DISABLED));run_save_config_cb(NULL);assert(sends==1&&strstr(lv_label_get_text(s_save_feedback),"changed"));click(action(confirm,0));click(apply);
+ command_log_hook=save_repeat_click;send_accept=false;click(s_save_action);command_log_hook=NULL;assert(sends==2);
+ command_log_hook=save_start_print;click(s_save_action);command_log_hook=NULL;assert(sends==2&&lv_obj_has_state(s_save_action,LV_STATE_DISABLED));
+ strcpy(state.printer_state,"ready");ui_calibration_results_refresh();
+ command_log_hook=save_replace_session;click(s_save_action);command_log_hook=NULL;assert(sends==2&&lv_obj_has_state(s_save_action,LV_STATE_DISABLED));
+ click(action(confirm,0));click(apply);
+ command_log_hook=save_retire_confirm;click(s_save_action);command_log_hook=NULL;assert(sends==2&&!confirm&&popup);
+ click(apply);command_log_hook=save_switch_owner;click(s_save_action);command_log_hook=NULL;assert(sends==2);
+ ui_calibration_results_refresh();assert(!confirm);ui_calibration_results_close();results_and_confirm();
  send_accept=true;send_hook=save_reenter;click(action(confirm,1));send_hook=NULL;
- assert(sends==2&&!strcmp(command,"SAVE_CONFIG")&&popup&&confirm&&session_resets==1&&s_save_requested);layout(confirm);assert(strstr(lv_label_get_text(s_save_feedback),"accepted"));assert(lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN));assert(lv_obj_has_state(action(confirm,1),LV_STATE_DISABLED));
- run_save_config_cb(NULL);apply_restart_button_cb(NULL);ui_calibration_results_refresh();assert(sends==2&&session_resets==1&&lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN));
+ assert(sends==3&&!strcmp(command,"SAVE_CONFIG")&&popup&&confirm&&session_resets==1&&s_save_requested);layout(confirm);assert(strstr(lv_label_get_text(s_save_feedback),"accepted"));assert(lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN));assert(lv_obj_has_state(action(confirm,1),LV_STATE_DISABLED));
+ run_save_config_cb(NULL);apply_restart_button_cb(NULL);ui_calibration_results_refresh();assert(sends==3&&session_resets==1&&lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN));
  close_save_confirm_popup();assert(!confirm&&popup);apply_restart_button_cb(NULL);assert(!confirm);ui_calibration_results_close();assert(!popup&&!label&&!apply&&!s_results_feedback&&!s_save_feedback&&!s_save_action);
  unsigned before=sends,resets=session_resets;
  for(unsigned i=0;i<10;i++){
   results_and_confirm();assert(confirm);lv_obj_delete(confirm);assert(!confirm&&!s_save_feedback&&!s_save_action&&popup);run_save_config_cb(NULL);assert(sends==before);
   click(apply);assert(confirm);lv_obj_delete(popup);assert(!popup&&!confirm&&!label&&!apply&&!s_results_feedback);ui_calibration_results_refresh();run_save_config_cb(NULL);assert(sends==before);
  }
- results_and_confirm();send_hook=save_retire_confirm;run_save_config_cb(NULL);send_hook=NULL;assert(!confirm&&popup&&sends==before+1&&session_resets==resets);ui_calibration_results_close();
- results_and_confirm();send_hook=save_retire_results;run_save_config_cb(NULL);send_hook=NULL;assert(!confirm&&!popup&&sends==before+2&&session_resets==resets);
- results_and_confirm();send_hook=save_replace_session;run_save_config_cb(NULL);send_hook=NULL;assert(popup&&confirm&&sends==before+3&&session_resets==resets);ui_calibration_results_refresh();assert(lv_obj_has_state(s_save_action,LV_STATE_DISABLED));ui_calibration_results_close();
- results_and_confirm();send_hook=save_switch_owner;run_save_config_cb(NULL);send_hook=NULL;assert(popup&&confirm&&sends==before+4&&session_resets==resets);ui_calibration_results_refresh();assert(!confirm&&lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN)&&strstr(lv_label_get_text(s_results_feedback),"Printer changed"));run_save_config_cb(NULL);assert(sends==before+4);ui_calibration_results_close();
+ results_and_confirm();send_hook=save_retire_confirm;click(s_save_action);send_hook=NULL;assert(!confirm&&popup&&sends==before+1&&session_resets==resets);ui_calibration_results_close();
+ results_and_confirm();send_hook=save_retire_results;click(s_save_action);send_hook=NULL;assert(!confirm&&!popup&&sends==before+2&&session_resets==resets);
+ results_and_confirm();send_hook=save_replace_session;click(s_save_action);send_hook=NULL;assert(popup&&confirm&&sends==before+3&&session_resets==resets);ui_calibration_results_refresh();assert(lv_obj_has_state(s_save_action,LV_STATE_DISABLED));ui_calibration_results_close();
+ results_and_confirm();send_hook=save_switch_owner;click(s_save_action);send_hook=NULL;assert(popup&&confirm&&sends==before+4&&session_resets==resets);ui_calibration_results_refresh();assert(!confirm&&lv_obj_has_flag(apply,LV_OBJ_FLAG_HIDDEN)&&strstr(lv_label_get_text(s_results_feedback),"Printer changed"));run_save_config_cb(NULL);assert(sends==before+4);ui_calibration_results_close();
  /* A recreated view renders the same session generation immediately. */
  complete_session();ui_calibration_results_show("Calibration results","Waiting...");ui_calibration_results_refresh();assert(strstr(lv_label_get_text(label),"Probe calibration complete"));ui_calibration_results_close();ui_calibration_results_show("Calibration results","Waiting...");ui_calibration_results_refresh();assert(strstr(lv_label_get_text(label),"Probe calibration complete"));ui_calibration_results_close();
  ui_calibration_results_init(NULL);
 }
 #elif defined(TEST_PA)
 #include "ui_calibration_pressure_advance.c"
+static void pa_change_tool(void){strcpy(state.active_hotend,"extruder1");}
 static void pa_reenter(void){click(choice(s_pa.popup,0));}
 static void pa_retire_during_send(void){lv_obj_delete(s_pa.popup);}
 static void pa_switch_during_send(void){owner++;}
 static void run(void){
  lv_obj_t *card=lv_obj_create(lv_screen_active());ui_calibration_pressure_advance_create(card,send_command,ready);ui_calibration_pressure_advance_refresh(true,true);
  click(s_pa.button);layout(s_pa.popup);lv_obj_t *initial=s_pa.popup;click(s_pa.button);assert(s_pa.popup==initial);
+ char old_tool[sizeof(state.active_hotend)];strcpy(old_tool,state.active_hotend);
+ command_log_hook=pa_change_tool;click(choice(s_pa.popup,1));command_log_hook=NULL;assert(!sends&&!s_pa.armed&&strstr(lv_label_get_text(s_pa.feedback),"changed"));
+ strcpy(state.active_hotend,old_tool);
  send_accept=false;click(choice(s_pa.popup,1));assert(s_pa.popup==initial&&!s_pa.armed&&sends==1);assert(strstr(lv_label_get_text(s_pa.feedback),"Retry"));layout(s_pa.popup);
  send_accept=true;send_hook=pa_reenter;click(choice(s_pa.popup,1));send_hook=NULL;assert(sends==2&&strstr(command,"FACTOR=.020")&&s_pa.armed);layout(s_pa.popup);click(s_pa.button);assert(s_pa.armed);click(action(s_pa.popup,0));assert(!s_pa.popup&&!s_pa.feedback);
  for(unsigned i=0;i<10;i++){click(s_pa.button);lv_obj_delete(s_pa.popup);assert(!s_pa.popup&&!s_pa.feedback&&!s_pa.armed);}
@@ -722,15 +803,16 @@ static void run(void){
  send_accept=false;click(action(popup,1));assert(sends==1&&popup==initial&&selected==15&&!result_views);assert(strstr(lv_label_get_text(s_custom_feedback),"retained"));layout(popup);
  send_accept=true;send_hook=custom_reenter;click(action(popup,1));send_hook=NULL;assert(sends==2&&!popup&&result_views==1&&strstr(command,"MACRO_15"));
  custom_review();unsigned held=sends;uint32_t generation=owner;
- macro_catalog_ready=false;run_custom_macro_cb(NULL);
+ macro_catalog_ready=false;click(s_custom_run_action);
  assert(sends==held&&popup&&strstr(lv_label_get_text(s_custom_feedback),"no longer"));
- macro_catalog_ready=true;missing_macro=15;run_custom_macro_cb(NULL);assert(sends==held&&owner==generation);
- missing_macro=-1;reverse_macros=true;run_custom_macro_cb(NULL);reverse_macros=false;
+ macro_catalog_ready=true;missing_macro=15;click(s_custom_run_action);assert(sends==held&&owner==generation);
+ missing_macro=-1;reverse_macros=true;click(s_custom_run_action);reverse_macros=false;
  assert(sends==held+1&&!popup&&strstr(command,"MACRO_15"));result_views=1;
  unsigned before=sends;run_custom_macro_cb(NULL);assert(sends==before);
  for(unsigned i=0;i<10;i++){custom_review();lv_obj_delete(popup);assert(!popup&&!s_custom_feedback);run_custom_macro_cb(NULL);assert(sends==before);}
- custom_review();send_hook=custom_retire_during_send;run_custom_macro_cb(NULL);send_hook=NULL;assert(!popup&&sends==before+1&&result_views==1);
- custom_review();send_hook=custom_switch_during_send;run_custom_macro_cb(NULL);send_hook=NULL;assert(popup&&sends==before+2&&result_views==1);run_custom_macro_cb(NULL);assert(sends==before+2);ui_calibration_custom_close();
+ custom_review();command_log_hook=custom_switch_during_send;click(s_custom_run_action);command_log_hook=NULL;assert(popup&&sends==before);ui_calibration_custom_close();
+ custom_review();send_hook=custom_retire_during_send;click(s_custom_run_action);send_hook=NULL;assert(!popup&&sends==before+1&&result_views==1);
+ custom_review();send_hook=custom_switch_during_send;click(s_custom_run_action);send_hook=NULL;assert(popup&&sends==before+2&&result_views==1);click(s_custom_run_action);assert(sends==before+2);ui_calibration_custom_close();
  context.names_capacity=3;ui_calibration_custom_event(NULL);assert(count==3);ui_calibration_custom_close();ui_calibration_custom_init(NULL);
 }
 #elif defined(TEST_GEOMETRY)
@@ -746,30 +828,32 @@ static void run(void){
  ui_calibration_geometry_context_t context={.screws_popup=&screws,.gantry_popup=&gantry,.screws_results_label=&label,.screws_home_required=&home,.gantry_home_required=&ghome,.gantry_use_qgl=&qgl,.screws_display=text,.screws_display_size=sizeof(text),.session_snapshot=&snap,.session_generation=&gen,.send_gcode=send_command};ui_calibration_geometry_init(&context);
  ui_calibration_geometry_screws_event(NULL);layout(screws);lv_obj_t *initial=screws;ui_calibration_geometry_screws_event(NULL);assert(screws==initial);
  send_accept=false;click(action(screws,1));assert(sends==1&&screws&&!label&&strstr(lv_label_get_text(s_screws_feedback),"Retry"));layout(screws);
- state.live_data_ok=false;run_screws_tilt_cb(NULL);assert(sends==1&&strstr(lv_label_get_text(s_screws_feedback),"Klipper"));state.live_data_ok=true;
- strcpy(state.printer_state,"printing");run_screws_tilt_cb(NULL);assert(sends==1);strcpy(state.printer_state,"ready");fixture_screws=false;run_screws_tilt_cb(NULL);assert(sends==1);fixture_screws=true;
- strcpy(state.homed_axes,"");run_screws_tilt_cb(NULL);assert(sends==1&&strstr(lv_label_get_text(s_screws_feedback),"homed"));close_screws_popup();ui_calibration_geometry_screws_event(NULL);assert(home);send_accept=true;send_hook=geometry_reenter;click(action(screws,1));send_hook=NULL;assert(sends==2&&label&&!strcmp(command,"G28\nSCREWS_TILT_CALCULATE"));layout(screws);
+ state.live_data_ok=false;click(s_screws_run_action);assert(sends==1&&strstr(lv_label_get_text(s_screws_feedback),"Klipper"));state.live_data_ok=true;
+ strcpy(state.printer_state,"printing");click(s_screws_run_action);assert(sends==1);strcpy(state.printer_state,"ready");fixture_screws=false;click(s_screws_run_action);assert(sends==1);fixture_screws=true;
+ strcpy(state.homed_axes,"");click(s_screws_run_action);assert(sends==1&&strstr(lv_label_get_text(s_screws_feedback),"homed"));close_screws_popup();ui_calibration_geometry_screws_event(NULL);assert(home);send_accept=true;send_hook=geometry_reenter;click(action(screws,1));send_hook=NULL;assert(sends==2&&label&&!strcmp(command,"G28\nSCREWS_TILT_CALCULATE"));layout(screws);
  session.status=CALIBRATION_SESSION_RESULTS;session.generation++;strcpy(session.results,"Front left: CW 00:10\nRear right: CCW 00:05");ui_calibration_geometry_refresh();assert(strstr(lv_label_get_text(label),"Front left"));layout(screws);run_screws_tilt_cb(NULL);assert(sends==2);owner++;ui_calibration_geometry_refresh();assert(strstr(lv_label_get_text(label),"Printer changed"));close_screws_popup();strcpy(state.homed_axes,"xyz");
  unsigned before=sends;
  for(unsigned i=0;i<10;i++){ui_calibration_geometry_screws_event(NULL);lv_obj_delete(screws);assert(!screws&&!label&&!s_screws_feedback);run_screws_tilt_cb(NULL);ui_calibration_geometry_refresh();assert(sends==before);}
- ui_calibration_geometry_screws_event(NULL);send_hook=geometry_retire_screws;run_screws_tilt_cb(NULL);send_hook=NULL;assert(!screws&&!label&&sends==before+1);
- ui_calibration_geometry_screws_event(NULL);send_hook=geometry_switch;run_screws_tilt_cb(NULL);send_hook=NULL;assert(screws&&!label&&sends==before+2);run_screws_tilt_cb(NULL);assert(sends==before+2);close_screws_popup();
- ui_calibration_geometry_gantry_event(NULL);layout(gantry);initial=gantry;ui_calibration_geometry_gantry_event(NULL);assert(gantry==initial&&qgl);send_accept=false;run_gantry_level_cb(NULL);assert(sends==before+3&&gantry&&!s_gantry_requested&&strstr(lv_label_get_text(s_gantry_feedback),"Retry"));layout(gantry);
- fixture_qgl=false;run_gantry_level_cb(NULL);assert(sends==before+3);fixture_qgl=true;send_accept=true;send_hook=geometry_reenter;run_gantry_level_cb(NULL);send_hook=NULL;assert(sends==before+4&&s_gantry_requested&&!strcmp(command,"QUAD_GANTRY_LEVEL"));layout(gantry);assert(lv_obj_has_flag(action(gantry,1),LV_OBJ_FLAG_HIDDEN));run_gantry_level_cb(NULL);assert(sends==before+4);close_gantry_level_popup();
- fixture_qgl=false;strcpy(state.homed_axes,"");ui_calibration_geometry_gantry_event(NULL);assert(!qgl&&ghome);run_gantry_level_cb(NULL);assert(sends==before+5&&!strcmp(command,"G28\nZ_TILT_ADJUST"));close_gantry_level_popup();fixture_qgl=true;strcpy(state.homed_axes,"xyz");
+ ui_calibration_geometry_screws_event(NULL);command_log_hook=geometry_retire_screws;click(s_screws_run_action);command_log_hook=NULL;assert(!screws&&sends==before);
+ ui_calibration_geometry_screws_event(NULL);send_hook=geometry_retire_screws;click(s_screws_run_action);send_hook=NULL;assert(!screws&&!label&&sends==before+1);
+ ui_calibration_geometry_screws_event(NULL);send_hook=geometry_switch;click(s_screws_run_action);send_hook=NULL;assert(screws&&!label&&sends==before+2);click(s_screws_run_action);assert(sends==before+2);close_screws_popup();
+ ui_calibration_geometry_gantry_event(NULL);layout(gantry);initial=gantry;ui_calibration_geometry_gantry_event(NULL);assert(gantry==initial&&qgl);send_accept=false;click(s_gantry_run_action);assert(sends==before+3&&gantry&&!s_gantry_requested&&strstr(lv_label_get_text(s_gantry_feedback),"Retry"));layout(gantry);
+ fixture_qgl=false;click(s_gantry_run_action);assert(sends==before+3);fixture_qgl=true;send_accept=true;send_hook=geometry_reenter;click(s_gantry_run_action);send_hook=NULL;assert(sends==before+4&&s_gantry_requested&&!strcmp(command,"QUAD_GANTRY_LEVEL"));layout(gantry);assert(lv_obj_has_flag(action(gantry,1),LV_OBJ_FLAG_HIDDEN));click(s_gantry_run_action);assert(sends==before+4);close_gantry_level_popup();
+ fixture_qgl=false;strcpy(state.homed_axes,"");ui_calibration_geometry_gantry_event(NULL);assert(!qgl&&ghome);click(s_gantry_run_action);assert(sends==before+5&&!strcmp(command,"G28\nZ_TILT_ADJUST"));close_gantry_level_popup();fixture_qgl=true;strcpy(state.homed_axes,"xyz");
  for(unsigned i=0;i<10;i++){ui_calibration_geometry_gantry_event(NULL);lv_obj_delete(gantry);assert(!gantry&&!s_gantry_feedback&&!s_gantry_requested);run_gantry_level_cb(NULL);assert(sends==before+5);}
- ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_retire_gantry;run_gantry_level_cb(NULL);send_hook=NULL;assert(!gantry&&sends==before+6);
- ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_switch;run_gantry_level_cb(NULL);send_hook=NULL;assert(gantry&&!s_gantry_requested&&sends==before+7);run_gantry_level_cb(NULL);assert(sends==before+7);ui_calibration_geometry_close();
+ ui_calibration_geometry_gantry_event(NULL);command_log_hook=geometry_switch;click(s_gantry_run_action);command_log_hook=NULL;assert(gantry&&sends==before+5);close_gantry_level_popup();
+ ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_retire_gantry;click(s_gantry_run_action);send_hook=NULL;assert(!gantry&&sends==before+6);
+ ui_calibration_geometry_gantry_event(NULL);send_hook=geometry_switch;click(s_gantry_run_action);send_hook=NULL;assert(gantry&&!s_gantry_requested&&sends==before+7);click(s_gantry_run_action);assert(sends==before+7);ui_calibration_geometry_close();
  /* Exercise the real UI -> semantic resolver chain, not only the UI's fallback string. */
  context.send_gcode=geometry_resolved_send;ui_calibration_geometry_init(&context);
  strcpy(state.homed_axes,"");resolver_macro="LEVEL_SCREWS";
- ui_calibration_geometry_screws_event(NULL);run_screws_tilt_cb(NULL);
+ ui_calibration_geometry_screws_event(NULL);click(s_screws_run_action);
  assert(!strcmp(command,"G28\nLEVEL_SCREWS"));close_screws_popup();
- resolver_macro="QGL";fixture_qgl=true;ui_calibration_geometry_gantry_event(NULL);run_gantry_level_cb(NULL);
+ resolver_macro="QGL";fixture_qgl=true;ui_calibration_geometry_gantry_event(NULL);click(s_gantry_run_action);
  assert(!strcmp(command,"G28\nQGL"));close_gantry_level_popup();
- resolver_macro="Z_TILT";fixture_qgl=false;ui_calibration_geometry_gantry_event(NULL);run_gantry_level_cb(NULL);
+ resolver_macro="Z_TILT";fixture_qgl=false;ui_calibration_geometry_gantry_event(NULL);click(s_gantry_run_action);
  assert(!strcmp(command,"G28\nZ_TILT"));close_gantry_level_popup();
- strcpy(state.homed_axes,"xyz");ui_calibration_geometry_gantry_event(NULL);run_gantry_level_cb(NULL);
+ strcpy(state.homed_axes,"xyz");ui_calibration_geometry_gantry_event(NULL);click(s_gantry_run_action);
  assert(!strcmp(command,"Z_TILT"));close_gantry_level_popup();
  resolver_macro=NULL;fixture_qgl=true;ui_calibration_geometry_init(NULL);
 }

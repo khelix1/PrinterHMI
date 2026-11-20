@@ -40,7 +40,7 @@ static bool send(const char*command){
  if(m==5)lv_obj_delete(s_page.panel);
  return accepted;
 }
-static void reset(void){ui_drybox_hide();setup();s_sent_pending=false;live.drybox_active_program=live.drybox_selected_program=UI_DRYBOX_PROGRAM_PLA;live.heater_on=true;ui_drybox_set_callbacks(send,status);ui_drybox_show();assert(s_page.panel);}
+static void reset(void){ui_drybox_hide();setup();live.capabilities.discovered=true;live.capabilities.has_drybox_macros=true;s_sent_pending=false;live.drybox_active_program=live.drybox_selected_program=UI_DRYBOX_PROGRAM_PLA;live.heater_on=true;ui_drybox_set_callbacks(send,status);ui_drybox_show();assert(s_page.panel);}
 static void checks(void){
  reset();unsigned before=sends,nt=notes;accepted=false;click(s_program_buttons[DRYBOX_PROGRAM_PETG]);assert(sends==before+1&&s_active_program==UI_DRYBOX_PROGRAM_PLA&&s_selected_program==UI_DRYBOX_PROGRAM_PLA&&notes==nt+1&&strstr(notice,"Previous program kept"));accepted=true;click(s_program_buttons[DRYBOX_PROGRAM_PETG]);assert(sends==before+2&&s_selected_program==UI_DRYBOX_PROGRAM_PETG&&s_active_program==UI_DRYBOX_PROGRAM_PLA);click(s_program_buttons[DRYBOX_PROGRAM_PETG]);assert(sends==before+2);
  ui_drybox_hide();ui_drybox_show();click(s_program_buttons[DRYBOX_PROGRAM_PETG]);assert(sends==before+2);click(s_program_buttons[DRYBOX_PROGRAM_STOP]);assert(sends==before+3&&!strcmp(sent,"DRY_STOP")&&s_active_program==UI_DRYBOX_PROGRAM_PLA);live.drybox_active_program=UI_DRYBOX_PROGRAM_NONE;live.heater_on=false;ui_drybox_refresh();assert(s_active_program==UI_DRYBOX_PROGRAM_NONE);
@@ -59,7 +59,14 @@ bool macro_controller_contains(const char *name){if(!macro_present&&!strcmp(name
 bool macro_controller_is_favorite(const char*n){(void)n;return favorite_value;}
 bool macro_controller_set_favorite(const char*n,bool favorite){(void)n;if(!favorite_storage_ok)return false;favorite_value=favorite;catalog_generation++;return true;}
 bool macro_controller_parameters(const char*n,macro_parameter_catalog_t*out){(void)n;memset(out,0,sizeof(*out));out->count=1;strcpy(out->names[0],"VALUE");return true;}
+static bool reject_macro_timer;
+static lv_timer_t *macro_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_macro_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create macro_test_timer
 #include "ui_macros.c"
+#undef lv_timer_create
 static bool macro_feedback_has(lv_obj_t *root,const char *text){
  if(lv_obj_check_type(root,&lv_label_class)&&strstr(lv_label_get_text(root),text))return true;
  for(unsigned i=0;i<lv_obj_get_child_count(root);i++)if(macro_feedback_has(lv_obj_get_child(root,i),text))return true;
@@ -105,6 +112,15 @@ static void checks(void){
  reset();close_confirm();click(s_macros->rows[0]);click(s_macros->parameter_fields[0]);assert(s_macros->editor);lv_obj_delete(s_macros->parameter_fields[0]);assert(!s_macros->parameter_fields[0]&&!s_macros->editor&&!s_macros->editor_target);review_macro_cb(NULL);assert(s_confirm&&!s_macros->reviewed);
  reset();close_confirm();click(s_macros->rows[0]);click(s_macros->parameter_fields[0]);lv_obj_delete(s_macros->editor_value);assert(!s_macros->editor_value);editor_done_cb(NULL);close_confirm();
  reset();before=sends;generation++;run_macro_cb(NULL);assert(sends==before);refresh_timer_cb(NULL);assert(lv_obj_has_state(s_macros->rows[0],LV_STATE_DISABLED));ui_macros_show(send);assert(s_macros->root_owner==generation&&!s_confirm);click(s_macros->rows[0]);assert(s_confirm);
+ reset();ui_macros_hide();before=sends;
+ reject_macro_timer=true;ui_macros_show(send);reject_macro_timer=false;
+ assert(!s_refresh_timer&&strstr(lv_label_get_text(s_status),"Reopen Macros"));
+ assert(lv_obj_has_state(s_macros->rows[0],LV_STATE_DISABLED));
+ click(s_macros->rows[0]);lv_obj_send_event(s_macros->rows[0],LV_EVENT_LONG_PRESSED,NULL);
+ run_macro_cb(NULL);assert(!s_confirm&&!favorite_value&&sends==before);
+ ui_macros_hide();ui_macros_show(send);
+ assert(s_refresh_timer&&!lv_obj_has_state(s_macros->rows[0],LV_STATE_DISABLED));
+ click(s_macros->rows[0]);assert(s_confirm);
  reset();before=sends;live.moonraker_ok=false;run_macro_cb(NULL);assert(sends==before);ui_macros_hide();assert(!s_root&&!s_refresh_timer&&!s_command_callback&&!s_macros->editor);
 }
 #endif

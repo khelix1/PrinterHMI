@@ -3,7 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "custom_theme.h"
+#include "lvgl.h"
+static bool reject_list_timer;
+static lv_timer_t *list_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_list_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create list_test_timer
 #include "ui_printer_popups.c"
+#undef lv_timer_create
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
@@ -68,6 +76,10 @@ static void safety(void){
  reset();open();before=sends;state.live_data_ok=false;click(s_filament_toggle_buttons[0]);assert(sends==before);state.live_data_ok=true;state.moonraker_ok=false;click(s_filament_toggle_buttons[0]);assert(sends==before);
  reset();open();before=sends;++generation;click(s_filament_toggle_buttons[0]);assert(sends==before);open();assert(s_filament_owner==generation);click(s_filament_toggle_buttons[0]);assert(sends==before+1);
  reset();open();before=sends;sensors.discovered=false;click(s_filament_toggle_buttons[0]);assert(sends==before);
+ reset();reject_list_timer=true;open();reject_list_timer=false;
+ assert(!s_filament_refresh_timer&&strstr(lv_label_get_text(s_filament_status_labels[0]),"reopen"));
+ before=sends;click(s_filament_toggle_buttons[0]);assert(sends==before);
+ close_filament_list_cb(NULL);open();assert(s_filament_refresh_timer);
  reset();ui_printer_popups_set_control_sender(NULL);ui_printer_popups_show_filament_sensors(legacy_send,&sensors);s_send_gcode_cb=NULL;before=sends;click(s_filament_toggle_buttons[0]);assert(sends==before+1);
  reset();open();before=sends;sensors.sensor_count=0;click(s_filament_toggle_buttons[0]);assert(sends==before);
  reset();strcpy(sensors.sensors[0].object_name,"filament_switch_sensor bad name");open();before=sends;click(s_filament_toggle_buttons[0]);assert(sends==before);

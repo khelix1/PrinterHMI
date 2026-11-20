@@ -16,12 +16,14 @@ static ui_calibration_pid_context_t *s_context;
 static uint32_t s_pid_owner;
 static uint32_t s_pid_epoch;
 static bool s_pid_dispatching;
+static lv_obj_t *s_pid_run_action;
 static lv_obj_t *s_pid_feedback;
 
 static void pid_retire_popup(void)
 {
     ++s_pid_epoch;
     s_pid_feedback = NULL;
+    s_pid_run_action = NULL;
     if (s_context) {
         *s_context->popup = NULL;
         *s_context->target_label = NULL;
@@ -222,7 +224,9 @@ static const char *pid_heater_argument(
 static void run_pid_tune_cb(
     lv_event_t *event)
 {
-    (void)event;
+    if (!event || !s_pid_run_action || lv_event_get_target_obj(event) != s_pid_run_action ||
+        lv_event_get_current_target_obj(event) != s_pid_run_action ||
+        lv_obj_has_state(s_pid_run_action, LV_STATE_DISABLED)) return;
 
     if (!s_context || !*s_context->popup || s_pid_dispatching ||
         s_pid_owner != moonraker_config_generation() ||
@@ -262,18 +266,30 @@ static void run_pid_tune_cb(
         return;
     }
 
-    uint32_t start_sequence =
-        console_controller_latest_sequence();
-    calibration_session_controller_begin(
-        CALIBRATION_SESSION_PID,
-        start_sequence);
-    console_controller_add_command(command);
 
     ui_calibration_pid_context_t *context = s_context;
     lv_obj_t *popup = *context->popup;
     uint32_t epoch = s_pid_epoch;
     uint32_t owner = s_pid_owner;
+    lv_obj_t *action = s_pid_run_action;
     s_pid_dispatching = true;
+    console_controller_add_command(command);
+    if (s_context != context || s_pid_epoch != epoch ||
+        *context->popup != popup || owner != moonraker_config_generation() ||
+        s_pid_run_action != action || !lv_obj_is_valid(action) ||
+        lv_obj_has_state(action, LV_STATE_DISABLED)) {
+        s_pid_dispatching = false;
+        return;
+    }
+    if (!ui_calibration_pid_printer_ready() || !pid_heater_available(object_name)) {
+        s_pid_dispatching = false;
+        if (s_pid_feedback) lv_label_set_text(s_pid_feedback, "Printer or heater is no longer ready. Review before retrying.");
+        return;
+    }
+    uint32_t start_sequence = console_controller_latest_sequence();
+    calibration_session_controller_begin(
+        CALIBRATION_SESSION_PID,
+        start_sequence);
     bool sent = context->send_gcode && context->send_gcode(command);
     s_pid_dispatching = false;
 
@@ -408,7 +424,7 @@ static void pid_start_warning_cb(lv_event_t *event)
 
     s_pid_feedback = ui_cal_dialog_caption(ui_cal_dialog_body(*s_context->popup), "");
     ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_CANCEL, LV_SYMBOL_LEFT " Back", back_to_pid_target_cb, NULL, NULL);
-    ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_DANGER, LV_SYMBOL_PLAY " Start heat", run_pid_tune_cb, NULL, NULL);
+    s_pid_run_action = ui_cal_dialog_action(*s_context->popup, UI_POPUP_ACTION_DANGER, LV_SYMBOL_PLAY " Start heat", run_pid_tune_cb, NULL, NULL);
 }
 
 

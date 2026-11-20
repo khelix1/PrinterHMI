@@ -331,7 +331,8 @@ static void start_cb(lv_event_t *e)
     }
 
     if (strlen(lv_textarea_get_text(s_ota_url_ta)) >= sizeof(s_deferred_start_url)) {
-        lv_textarea_set_placeholder_text(s_ota_url_ta, "Firmware URL is too long.");
+        ui_popup_feedback(ui_ota_body(s_ota_popup), UI_STATUS_DANGER,
+                          "Firmware URL is too long", "Shorten the URL and try again.");
         return;
     }
     /* Reserve the asynchronous callback before transferring any ownership. */

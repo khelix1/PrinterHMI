@@ -109,6 +109,14 @@ bool demo_calibration_send(const char *command)
     if (is_session(&session,CALIBRATION_SESSION_PROBE_ACCURACY) && number(action,"PROBE_ACCURACY SAMPLES=",1,100)) {
         console_controller_add(CONSOLE_ENTRY_RESPONSE,"// probe accuracy results: maximum 1.509000, minimum 1.501000, range 0.008000, average 1.505000, median 1.505000, standard deviation 0.002000"); return true;
     }
+    if (is_session(&session,CALIBRATION_SESSION_INPUT_SHAPER)) {
+        if (!strcmp(action,"SHAPER_CALIBRATE AXIS=X")) {
+            console_controller_add(CONSOLE_ENTRY_RESPONSE,"// shaper_type_x=mzv shaper_freq_x=39.6; SAVE_CONFIG to persist"); return true;
+        }
+        if (!strcmp(action,"SHAPER_CALIBRATE AXIS=Y")) {
+            console_controller_add(CONSOLE_ENTRY_RESPONSE,"// shaper_type_y=2hump_ei shaper_freq_y=66.0; SAVE_CONFIG to persist"); return true;
+        }
+    }
     if (is_session(&session,CALIBRATION_SESSION_INPUT_SHAPER) && !strcmp(action,"SHAPER_CALIBRATE")) {
         console_controller_add(CONSOLE_ENTRY_RESPONSE,"// shaper_type_x=mzv shaper_freq_x=39.6, shaper_type_y=2hump_ei shaper_freq_y=66.0; SAVE_CONFIG to persist"); return true;
     }

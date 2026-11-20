@@ -38,6 +38,33 @@ static void layout(lv_obj_t *popup){lv_obj_update_layout(popup);
 lv_obj_t *footer=lv_obj_get_child(popup,-1),*body=lv_obj_get_child(popup,1);inside(footer,popup);inside(body,popup);for(uint32_t i=0;i<lv_obj_get_child_count(footer);i++){lv_obj_t *b=lv_obj_get_child(footer,i);assert(lv_obj_get_height(b)>=48);inside(b,footer);inside(lv_obj_get_child(b,0),b);}lv_area_t before,after;lv_obj_get_coords(footer,&before);lv_obj_scroll_to_y(body,300,LV_ANIM_OFF);lv_obj_update_layout(popup);lv_obj_get_coords(footer,&after);assert(!memcmp(&before,&after,sizeof(before)));lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);}
 static unsigned timer_count(void){unsigned count=0;for(lv_timer_t*t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))count++;return count;}
 static void reset(void){memset(&motion,0,sizeof(motion));memset(&state,0,sizeof(state));state.moonraker_ok=state.live_data_ok=true;strcpy(state.printer_state,"ready");motion.owner_generation=generation;motion.discovered=true;for(int i=0;i<4;i++){motion.limit_valid[i]=true;motion.limits[i]=(double[]){200,2500,6,0.5}[i];}motion.driver_count=2;strcpy(motion.drivers[0].name,"tmc2209 stepper_x");strcpy(motion.drivers[1].name,"tmc2209 stepper_y");motion.drivers[0].run_valid=motion.drivers[0].hold_valid=motion.drivers[0].status_valid=true;motion.drivers[0].run_current=0.8;motion.drivers[0].hold_current=0.3;strcpy(motion.drivers[0].flags,"Example driver warning text spanning multiple words");}
+static void switch_printer_on_edit(lv_event_t *event)
+{
+ (void)event;
+ ++generation;
+}
+static void input_ownership_checks(void)
+{
+ reset();show_view(VIEW_DRIVERS);
+ lv_dropdown_open(s->driver_selector);assert(lv_dropdown_is_open(s->driver_selector));
+ state.live_data_ok=false;refresh(NULL);assert(!lv_dropdown_is_open(s->driver_selector));
+ state.live_data_ok=true;refresh(NULL);lv_dropdown_open(s->driver_selector);
+ --motion.driver_count;refresh(NULL);assert(!lv_dropdown_is_open(s->driver_selector));
+ close_popup();
+
+ reset();show_view(VIEW_DISTANCE);click(s->pitch);
+ lv_textarea_set_text(s->editor_value,"3.5");
+ lv_obj_t *foreign=lv_button_create(lv_screen_active());
+ lv_obj_add_event_cb(foreign,editor_done_cb,LV_EVENT_CLICKED,NULL);
+ click(foreign);assert(s->editor&&!strcmp(lv_textarea_get_text(s->pitch),"2"));
+ lv_obj_delete(foreign);
+ lv_obj_add_state(s->editor_done,LV_STATE_DISABLED);click(s->editor_done);assert(s->editor);
+ lv_obj_remove_state(s->editor_done,LV_STATE_DISABLED);
+ lv_obj_add_event_cb(s->pitch,switch_printer_on_edit,LV_EVENT_VALUE_CHANGED,NULL);
+ click(s->editor_done);refresh(NULL);
+ assert(s->popup&&!s->editor&&!s->timer&&strstr(lv_label_get_text(s->result),"Printer changed"));
+ close_popup();
+}
 int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint8_t pixels[1024*50*2];lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,pixels,NULL,sizeof(pixels),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);motion_ui_state_t storage={0};s=&storage;
  for(int narrow=0;narrow<3;narrow++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
   width=(int[]){1024,640,480}[narrow];lv_display_set_resolution(d,width,narrow==2?400:600);ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();
@@ -64,4 +91,5 @@ int main(void){lv_init();lv_display_t *d=lv_display_create(1024,600);static uint
   }
  }
  width=1024;lv_display_set_resolution(d,1024,600);reset();show_view(VIEW_DISTANCE);click(s->pitch);lv_obj_delete(s->editor);assert(!s->editor&&!s->editor_target);click(s->pitch);lv_obj_delete(s->popup);assert(!s->popup&&!s->timer&&!s->editor);show_view(VIEW_LIMITS);click(lv_obj_get_child(lv_obj_get_child(s->popup,-1),0));assert(!s->popup&&!s->timer);
+ input_ownership_checks();
  s=NULL;puts("PASS: Motion layouts, fields/keyboard/footer bounds, all themes/densities/text sizes, scrolling, calculations, retained edits, driver/offline/profile states, stale callbacks and timer-balanced deletion");return 0;}

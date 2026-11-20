@@ -18,14 +18,18 @@ int main(void)
         const console_filter_kind_t kinds[]={CONSOLE_FILTER_COMMANDS,CONSOLE_FILTER_RESPONSES,CONSOLE_FILTER_WARNINGS,CONSOLE_FILTER_ERRORS,CONSOLE_FILTER_SYSTEM};
         for (int i=0;i<5;++i) assert(matches(type,"probe TEST",kinds[i],"",false)==(type==i));
     }
-    const char *reports[]={"T:200.0 /205.0 B:60.0 /60.0", "ok T0:20 /0 T1:30 /0 @:0 B@:0", "// T: -5.2 / 0 B:20 /0", "B:20", "T:200 /205"};
+    const char *reports[]={"T:200.0 /205.0 B:60.0 /60.0", "ok T0:20 /0 T1:30 /0 @:0 B@:0", "// T: -5.2 / 0 B:20 /0", "B:20", "T:200 /205",
+        "OK C:34.5", "ok chamber_sensor:25.2 /0.0", "T:210 B:60 MCU:42.8 T0@:127 B@:10",
+        "// ok enclosure-air:31.0 /35.0"};
     for(size_t i=0;i<sizeof(reports)/sizeof(*reports);++i){
         assert(!matches(CONSOLE_ENTRY_RESPONSE,reports[i],CONSOLE_FILTER_ALL,"",true));
         assert(matches(CONSOLE_ENTRY_RESPONSE,reports[i],CONSOLE_FILTER_ALL,"",false));
         assert(matches(CONSOLE_ENTRY_WARNING,reports[i],CONSOLE_FILTER_ALL,"",true));
         assert(matches(CONSOLE_ENTRY_ERROR,reports[i],CONSOLE_FILTER_ALL,"",true));
     }
-    const char *other[]={"T:200 heater unstable","T:nan","T:inf","T:20 B:invalid","T:20garbage","T:","T", "ok", "@:0", "Temperature sensor read error", "probe accuracy results: average 1.2", "TMC stepper_x status"};
+    const char *other[]={"T:200 heater unstable","T:nan","T:inf","T:20 B:invalid","T:20garbage","T:","T", "ok", "@:0", "Temperature sensor read error", "probe accuracy results: average 1.2", "TMC stepper_x status",
+        "speed:200", "T:20 chamber:no-response", "chamber:25 /invalid", "T0@:127 B@:10",
+        "T:20 B@:10 /20", "T:20//error", "!! T:100 /110"};
     for(size_t i=0;i<sizeof(other)/sizeof(*other);++i) assert(matches(CONSOLE_ENTRY_RESPONSE,other[i],CONSOLE_FILTER_ALL,NULL,true));
     entry.type=CONSOLE_ENTRY_RESPONSE;strcpy(entry.message,"T:20");
     console_entry_t before=entry;

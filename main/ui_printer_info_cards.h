@@ -2,17 +2,26 @@
 
 #include "lvgl.h"
 #include "moonraker.h"
+#include "ui_hotend_readings.h"
 
 typedef struct {
     lv_obj_t *progress;
+    lv_obj_t *progress_bar;
     lv_obj_t *nozzle;
     lv_obj_t *bed;
     lv_obj_t *part_fan;
     lv_obj_t *elapsed;
     lv_obj_t *remaining;
     lv_obj_t *eta;
-    lv_obj_t *nozzle_target;
-    lv_obj_t *bed_target;
+    bool studio;
+    lv_obj_t *bed_title;
+    lv_obj_t *nozzle_setpoint;
+    lv_obj_t *bed_setpoint;
+    lv_obj_t *nozzle_title;
+    lv_obj_t *tools_title;
+    lv_obj_t *hotend_readings[MOONRAKER_MAX_HOTENDS];
+    ui_hotend_layout_t hotend_layout;
+    size_t hotend_layout_count;
 } ui_printer_info_cards_t;
 
 void ui_printer_info_cards_create(lv_obj_t *parent,
@@ -46,3 +55,6 @@ void ui_printer_info_cards_refresh_live(
     const double *remaining_seconds,
     bool moonraker_ok,
     const moonraker_capabilities_t *capabilities);
+
+void ui_printer_info_cards_set_hotends(ui_printer_info_cards_t *cards,
+    const moonraker_hotend_t *hotends, size_t count, bool online);

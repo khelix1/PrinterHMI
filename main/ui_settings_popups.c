@@ -758,6 +758,7 @@ void ui_settings_popups_show_theme(ui_settings_theme_changed_cb_t changed_cb)
         s_theme_open_pending = false;
         s_theme_changed_cb = NULL;
         ESP_LOGE(TAG, "Could not schedule theme chooser");
+        ui_toast_show(UI_STATUS_WARNING,"Theme chooser unavailable","Tap Theme again to retry.");
     }
 }
 
@@ -767,7 +768,11 @@ static void theme_popup_create_async(void *user_data)
     s_theme_open_pending = false;
     if (s_theme_popup || s_theme_change_pending) return;
     s_theme_popup = ui_popup_create_on_screen(settings_dialog_width(920), settings_dialog_height(520), UI_POPUP_STANDARD);
-    if (!s_theme_popup) { s_theme_changed_cb = NULL; return; }
+    if (!s_theme_popup) {
+        s_theme_changed_cb = NULL;
+        ui_toast_show(UI_STATUS_WARNING,"Theme chooser unavailable","Tap Theme again to retry.");
+        return;
+    }
     /* Keep scroll damage opaque so underlying pages need not be composited. */
     lv_obj_set_style_bg_opa(s_theme_popup, LV_OPA_COVER, 0);
     lv_obj_set_style_shadow_width(s_theme_popup, 0, 0);

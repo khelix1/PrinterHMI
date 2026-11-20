@@ -8,7 +8,8 @@ typedef bool (*ui_bed_mesh_profiles_command_cb_t)(
 
 void ui_bed_mesh_profiles_init(
     lv_obj_t *owner,
-    ui_bed_mesh_profiles_command_cb_t command_cb);
+    ui_bed_mesh_profiles_command_cb_t command_cb,
+    void (*sync_mesh)(void));
 
 void ui_bed_mesh_profiles_update(
     const bed_mesh_snapshot_t *mesh);
@@ -16,6 +17,7 @@ void ui_bed_mesh_profiles_update(
 void ui_bed_mesh_profiles_show_cb(
     lv_event_t *event);
 
+bool ui_bed_mesh_profiles_is_open(void);
 void ui_bed_mesh_profiles_close(void);
 
 void ui_bed_mesh_profiles_refresh_availability(void);

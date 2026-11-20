@@ -464,6 +464,17 @@ void ui_toast_preferences_show(void (*changed)(void))
     lv_obj_set_size(save, 128, 48); lv_obj_set_flex_grow(save, 1); lv_obj_add_event_cb(save, preference_save, LV_EVENT_CLICKED, NULL);
 }
 
+/* Connection cards require sustained loss; short reconnects still disable
+ * live controls immediately but should not interrupt the operator. */
+#define CONNECTION_LOSS_NOTICE_MS 10000u
+#define CONNECTION_RECOVERY_NOTICE_MS 3000u
+
+/* A reachable Moonraker can temporarily lack fresh Klipper status. */
+static bool printer_reachable(const moonraker_state_t *state)
+{
+    return state->moonraker_ok || state->live_data_ok;
+}
+
 /* Observe only this owner; boot/printer selection establishes a baseline,
  * not a fabricated disconnect or print event. No per-telemetry-poll notices. */
 void ui_toast_observe_printer(const moonraker_state_t *state)
@@ -471,29 +482,39 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
     static uint32_t owner,candidate_since;
     static int owner_profile = -1;
     static bool initialized,armed,live,candidate,last_sample_live;
+    static bool completed,active_candidate,gap_reachable;
+    static uint32_t active_since, klipper_lost_since;
+    static bool klipper_lost, klipper_notified;
     static char previous[32],fault[32];
+    static char previous_file[sizeof(state->printer_file)];
     if(!state)return;
     uint32_t current=moonraker_config_generation(),now=lv_tick_get();
+    bool reachable=printer_reachable(state);
     if(!initialized || owner!=current) {
         int profile = moonraker_config_active_profile_index();
         bool retired = initialized && owner_profile == profile &&
             retire_profile_connection_notices(profile);
         owner_profile=profile;
         owner=current;initialized=true;armed=false;live=false;
-        candidate=state->live_data_ok;candidate_since=now;
+        candidate=reachable;candidate_since=now;
         last_sample_live=state->live_data_ok;
+        completed=state->live_data_ok && !strcmp(state->printer_state,"complete");
+        active_candidate=false;
+        gap_reachable=state->live_data_ok;
+        snprintf(previous_file,sizeof(previous_file),"%s",state->live_data_ok?state->printer_file:"");
+        klipper_lost=klipper_notified=false;
         fault[0]=0;
         snprintf(previous,sizeof(previous),"%s",state->printer_state);
         if(retired)render_notice();
         return;
     }
-    if(candidate!=state->live_data_ok) {
-        candidate=state->live_data_ok;candidate_since=now;
+    if(candidate!=reachable) {
+        candidate=reachable;candidate_since=now;
     }
     /* Selection/bootstrap is not a lost connection. Establish a confirmed
-     * live baseline first, then debounce transport freshness changes. */
+     * reachability baseline first, then debounce connection changes. */
     bool established_now=false;
-    if((uint32_t)(now-candidate_since)>=3000u) {
+    if((uint32_t)(now-candidate_since)>=(candidate ? CONNECTION_RECOVERY_NOTICE_MS : CONNECTION_LOSS_NOTICE_MS)) {
         if(!armed && candidate) {
             armed=true;live=true;established_now=true;
         } else if(armed && live!=candidate) {
@@ -503,11 +524,11 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
             retire_profile_connection_notices(moonraker_config_active_profile_index());
             if(live) {
                 toast_show_named(UI_STATUS_INFO,"PRINTER RECONNECTED",
-                    "Live status is available again. Review the printer before resuming work.",UI_SHELL_PAGE_PRINTER,true,
+                    "Moonraker is reachable again. Review live printer status before resuming work.",UI_SHELL_PAGE_PRINTER,true,
                     moonraker_config_active_profile_name(),moonraker_config_active_profile_index(),true);
             } else {
                 toast_show_named(UI_STATUS_WARNING,"PRINTER OFFLINE",
-                    "Live status was lost. Printing may still be running; check the printer and its connection.",UI_SHELL_PAGE_PRINTER,true,
+                    "Moonraker is unreachable. Printing may still be running; check the printer and its connection.",UI_SHELL_PAGE_PRINTER,true,
                     moonraker_config_active_profile_name(),moonraker_config_active_profile_index(),true);
             }
             established_now=true;
@@ -524,17 +545,67 @@ void ui_toast_observe_printer(const moonraker_state_t *state)
                 "Review the reported error in Console. Resolve the cause before restarting or resuming.",UI_SHELL_PAGE_CONSOLE);
         } else if(!reported_fault && state->live_data_ok) fault[0]=0;
     }
-    if(armed && !established_now && live && last_sample_live && state->live_data_ok && strcmp(previous,state->printer_state)) {
-        const char *title=!strcmp(state->printer_state,"printing") ? (!strcmp(previous,"paused") ? "PRINT RESUMED" : "PRINT STARTED") :
-            !strcmp(state->printer_state,"paused") ? "PRINT PAUSED" :
-            !strcmp(state->printer_state,"complete") ? "PRINT COMPLETE" :
-            !strcmp(state->printer_state,"cancelled") ? "PRINT CANCELLED" : NULL;
-        if(title)ui_toast_show_link(!strcmp(state->printer_state,"paused")?UI_STATUS_WARNING:UI_STATUS_INFO,
-            title,!strcmp(state->printer_state,"paused")?"The print needs attention. Open Printer for controls or filament recovery.":"Open Printer to review this job.",UI_SHELL_PAGE_PRINTER);
+    /* A Klipper lifecycle loss is distinct from the Moonraker socket. */
+    bool klipper_disconnected=state->moonraker_ok && !state->live_data_ok &&
+        !strcmp(state->printer_state,"disconnected");
+    if (armed && klipper_disconnected) {
+        if (!klipper_lost) { klipper_lost=true;klipper_lost_since=now; }
+        if (!klipper_notified && (uint32_t)(now-klipper_lost_since)>=CONNECTION_LOSS_NOTICE_MS) {
+            klipper_notified=true;
+            ui_toast_show_link(UI_STATUS_WARNING,"KLIPPER DISCONNECTED",
+                "Moonraker is reachable, but Klipper has not returned. Check Console and the printer.",
+                UI_SHELL_PAGE_CONSOLE);
+        }
+    } else {
+        klipper_lost=false;
+        klipper_notified=false;
     }
-    last_sample_live=state->live_data_ok;
-    /* Preserve last reported job state during a disconnect. */
-    if(state->live_data_ok)snprintf(previous,sizeof(previous),"%s",state->printer_state);
+    bool fresh=state->live_data_ok;
+    bool printing=!strcmp(state->printer_state,"printing");
+    bool paused=!strcmp(state->printer_state,"paused");
+    bool complete=!strcmp(state->printer_state,"complete");
+    if (!fresh || (!printing && !paused)) active_candidate=false;
+    /* If status resumes with completion for the same observed job, report
+     * it even without consecutive fresh samples. An unreachable sample
+     * breaks continuity, as does a printer/profile change. */
+    bool same_job_finished=complete && gap_reachable && previous_file[0] &&
+        !strcmp(previous_file,state->printer_file) &&
+        (!strcmp(previous,"printing") || !strcmp(previous,"paused"));
+    bool notify=armed && !established_now && live && fresh &&
+        (last_sample_live || same_job_finished);
+    last_sample_live=fresh;
+    if (!fresh) {
+        gap_reachable=gap_reachable && reachable;
+        return;
+    }
+    gap_reachable=reachable;
+    /* After completion, brief returns to printing/paused are not a new job.
+     * Job revision is unsuitable here: it advances on state and link churn. */
+    if (completed && (printing || paused)) {
+        if (!active_candidate) { active_candidate=true;active_since=now; }
+        if ((uint32_t)(now-active_since)<2000u) return;
+        completed=false;
+        active_candidate=false;
+    }
+    const char *title=NULL;
+    if (notify && strcmp(previous,state->printer_state)) {
+        title=printing ? (!strcmp(previous,"paused") ? "PRINT RESUMED" : "PRINT STARTED") :
+            paused ? "PRINT PAUSED" :
+            complete && !completed ? "PRINT COMPLETE" :
+            !strcmp(state->printer_state,"cancelled") ? "PRINT CANCELLED" : NULL;
+    }
+    if (complete) completed=true;
+    snprintf(previous_file,sizeof(previous_file),"%s",state->printer_file);
+    snprintf(previous,sizeof(previous),"%s",state->printer_state);
+    if (title) {
+        if (complete) {
+            operator_event_log_add(OPERATOR_EVENT_INFO, "%s: PRINT COMPLETE | Open Printer to review this job.",
+                                   moonraker_config_active_profile_name());
+            return;
+        }
+        ui_toast_show_link(paused?UI_STATUS_WARNING:UI_STATUS_INFO,title,
+            paused?"The print needs attention. Open Printer for controls or filament recovery.":"Open Printer to review this job.",UI_SHELL_PAGE_PRINTER);
+    }
 }
 
 /* Retire current connection cards, preserving their Event History records and
@@ -573,7 +644,8 @@ static bool notification_profile_equal(const notification_profile_identity_t *le
 void ui_toast_observe_profiles(const moonraker_state_t *active_state)
 {
     typedef struct {
-        bool configured, armed, online, candidate;
+        bool configured, armed, online, candidate, losing;
+        uint32_t loss_since;
         uint32_t candidate_since;
         notification_profile_identity_t identity;
     } profile_observer_t;
@@ -606,17 +678,18 @@ void ui_toast_observe_profiles(const moonraker_state_t *active_state)
             snprintf(last->identity.api_key, sizeof(last->identity.api_key), "%s", profile->api_key);
         }
         if (index == active) {
+            last->losing = false;
             /* Active notifications already have their own debounce. Keep the
              * confirmed baseline when that printer later becomes inactive. */
             if (active_state) {
-                bool candidate = active_state->moonraker_ok && active_state->live_data_ok;
+                bool candidate = printer_reachable(active_state);
                 if (selected || candidate != last->candidate) {
                     last->candidate = candidate;
                     last->candidate_since = now;
                 }
                 /* A selection/bootstrap gap is not a confirmed loss. Match
-                 * the active connection observer's three-second debounce. */
-                if ((uint32_t)(now - last->candidate_since) >= 3000u) {
+                 * the active connection observer's sustained-loss debounce. */
+                if ((uint32_t)(now - last->candidate_since) >= (candidate ? CONNECTION_RECOVERY_NOTICE_MS : CONNECTION_LOSS_NOTICE_MS)) {
                     if (candidate) last->armed = true;
                     if (last->armed) last->online = candidate;
                 }
@@ -625,13 +698,22 @@ void ui_toast_observe_profiles(const moonraker_state_t *active_state)
         }
         bool known = false;
         bool online = printer_profile_health_get(index, &known);
-        if (!known) continue; /* Verification is not confirmed loss. */
+        if (!known) {
+            last->losing = false;
+            continue; /* Verification breaks continuous evidence of loss. */
+        }
+        if (online) last->losing = false;
         if (online && !printer_profile_health_live_state_fresh(index, 5000000LL)) continue;
         if (!last->armed) {
             if (online) last->armed = last->online = true;
             continue; /* Initial discovery is not a disconnect/recovery event. */
         }
         if (last->online == online) continue;
+        if (!online) {
+            if (!last->losing) { last->losing = true; last->loss_since = now; }
+            if ((uint32_t)(now - last->loss_since) < CONNECTION_LOSS_NOTICE_MS) continue;
+        }
+        last->losing = false;
         last->online = online;
         /* Retire this printer's previous connection card, including one
          * captured before the operator selected another active profile. */

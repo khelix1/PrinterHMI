@@ -60,6 +60,7 @@ void host_printer_refresh(void){
  .motion_button=printer_actions.motion,.home_button=printer_home_btn,.pause_button=printer_pause_btn,.resume_button=printer_resume_btn,.object_button=printer_object_btn,.cancel_button=printer_cancel_btn,
  .info_cards=&printer_info_cards,.banner_text="Simulated printer",.printer_state=m.printer_state,.printer_file=m.printer_file,.selected_preview_file=selected_file,
  .live_velocity=m.live_velocity,.live_flow=m.live_flow,.speed_factor=m.speed_factor,.flow_factor=m.flow_factor,.current_layer=m.current_layer,.total_layer=m.total_layer,.progress=m.progress,
+ .hotends=m.hotends,.hotend_count=m.hotend_count,
  .nozzle_temp=m.nozzle_temp,.nozzle_target=m.nozzle_target,.bed_temp=m.bed_temp,.bed_target=m.bed_target,.part_fan_speed=m.part_fan_speed,.print_duration=m.print_duration,
  .moonraker_ok=m.moonraker_ok,.live_data_ok=m.live_data_ok,.exclude_objects_available=moonraker_exclude_objects_available(),.capabilities=&m.capabilities,.filament_state=&filament};
  printer_ui_controller_refresh(&ctx);

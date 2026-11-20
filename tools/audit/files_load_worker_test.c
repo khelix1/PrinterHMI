@@ -45,14 +45,16 @@ static void run_worker(void){assert(worker_arg);void *arg=worker_arg;worker_arg=
 static void poll(void){assert(s_load_timer);files_load_poll(s_load_timer);}
 static void load(const char *host){files_page_controller_reload(true,true,true,host,7125,"key");}
 int main(void){
- lv_init();load("offline");assert(http_calls==0 && delays==0 && s_load_busy);success=false;run_worker();assert(http_calls==3 && delays==360 && rendered==0);poll();assert(!s_load_busy && !s_load_timer && strstr(status,"TIMEOUT"));
+ lv_init();load("offline");assert(http_calls==0 && delays==0 && s_load_busy);success=false;run_worker();assert(http_calls==3 && delays==360 && rendered==0);poll();assert(!s_load_busy && !s_load_timer && strstr(status,"did not complete"));
  success=true;load("hidden");run_worker();page=NULL;poll();assert(!rendered && !preview_begin);page=(void*)2;
  load("old");generation=2;load("new");load("newest");assert(s_pending_load && s_load_busy);unsigned before=http_calls;run_worker();assert(http_calls==before);poll();assert(worker_arg && rendered==0);run_worker();poll();assert(rendered==1 && preview_begin==1 && strcmp(last_path,"newest.gcode")==0);
  load("detail");run_worker();detail=true;poll();assert(result && rendered==1);detail=false;poll();assert(!result && rendered==2);
  detail=embedded=true;load("inspector");run_worker();poll();assert(!result && rendered==3);detail=embedded=false;
  load("stale");run_worker();files_page_controller_reload(true,false,true,"offline",7125,"key");poll();assert(rendered==3 && strstr(status,"offline"));
- task_fail=true;load("failed");assert(!s_load_busy && strstr(status,"worker"));poll();task_fail=false;
- body_fail=true;load("no_memory");run_worker();poll();assert(strstr(status,"allocate"));body_fail=false;
+ task_fail=true;load("failed");assert(!s_load_busy && !s_load_timer && !worker_arg && strstr(status,"Tap Refresh"));task_fail=false;
+ load("first");load("queued");run_worker();task_fail=true;poll();task_fail=false;
+ assert(!s_load_busy&&!s_load_timer&&!s_pending_load&&!worker_arg&&strstr(status,"Tap Refresh"));
+ body_fail=true;load("no_memory");run_worker();poll();assert(strstr(status,"Not enough memory"));body_fail=false;
  load("pending");unsigned rows=rendered;files_page_controller_set_search("unlikely");files_page_controller_cycle_sort();assert(rendered==rows&&strstr(status,"Loading"));run_worker();poll();assert(strstr(status,"current search"));
  empty_list=true;load("empty");run_worker();poll();assert(!s_entry_count&&s_index_ready&&strstr(status,"current search"));files_page_controller_set_search("");assert(strstr(status,"gcodes root"));files_page_controller_open_folder("subfolder");assert(strstr(status,"this folder"));empty_list=false;
  invalid_list=true;unsigned valid_previews=preview_begin;load("invalid");run_worker();poll();assert(!s_index_ready&&preview_begin==valid_previews&&strstr(status,"Invalid file list"));invalid_list=false;

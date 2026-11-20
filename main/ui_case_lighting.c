@@ -37,6 +37,7 @@ static void close_cb(lv_event_t *event){(void)event;ui_case_lighting_close();}
 static const char *ready(case_lighting_snapshot_t *light)
 {
     if(s_owner!=moonraker_config_generation())return "Printer changed. Close and reopen Lighting.";
+    if(!s_timer)return "Lighting refresh unavailable. Close and reopen Lighting.";
     moonraker_state_t state;moonraker_state_snapshot(&state);
     const char *reason=printer_connection_reason(&state);if(*reason)return reason;
     if(!moonraker_live_websocket_subscribed())return "Waiting for the live printer connection...";
@@ -59,7 +60,7 @@ static void refresh(lv_timer_t *timer)
     case_lighting_snapshot_t light={0};const char *reason=ready(&light);
     if(*reason||!light.pwm||light.session!=s_drag_session)s_dragging=false;
     enabled(s_switch,!*reason);enabled(s_slider,!*reason&&light.pwm);
-    if(light.known){
+    if(light.known && light.generation==s_owner){
         int value=(int)lround(light.value*100);
         bool on=light.value>0;
         if(on)s_last_on=value>0?value:1;
@@ -68,6 +69,10 @@ static void refresh(lv_timer_t *timer)
         if(s_switch){if(on)lv_obj_add_state(s_switch,LV_STATE_CHECKED);else lv_obj_remove_state(s_switch,LV_STATE_CHECKED);}
         if(s_slider&&!lv_obj_has_state(s_slider,LV_STATE_PRESSED))lv_slider_set_value(s_slider,value,LV_ANIM_OFF);
         if(s_value&&(!s_slider||!lv_obj_has_state(s_slider,LV_STATE_PRESSED))){char text[48];if(on&&!value)snprintf(text,sizeof(text),"Brightness: <1%%");else snprintf(text,sizeof(text),"Brightness: %d%%",value);ui_value_set_text(s_value,text);}
+    } else {
+        if(s_switch)lv_obj_remove_state(s_switch,LV_STATE_CHECKED);
+        if(s_slider&&!lv_obj_has_state(s_slider,LV_STATE_PRESSED))lv_slider_set_value(s_slider,0,LV_ANIM_OFF);
+        ui_value_set_text(s_value,"Brightness: --");
     }
     if(s_status)ui_value_set_text(s_status,*reason?reason:light.error[0]?light.error:light.pwm?"Live case lighting":"On/off output - brightness requires PWM.");
 }
@@ -86,7 +91,7 @@ static void apply(int percent)
 }
 static void switch_cb(lv_event_t *event)
 {
-    if(lv_event_get_target_obj(event)!=s_switch||lv_obj_has_state(s_switch,LV_STATE_DISABLED))return;
+    if(!s_switch||lv_event_get_target_obj(event)!=s_switch||lv_obj_has_state(s_switch,LV_STATE_DISABLED))return;
     case_lighting_snapshot_t light={0};
     if (*ready(&light)) { refresh(NULL); return; }
     apply(lv_obj_has_state(s_switch,LV_STATE_CHECKED)?(light.pwm?s_last_on:100):0);

@@ -58,7 +58,9 @@ void moonraker_state_snapshot(moonraker_state_t *out){*out=snapshot;}
 void moonraker_filament_state_snapshot(moonraker_filament_state_t *out){memset(out,0,sizeof(*out));}
 void ui_dashboard_set_banner(const char *s,const char*f,const char*e,const char*p){snprintf(eta_text,sizeof(eta_text),"%s",e);snprintf(banner,sizeof(banner),"%s",s);snprintf(file_text,sizeof(file_text),"%s",f);snprintf(progress_text,sizeof(progress_text),"%s",p);}
 void ui_dashboard_set_machine(const char*n,const char*b,const char*c,const char*h,const char*s,const char*f,const char*fan){const char*values[]={n,b,c,h,s,f,fan};for(unsigned i=0;i<7;i++)snprintf(readings[i],sizeof(readings[i]),"%s",values[i]);}
-void ui_dashboard_set_active_hotend(const char*n,const char*v){(void)n;assert(!strcmp(v,readings[0]));}
+void ui_dashboard_set_hotends(const moonraker_hotend_t *hotends,size_t count,bool online){
+ assert(hotends&&count==snapshot.hotend_count&&online==(snapshot.moonraker_ok&&snapshot.live_data_ok));
+}
 void ui_dashboard_set_machine_connection(bool online){machine_online=online;}
 void ui_dashboard_set_filament(bool online,const moonraker_filament_state_t*s){assert(s);filament_online=online;}
 int main(void){lv_init();
@@ -81,6 +83,7 @@ int main(void){lv_init();
   }
   snapshot.moonraker_ok=snapshot.live_data_ok=true;strcpy(snapshot.printer_state,"printing");
   dashboard_live_controller_push_banner(true);dashboard_live_controller_push_machine();
+  assert(!strcmp(readings[0],"205.0/210.0°")&&!strcmp(readings[1],"60.0/60.0°"));
   assert(strstr(banner,"PRINTING")&&strstr(readings[0],"205")&&machine_online&&filament_online&&!strcmp(progress_text,"72%"));
   assert(!strcmp(printer_controller_machine_banner_text("printing",true,true),"MACHINE PRINTING"));
   strcpy(snapshot.printer_state,"complete");snapshot.progress=-1;

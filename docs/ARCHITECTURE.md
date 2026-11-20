@@ -2,7 +2,7 @@
 
 ## Scope
 
-PrinterHMI v7.3.115-dev is an ESP-IDF application for an ESP32-P4 operator panel.
+PrinterHMI v7.3.164-dev is an ESP-IDF application for an ESP32-P4 operator panel.
 It presents an LVGL interface and connects through an ESP32-C6 hosted network
 coprocessor to as many as four Klipper/Moonraker printers.
 
@@ -85,7 +85,7 @@ secure-only. This does not make multi-key persistence transactional.
 
 ### LVGL page refresh and layout
 
-Console retains up to 64 labels, Macros up to 64 buttons, and Devices up to
+Console retains up to 256 labels, Macros up to 64 buttons, and Devices up to
 12 cards while each page is open. Refreshes rebind and hide slots rather than
 cleaning and rebuilding the list. The pointer tables use permanent PSRAM-first
 contexts; page teardown clears references before a later reopen.

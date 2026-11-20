@@ -18,10 +18,8 @@ void ui_machine_status_set_connection(
     lv_obj_t *panel,
     bool online);
 
-void ui_machine_status_set_active_hotend(
-    lv_obj_t *panel,
-    const char *name,
-    const char *value);
+void ui_machine_status_set_hotends(lv_obj_t *panel,
+    const moonraker_hotend_t *hotends, size_t count, bool online);
 
 void ui_machine_status_set(
     lv_obj_t *panel,

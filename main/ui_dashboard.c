@@ -1,4 +1,5 @@
 #include "ui_dashboard.h"
+#include "ui_temperature_reading.h"
 #include "ui_text.h"
 #ifdef PRINTERHMI_DEMO_RUNTIME
 #include "demo_mode.h"
@@ -58,6 +59,7 @@ static lv_obj_t *dash32_camera_toggle = NULL;
 static lv_obj_t *dash32_camera_status = NULL;
 static lv_timer_t *dash32_camera_timer = NULL;
 static uint8_t *dash32_camera_frame = NULL;
+static uint32_t dash32_camera_frame_tick;
 static lv_image_dsc_t dash32_camera_dsc;
 static bool dash32_camera_mode = false;
 static lv_obj_t *dash32_fullscreen_origin;
@@ -125,7 +127,7 @@ static void dashboard_camera_raise_layers(void)
 static void dashboard_camera_poll_cb(lv_timer_t *timer)
 {
     dashboard_camera_context_t context=dashboard_camera_context();
-    if(dash32_camera_polling || !dashboard_camera_current(&context) || (timer && timer!=dash32_camera_timer))return;
+    if(!dash32_camera_timer || dash32_camera_polling || !dashboard_camera_current(&context) || (timer && timer!=dash32_camera_timer))return;
     dash32_camera_polling=true;uint8_t *pixels=NULL;
     if(dash32_camera_generation!=context.generation){
         dash32_camera_generation=context.generation;
@@ -148,6 +150,7 @@ static void dashboard_camera_poll_cb(lv_timer_t *timer)
             dashboard_camera_release_frame();
             if(!dashboard_camera_current(&context))goto finished;
             dash32_camera_frame=pixels;pixels=NULL;
+            dash32_camera_frame_tick=lv_tick_get();
             dash32_camera_dsc.header.magic=LV_IMAGE_HEADER_MAGIC;
             dash32_camera_dsc.header.cf=LV_COLOR_FORMAT_RGB565;
             dash32_camera_dsc.header.w=width;dash32_camera_dsc.header.h=height;
@@ -175,13 +178,25 @@ static void dashboard_camera_poll_cb(lv_timer_t *timer)
         }
         if(!dashboard_camera_current(&context))goto finished;
     }
+    /* Never keep a frozen frame labeled live while the stream is stalled. */
+    if(dash32_camera_frame && lv_tick_elaps(dash32_camera_frame_tick)>2000u){
+        dashboard_camera_release_frame();
+        if(!dashboard_camera_current(&context))goto finished;
+        dashboard_camera_set_status("Camera unavailable");
+        if(!dashboard_camera_current(&context))goto finished;
+    }
     bool busy=camera_stream_busy();
     if(!dashboard_camera_current(&context) || busy)goto finished;
     char url[192];bool configured=dashboard_camera_url(&context,url,sizeof(url));
     if(!dashboard_camera_current(&context))goto finished;
-    if(!configured){dashboard_camera_set_status("No camera configured");goto finished;}
+    if(!configured){
+        dashboard_camera_release_frame();
+        if(dashboard_camera_current(&context))dashboard_camera_set_status("No camera configured");
+        goto finished;
+    }
     bool started=camera_stream_start(url);
-    if(dashboard_camera_current(&context) && !started)dashboard_camera_set_status("Camera connecting...");
+    if(dashboard_camera_current(&context) && !started && !dash32_camera_frame)
+        dashboard_camera_set_status("Camera unavailable");
 finished:
     heap_caps_free(pixels);dash32_camera_polling=false;
 }
@@ -201,6 +216,13 @@ static void dashboard_camera_mode_set(bool enabled)
     }
     dash32_camera_generation=context.generation;
     if(!dash32_camera_timer)dash32_camera_timer=lv_timer_create(dashboard_camera_poll_cb,100,NULL);
+    if (!dash32_camera_timer) {
+        dashboard_camera_set_status("Camera unavailable. Tap Retry.");
+        if (dashboard_camera_current(&context)) {
+            ui_value_set_text(lv_obj_get_child(dash32_camera_toggle,0),ui_text("Retry"));
+        }
+        return;
+    }
     dashboard_camera_set_status("Connecting camera...");
     if(dashboard_camera_current(&context))dashboard_camera_poll_cb(NULL);
 }
@@ -246,7 +268,7 @@ static bool dashboard_camera_action(lv_event_t *event,lv_obj_t *object)
 static void dashboard_camera_toggle_cb(lv_event_t *event)
 {
     if(!dashboard_camera_action(event,dash32_camera_toggle))return;
-    dash32_camera_dispatching=true;dashboard_camera_mode_set(!dash32_camera_mode);dash32_camera_dispatching=false;
+    dash32_camera_dispatching=true;dashboard_camera_mode_set(!dash32_camera_mode || !dash32_camera_timer);dash32_camera_dispatching=false;
 }
 static void dashboard_camera_fullscreen_closed(void)
 {
@@ -262,7 +284,7 @@ static void dashboard_camera_fullscreen_closed(void)
 }
 static void dashboard_camera_open_fullscreen_cb(lv_event_t *event)
 {
-    if(!dashboard_camera_action(event,dash32_camera_image) || !dash32_camera_mode)return;
+    if(!dashboard_camera_action(event,dash32_camera_image) || !dash32_camera_mode || !dash32_camera_timer)return;
     dash32_camera_dispatching=true;
     lv_obj_t *root=dash32_root;uint32_t epoch=dash32_camera_epoch;
     dashboard_camera_mode_set(false);
@@ -390,8 +412,8 @@ void ui_dashboard_create(void)
 
     ui_machine_status_set(
         dash32_machine,
-        "-- / -- C",
-        "-- / -- C",
+        UI_TEMPERATURE_PAIR_UNKNOWN,
+        UI_TEMPERATURE_PAIR_UNKNOWN,
         "-- C",
         "-- %RH",
         "100%",
@@ -468,18 +490,10 @@ void ui_dashboard_set_machine_connection(
 }
 
 
-void ui_dashboard_set_active_hotend(
-    const char *name,
-    const char *value)
+void ui_dashboard_set_hotends(const moonraker_hotend_t *hotends, size_t count, bool online)
 {
-    if (!dash32_machine) return;
-
-    ui_machine_status_set_active_hotend(
-        dash32_machine,
-        name,
-        value);
+    ui_machine_status_set_hotends(dash32_machine, hotends, count, online);
 }
-
 
 void ui_dashboard_set_machine(
     const char *nozzle,

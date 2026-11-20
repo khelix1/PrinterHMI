@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "custom_theme.h"
+#include "lvgl.h"
 #include "moonraker.h"
 #include "calibration_session_controller.h"
 #include "motion_diagnostics_controller.h"
@@ -46,13 +47,26 @@ static void setup(void){generation++;accept=ws=true;mode=snapshot_mode=0;
 #endif
 now+=3000000;live=(moonraker_state_t){.moonraker_ok=true,.live_data_ok=true};strcpy(live.printer_state,"ready");strcpy(live.homed_axes,"xyz");motion_sample=(motion_diagnostics_snapshot_t){.owner_generation=generation,.discovered=true};for(unsigned i=0;i<4;i++){motion_sample.limit_valid[i]=true;motion_sample.limits[i]=100;}}
 static void flush(lv_display_t*d,const lv_area_t*a,uint8_t*p){(void)a;(void)p;lv_display_flush_ready(d);}
+#if defined(TEST_PROBE) || defined(TEST_MOTION)
+static bool reject_diag_timer;
+static lv_timer_t *diag_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_diag_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create diag_test_timer
+#endif
 #if defined(TEST_PROBE)
 #include "ui_probe_accuracy.c"
+#undef lv_timer_create
 static lv_obj_t*card;
 static bool ready(const char*w){(void)w;unsigned m=ready_mode;ready_mode=0;if(m==1)run_cb(NULL);if(m==2)ui_probe_accuracy_hide();if(m==3)generation++;return true;}
 static bool send(const char*c){sends++;snprintf(command,sizeof(command),"%s",c);unsigned m=mode;mode=0;if(m==1)run_cb(NULL);if(m==2){close_popup();open_cb(NULL);}if(m==3)lv_obj_delete(s_popup);if(m==4)generation++;if(m==5){session.kind=CALIBRATION_SESSION_PID;session.generation++;}return accept;}
 static void reset(void){ui_probe_accuracy_hide();if(card)lv_obj_delete(card);setup();s_accepted=false;card=lv_obj_create(lv_screen_active());ui_probe_accuracy_create(card,send,ready);ui_probe_accuracy_refresh(true);open_cb(NULL);assert(s_popup);}
 static void checks(void){
+ reject_diag_timer=true;reset();reject_diag_timer=false;
+ unsigned rejected_before=sends;
+ assert(!s_status_timer&&strstr(lv_label_get_text(s_status),"Live refresh unavailable"));
+ assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(sends==rejected_before);
  reset();unsigned baseline=timers()-1,before=sends,r=results;lv_dropdown_set_selected(s_samples,2);accept=false;click(s_run);assert(sends==before+1&&s_popup&&lv_dropdown_get_selected(s_samples)==2&&strstr(lv_label_get_text(s_status),"not accepted"));accept=true;click(s_run);assert(sends==before+2&&results==r+1&&!strcmp(command,"PROBE_ACCURACY SAMPLES=20")&&!s_popup&&timers()==baseline);
  open_cb(NULL);assert(lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(sends==before+2);lv_tick_inc(5000);refresh_status(NULL);assert(!lv_obj_has_state(s_run,LV_STATE_DISABLED));
  for(unsigned m=1;m<=5;m++){reset();before=sends;r=results;unsigned e=errors;mode=m;accept=m!=5;click(s_run);assert(sends==before+1&&!s_dispatching);if(m==1)assert(results==r+1);else assert(results==r);if(m==5)assert(errors==e&&session.kind==CALIBRATION_SESSION_PID);if(m==2||m==3){open_cb(NULL);assert(s_popup&&lv_obj_has_state(s_run,LV_STATE_DISABLED));run_cb(NULL);assert(sends==before+1);}}
@@ -82,11 +96,21 @@ static void checks(void){
 }
 #elif defined(TEST_MOTION)
 #include "ui_motion_diagnostics.c"
+#undef lv_timer_create
 #include "motion_calculation.inc"
 static lv_obj_t*card;
 void motion_diagnostics_controller_snapshot(motion_diagnostics_snapshot_t*out){*out=motion_sample;unsigned m=snapshot_mode;snapshot_mode=0;if(m==1)close_popup();if(m==2){close_popup();show_view(VIEW_DISTANCE);}if(m==3)generation++;}
 static void reset(void){close_popup();if(card)lv_obj_delete(card);setup();card=lv_obj_create(lv_screen_active());ui_motion_diagnostics_create(card);}
 static void checks(void){
+ reset();unsigned clean=timers();
+ for(unsigned view=0;view<3;view++){
+  reject_diag_timer=true;click(s_actions[view]);reject_diag_timer=false;
+  assert(s->popup&&!s->timer);
+  lv_obj_t *label=view==1?s->reference:s->status;
+  assert(strstr(lv_label_get_text(label),"unavailable"));
+  if(view==1){calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"40.000000"));}
+  close_popup();assert(timers()==clean);
+ }
  reset();unsigned baseline=timers();click(s_actions[1]);assert(s->popup&&s->pitch&&s->timer);click(s->pitch);assert(s->editor);lv_textarea_set_text(s->editor_value,"2.5");editor_done_cb(NULL);assert(!s->editor&&!strcmp(lv_textarea_get_text(s->pitch),"2.5"));calculate_cb(NULL);assert(strstr(lv_label_get_text(s->result),"50.000000"));
  click(s->pitch);lv_textarea_set_text(s->editor_value,"bad");editor_done_cb(NULL);assert(s->editor&&lv_label_get_text(s->editor_feedback)[0]);lv_obj_delete(s->pitch);assert(!s->pitch&&!s->editor&&!s->editor_target);calculate_cb(NULL);close_popup();assert(timers()==baseline);
  reset();click(s_actions[1]);click(s->count);lv_obj_delete(s->editor_value);assert(!s->editor_value);editor_done_cb(NULL);close_popup();assert(timers()==baseline);

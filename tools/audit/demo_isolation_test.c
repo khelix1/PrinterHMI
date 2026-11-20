@@ -11,6 +11,7 @@
 #include "demo_calibration.h"
 #include "calibration_session_controller.h"
 #include "calibration_capability_controller.h"
+#include "cJSON.h"
 #include "console_controller.h"
 #include "camera_catalog_controller.h"
 #include "demo_mode.h"
@@ -454,6 +455,10 @@ static void calibration(void) {
   calibration_session_controller_begin(CALIBRATION_SESSION_INPUT_SHAPER,console_controller_latest_sequence());
   assert(demo_calibration_send("SHAPER_CALIBRATE"));calibration_session_controller_poll();calibration_session_controller_snapshot(&session);
   assert(session.completed && session.save_available && strstr(session.results,"shaper_type_x"));
+  calibration_session_controller_begin(CALIBRATION_SESSION_INPUT_SHAPER,console_controller_latest_sequence());
+  assert(demo_calibration_send("SHAPER_CALIBRATE AXIS=Y"));
+  calibration_session_controller_poll();calibration_session_controller_snapshot(&session);
+  assert(session.completed && session.save_available && strstr(session.results,"shaper_type_y") && !strstr(session.results,"shaper_type_x"));
   calibration_session_controller_begin(CALIBRATION_SESSION_RESONANCE_TEST,console_controller_latest_sequence());
   assert(!demo_calibration_send("TEST_RESONANCES AXIS=Z"));assert(demo_calibration_send("TEST_RESONANCES AXIS=X"));
   calibration_session_controller_poll();calibration_session_controller_snapshot(&session);assert(!session.save_available && strstr(session.results,"resonance data written"));
@@ -486,6 +491,12 @@ static void calibration(void) {
   calibration_session_controller_begin(CALIBRATION_SESSION_CUSTOM,console_controller_latest_sequence());
   assert(demo_calibration_send("PID_BED"));calibration_session_controller_poll();calibration_session_controller_snapshot(&session);
   assert(session.completed && session.save_available && published.bed_target==60);
+  cJSON *commands=cJSON_Parse("{\"gcode\":{\"commands\":{\"SHAPER_CALIBRATE\":{}}}}");
+  assert(commands && calibration_capability_controller_merge_status(commands));
+  cJSON_Delete(commands);
+  calibration_capability_controller_snapshot(&caps);assert(caps.shaper_calibrate);
+  calibration_capability_controller_reset();
+  calibration_capability_controller_snapshot(&caps);assert(!caps.shaper_calibrate);
   puts("PASS demo calibration capabilities, results, safety guards and profile switching");
 }
 static void capacity(void) {

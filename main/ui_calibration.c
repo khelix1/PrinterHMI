@@ -228,7 +228,7 @@ static void refresh_capabilities(void)
     calibration_capability_controller_snapshot(
         &capabilities);
 
-    if (!capabilities.discovered) {
+    if (!capabilities.discovered && !capabilities.shaper_calibrate) {
         lv_label_set_text(
             s_calibration->banner_status,
             ui_text("Checking calibration tools"));
@@ -291,10 +291,7 @@ static void refresh_capabilities(void)
             false,
             false);
 
-        ui_calibration_motion_refresh(
-            false,
-            false,
-            false);
+        ui_calibration_motion_refresh(false, false, false, false);
 
         ui_probe_accuracy_refresh(false);
 
@@ -446,13 +443,14 @@ static void refresh_capabilities(void)
     }
 
     ui_calibration_layout_set_card(&s_calibration->motion,
-        "Limits / axis distance / TMC status", 3 + (capabilities.input_shaper ? 1 : 0) +
+        "Limits / axis distance / TMC status", 3 + (capabilities.input_shaper || capabilities.shaper_calibrate ? 1 : 0) +
         (capabilities.accelerometer ? 1 : 0), 0);
 
     ui_calibration_motion_refresh(
-        true,
+        capabilities.discovered,
         capabilities.input_shaper,
-        capabilities.accelerometer);
+        capabilities.accelerometer,
+        capabilities.shaper_calibrate);
 
     char thermal[176] = "";
     size_t thermal_count = 0;
@@ -674,88 +672,64 @@ static void close_probe_popup_cb(
 }
 
 
-static void send_probe_step_cb(
-    lv_event_t *event)
+static bool manual_probe_send(const char *workflow, const char *command,
+                              const char *retry_message)
 {
-    if (!s_calibration || !event) {
-        return;
-    }
+    if (!command || !command[0] || !s_calibration || !s_calibration->root ||
+        s_calibration_dispatching || !ui_calibration_manual_probe_is_visible()) return false;
 
-    const char *command =
-        (const char *)lv_event_get_user_data(event);
-
-    if (!command || !command[0] ||
-        !calibration_action_ready("Probe/Z calibration")) {
-        return;
-    }
+    uint32_t epoch = s_calibration_epoch, owner = moonraker_config_generation();
+    ui_calibration_send_gcode_cb_t send = s_calibration->send_gcode;
+    s_calibration_dispatching = true;
+    bool sent = false;
+    if (!send || !calibration_action_ready(workflow)) goto done;
+    if (epoch != s_calibration_epoch || owner != moonraker_config_generation() ||
+        !ui_calibration_manual_probe_is_visible()) goto done;
 
     console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
+    if (epoch != s_calibration_epoch || owner != moonraker_config_generation() ||
+        !ui_calibration_manual_probe_is_visible() || !calibration_action_ready(workflow)) goto done;
+    if (epoch != s_calibration_epoch || owner != moonraker_config_generation() ||
+        !ui_calibration_manual_probe_is_visible()) goto done;
 
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept the TESTZ command.");
-        ui_cal_dialog_notice(
-            UI_STATUS_DANGER,
-            "Probe move failed",
-            "Moonraker did not accept the TESTZ command.");
-    }
+    sent = send(command);
+    if (epoch != s_calibration_epoch || owner != moonraker_config_generation() ||
+        !ui_calibration_manual_probe_is_visible()) sent = false;
+    else if (!sent) ui_calibration_manual_probe_set_status(retry_message);
+
+done:
+    s_calibration_dispatching = false;
+    return sent;
 }
 
-
-static void abort_probe_calibration_cb(
-    lv_event_t *event)
+static void send_probe_step_cb(lv_event_t *event)
 {
-    (void)event;
+    if (event && manual_probe_send("Probe/Z calibration", lv_event_get_user_data(event),
+        "TESTZ was not accepted. Check the printer before retrying."))
+        ui_calibration_manual_probe_set_status("Move requested. Wait for motion to stop before adjusting again.");
+}
 
-    if (!s_calibration) {
-        return;
-    }
-
-    static const char command[] = "ABORT";
-    console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
+static void finish_manual_abort(const char *title)
+{
     ui_calibration_manual_probe_hide();
     ui_calibration_results_close();
     calibration_session_controller_reset();
-
-    ui_cal_dialog_notice(
-        sent ? UI_STATUS_OK : UI_STATUS_DANGER,
-        sent ? "Probe abort requested" : "Abort failed",
-        sent
-            ? "No calibration values were saved."
-            : "Moonraker did not accept ABORT.");
+    ui_cal_dialog_notice(UI_STATUS_OK, title, "No calibration values were saved.");
 }
 
-
-static void accept_probe_calibration_cb(
-    lv_event_t *event)
+static void abort_probe_calibration_cb(lv_event_t *event)
 {
-    (void)event;
+    if (event && manual_probe_send("Probe/Z calibration", "ABORT",
+        "ABORT was not accepted. This calibration may still be active. Retry or check Console."))
+        finish_manual_abort("Probe abort requested");
+}
 
-    if (!s_calibration ||
-        !calibration_action_ready(
-            "Probe/Z calibration")) {
-        return;
-    }
-
-    static const char command[] = "ACCEPT";
-    console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
+static void accept_probe_calibration_cb(lv_event_t *event)
+{
+    if (!event || !manual_probe_send("Probe/Z calibration", "ACCEPT",
+        "ACCEPT was not accepted. Your calibration is still open. Retry or check Console.")) return;
 
     ui_calibration_manual_probe_hide();
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept ACCEPT.");
-    }
-
     ui_calibration_results_show(
         "Probe / Z results",
         "Waiting for Klipper to accept the measured Z offset.\n\n"
@@ -922,88 +896,24 @@ static void close_axis_twist_popup_cb(
 }
 
 
-static void send_axis_twist_step_cb(
-    lv_event_t *event)
+static void send_axis_twist_step_cb(lv_event_t *event)
 {
-    if (!s_calibration || !event) {
-        return;
-    }
-
-    const char *command =
-        (const char *)lv_event_get_user_data(event);
-
-    if (!command || !command[0] ||
-        !calibration_action_ready(
-            "Axis Twist calibration")) {
-        return;
-    }
-
-    console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept the Axis Twist TESTZ command.");
-        ui_cal_dialog_notice(
-            UI_STATUS_DANGER,
-            "Axis twist move failed",
-            "Moonraker did not accept the TESTZ command.");
-    }
+    if (event && manual_probe_send("Axis Twist calibration", lv_event_get_user_data(event),
+        "TESTZ was not accepted. Check the printer before retrying."))
+        ui_calibration_manual_probe_set_status("Move requested. Wait for motion to stop before adjusting again.");
 }
 
-
-static void abort_axis_twist_calibration_cb(
-    lv_event_t *event)
+static void abort_axis_twist_calibration_cb(lv_event_t *event)
 {
-    (void)event;
-
-    if (!s_calibration) {
-        return;
-    }
-
-    static const char command[] = "ABORT";
-    console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
-
-    ui_calibration_manual_probe_hide();
-    ui_calibration_results_close();
-    calibration_session_controller_reset();
-
-    ui_cal_dialog_notice(
-        sent ? UI_STATUS_OK : UI_STATUS_DANGER,
-        sent ? "Axis twist abort requested" : "Abort failed",
-        sent
-            ? "No Axis Twist values were saved."
-            : "Moonraker did not accept ABORT.");
+    if (event && manual_probe_send("Axis Twist calibration", "ABORT",
+        "ABORT was not accepted. This calibration may still be active. Retry or check Console."))
+        finish_manual_abort("Axis twist abort requested");
 }
 
-
-static void accept_axis_twist_point_cb(
-    lv_event_t *event)
+static void accept_axis_twist_point_cb(lv_event_t *event)
 {
-    (void)event;
-
-    if (!s_calibration ||
-        !calibration_action_ready(
-            "Axis Twist calibration")) {
-        return;
-    }
-
-    static const char command[] = "ACCEPT";
-    console_controller_add_command(command);
-    bool sent =
-        s_calibration->send_gcode &&
-        s_calibration->send_gcode(command);
-
-    if (!sent) {
-        calibration_session_controller_mark_error(
-            "Moonraker did not accept the Axis Twist sample.");
-        return;
-    }
+    if (!event || !manual_probe_send("Axis Twist calibration", "ACCEPT",
+        "ACCEPT was not accepted. This sample is still open. Retry or check Console.")) return;
 
     ui_calibration_manual_probe_set_status(
         "Point accepted. Klipper is moving to the next sample.\n"

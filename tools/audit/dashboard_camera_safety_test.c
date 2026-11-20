@@ -5,7 +5,14 @@
 #include "lvgl.h"
 static void source_set(lv_obj_t *,const void *);
 #define lv_image_set_src source_set
+static bool reject_poll_timer;
+static lv_timer_t *test_poll_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_poll_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create test_poll_timer
 #include "ui_dashboard.c"
+#undef lv_timer_create
 #undef lv_image_set_src
 #include "custom_theme.h"
 static unsigned allocated,freed,takes,starts,stops,fullscreen;
@@ -54,9 +61,28 @@ int main(void)
  for(unsigned theme=0;theme<5;theme++)for(unsigned density=0;density<3;density++)for(unsigned large=0;large<2;large++){
   ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});unsigned baseline=timers();build();configured=true;busy=true;
   unsigned before=starts;lv_obj_add_state(dash32_camera_toggle,LV_STATE_DISABLED);lv_obj_send_event(dash32_camera_toggle,LV_EVENT_CLICKED,NULL);assert(!dash32_camera_mode&&starts==before);lv_obj_remove_state(dash32_camera_toggle,LV_STATE_DISABLED);
+  reject_poll_timer=true;busy=false;unsigned before_takes=takes,before_fullscreen=fullscreen;
+  lv_obj_send_event(dash32_camera_toggle,LV_EVENT_CLICKED,NULL);
+  assert(dash32_camera_mode&&!dash32_camera_timer&&starts==before&&takes==before_takes);
+  assert(!strcmp(lv_label_get_text(lv_obj_get_child(dash32_camera_toggle,0)),"Retry"));
+  dashboard_camera_poll_cb(NULL);lv_obj_send_event(dash32_camera_image,LV_EVENT_CLICKED,NULL);
+  assert(starts==before&&takes==before_takes&&fullscreen==before_fullscreen);
+  reject_poll_timer=false;lv_obj_send_event(dash32_camera_toggle,LV_EVENT_CLICKED,NULL);
+  assert(dash32_camera_timer&&starts==before+1&&busy);dashboard_camera_mode_set(false);busy=true;
   lv_obj_t *fake=lv_button_create(dash32_root);lv_obj_add_event_cb(fake,dashboard_camera_toggle_cb,LV_EVENT_CLICKED,NULL);lv_obj_send_event(fake,LV_EVENT_CLICKED,NULL);assert(!dash32_camera_mode);lv_obj_delete(fake);
   dashboard_camera_mode_set(true);offer(3,2,12);unsigned reads=takes;lv_timer_t*other=lv_timer_create(dashboard_camera_poll_cb,60000,NULL);dashboard_camera_poll_cb(other);assert(takes==reads);lv_timer_delete(other);
   take_hook=nested;dashboard_camera_poll_cb(dash32_camera_timer);assert(dash32_camera_frame&&takes==reads+1);
+  lv_tick_inc(2000);dashboard_camera_poll_cb(NULL);assert(dash32_camera_frame);
+  lv_tick_inc(1);dashboard_camera_poll_cb(NULL);
+  assert(!dash32_camera_frame&&!lv_image_get_src(dash32_camera_image));
+  assert(!strcmp(lv_label_get_text(dash32_camera_status),"Camera unavailable"));
+  busy=false;start_ok=false;dashboard_camera_poll_cb(NULL);
+  assert(!strcmp(lv_label_get_text(dash32_camera_status),"Camera unavailable"));
+  start_ok=true;offer(3,2,12);dashboard_camera_poll_cb(NULL);
+  assert(dash32_camera_frame&&!strcmp(lv_label_get_text(dash32_camera_status),"LIVE CAMERA"));
+  configured=false;busy=false;dashboard_camera_poll_cb(NULL);
+  assert(!dash32_camera_frame&&!strcmp(lv_label_get_text(dash32_camera_status),"No camera configured"));
+  configured=true;
   for(unsigned invalid=0;invalid<4;invalid++){offer(3,2,12);if(invalid==0)offered_w=0;if(invalid==1)offered_h=65536;if(invalid==2)offered_w=-1;if(invalid==3)offered_size=2;dashboard_camera_poll_cb(NULL);assert(!dash32_camera_frame);}
   offer(3,2,12);take_hook=off;dashboard_camera_poll_cb(NULL);assert(!dash32_camera_frame&&!dash32_camera_mode&&!dash32_camera_timer);
   dashboard_camera_mode_set(true);offer(3,2,12);take_hook=rebuild;dashboard_camera_poll_cb(NULL);assert(dash32_root&&!dash32_camera_frame&&!dash32_camera_mode);

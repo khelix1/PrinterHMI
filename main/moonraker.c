@@ -286,7 +286,7 @@ void moonraker_state_set_connection(
 }
 
 
-void moonraker_state_expire_websocket(int64_t maximum_age_us)
+void moonraker_state_expire_websocket(int64_t maximum_age_us, bool transport_connected)
 {
     /* A status callback can publish after the runtime's earlier freshness probe.
      * Recheck its timestamp while holding the publication lock before expiring. */
@@ -297,7 +297,9 @@ void moonraker_state_expire_websocket(int64_t maximum_age_us)
         if (g_moonraker_state.live_data_ok) ++g_moonraker_state.print_job_revision;
         g_moonraker_state.estimate_sample = (print_estimate_sample_t){0};
         g_moonraker_state.live_data_ok = false;
-        g_moonraker_state.moonraker_ok = false;
+        /* Preserve established reachability during a status gap on the
+         * current socket. A stale transport read cannot promote a loss. */
+        if (!transport_connected) g_moonraker_state.moonraker_ok = false;
     }
     state_unlock();
 }
@@ -510,15 +512,26 @@ void moonraker_state_publish_http_fallback(
     g_moonraker_state.nozzle_temp = update->nozzle_temp;
     g_moonraker_state.nozzle_target = update->nozzle_target;
 
-    /*
-     * The HTTP fallback currently queries the conventional primary
-     * extruder. Preserve that result in the capability-aware state.
-     */
-    if (g_moonraker_state.hotend_count > 0) {
-        g_moonraker_state.hotends[0].temperature =
-            update->nozzle_temp;
-        g_moonraker_state.hotends[0].target =
-            update->nozzle_target;
+    if (update->live_data_ok && update->hotends && update->hotend_count > 0) {
+        size_t count = update->hotend_count;
+        if (count > MOONRAKER_MAX_HOTENDS) count = MOONRAKER_MAX_HOTENDS;
+        memcpy(g_moonraker_state.hotends, update->hotends, count * sizeof(*update->hotends));
+        g_moonraker_state.hotend_count = count;
+        for (size_t i = 0; i < count; ++i) {
+            const moonraker_hotend_t *hotend = &g_moonraker_state.hotends[i];
+            if (!hotend->active) continue;
+            mr_safe_copy(g_moonraker_state.active_hotend, sizeof(g_moonraker_state.active_hotend),
+                hotend->object_name);
+            g_moonraker_state.nozzle_temp = hotend->temperature;
+            g_moonraker_state.nozzle_target = hotend->target;
+            break;
+        }
+    } else {
+        for (size_t i = 0; i < g_moonraker_state.hotend_count; ++i) {
+            moonraker_hotend_t *hotend = &g_moonraker_state.hotends[i];
+            hotend->temperature = -999.0;
+            hotend->target = -999.0;
+        }
     }
 
     g_moonraker_state.bed_temp = update->bed_temp;
@@ -837,11 +850,12 @@ moonraker_websocket_message_t moonraker_state_merge_websocket_json(
         } else {
             klipper_readiness_set("disconnected");
             g_moonraker_state.live_data_ok = false;
-            g_moonraker_state.moonraker_ok = false;
+            /* The lifecycle event itself arrived from Moonraker. */
+            g_moonraker_state.moonraker_ok = true;
             mr_safe_copy(
                 g_moonraker_state.printer_state,
                 sizeof(g_moonraker_state.printer_state),
-                "--");
+                "disconnected");
         }
 
         state_unlock();

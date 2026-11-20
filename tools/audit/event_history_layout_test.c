@@ -3,7 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "custom_theme.h"
+#include "lvgl.h"
+static bool reject_history_timer;
+static lv_timer_t *history_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_history_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create history_test_timer
 #include "ui_event_history_popup.c"
+#undef lv_timer_create
 static uint16_t raster[1024*600];
 static size_t event_count;
 static uint32_t sequence;
@@ -99,6 +107,13 @@ int main(void)
         ui_event_history_popup_show();lv_obj_delete(s_follow_button);assert(!s_follow_button);follow_cb(NULL);refresh_timer_cb(NULL);clear_hook=1;clear_cb(NULL);assert(!s_popup&&!s_list&&!s_refresh_timer);
         ui_event_history_popup_show();ui_event_history_popup_close();assert(!s_popup&&!s_refresh_timer);
     }
+    event_count=2;sequence++;
+    reject_history_timer=true;ui_event_history_popup_show();reject_history_timer=false;
+    assert(s_popup&&!s_refresh_timer&&!strcmp(lv_label_get_text(lv_obj_get_child(s_follow_button,0)),"Refresh"));
+    event_count=3;sequence++;follow_cb(NULL);assert(lv_obj_get_child_count(s_list)==3);
+    ui_event_history_popup_close();ui_event_history_popup_show();
+    assert(s_refresh_timer&&!strcmp(lv_label_get_text(lv_obj_get_child(s_follow_button,0)),"Hold"));
+    ui_event_history_popup_close();
     lv_display_delete(display);lv_deinit();
     puts("PASS: Event History five themes, densities/text sizes/viewports, centered pinned actions, complete rows, Hold/Follow, ring replacement, clear and deletion cleanup");
     return 0;

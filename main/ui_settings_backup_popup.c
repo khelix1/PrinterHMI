@@ -341,7 +341,7 @@ static void finish_worker_success(const char *status,uint32_t epoch)
 
 static void export_progress_timer_cb(lv_timer_t *timer)
 {
-    if (!s_popup || !s_export_progress_popup || timer != s_export_progress_timer) return;
+    if (!s_popup || !s_export_progress_popup || timer != s_export_progress_timer || s_backup_dispatching) return;
     uint32_t epoch = s_backup_epoch;
     settings_backup_encrypted_worker_state_t state =
         settings_backup_encrypted_worker_state();
@@ -420,7 +420,10 @@ static void show_backup_progress(const char *title,const char *status,bool monit
     s_progress_hint=ui_form_text(body,"Keep power connected until the backup operation finishes.",UI_FONT_CAPTION,UI_TEXT_DIM);
     backup_field_own(s_progress_hint);
     s_export_progress_pulse=0;
-    if(monitor)s_export_progress_timer=lv_timer_create(export_progress_timer_cb,150,NULL);
+    if (monitor) {
+        s_export_progress_timer=lv_timer_create(export_progress_timer_cb,150,NULL);
+        if (s_export_progress_timer) lv_timer_pause(s_export_progress_timer);
+    }
     if(!restore_verify){
         s_progress_close=ui_form_action(s_export_progress_popup,UI_BUTTON_CLOSE,"Close",progress_close_cb,NULL);
         lv_obj_add_state(s_progress_close,LV_STATE_DISABLED);
@@ -506,14 +509,35 @@ static void secret_submit_cb(lv_event_t *event)
         secret_status("The two passphrases do not match.");
         goto done;
     }
+    lv_obj_t *secret = s_secret_popup;
+    show_export_progress_popup(restore);
+    lv_obj_t *progress = s_export_progress_popup;
+    if (!progress || !s_export_progress_timer || s_secret_popup != secret ||
+        s_backup_epoch != epoch + 1U) {
+        if (progress) close_export_progress_popup();
+        if (s_secret_popup == secret) secret_status("Could not open backup progress. Try again.");
+        goto done;
+    }
+    epoch = s_backup_epoch;
     bool started = restore
         ? settings_backup_encrypted_worker_start_verify(passphrase, status, sizeof(status))
         : settings_backup_encrypted_worker_start_export(passphrase, status, sizeof(status));
-    if (epoch != s_backup_epoch) goto done;
-    if (!started) {secret_status(status);goto done;}
+    bool current = epoch == s_backup_epoch && s_secret_popup == secret &&
+        s_export_progress_popup == progress && s_export_progress_timer;
+    if (!current || !started) {
+        if (s_export_progress_popup == progress) close_export_progress_popup();
+        if (current && s_secret_popup == secret) secret_status(status);
+        goto done;
+    }
     if (restore) snprintf(s_restore_passphrase, sizeof(s_restore_passphrase), "%s", passphrase);
     close_secret_popup(restore);
-    if (s_backup_epoch == epoch + 1 && s_popup) show_export_progress_popup(restore);
+    if (s_backup_epoch == epoch + 1U && s_popup &&
+        s_export_progress_popup == progress && s_export_progress_timer) {
+        lv_timer_reset(s_export_progress_timer);
+        lv_timer_resume(s_export_progress_timer);
+    } else if (s_export_progress_popup == progress) {
+        close_export_progress_popup();
+    }
  done:
     secure_clear(passphrase, sizeof(passphrase));
     s_backup_dispatching = false;

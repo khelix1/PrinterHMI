@@ -14,13 +14,14 @@
 static const char *TAG = "console_controller";
 
 typedef struct {
-    console_entry_t entries[CONSOLE_LOG_CAPACITY];
+    size_t entry_capacity;
     char history[CONSOLE_HISTORY_CAPACITY][CONSOLE_COMMAND_MAX + 1];
     size_t entry_head;
     size_t entry_count;
     size_t history_head;
     size_t history_count;
     uint32_t next_sequence;
+    console_entry_t entries[];
 } console_store_t;
 
 static console_store_t *s_store = NULL;
@@ -33,21 +34,16 @@ bool console_controller_init(void)
         return true;
     }
 
-    s_store = heap_caps_calloc(
-        1,
-        sizeof(*s_store),
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
+    size_t capacity = CONSOLE_LOG_CAPACITY;
+    size_t bytes = sizeof(*s_store) + capacity * sizeof(console_entry_t);
+    s_store = heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_store) {
-        ESP_LOGI(
-            TAG,
-            "Console history allocated permanently in PSRAM: %u bytes",
-            (unsigned)sizeof(*s_store));
+        ESP_LOGI(TAG, "Console history: %u entries in PSRAM (%u bytes)",
+                 (unsigned)capacity, (unsigned)bytes);
     } else {
-        s_store = heap_caps_calloc(
-            1,
-            sizeof(*s_store),
-            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        capacity = CONSOLE_LOG_FALLBACK_CAPACITY;
+        bytes = sizeof(*s_store) + capacity * sizeof(console_entry_t);
+        s_store = heap_caps_calloc(1, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
 
     if (!s_store) {
@@ -55,6 +51,7 @@ bool console_controller_init(void)
         return false;
     }
 
+    s_store->entry_capacity = capacity;
     s_store->next_sequence = 1;
     console_controller_add(
         CONSOLE_ENTRY_SYSTEM,
@@ -97,13 +94,13 @@ void console_controller_add(
 
     size_t write_index =
         (s_store->entry_head + s_store->entry_count) %
-        CONSOLE_LOG_CAPACITY;
+        s_store->entry_capacity;
 
-    if (s_store->entry_count == CONSOLE_LOG_CAPACITY) {
+    if (s_store->entry_count == s_store->entry_capacity) {
         write_index = s_store->entry_head;
         s_store->entry_head =
             (s_store->entry_head + 1) %
-            CONSOLE_LOG_CAPACITY;
+            s_store->entry_capacity;
     } else {
         ++s_store->entry_count;
     }
@@ -189,7 +186,7 @@ uint32_t console_controller_latest_sequence(void)
         size_t newest =
             (s_store->entry_head +
              s_store->entry_count - 1) %
-            CONSOLE_LOG_CAPACITY;
+            s_store->entry_capacity;
 
         sequence = s_store->entries[newest].sequence;
     }
@@ -198,6 +195,42 @@ uint32_t console_controller_latest_sequence(void)
     return sequence;
 }
 
+
+size_t console_controller_window(uint32_t *newest)
+{
+    size_t count = 0;
+    if (newest) *newest = 0;
+    if (!s_store) return 0;
+    portENTER_CRITICAL(&s_lock);
+    count = s_store->entry_count;
+    if (count && newest) {
+        size_t index = (s_store->entry_head + count - 1) % s_store->entry_capacity;
+        *newest = s_store->entries[index].sequence;
+    }
+    portEXIT_CRITICAL(&s_lock);
+    return count;
+}
+
+bool console_controller_get_sequence(uint32_t sequence, console_entry_t *out)
+{
+    if (!s_store || !sequence || !out) return false;
+    bool found = false;
+    portENTER_CRITICAL(&s_lock);
+    const size_t count = s_store->entry_count, capacity = s_store->entry_capacity;
+    if (count) {
+        size_t last = (s_store->entry_head + count - 1) % capacity;
+        uint32_t distance = console_sequence_distance(s_store->entries[last].sequence, sequence);
+        if (distance < count) {
+            size_t index = (s_store->entry_head + count - 1 - distance) % capacity;
+            if (s_store->entries[index].sequence == sequence) {
+                *out = s_store->entries[index];
+                found = true;
+            }
+        }
+    }
+    portEXIT_CRITICAL(&s_lock);
+    return found;
+}
 
 bool console_controller_get(
     size_t newest_index,
@@ -216,7 +249,7 @@ bool console_controller_get(
 
         size_t physical =
             (s_store->entry_head + chronological) %
-            CONSOLE_LOG_CAPACITY;
+            s_store->entry_capacity;
 
         *out = s_store->entries[physical];
         found = true;
@@ -284,7 +317,7 @@ void console_controller_clear(void)
     memset(
         s_store->entries,
         0,
-        sizeof(s_store->entries));
+        s_store->entry_capacity * sizeof(s_store->entries[0]));
     s_store->entry_head = 0;
     s_store->entry_count = 0;
     portEXIT_CRITICAL(&s_lock);

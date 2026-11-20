@@ -4,13 +4,21 @@
 #include <stdlib.h>
 #include "custom_theme.h"
 #include "printer_ui_controller.h"
+#include "lvgl.h"
+static bool reject_recovery_timer;
+static lv_timer_t *recovery_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_recovery_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create recovery_test_timer
 #include "ui_filament_recovery.c"
+#undef lv_timer_create
 static moonraker_state_t fixture;
 static moonraker_filament_state_t sensors;
 static uint32_t generation = 1;
 static bool catalog_available = true, command_ok = true;
 static char sent[96];
-static int send_count, send_mode;
+static int send_count, send_mode, change_at_final_check, snapshot_count;
 void ui_toast_show(ui_status_kind_t k,const char*t,const char*d){(void)k;(void)t;(void)d;}
 static bool send(const char *s);
 static void click(lv_obj_t *b);
@@ -18,8 +26,17 @@ bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
 bool custom_theme_surface_opacity(uint8_t *a){(void)a;return false;}
-void moonraker_state_snapshot(moonraker_state_t *s){*s=fixture;}
-void moonraker_filament_state_snapshot(moonraker_filament_state_t *s){*s=sensors;}
+void moonraker_state_snapshot(moonraker_state_t *s){
+ if(change_at_final_check && ++snapshot_count==3){
+  if(change_at_final_check==1)strcpy(fixture.homed_axes,"xy");
+  else if(change_at_final_check==2)fixture.nozzle_temp=120;
+ }
+ *s=fixture;
+}
+void moonraker_filament_state_snapshot(moonraker_filament_state_t *s){
+ if(change_at_final_check==3 && snapshot_count==2) sensors.sensors[0].filament_detected=false;
+ *s=sensors;
+}
 uint32_t moonraker_config_generation(void){return generation;}
 void macro_controller_status(macro_controller_status_t *s){memset(s,0,sizeof(*s));s->discovered=catalog_available;s->count=catalog_available?4:0;}
 bool macro_controller_get(size_t i,char *s,size_t n){if(i>=4)return false;snprintf(s,n,"%s",commands[i]);return true;}
@@ -38,9 +55,9 @@ static void flush(lv_display_t *d,const lv_area_t *a,uint8_t *p){uint16_t *v=(ui
 static void snapshot(int theme){const char *folder=getenv("RECOVERY_SCREENSHOTS");if(!folder)return;lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/theme%d.ppm",folder,theme);FILE *f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1024 600\n255\n");for(int i=0;i<1024*600;i++){uint16_t v=raster[i];unsigned char c[3]={(v>>11)*255/31,((v>>5)&63)*255/63,(v&31)*255/31};fwrite(c,1,3,f);}fclose(f);}
 
 static void fixture_reset(void){
- memset(&fixture,0,sizeof(fixture));fixture.moonraker_ok=fixture.live_data_ok=true;strcpy(fixture.printer_state,"paused");strcpy(fixture.homed_axes,"xyz");fixture.nozzle_temp=fixture.nozzle_target=205;
+ memset(&fixture,0,sizeof(fixture));fixture.moonraker_ok=fixture.live_data_ok=true;strcpy(fixture.printer_state,"paused");strcpy(fixture.homed_axes,"xyz");fixture.nozzle_temp=fixture.nozzle_target=205;strcpy(fixture.active_hotend,"extruder");
  memset(&sensors,0,sizeof(sensors));sensors.discovered=true;sensors.sensor_count=1;sensors.sensors[0].enabled=sensors.sensors[0].status_known=sensors.sensors[0].filament_detected=true;
- catalog_available=command_ok=true;generation=1;send_count=0;send_mode=0;action_pending=false;pending_generation=0;assert(!dispatching);
+ catalog_available=command_ok=true;generation=1;send_count=0;send_mode=0;action_pending=resume_pending=false;pending_generation=0;change_at_final_check=snapshot_count=0;assert(!dispatching);
 }
 static void click(lv_obj_t *b){lv_obj_send_event(b,LV_EVENT_CLICKED,NULL);}
 static void enabled(unsigned i,bool expected){refresh(NULL);assert(!lv_obj_has_state(buttons[i],LV_STATE_DISABLED)==expected);}
@@ -85,6 +102,30 @@ static void lifetime_checks(void){
  assert(!status_label&&!sensor_label&&!temperature_label&&!buttons[2]);ui_filament_recovery_close();assert(timers()==baseline);
  fixture_reset();for(int i=0;i<10;i++){ui_filament_recovery_show(send);lv_obj_delete(popup);assert(!popup&&!refresh_timer&&!message_label&&timers()==baseline);}
 }
+static void recovery_interlocks(void){
+ fixture_reset();ui_filament_recovery_show(send);
+ strcpy(fixture.active_hotend,"extruder1");fixture.nozzle_target=215;
+ click(buttons[0]);assert(!send_count&&strstr(lv_label_get_text(status_label),"Active extruder changed"));
+ for(unsigned i=0;i<5;i++)enabled(i,false);
+ ui_filament_recovery_close();ui_filament_recovery_show(send);
+ assert(selected_temperature==215&&strstr(lv_label_get_text(status_label),"extruder1"));
+ ui_filament_recovery_close();
+
+ for(int condition=1;condition<=3;condition++){
+  fixture_reset();ui_filament_recovery_show(send);change_at_final_check=condition;
+  click(buttons[condition==3?4:2]);assert(!send_count&&snapshot_count>=3);ui_filament_recovery_close();
+ }
+ fixture_reset();ui_filament_recovery_show(send);command_ok=false;click(buttons[4]);
+ assert(send_count==1&&!resume_pending);enabled(4,true);
+ command_ok=true;click(buttons[4]);assert(send_count==2&&resume_pending);
+ lv_tick_inc(5000);enabled(4,false);assert(strstr(lv_label_get_text(message_label),"Waiting"));
+ ui_filament_recovery_close();ui_filament_recovery_show(send);enabled(4,false);
+ lv_tick_inc(resume_wait_ms);enabled(4,true);assert(strstr(lv_label_get_text(message_label),"Still paused"));
+ click(buttons[4]);assert(send_count==3&&resume_pending);
+ strcpy(fixture.printer_state,"printing");enabled(4,false);
+ assert(!resume_pending&&strstr(lv_label_get_text(message_label),"Print resumed"));
+ ui_filament_recovery_close();
+}
 static void layout_checks(lv_display_t*d,lv_indev_t*pointer){
  for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
   int width=(int[]){1024,640,480}[size];lv_display_set_resolution(d,width,size==2?400:600);
@@ -121,17 +162,34 @@ int main(void){
   fixture.nozzle_temp=100;enabled(1,false);enabled(2,false);enabled(3,false);enabled(0,true);enabled(4,true);
   fixture.nozzle_temp=205;sensors.sensors[0].filament_detected=false;enabled(4,false);enabled(1,true);int before=send_count;click(buttons[4]);assert(send_count==before);
   sensors.sensors[0].filament_detected=true;click(buttons[1]);assert(strcmp(sent,"HMI_FILAMENT_UNLOAD")==0);lv_tick_inc(3000);enabled(2,false);lv_tick_inc(6000);enabled(2,true);
-  for(unsigned i=2;i<5;i++){click(buttons[i]);assert(!strcmp(sent,commands[i]));int count=send_count;click(buttons[i]);assert(send_count==count);lv_tick_inc(9000);}
+  for(unsigned i=2;i<5;i++){click(buttons[i]);assert(!strcmp(sent,commands[i]));int count=send_count;click(buttons[i]);assert(send_count==count);lv_tick_inc(i==4?resume_wait_ms:9000);}
   catalog_available=false;enabled(0,false);enabled(1,false);enabled(4,true);catalog_available=true;
   fixture.live_data_ok=false;for(int i=0;i<5;i++)enabled(i,false);fixture.live_data_ok=true;
   sensors.truncated=true;enabled(4,false);sensors.truncated=false;sensors.sensors[0].status_known=false;enabled(4,false);sensors.sensors[0].status_known=true;
   generation++;for(int i=0;i<5;i++)enabled(i,false);ui_filament_recovery_close();assert(!popup&&!refresh_timer);
   lifetime_checks();
  }
+ fixture_reset();
+ unsigned baseline=timers();
+ reject_recovery_timer=true;ui_filament_recovery_show(send);reject_recovery_timer=false;
+ assert(popup&&!refresh_timer&&strstr(lv_label_get_text(status_label),"Close and reopen"));
+ for(unsigned i=0;i<5;i++){assert(lv_obj_has_state(buttons[i],LV_STATE_DISABLED));click(buttons[i]);}
+ for(unsigned i=0;i<2;i++){assert(lv_obj_has_state(temperature_buttons[i],LV_STATE_DISABLED));click(temperature_buttons[i]);}
+ assert(selected_temperature==205&&strstr(lv_label_get_text(sensor_label),"unavailable"));
+ assert(!send_count);ui_filament_recovery_close();assert(timers()==baseline);
+ ui_filament_recovery_show(send);assert(refresh_timer);
+ fixture.print_job_revision++;click(temperature_buttons[1]);
+ assert(selected_temperature==205&&lv_obj_has_state(temperature_buttons[1],LV_STATE_DISABLED));
+ assert(strstr(lv_label_get_text(sensor_label),"unavailable"));
+ ui_filament_recovery_show(send);click(temperature_buttons[1]);assert(selected_temperature==210);
+ click(buttons[0]);assert(send_count==1&&!strcmp(sent,"HMI_FILAMENT_HEAT TEMP=210"));
+ assert(lv_obj_has_state(temperature_buttons[0],LV_STATE_DISABLED));
+ ui_filament_recovery_close();assert(timers()==baseline);
  fixture_reset();ui_filament_recovery_show(send);command_ok=false;click(buttons[0]);assert(!action_pending);assert(strstr(lv_label_get_text(message_label),"could not"));ui_filament_recovery_close();
  fixture_reset();printer_ui_controller_init(send,NULL,NULL,NULL);lv_obj_t *b=lv_button_create(lv_screen_active());ui_printer_actions_t actions={.resume=b};printer_ui_controller_bind_actions(&actions);lv_obj_add_event_cb(b,printer_ui_controller_command_event_cb,LV_EVENT_CLICKED,"RESUME");click(b);assert(popup&&send_count==0);ui_filament_recovery_close();lv_obj_delete(b);
  fixture_reset();ui_filament_recovery_show(send);strcpy(fixture.homed_axes,"xy");enabled(1,false);enabled(4,false);ui_filament_recovery_close();
  fixture_reset();ui_filament_recovery_show(send);strcpy(fixture.printer_state,"printing");int before=send_count;click(buttons[4]);assert(send_count==before);ui_filament_recovery_close();
+ recovery_interlocks();
  lv_indev_t*pointer=lv_indev_create();lv_indev_set_type(pointer,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(pointer,read_touch);layout_checks(d,pointer);
  puts("PASS: pinned Close and native-panel no-scroll layout; rejected retry, duplicate callbacks, reentrant deletion/reopen, retired fields/timers, recovery events, temperature, macro discovery, sensors, cooldown, printer/offline fencing, all themes/densities/accessibility");return 0;
 }

@@ -5,7 +5,7 @@ Tapping the Printer filament status while paused opens the same panel. Outside a
 pause that status continues to open the sensor controls. Recovery never resumes
 or extrudes automatically. Close leaves the print paused.
 
-The panel shows live temperature and aggregate filament status, a 170–255 C
+The panel shows the active extruder, live temperature and aggregate filament status, a 170–255 C
 selector in 5 C steps, Heat, Unload, Load 30 mm, Purge 10 mm and Resume. The initial
 selection is the current nozzle target, or 205 C if the target has been turned
 off. After a cooled pause, select the correct material temperature before Heat.
@@ -18,11 +18,14 @@ Unload/load/purge require live paused telemetry, XYZ homing and a hot nozzle.
 Resume checks enabled sensor presence and homing; the printer macro reheats and
 checks again before restoring position. Repeated movement taps are briefly
 blocked for the duration of the supplied short moves. The UI reports command
-submission, not completion; printer errors remain visible in Console.
+submission; printer errors remain visible in Console. After Resume, the panel
+waits for live status to leave Paused. If the printer is still paused after
+30 seconds, check Console and nozzle before retrying.
 
 Closing, printer selection, theme changes and popup teardown delete the refresh
 timer. The endpoint generation is checked on each refresh and click; an old panel
-cannot send to a newly selected printer. Offline, stale or resumed telemetry
+cannot send to a newly selected printer. If the active extruder changes, close
+and reopen to review the new tool before sending a command. Offline, stale or resumed telemetry
 disables recovery actions. Standard sensor controls remain available outside a
 pause; this panel does not automatically disable a sensor.
 

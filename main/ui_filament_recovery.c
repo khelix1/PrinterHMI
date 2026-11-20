@@ -12,8 +12,13 @@
 #include <string.h>
 
 static lv_obj_t *popup, *status_label, *sensor_label, *message_label;
-static lv_obj_t *buttons[5], *temperature_label;
+static lv_obj_t *buttons[5], *temperature_buttons[2], *temperature_label;
 static int selected_temperature;
+static char recovery_tool[MOONRAKER_HOTEND_NAME_MAX];
+static bool tool_changed;
+static bool resume_pending;
+static uint32_t resume_owner, resume_job, resume_tick;
+static const uint32_t resume_wait_ms = 30000;
 static lv_timer_t *refresh_timer;
 static bool (*send_command)(const char *);
 static uint32_t endpoint_generation, last_action_tick, action_wait_ms;
@@ -37,9 +42,8 @@ static bool macro_available(const char *wanted)
     return false;
 }
 
-static bool paused_here(moonraker_state_t *state)
+static bool paused_here(const moonraker_state_t *state)
 {
-    moonraker_state_snapshot(state);
     return endpoint_generation == moonraker_config_generation() &&
         state->print_job_revision == recovery_job &&
         state->moonraker_ok && state->live_data_ok &&
@@ -56,31 +60,85 @@ static bool sensors_allow_resume(const moonraker_filament_state_t *sensors)
     return true;
 }
 
+static bool action_allowed(size_t index, const moonraker_state_t *state,
+                           const moonraker_filament_state_t *sensors)
+{
+    if (!refresh_timer || !send_command || !paused_here(state) || tool_changed ||
+        !recovery_tool[0] || strcmp(recovery_tool, state->active_hotend)) return false;
+    if (resume_pending && resume_owner == endpoint_generation && resume_job == recovery_job)
+        return false;
+    if (action_pending && pending_generation == endpoint_generation &&
+        pending_job == recovery_job && lv_tick_elaps(last_action_tick) < action_wait_ms)
+        return false;
+    if (index < 4 && !macro_available(commands[index])) return false;
+    if (index == 0) return true;
+    if (!strchr(state->homed_axes, 'x') || !strchr(state->homed_axes, 'y') ||
+        !strchr(state->homed_axes, 'z')) return false;
+    if (index == 4) return sensors->discovered && sensors_allow_resume(sensors);
+    return state->nozzle_target >= 170 && state->nozzle_temp >= 170 &&
+           state->nozzle_temp >= state->nozzle_target - 5;
+}
+
+static void follow_resume(const moonraker_state_t *state)
+{
+    if (!resume_pending) return;
+    if (resume_owner != moonraker_config_generation() ||
+        (state->moonraker_ok && state->live_data_ok &&
+         state->print_job_revision != resume_job)) {
+        resume_pending = false;
+        return;
+    }
+    if (!state->moonraker_ok || !state->live_data_ok) return;
+    if (strcmp(state->printer_state, "paused")) {
+        resume_pending = false;
+        if (!strcmp(state->printer_state, "printing"))
+            ui_value_set_text(message_label, "Print resumed.");
+        else
+            ui_value_set_text(message_label, "Print is no longer paused. Check Printer for its current state.");
+    } else if (lv_tick_elaps(resume_tick) >= resume_wait_ms) {
+        resume_pending = false;
+        ui_value_set_text(message_label, "Still paused. Check Console and nozzle before retrying Resume.");
+        ui_value_set_color(message_label, UI_WARN, 0);
+    } else {
+        ui_value_set_text(message_label, "Resume requested. Waiting for the printer to leave Paused...");
+        ui_value_set_color(message_label, UI_TEXT_DIM, 0);
+    }
+}
+
 static void refresh(lv_timer_t *timer)
 {
-    (void)timer;
     if (!popup || (timer && timer != refresh_timer)) return;
     moonraker_state_t state;
+    moonraker_state_snapshot(&state);
     bool paused = paused_here(&state);
+    if (paused && strcmp(recovery_tool, state.active_hotend)) tool_changed = true;
+    follow_resume(&state);
     moonraker_filament_state_t sensors;
     moonraker_filament_state_snapshot(&sensors);
     char text[192];
-    if (endpoint_generation != moonraker_config_generation()) {
+    if (!refresh_timer) {
+        snprintf(text, sizeof(text), "Recovery refresh unavailable. Close and reopen recovery.");
+    } else if (endpoint_generation != moonraker_config_generation()) {
         snprintf(text, sizeof(text), "Printer changed. Close and reopen recovery.");
     } else if (state.print_job_revision != recovery_job) {
         snprintf(text, sizeof(text), "Print changed. Close and reopen recovery.");
     } else if (!state.moonraker_ok || !state.live_data_ok) {
         snprintf(text, sizeof(text), "Printer offline. Recovery actions unavailable.");
+    } else if (tool_changed || !recovery_tool[0]) {
+        snprintf(text, sizeof(text), "%s. Close and reopen recovery.",
+            tool_changed ? "Active extruder changed" : "Active extruder unavailable");
     } else {
-        snprintf(text, sizeof(text), "%s | Nozzle %.0f / %.0f C",
-            paused ? "Print paused" : "Print is no longer paused",
+        snprintf(text, sizeof(text), "%s | %s: %.0f / %.0f C",
+            paused ? "Print paused" : "Print is no longer paused", recovery_tool,
             state.nozzle_temp, state.nozzle_target);
     }
     ui_value_set_text(status_label, text);
-    ui_value_set_color(status_label,endpoint_generation!=moonraker_config_generation() || !state.moonraker_ok || !state.live_data_ok ? UI_WARN : UI_TEXT_BRIGHT,0);
+    ui_value_set_color(status_label,!refresh_timer || endpoint_generation!=moonraker_config_generation() || !state.moonraker_ok || !state.live_data_ok ? UI_WARN : UI_TEXT_BRIGHT,0);
     bool sensor_ready = sensors_allow_resume(&sensors);
     if (endpoint_generation != moonraker_config_generation())
         snprintf(text, sizeof(text), "Filament sensor unavailable for this printer.");
+    else if (!refresh_timer || state.print_job_revision != recovery_job)
+        snprintf(text, sizeof(text), "Filament sensor unavailable for this recovery.");
     else if (!state.moonraker_ok || !state.live_data_ok)
         snprintf(text, sizeof(text), "Filament sensor unavailable while offline.");
     else if (!sensors.discovered) snprintf(text, sizeof(text), "Filament sensor: checking");
@@ -88,44 +146,63 @@ static void refresh(lv_timer_t *timer)
     else snprintf(text, sizeof(text), "Filament sensor: %s", sensor_ready ? "ready (or disabled)" : "empty or checking");
     ui_value_set_text(sensor_label, text);
     ui_value_set_color(sensor_label,sensors.discovered && !sensor_ready ? UI_WARN : UI_TEXT_DIM,0);
-    bool hot = state.nozzle_target >= 170 && state.nozzle_temp >= 170 &&
-        state.nozzle_temp >= state.nozzle_target - 5;
-    bool homed = strchr(state.homed_axes, 'x') && strchr(state.homed_axes, 'y') &&
-        strchr(state.homed_axes, 'z');
-    bool cooldown = action_pending && pending_generation == endpoint_generation &&
-        pending_job == recovery_job &&
-        lv_tick_elaps(last_action_tick) < action_wait_ms;
     for (size_t i = 0; i < 5; ++i) {
         if (!buttons[i]) continue;
-        bool enabled = paused && !cooldown && !dispatching && send_command;
-        if (i < 4) enabled = enabled && macro_available(commands[i]);
-        if (i > 0) enabled = enabled && homed;
-        if (i > 0 && i < 4) enabled = enabled && hot;
-        if (i == 4) enabled = enabled && sensors.discovered && sensor_ready;
+        bool enabled = !dispatching && action_allowed(i, &state, &sensors);
         if (enabled) lv_obj_remove_state(buttons[i], LV_STATE_DISABLED);
         else lv_obj_add_state(buttons[i], LV_STATE_DISABLED);
+    }
+    bool target_enabled = buttons[0] && !lv_obj_has_state(buttons[0], LV_STATE_DISABLED);
+    for (size_t i = 0; i < 2; ++i) {
+        if (!temperature_buttons[i]) continue;
+        if (target_enabled) lv_obj_remove_state(temperature_buttons[i], LV_STATE_DISABLED);
+        else lv_obj_add_state(temperature_buttons[i], LV_STATE_DISABLED);
     }
 }
 
 static void action(lv_event_t *event)
 {
-    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || !popup || dispatching) return;
+    if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || !popup || !refresh_timer || dispatching) return;
     size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
-    if (index >= 5 || lv_event_get_target_obj(event) != buttons[index]) return;
+    if (index >= 5 || !buttons[index] || lv_event_get_target_obj(event) != buttons[index] ||
+        lv_event_get_current_target_obj(event) != buttons[index]) return;
+    lv_obj_t *owner_popup = popup;
+    uint32_t epoch = popup_epoch, owner = endpoint_generation, job = recovery_job;
     /* Recheck telemetry and endpoint on the click, not just on the timer. */
     refresh(NULL);
-    if (!buttons[index] || lv_obj_has_state(buttons[index], LV_STATE_DISABLED) || !send_command) return;
+    if (epoch != popup_epoch || owner_popup != popup || !buttons[index] ||
+        lv_obj_has_state(buttons[index], LV_STATE_DISABLED) || !send_command) return;
     char command[64];
     if (index == 0) snprintf(command, sizeof(command), "HMI_FILAMENT_HEAT TEMP=%d", selected_temperature);
     else snprintf(command, sizeof(command), "%s", commands[index]);
-    lv_obj_t *owner_popup = popup;
-    uint32_t epoch = popup_epoch, owner = endpoint_generation, job = recovery_job;
     dispatching = true;
     refresh(NULL);
+    if (epoch != popup_epoch || owner_popup != popup || !buttons[index] ||
+        owner != moonraker_config_generation() || !send_command) {
+        dispatching = false;
+        refresh(NULL);
+        return;
+    }
+    moonraker_filament_state_t latest_sensors;
+    moonraker_state_t latest;
+    moonraker_filament_state_snapshot(&latest_sensors);
+    moonraker_state_snapshot(&latest);
+    if (!action_allowed(index, &latest, &latest_sensors) ||
+        epoch != popup_epoch || owner_popup != popup || !buttons[index] ||
+        owner != moonraker_config_generation() || !send_command) {
+        dispatching = false;
+        refresh(NULL);
+        return;
+    }
     bool sent = send_command(command);
     dispatching = false;
     /* Accepted commands keep their cooldown even across close/reopen. */
-    if (sent) {
+    if (sent && index == 4) {
+        resume_pending = true;
+        resume_owner = owner;
+        resume_job = job;
+        resume_tick = lv_tick_get();
+    } else if (sent) {
         action_pending = true;
         pending_generation = owner;
         pending_job = job;
@@ -146,6 +223,7 @@ static void field_deleted(lv_event_t *event)
     if (field == status_label) status_label = NULL;
     if (field == sensor_label) sensor_label = NULL;
     if (field == message_label) message_label = NULL;
+    for (unsigned i = 0; i < 2; ++i) if (field == temperature_buttons[i]) temperature_buttons[i] = NULL;
     if (field == temperature_label) temperature_label = NULL;
     for (unsigned i = 0; i < 5; ++i) if (field == buttons[i]) buttons[i] = NULL;
 }
@@ -160,6 +238,7 @@ static void deleted(lv_event_t *event)
     refresh_timer = NULL;
     send_command = NULL;
     memset(buttons, 0, sizeof(buttons));
+    memset(temperature_buttons, 0, sizeof(temperature_buttons));
 }
 
 void ui_filament_recovery_close(void)
@@ -176,8 +255,15 @@ static void close_event(lv_event_t *event)
 static void temperature_change(lv_event_t *event)
 {
     if (!event || lv_event_get_code(event) != LV_EVENT_CLICKED || !popup || dispatching) return;
-    if (endpoint_generation != moonraker_config_generation()) return;
-    int delta = (int)(intptr_t)lv_event_get_user_data(event);
+    size_t index = (size_t)(uintptr_t)lv_event_get_user_data(event);
+    if (index >= 2 || !temperature_buttons[index] ||
+        lv_event_get_target_obj(event) != temperature_buttons[index] ||
+        lv_event_get_current_target_obj(event) != temperature_buttons[index]) return;
+    uint32_t epoch = popup_epoch;
+    refresh(NULL);
+    if (epoch != popup_epoch || !temperature_buttons[index] ||
+        lv_obj_has_state(temperature_buttons[index], LV_STATE_DISABLED)) return;
+    int delta = index ? 5 : -5;
     selected_temperature += delta;
     if (selected_temperature < 170) selected_temperature = 170;
     if (selected_temperature > 255) selected_temperature = 255;
@@ -196,6 +282,8 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     recovery_job = state.print_job_revision;
     endpoint_generation = moonraker_config_generation();
     send_command = send;
+    snprintf(recovery_tool, sizeof(recovery_tool), "%s", state.active_hotend);
+    tool_changed = false;
 
     selected_temperature = state.nozzle_target >= 170 && state.nozzle_target <= 255
         ? (int)state.nozzle_target : 205;
@@ -228,7 +316,9 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     lv_obj_set_height(minus, 52);
     lv_obj_set_grid_cell(minus, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_START, 0, 1);
     lv_obj_add_event_cb(minus, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
-    lv_obj_add_event_cb(minus, temperature_change, LV_EVENT_CLICKED, (void *)(intptr_t)-5);
+    temperature_buttons[0] = minus;
+    lv_obj_add_event_cb(minus, field_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_add_event_cb(minus, temperature_change, LV_EVENT_CLICKED, (void *)(uintptr_t)0);
     temperature_label = ui_form_text(temperature_row, "", UI_FONT_BODY_LARGE, UI_TEXT_BRIGHT);
     lv_obj_set_style_text_align(temperature_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_grid_cell(temperature_label, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_CENTER, 0, 1);
@@ -237,7 +327,9 @@ void ui_filament_recovery_show(bool (*send)(const char *))
     lv_obj_set_height(plus, 52);
     lv_obj_set_grid_cell(plus, LV_GRID_ALIGN_STRETCH, 2, 1, LV_GRID_ALIGN_START, 0, 1);
     lv_obj_add_event_cb(plus, ui_form_action_fit, LV_EVENT_SIZE_CHANGED, NULL);
-    lv_obj_add_event_cb(plus, temperature_change, LV_EVENT_CLICKED, (void *)(intptr_t)5);
+    temperature_buttons[1] = plus;
+    lv_obj_add_event_cb(plus, field_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_add_event_cb(plus, temperature_change, LV_EVENT_CLICKED, (void *)(uintptr_t)1);
     char temperature_text[32];
     snprintf(temperature_text, sizeof(temperature_text), "%d C", selected_temperature);
     lv_label_set_text(temperature_label, temperature_text);
@@ -259,8 +351,8 @@ void ui_filament_recovery_show(bool (*send)(const char *))
         lv_obj_add_event_cb(buttons[i], action, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
     }
     ui_form_action(popup, UI_BUTTON_CLOSE, "Close", close_event, NULL);
-    refresh(NULL);
     refresh_timer = lv_timer_create(refresh, 500, NULL);
+    refresh(NULL);
     ui_form_finish(popup);
     /* The grid has its final width now; fit from the preferred readable size
      * rather than retaining a font chosen during its initial empty layout. */

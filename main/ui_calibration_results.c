@@ -103,9 +103,15 @@ static bool save_worthy(const calibration_session_snapshot_t *snapshot)
            snapshot->status == CALIBRATION_SESSION_RESULTS;
 }
 
+static void save_action_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target_obj(event) == s_save_action) s_save_action = NULL;
+}
+
 static void run_save_config_cb(lv_event_t *event)
 {
-    (void)event;
+    if (!event || !s_save_action || lv_event_get_target_obj(event) != s_save_action ||
+        lv_obj_has_state(s_save_action, LV_STATE_DISABLED)) return;
     if (!s_context || !*s_context->results_popup ||
         !*s_context->save_confirm_popup || s_save_dispatching || s_save_requested ||
         s_results_owner != moonraker_config_generation()) return;
@@ -130,8 +136,22 @@ static void run_save_config_cb(lv_event_t *event)
     uint32_t epoch = s_results_epoch;
     uint32_t owner = s_results_owner;
     static const char command[] = "SAVE_CONFIG";
-    console_controller_add_command(command);
+    lv_obj_t *action = s_save_action;
     s_save_dispatching = true;
+    console_controller_add_command(command);
+    if (s_context != context || s_results_epoch != epoch ||
+        *context->save_confirm_popup != popup || owner != moonraker_config_generation() ||
+        s_save_action != action) {
+        s_save_dispatching = false;
+        return;
+    }
+    calibration_session_controller_snapshot(&snapshot);
+    if (results_unavailable_reason() || !save_worthy(&snapshot) ||
+        snapshot.generation != s_save_generation || lv_obj_has_state(action, LV_STATE_DISABLED)) {
+        s_save_dispatching = false;
+        ui_calibration_results_refresh();
+        return;
+    }
     bool sent = context->send_gcode && context->send_gcode(command);
     s_save_dispatching = false;
     /* Transport callbacks may navigate or change the active printer. */
@@ -211,6 +231,7 @@ static void apply_restart_button_cb(lv_event_t *event)
                         LV_SYMBOL_LEFT " Back", close_save_confirm_popup_cb, NULL, NULL);
     s_save_action = ui_cal_dialog_action(*s_context->save_confirm_popup, UI_POPUP_ACTION_DANGER,
                                         "Apply & restart", run_save_config_cb, NULL, NULL);
+    if (s_save_action) lv_obj_add_event_cb(s_save_action, save_action_deleted, LV_EVENT_DELETE, NULL);
 }
 
 void ui_calibration_results_show(const char *title, const char *waiting_text)

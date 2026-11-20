@@ -32,6 +32,7 @@ void ui_calibration_motion_create(
 void ui_calibration_motion_refresh(
     bool discovered,
     bool input_shaper,
-    bool accelerometer);
+    bool accelerometer,
+    bool shaper_calibrate);
 
 void ui_calibration_motion_hide(void);

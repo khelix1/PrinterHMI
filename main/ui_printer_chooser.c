@@ -57,7 +57,7 @@ static chooser_card_t s_cards[MOONRAKER_CONFIG_MAX_PROFILES];
 
 static ui_printer_chooser_select_cb_t s_select_cb = NULL;
 static ui_printer_chooser_manage_cb_t s_manage_cb = NULL;
-static lv_obj_t *s_manage_action;
+static lv_obj_t *s_manage_action,*s_title;
 static uint32_t s_chooser_epoch;
 static bool s_chooser_dispatching,s_refreshing,s_flushing,s_show_pending,s_flush_queued;
 static unsigned s_subject_depth,s_retiring;
@@ -92,7 +92,7 @@ static void card_retire(chooser_card_t *card)
 static void chooser_retire(void)
 {
     lv_timer_t *timer=s_timer;s_timer=NULL;
-    ++s_chooser_epoch;s_root=s_manage_action=NULL;s_select_cb=NULL;s_manage_cb=NULL;
+    ++s_chooser_epoch;s_root=s_manage_action=s_title=NULL;s_select_cb=NULL;s_manage_cb=NULL;
     if(timer)lv_timer_delete(timer);
     ++s_retiring;
     for(int i=0;i<MOONRAKER_CONFIG_MAX_PROFILES;++i)card_retire(&s_cards[i]);
@@ -106,6 +106,7 @@ static void chooser_root_deleted(lv_event_t *event)
 static void chooser_field_deleted(lv_event_t *event)
 {
     lv_obj_t *object=lv_event_get_target_obj(event);bool retired=false;
+    if(object==s_title){s_title=NULL;retired=true;}
     if(object==s_manage_action){s_manage_action=NULL;retired=true;}
     for(int i=0;i<MOONRAKER_CONFIG_MAX_PROFILES;++i){
         chooser_card_t *card=&s_cards[i];
@@ -573,6 +574,14 @@ static void chooser_timer_cb(lv_timer_t *timer)
 }
 
 
+static void chooser_ensure_refresh_timer(void)
+{
+    if (s_timer) return;
+    s_timer = lv_timer_create(chooser_timer_cb, 500, NULL);
+    ui_value_set_text(s_title, s_timer ? ui_text("Printers") : ui_text("Printers (snapshot)"));
+
+}
+
 void ui_printer_chooser_refresh(void)
 {
     if (!s_root) return;
@@ -587,7 +596,10 @@ void ui_printer_chooser_show(
     if(s_root){
         lv_obj_t *root=s_root;uint32_t epoch=s_chooser_epoch;
         refresh_cards();
-        if(root==s_root && epoch==s_chooser_epoch)lv_obj_move_foreground(root);
+        if(root==s_root && epoch==s_chooser_epoch){
+            chooser_ensure_refresh_timer();
+            lv_obj_move_foreground(root);
+        }
         return;
     }
     /* Reusing static subjects inside their previous notification is unsafe. */
@@ -610,6 +622,7 @@ void ui_printer_chooser_show(
     lv_obj_set_style_pad_all(s_root, 0, 0);
 
     lv_obj_t *title = make_label(s_root, "Printers", 20, 12, 360);
+    s_title=title;chooser_watch(title);
     ui_apply_text_heading(title);
     ui_apply_label_bright(title);
 
@@ -675,7 +688,7 @@ void ui_printer_chooser_show(
     refresh_cards();
     if(root!=s_root || epoch!=s_chooser_epoch)return;
 
-    s_timer = lv_timer_create(chooser_timer_cb, 500, NULL);
+    chooser_ensure_refresh_timer();
 
     ESP_LOGI("printer_chooser", "Chooser visible");
 

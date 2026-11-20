@@ -108,7 +108,7 @@ class NativeTests(unittest.TestCase):
         for point in [(300,475),(580,475),(400,400),(800,365),(50,40)]:
             self.assertEqual(self.host.hover(*point),'default')
             self.assertEqual(self.click(*point)['command'],'')
-        for point in [(750,130),(750,280),(700,390),(130,475),(590,350),(560,420)]:
+        for point in [(750,130),(750,280),(700,360),(130,475),(590,350),(560,420)]:
             self.assertEqual(self.host.hover(*point),'pointer')
         self.click(750,130);result=self.click(480,285)
         self.assertEqual(result['command'],'M104 S200');self.assertFalse(result['closed'])
@@ -120,6 +120,19 @@ class NativeTests(unittest.TestCase):
         self.click(750,400);self.click(590,350)
         self.assertEqual(self.host.hover(130,475),'default','Tune reopens after Close')
         self.host.request('key 27');self.assertEqual(self.host.hover(130,475),'pointer')
+    def test_native_dashboard_printer_dual_tool_readings_and_progress(self):
+        self.host.request('open dashboard-page 0',['telemetry-fixture 1'])
+        self.assertIn('T0 210.0/210.0°',self.ui_text())
+        self.assertIn('T1 185.0/190.0°',self.ui_text())
+        self.assertEqual(self.host.hover(830,138),'default')
+        self.host.request('open printer-page 0')
+        self.assertIn('T0 210.0/210.0°',self.ui_text())
+        self.assertIn('T1 185.0/190.0°',self.ui_text())
+        self.assertIn('Progress\n64%',self.ui_text())
+        self.assertEqual(self.host.hover(750,130),'pointer')
+        self.click(750,130)
+        self.assertIn('extruder1',self.ui_text())
+
     def test_native_printer_pause_recovery_resume_and_stop(self):
         self.host.request('open printer-page 0')
         result=self.click(450,475);self.assertEqual(result['command'],'PAUSE');self.assertEqual(result['printState'],'paused')

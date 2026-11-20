@@ -26,6 +26,10 @@ static bool s_wifi_password_dispatching;
 static void owned_password_save(lv_event_t *event)
 {
     if (!s_wifi_password_popup || !s_wifi_password_textarea || !s_wifi_password_save || s_wifi_password_dispatching) return;
+    if (strlen(lv_textarea_get_text(s_wifi_password_textarea)) > 64) {
+        ui_network_tools_wifi_password_set_status("Wi-Fi password is too long. Use at most 64 bytes.");
+        return;
+    }
     lv_event_cb_t save=s_wifi_password_save;
     s_wifi_password_dispatching=true;
     save(event);

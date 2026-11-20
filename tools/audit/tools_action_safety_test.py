@@ -32,6 +32,8 @@ with tempfile.TemporaryDirectory(prefix='printerhmi-tools-test-') as directory:
 #define ESP_LOGW(...) ((void)TAG)
 #define ESP_LOGE(...) ((void)TAG)
 ''',
+        'esp_err.h': '#pragma once\ntypedef int esp_err_t;\n',
+        'esp_http_client.h': '#pragma once\ntypedef void *esp_http_client_handle_t;\ntypedef struct esp_http_client_event esp_http_client_event_t;\n',
         'esp_timer.h': '#include <stdint.h>\nint64_t esp_timer_get_time(void);\n',
         'freertos/FreeRTOS.h': '''typedef int portMUX_TYPE;
 #define portMUX_INITIALIZER_UNLOCKED 0
@@ -59,6 +61,10 @@ bool console_controller_get(size_t index, console_entry_t *out) {
     if (index >= entries) return false;
     *out = entry;
     return true;
+}
+size_t console_controller_window(uint32_t *newest) { *newest=entry.sequence; return entries; }
+bool console_controller_get_sequence(uint32_t sequence, console_entry_t *out) {
+    return sequence==entry.sequence && console_controller_get(0,out);
 }
 static calibration_session_snapshot_t snapshot(void) {
     calibration_session_snapshot_t out;
@@ -137,26 +143,32 @@ int main(void) {
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-typedef struct { bool moonraker_ok, live_data_ok; char printer_state[32]; } moonraker_state_t;
-static moonraker_state_t state = {true, true, "ready"};
+#include "printer_connection_policy.h"
+static moonraker_state_t state = {.moonraker_ok=true,.live_data_ok=true,.printer_state="ready"};
 static bool s_got_ip = true, accepted = true;
 static uint32_t s_bed_mesh_owner_generation = 1, generation = 1;
 static int sends, recorded;
 static char sent[256];
 #define UI_STATUS_DANGER 0
 static uint32_t moonraker_config_generation(void) { return generation; }
-static void moonraker_state_snapshot(moonraker_state_t *out) { *out = state; }
+void moonraker_state_snapshot(moonraker_state_t *out) { *out = state; }
 static void ui_toast_show(int status, const char *title, const char *detail) {
     (void)status; (void)title; (void)detail;
 }
-static void console_controller_add_command(const char *cmd) { (void)cmd; ++recorded; }
+static int during_log;
+static void console_controller_add_command(const char *cmd) {
+    (void)cmd; ++recorded;
+    if (during_log == 1) { ++generation; ++s_bed_mesh_owner_generation; }
+    if (during_log == 2) strcpy(state.printer_state, "printing");
+    if (during_log == 3) s_got_ip = false;
+}
 static bool moonraker_send_gcode(const char *cmd) {
     ++sends; snprintf(sent, sizeof(sent), "%s", cmd); return accepted;
 }
 ''' + function(main, 'bed_mesh_send_gcode_bridge') + r'''
 int main(void) {
-    const char *blocked[] = {"printing", "paused", "error", "shutdown"};
-    for (unsigned i = 0; i < 4; ++i) {
+    const char *blocked[] = {"printing", "paused", "error", "shutdown", "startup", "disconnected", "offline", "--"};
+    for (unsigned i = 0; i < sizeof(blocked)/sizeof(blocked[0]); ++i) {
         snprintf(state.printer_state, sizeof(state.printer_state), "%s", blocked[i]);
         assert(!bed_mesh_send_gcode_bridge("BED_MESH_CALIBRATE"));
     }
@@ -177,6 +189,13 @@ int main(void) {
     strcpy(state.printer_state, "ready"); accepted = false;
     assert(!bed_mesh_send_gcode_bridge("BED_MESH_CALIBRATE"));
     assert(sends == 3);
+    accepted = true;
+    for (during_log = 1; during_log <= 3; ++during_log) {
+        assert(!bed_mesh_send_gcode_bridge("BED_MESH_CALIBRATE"));
+        assert(sends == 3);
+        strcpy(state.printer_state, "ready"); s_got_ip = true;
+    }
+    assert(bed_mesh_send_gcode_bridge("BED_MESH_CALIBRATE") && sends == 4);
     return 0;
 }
 ''')

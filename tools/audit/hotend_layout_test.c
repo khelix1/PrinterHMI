@@ -3,7 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "custom_theme.h"
+#include "lvgl.h"
+static bool reject_list_timer;
+static lv_timer_t *list_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_list_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create list_test_timer
 #include "ui_printer_popups.c"
+#undef lv_timer_create
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_accent_override(uint8_t a,uint32_t *b){(void)a;(void)b;return false;}
@@ -55,6 +63,11 @@ for(int size=0;size<3;size++)for(int theme=0;theme<5;theme++)for(int density=0;d
  strcpy(fixture.printer_state,"printing");refresh_hotend_list(NULL);assert(lv_obj_has_state(s_hotend_activate_buttons[1],LV_STATE_DISABLED));click(s_hotend_activate_buttons[1]);assert(!s_hotend_activate_popup);strcpy(fixture.printer_state,"paused");refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);assert(!s_hotend_activate_popup);strcpy(fixture.printer_state,"standby");refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);strcpy(fixture.printer_state,"printing");confirm_hotend_activate_cb(NULL);assert(sends==before+1&&s_hotend_activate_popup);close_hotend_activate_cb(NULL);strcpy(fixture.printer_state,"standby");refresh_hotend_list(NULL);
  fixture.moonraker_ok=false;refresh_hotend_list(NULL);click(s_hotend_temp_buttons[1]);click(s_hotend_activate_buttons[1]);assert(!s_control_popup&&!s_hotend_activate_popup);fixture.moonraker_ok=true;refresh_hotend_list(NULL);
  moonraker_hotend_t swap=fixture.hotends[1];fixture.hotends[1]=fixture.hotends[2];fixture.hotends[2]=swap;refresh_hotend_list(NULL);click(s_hotend_activate_buttons[1]);click(s_hotend_confirm_button);assert(!strcmp(sent,"ACTIVATE_EXTRUDER EXTRUDER=extruder_long_name_0001"));click(s_hotend_temp_buttons[1]);assert(s_control_popup&&!s_hotend_list_popup&&!s_hotend_refresh_timer);lv_obj_t *presets=lv_obj_get_child(lv_obj_get_child(s_control_popup,1),2);click(lv_obj_get_child(presets,2));assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0001 TARGET=215"));
+ reset();reject_list_timer=true;ui_printer_popups_show_hotends(send,&fixture);reject_list_timer=false;
+ assert(s_hotend_list_popup&&!s_hotend_refresh_timer&&strstr(lv_label_get_text(s_hotend_temp_labels[0]),"reopen"));
+ unsigned prior_sends=sends;click(s_hotend_temp_buttons[0]);click(s_hotend_activate_buttons[1]);
+ assert(!s_control_popup&&!s_hotend_activate_popup&&sends==prior_sends);
+ close_hotend_list_cb(NULL);
  reset();strcpy(fixture.printer_state,"printing");ui_printer_popups_show_hotends(send,&fixture);click(s_hotend_temp_buttons[3]);click(lv_obj_get_child(lv_obj_get_child(lv_obj_get_child(s_control_popup,1),0),1));assert(s_custom_temp_popup);lv_textarea_set_text(s_custom_temp_textarea,"230");set_custom_temp_cb(NULL);assert(!strcmp(sent,"SET_HEATER_TEMPERATURE HEATER=extruder_long_name_0003 TARGET=230"));
  // Temperature and fan changes remain usable during both printing and pause.
  for(int paused=0;paused<2;paused++){

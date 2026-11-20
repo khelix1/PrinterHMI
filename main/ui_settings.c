@@ -340,6 +340,7 @@ static void settings_brightness_save_cb(lv_event_t *e)
 
 static const char *settings_sleep_timeout_text(void)
 {
+    if(s_sleep_timeout_minutes && !s_sleep_timer)return "Unavailable / Tap to retry";
     switch (s_sleep_timeout_minutes) {
         case 5:
             return s_sleep_save_failed ? "5 MIN / Not saved" : "5 MIN";
@@ -421,6 +422,11 @@ static void settings_sleep_timer_cb(lv_timer_t *timer)
     if(timer!=s_sleep_timer || !s_sleep_timer || s_display_sleeping || !s_sleep_timeout_minutes || s_display_io_dispatching)return;
     lv_display_t *display=lv_display_get_default();
     if(display && lv_display_get_inactive_time(display)>=(uint32_t)s_sleep_timeout_minutes*60U*1000U)settings_enter_display_sleep();
+}
+static bool settings_ensure_sleep_timer(void)
+{
+    if (!s_sleep_timer) s_sleep_timer=lv_timer_create(settings_sleep_timer_cb,1000,NULL);
+    return s_sleep_timer!=NULL;
 }
 static bool settings_save_sleep_timeout(uint8_t requested)
 {
@@ -518,13 +524,7 @@ void ui_settings_module_init(void)
             esp_err_to_name(err));
     }
 
-    if (!s_sleep_timer) {
-        s_sleep_timer =
-            lv_timer_create(
-                settings_sleep_timer_cb,
-                1000,
-                NULL);
-    }
+    settings_ensure_sleep_timer();
 
     ESP_LOGI(
         TAG,
@@ -1182,6 +1182,8 @@ bool ui_settings_restore_display_preferences(
         return false;
     }
 
+    if(sleep_timeout_minutes && !settings_ensure_sleep_timer())return false;
+
     s_display_io_dispatching=true;
     uint32_t epoch=s_settings_page_epoch;
     nvs_handle_t handle;
@@ -1267,6 +1269,18 @@ void settings_sleep_card_cb(lv_event_t *e)
 {
     if(!settings_panel || !settings_sleep_label || !s_sleep_action || s_display_io_dispatching || s_display_sleeping ||
         (e && (lv_event_get_code(e)!=LV_EVENT_CLICKED || lv_event_get_target_obj(e)!=s_sleep_action)))return;
+    /* A saved timeout may be loaded before a timer could be allocated.
+     * Retry that timeout without cycling or rewriting the preference. */
+    bool retry_saved=s_sleep_timeout_minutes && !s_sleep_timer;
+    if (!s_sleep_timer && !settings_ensure_sleep_timer()) {
+        ui_toast_show(UI_STATUS_WARNING,"SLEEP TIMER UNAVAILABLE","Tap Sleep timeout again to retry.");
+        return;
+    }
+    if (retry_saved) {
+        ui_value_set_text(settings_sleep_label,settings_sleep_timeout_text());
+        lv_display_trigger_activity(lv_display_get_default());
+        return;
+    }
     uint8_t requested=s_sleep_timeout_minutes==0?5:s_sleep_timeout_minutes==5?15:s_sleep_timeout_minutes==15?30:0;
     uint32_t epoch=s_settings_page_epoch;
     s_display_io_dispatching=true;

@@ -164,6 +164,8 @@ typedef struct {
     bool moonraker_ok;
     const char *printer_state;
     const char *printer_file;
+    const moonraker_hotend_t *hotends;
+    size_t hotend_count;
 } moonraker_http_fallback_update_t;
 
 #define MOONRAKER_EXCLUDE_MAX_OBJECTS 48
@@ -213,7 +215,7 @@ void moonraker_state_snapshot(moonraker_state_t *out);
 void moonraker_state_publish_demo(const moonraker_state_t *,const moonraker_filament_state_t *,const bool excluded[2]);
 #endif
 /* Expire stale WebSocket state atomically against status publication. */
-void moonraker_state_expire_websocket(int64_t maximum_age_us);
+void moonraker_state_expire_websocket(int64_t maximum_age_us, bool transport_connected);
 void moonraker_filament_state_snapshot(
     moonraker_filament_state_t *out);
 void moonraker_exclude_state_snapshot(moonraker_exclude_state_t *out);

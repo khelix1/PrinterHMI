@@ -37,7 +37,7 @@ function render(project,page='dashboard',options={}){
  // Shell controls share state with every page; these are local actions only.
  a('printers',202,14,360,44);a('estop',852,10,140,52);
  out.push('<g transform="translate(24 80)" clip-path="url(#studio-body)">');
- const thermal=(x,y,name,current,target,key)=>{const draw=()=>{text(name,x,y,20,'text_dim');text(current,x,y+30,48,'success');text('Target '+target,x,y+90,18,'text_dim');};if(page==='printer')a('temperature:'+key,x-12,y,336,136,draw);else draw();};
+ const thermal=(x,y,name,current,target,key,compact=false)=>{const draw=()=>{text(name+(page==='printer'?'  •  Tap to set':''),x,y,20,'text_dim');const reading=Number(current).toFixed(1),goal=Number(target).toFixed(1);const top=y+(page==='printer'?(compact?24:32):30);text(reading,x,top,48);const offset=reading.length*25+4;if(offset+(goal.length+2)*10<= (page==='printer'?312:220))text('/'+goal+'°',x+offset,top+29,18,'text_dim');else text('/'+goal+'°',x,top+58,18,'text_dim');};if(page==='printer')a('temperature:'+key,x-12,y,336,compact?106:136,draw);else draw();};
  if(page==='dashboard'){
   text(state.print.toUpperCase(),0,0,20);text(state.job,0,32,24,'text_bright');
   a('fullscreen',0,62,316,276,()=>{text('PRINT',158,168,24,'text_dim','middle');text('THUMBNAIL',158,198,24,'text_dim','middle');});
@@ -45,14 +45,15 @@ function render(project,page='dashboard',options={}){
   text('ETA 3:42 PM',340,194,18,'text_dim');text('Layer '+Math.round(state.progress*267/100)+' / 267',340,228,18,'text_dim');text('01:06 elapsed  •  REM 00:38',340,254,18);
   nativeButton(state.print==='paused'?'▶ Resume':'Ⅱ Pause',340,278,112,52,'pause',true,!['printing','paused'].includes(state.print));
   nativeButton('■ Stop',464,278,112,52,'stop',false,!['printing','paused'].includes(state.print));nativeButton('Object',588,278,112,52,'object',false,!['printing','paused'].includes(state.print)||state.excluded?.length>=2);
-  line(736,0,1,330);thermal(756,4,'Nozzle','210°',state.nozzle+'°','nozzle');line(756,134,220);thermal(756,154,'Bed','60°',state.bed+'°','bed');
+  line(736,0,1,330);thermal(756,4,'Nozzle',210,state.nozzle,'nozzle');line(756,134,220);thermal(756,154,'Bed',60,state.bed,'bed');
   text('LIVE',756,298,16,'success');text('PRESENT',856,298,16,'success');line(0,346,976);
   [['Speed','125 mm/s','tune'],['Flow','8.3 mm3/s','tune'],['Fan',state.fan+'%','fan'],['Drybox air','45.0 C','nav:drybox'],['Humidity','18.0 %RH','nav:drybox']].forEach(([v,b,action],i)=>{text(v,i*196,356,16,'text_dim');text(b,i*196,386,i>2?32:20);if(i)line(i*196-10,356,1,60);});
  }else if(page==='printer'){
   a('fullscreen',0,0,620,240,()=>{text('PRINT',310,86,24,'text_dim','middle');text('THUMBNAIL',310,116,24,'text_dim','middle');});
   text('X '+state.position[0].toFixed(1)+'    Y '+state.position[1].toFixed(1)+'    Z '+state.position[2].toFixed(2),0,252);nativeButton('Tune',524,246,96,44,'tune');
   line(0,302,620);[['Speed','125 mm/s'],['Flow','8.3 mm3/s'],['Layer','171 / 267'],['Filament','PRESENT']].forEach(([v,b],i)=>{const x=[0,144,288,474][i];text(v,x,310,16,'text_dim');text(b,x,332,16);});
-  line(630,8,1,338);thermal(652,0,'Nozzle','210°',state.nozzle+'°','nozzle');thermal(652,142,'Bed','60°',state.bed+'°','bed');text('Fan',652,276,16,'text_dim');a('fan',652,294,94,40,()=>text(state.fan+'%',652,298,24));text('Elapsed',764,276,16,'text_dim');text('01:06',764,298,24);text('Remaining',876,276,16,'text_dim');text('00:38',876,298,24);
+  line(630,8,1,338);thermal(652,0,'Nozzle',210,state.nozzle,'nozzle');thermal(652,142,'Bed',60,state.bed,'bed',true);text('Fan',652,251,16,'text_dim');a('fan',652,268,94,34,()=>text(state.fan+'%',652,268,24));text('Elapsed',764,251,16,'text_dim');text('01:06',764,268,24);text('Remaining',876,251,16,'text_dim');text('00:38',876,268,24);
+  line(652,304,312);text('Progress',652,308,18,'text_dim');text(state.progress+'%',960,306,32,'text_bright','end');rect(652,333,180,8,'progress_track',4);rect(652,333,state.progress*1.8,8,'success',4);
   [['Toolhead control',0,220,'toolhead'],['Home',232,128,'home'],['Pause',372,128,'pause'],['Resume',512,128,'pause'],['Object',652,128,'object'],['Stop',792,184,'stop']].forEach(([v,x,w,action])=>nativeButton(v,x,370,w,52,action,false,(v==='Pause'&&state.print!=='printing')||(v==='Resume'&&state.print!=='paused')||(['Object','Stop'].includes(v)&&!['printing','paused'].includes(state.print))||(v==='Object'&&state.excluded?.length>=2)));
  }else if(page==='files'){
   heading('Job library');[['Up',0,100,'up'],['Search',110,148,'files-search'],[['Name','Date','Size'][state.sort],268,144,'sort'],['Refresh',422,154,'refresh-files']].forEach(([v,x,w,action])=>nativeButton(v,x,48,w,44,action));
@@ -88,7 +89,7 @@ function render(project,page='dashboard',options={}){
   heading('Tools');[['Calibration','Tune and validate your printer.','↻','success'],['Bed mesh','Probe and visualize the bed surface.','▦','accent_bright'],['Devices','Inspect devices and live readings.','ϟ','warning'],['Macros','Run available printer macros.','▶','success']].forEach(([v,body,icon,ink],i)=>{const x=i%2*496,y=56+Math.floor(i/2)*184;a('tool:'+v,x,y,480,168,()=>{text(icon,x+20,y+16,32,ink);text(v,x+72,y+16,24,'text_bright');text(body,x+72,y+56,18);line(x,y+167,480);});});line(488,64,1,352);
  }else if(page==='console'){
   heading('Console');text(T.consoleRows(state).length+' shown',976,7,16,'text_dim','end');text(state.printer+' | Connected',0,38,16,'text_dim');
-  [[state.consoleFilter,0,260,'console-filter'],[state.hideTemps?'Temps hidden':'Temps shown',268,160,'temps'],['Search',436,104,'console-search'],['Reset filters',548,144,'reset-filters']].forEach(([v,x,w,action])=>nativeButton(v,x,65,w,48,action));
+  [[state.consoleFilter,0,260,'console-filter'],[state.hideTemps?'Show temps':'Hide temps',268,160,'temps'],['Search',436,104,'console-search'],['Reset filters',548,144,'reset-filters']].forEach(([v,x,w,action])=>nativeButton(v,x,65,w,48,action));
   line(0,121,976);line(0,368,976);clip('console-log',0,122,976,246);T.consoleRows(state).forEach(([kind,value],i)=>text(value,10,132+i*32-state.scroll,18,kind==='error'?'danger':kind==='command'?'accent_bright':'text'));out.push('</g>');
   nativeButton('Command',0,376,136,48,'command',true);nativeButton(state.follow?'Follow on':'Follow off',144,376,136,48,'follow');nativeButton('Clear',288,376,96,48,'clear-console');
  }

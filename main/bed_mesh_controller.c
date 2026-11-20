@@ -20,6 +20,7 @@ typedef struct {
     size_t capacity;
 } mesh_state_t;
 static mesh_state_t s;
+static uint32_t mesh_revision;
 static SemaphoreHandle_t mutex;
 static void lock(void){ if(mutex) xSemaphoreTake(mutex, portMAX_DELAY); }
 static void unlock(void){ if(mutex) xSemaphoreGive(mutex); }
@@ -183,6 +184,7 @@ void bed_mesh_controller_reset(void)
 {
     if (!mutex) return;
     lock();
+    ++mesh_revision;
     s = (mesh_state_t){
         .values = s.values, .capacity = s.capacity,
         .profile_names = s.profile_names, .profile_capacity = s.profile_capacity,
@@ -249,6 +251,10 @@ bool bed_mesh_controller_merge_status(cJSON *status)
             read_profiles_locked(profiles);
         }
 
+        if ((matrix_present && s.valid) ||
+            (cJSON_IsString(profile) && strcmp(s.profile_name, profile->valuestring)))
+            ++mesh_revision;
+
         if (cJSON_IsString(profile) &&
             profile->valuestring) {
             snprintf(
@@ -311,6 +317,10 @@ bool bed_mesh_controller_merge_status(cJSON *status)
 
     lock();
 
+    bool changed = !s.valid || s.rows != rows || s.cols != cols ||
+        s.truncated != (source_rows > BED_MESH_MAX_ROWS || source_cols > BED_MESH_MAX_COLS);
+    double old_min_x = s.mesh_min_x, old_min_y = s.mesh_min_y;
+    double old_max_x = s.mesh_max_x, old_max_y = s.mesh_max_y;
     if (!ensure_capacity(count)) {
         unlock();
         return false;
@@ -329,7 +339,9 @@ bool bed_mesh_controller_merge_status(cJSON *status)
         for (uint16_t x = 0; x < cols; ++x) {
             /* Every retained cell was validated before any cached data changed. */
             double z = cJSON_GetArrayItem(row, x)->valuedouble;
-            s.values[(size_t)y * cols + x] = (float)z;
+            size_t index = (size_t)y * cols + x;
+            if (!changed && s.values[index] != (float)z) changed = true;
+            s.values[index] = (float)z;
             if (z < low) low = z;
             if (z > high) high = z;
             sum += z;
@@ -338,6 +350,7 @@ bool bed_mesh_controller_merge_status(cJSON *status)
 
     if (cJSON_IsString(profile) &&
         profile->valuestring) {
+        if (strcmp(s.profile_name, profile->valuestring)) changed = true;
         snprintf(
             s.profile_name,
             sizeof(s.profile_name),
@@ -374,6 +387,8 @@ bool bed_mesh_controller_merge_status(cJSON *status)
     s.average = sum / count;
     s.range = s.maximum - s.minimum;
     s.valid = true;
+    if (changed || old_min_x != s.mesh_min_x || old_min_y != s.mesh_min_y ||
+        old_max_x != s.mesh_max_x || old_max_y != s.mesh_max_y) ++mesh_revision;
 
     unlock();
     return true;
@@ -415,6 +430,7 @@ bool bed_mesh_controller_snapshot(
         return out->profile_count > 0;
     }
 
+    out->mesh_revision = mesh_revision;
     out->valid = s.valid;
     out->truncated = s.truncated;
     out->rows = s.rows;

@@ -22,6 +22,10 @@ void console_controller_add_command(const char *command){
 size_t console_controller_count(void){return count;}
 uint32_t console_controller_latest_sequence(void){return sequence;}
 bool console_controller_get(size_t i,console_entry_t *out){if(i>=count||!out)return false;*out=entries[i];return true;}
+size_t console_controller_window(uint32_t *newest){*newest=count?sequence:0;return count;}
+bool console_controller_get_sequence(uint32_t seq,console_entry_t *out){
+ return seq && console_controller_get(console_sequence_distance(sequence,seq),out);
+}
 size_t console_controller_history_count(void){return history_count;}
 bool console_controller_history_get(size_t i,char *out,size_t size){if(i>=history_count||!out||!size)return false;snprintf(out,size,"%s",history[i]);return true;}
 void console_controller_clear(void){count=0;sequence++;}

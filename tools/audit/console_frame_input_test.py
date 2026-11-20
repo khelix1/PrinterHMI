@@ -12,7 +12,7 @@ parser.add_argument('--source', type=Path, default=root / 'main/console_controll
 args = parser.parse_args()
 cjson = root / 'tools/theme-maker/linux/native/vendor/cjson'
 headers = {
-    'esp_heap_caps.h': '#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_INTERNAL 2\n#define MALLOC_CAP_8BIT 4\n#define heap_caps_calloc(n,s,c) calloc(n,s)\n',
+    'esp_heap_caps.h': '#pragma once\n#include <stdlib.h>\n#define MALLOC_CAP_SPIRAM 1\n#define MALLOC_CAP_INTERNAL 2\n#define MALLOC_CAP_8BIT 4\n#define heap_caps_calloc(n,s,c) (((c) & MALLOC_CAP_SPIRAM) && getenv("CONSOLE_TEST_NO_PSRAM") ? NULL : calloc((n),(s)))\n',
     'esp_log.h': '#pragma once\n#define ESP_LOGI(tag,...) ((void)(tag))\n#define ESP_LOGE(tag,...) ((void)(tag))\n',
     'esp_timer.h': '#pragma once\n#include <stdint.h>\nstatic inline int64_t esp_timer_get_time(void){return 0;}\n',
     'freertos/FreeRTOS.h': '#pragma once\ntypedef int portMUX_TYPE;\n#define portMUX_INITIALIZER_UNLOCKED 0\n#define portENTER_CRITICAL(lock) ((void)(lock))\n#define portEXIT_CRITICAL(lock) ((void)(lock))\n',
@@ -51,6 +51,27 @@ int main(void){
  command[CONSOLE_COMMAND_MAX]=0;console_controller_add_command(command);
  assert(console_controller_history_count()==1&&console_controller_history_get(0,history,sizeof(history))&&!strcmp(history,command));
  assert(!console_controller_history_get(0,short_history,sizeof(short_history))&&!short_history[0]);
+ size_t capacity=getenv("CONSOLE_TEST_NO_PSRAM") ? CONSOLE_LOG_FALLBACK_CAPACITY : CONSOLE_LOG_CAPACITY;
+ uint32_t previous_sequence=console_controller_latest_sequence();
+ console_controller_clear();assert(!console_controller_count());
+ for(size_t i=0;i<capacity+20;i++)console_controller_add(CONSOLE_ENTRY_RESPONSE,"Entry %zu",i);
+ assert(console_controller_count()==capacity&&console_controller_init());
+ assert(console_controller_get(capacity-1,&entry)&&!strcmp(entry.message,"Entry 20"));
+ assert(!console_controller_get(capacity,&entry));
+ assert(console_controller_get(0,&entry)&&entry.sequence==previous_sequence+capacity+20);
+ assert(console_controller_history_count()==1); /* Clearing output leaves command recall intact. */
+ uint32_t newest;
+ assert(console_controller_window(&newest)==capacity&&newest==entry.sequence);
+ uint32_t oldest=console_sequence_at(newest,capacity-1);
+ console_controller_add(CONSOLE_ENTRY_RESPONSE,"New entry during a history read");
+ assert(!console_controller_get_sequence(oldest,&entry));
+ assert(console_controller_get_sequence(newest,&entry)&&entry.sequence==newest);
+ assert(console_sequence_at(1,1)==UINT32_MAX);
+ assert(console_sequence_distance(1,UINT32_MAX)==1);
+ console_controller_clear();
+ assert(console_controller_window(&newest)==0&&!newest);
+
+ puts("PASS: bounded Console retention and eviction; clear preserves command recall");
  puts("PASS: Console respects exact buffer lengths, accepts nonterminated frames and rejects malformed/deep/oversized/trailing input without log changes");
 }
 '''
@@ -68,3 +89,5 @@ with tempfile.TemporaryDirectory(prefix='console-frame-') as directory:
                     '-o', str(p / 'test')], check=True)
     subprocess.run([str(p / 'test')], check=True,
                    env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=0'})
+    subprocess.run([str(p / 'test')], check=True,
+                   env={**os.environ, 'ASAN_OPTIONS': 'detect_leaks=0', 'CONSOLE_TEST_NO_PSRAM': '1'})

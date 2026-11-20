@@ -11,6 +11,7 @@ typedef char bed_mesh_profile_name_t[BED_MESH_PROFILE_NAME_MAX];
 typedef struct {
     bool valid;
     bool truncated;
+    uint32_t mesh_revision;
     uint16_t rows;
     uint16_t cols;
     double mesh_min_x, mesh_min_y, mesh_max_x, mesh_max_y;

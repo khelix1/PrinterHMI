@@ -172,6 +172,7 @@ static void sntp_wait_task(void *arg);
 #include "ui_printer_layout.h"
 #include "ui_printer_info_cards.h"
 #include "ui_bed_mesh.h"
+#include "printer_connection_policy.h"
 #include "ui_printer_actions.h"
 #include "ui_printer_banner.h"
 #include "printer_controller.h"
@@ -1057,6 +1058,8 @@ static bool moonraker_get_live_objects(void)
     moonraker_http_object_number(status, "heater_bed", "temperature", 1.0, &printer_bed_temp);
     moonraker_http_object_number(status, "heater_bed", "target", 1.0, &printer_bed_target);
 
+    moonraker_hotend_t hotends[MOONRAKER_MAX_HOTENDS];
+    size_t hotend_count = moonraker_http_hotends(status, hotends);
     cJSON_Delete(root);
     s_live_data_ok = true;
     
@@ -1075,6 +1078,8 @@ static bool moonraker_get_live_objects(void)
             .live_flow = printer_live_flow,
             .nozzle_temp = printer_nozzle_temp,
             .nozzle_target = printer_nozzle_target,
+            .hotends = hotends,
+            .hotend_count = hotend_count,
             .bed_temp = printer_bed_temp,
             .bed_target = printer_bed_target,
             .progress = printer_progress,
@@ -1142,7 +1147,7 @@ static void moonraker_live_poll_tasklet(void)
      * hold this task for the HTTP timeout every poll interval.
      */
     if (moonraker_live_websocket_running()) {
-        moonraker_state_expire_websocket(3000000LL);
+        moonraker_state_expire_websocket(3000000LL, moonraker_live_websocket_connected());
         moonraker_state_t ws_state;
         moonraker_state_snapshot(&ws_state);
         s_moonraker_ok = ws_state.moonraker_ok;
@@ -1502,31 +1507,23 @@ static uint32_t s_bed_mesh_owner_generation;
 
 static bool bed_mesh_send_gcode_bridge(const char *cmd)
 {
-    if (s_bed_mesh_owner_generation != moonraker_config_generation()) {
-        ui_toast_show(UI_STATUS_DANGER, "BED MESH UNAVAILABLE",
-                      "Printer changed. Reopen Bed Mesh before continuing.");
-        return false;
+    if (!cmd || !*cmd) return false;
+    const uint32_t owner = s_bed_mesh_owner_generation;
+    for (unsigned check = 0; check < 2; ++check) {
+        moonraker_state_t state;
+        moonraker_state_snapshot(&state);
+        if (owner != s_bed_mesh_owner_generation || owner != moonraker_config_generation()) {
+            ui_toast_show(UI_STATUS_DANGER, "BED MESH UNAVAILABLE",
+                          "Printer changed. Reopen Bed Mesh before continuing.");
+            return false;
+        }
+        const char *reason = s_got_ip ? printer_idle_reason(&state) : "Network unavailable.";
+        if (reason[0]) {
+            ui_toast_show(UI_STATUS_DANGER, "BED MESH BLOCKED", reason);
+            return false;
+        }
+        if (!check) console_controller_add_command(cmd);
     }
-    moonraker_state_t state;
-    moonraker_state_snapshot(&state);
-    if (!s_got_ip || !state.moonraker_ok || !state.live_data_ok) {
-        ui_toast_show(UI_STATUS_DANGER, "BED MESH UNAVAILABLE",
-                      "The active printer is offline or not ready.");
-        return false;
-    }
-    if (strcmp(state.printer_state, "printing") == 0 ||
-        strcmp(state.printer_state, "paused") == 0) {
-        ui_toast_show(UI_STATUS_DANGER, "BED MESH BLOCKED",
-                      "Mesh actions cannot run during a print.");
-        return false;
-    }
-    if (strcmp(state.printer_state, "error") == 0 ||
-        strcmp(state.printer_state, "shutdown") == 0) {
-        ui_toast_show(UI_STATUS_DANGER, "BED MESH BLOCKED",
-                      "Clear the printer error before changing the mesh.");
-        return false;
-    }
-    console_controller_add_command(cmd);
     return moonraker_send_gcode(cmd);
 }
 
@@ -1956,6 +1953,8 @@ static void ui_refresh_timer_cb(lv_timer_t *timer)
         .remaining_seconds = &estimate.remaining,
         .nozzle_temp = telemetry_state.nozzle_temp,
         .nozzle_target = telemetry_state.nozzle_target,
+        .hotends = telemetry_state.hotends,
+        .hotend_count = telemetry_state.hotend_count,
         .bed_temp = telemetry_state.bed_temp,
         .bed_target = telemetry_state.bed_target,
         .part_fan_speed = telemetry_state.part_fan_speed,
@@ -2913,6 +2912,11 @@ static void dash_thumb_start_render_task(void)
     if (dash_thumb_render_running) return;
     if (!thumbnail_manager_has_png()) return;
 
+    if (!dash_thumb_render_timer) {
+        dash_thumb_render_timer = lv_timer_create(dash_thumb_render_ui_poll_cb, 100, NULL);
+        if (!dash_thumb_render_timer) return;
+    }
+
     safe_copy(dash_thumb_render_file, sizeof(dash_thumb_render_file), thumbnail_session_selected_file());
     dash_thumb_render_profile_index =
         moonraker_config_active_profile_index();
@@ -2937,17 +2941,15 @@ static void dash_thumb_start_render_task(void)
         ESP_LOGW(TAG, "DASH_WORKER task create failed");
         dash_thumb_render_running = false;
         dash_thumb_render_failed = true;
-        return;
-    }
-
-    if (!dash_thumb_render_timer) {
-        dash_thumb_render_timer = lv_timer_create(dash_thumb_render_ui_poll_cb, 100, NULL);
+        lv_timer_delete(dash_thumb_render_timer);
+        dash_thumb_render_timer = NULL;
     }
 }
 
 
 static void printer_thumb_ui_poll_cb(lv_timer_t *t)
 {
+    if (!t || t != thumb_poll_timer) return;
     bool is_live_thumb =
         (printer_thumb_target == THUMB_TARGET_LIVE);
 
@@ -3049,19 +3051,23 @@ static void printer_thumb_ui_poll_cb(lv_timer_t *t)
 
 static void printer_thumb_start_delayed(void)
 {
-    if (printer_thumb_target == THUMB_TARGET_POPUP) {
-        s_popup_thumb_start_pending = true;
-        if (!thumb_poll_timer) {
-            thumb_poll_timer = lv_timer_create(printer_thumb_ui_poll_cb, 200, NULL);
-        }
-    }
-
+    const bool popup = printer_thumb_target == THUMB_TARGET_POPUP;
     if (!thumbnail_session_selected_thumbnail_path()[0]) {
         s_popup_thumb_start_pending = false;
         thumbnail_manager_mark_failed();
         printer_thumb_set_label("NO THUMBNAIL");
         return;
     }
+
+    if ((popup || (s_got_ip && s_moonraker_ok)) && !thumb_poll_timer) {
+        thumb_poll_timer = lv_timer_create(printer_thumb_ui_poll_cb, 200, NULL);
+        if (!thumb_poll_timer) {
+            s_popup_thumb_start_pending = false;
+            printer_thumb_set_label("PREVIEW UNAVAILABLE");
+            return;
+        }
+    }
+    s_popup_thumb_start_pending = popup;
 
     if (!s_got_ip) {
         printer_thumb_set_label("WAITING\nFOR WIFI");
@@ -3077,8 +3083,6 @@ static void printer_thumb_start_delayed(void)
 
     if (thumbnail_manager_task_running()) {
         printer_thumb_set_label("LOADING...");
-        if (!thumb_poll_timer)
-        thumb_poll_timer = lv_timer_create(printer_thumb_ui_poll_cb, 200, NULL);
         return;
     }
 
@@ -3096,12 +3100,10 @@ static void printer_thumb_start_delayed(void)
 
     if (!started) {
         thumbnail_manager_mark_failed();
+        lv_timer_delete(thumb_poll_timer);
+        thumb_poll_timer = NULL;
         printer_thumb_set_label("THUMBNAIL\nTASK FAIL");
-        return;
     }
-
-    if (!thumb_poll_timer)
-        thumb_poll_timer = lv_timer_create(printer_thumb_ui_poll_cb, 200, NULL);
 }
 
 /* BEGIN FILES APP BRIDGE BLOCK */
@@ -3163,6 +3165,10 @@ static void show_printer_file_detail_popup(void)
         &printer_thumb_view,
         close_printer_file_detail_popup,
         printer_file_detail_start_bridge);
+    if (!ui_files_detail_is_open() || !printer_thumb_box || !printer_thumb_view) {
+        ui_toast_show(UI_STATUS_WARNING, "Could not open file details", "Select the file to try again.");
+        return;
+    }
     ui_thumbnail_bind_owner(printer_thumb_view, &printer_thumb_view);
     printer_thumb_set_label("LOADING...");
 

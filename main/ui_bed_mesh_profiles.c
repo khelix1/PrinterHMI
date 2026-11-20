@@ -14,7 +14,9 @@
 
 typedef struct {
     lv_obj_t *owner;
-    uint32_t owner_generation;
+    uint32_t owner_generation, mesh_revision, reviewed_revision;
+    bool review_stale;
+    void (*sync_mesh)(void);
     lv_obj_t *actions[4], *connection_label, *confirm_connection_label;
     lv_obj_t *profile_popup, *profile_list, *profile_editor;
     lv_obj_t *profile_name_input, *profile_confirm, *editor_feedback, *editor_continue, *editor_keyboard;
@@ -80,7 +82,7 @@ void ui_bed_mesh_profiles_refresh_availability(void)
     const char *reason = profile_reason();
     bool selected = reported_profile(selected_profile_name());
     bool review_unavailable = s.profile_confirm &&
-        (s.confirmation_removing ? !reported_profile(s.pending_profile_name) : !s.mesh_valid);
+        (s.review_stale || (s.confirmation_removing ? !reported_profile(s.pending_profile_name) : !s.mesh_valid));
     for (unsigned i = 0; i < 4; ++i) if (s.actions[i]) {
         bool blocked = reason[0] || s_dispatching || (i == 0 && !s.mesh_valid) ||
             ((i == 1 || i == 2) && !selected) || (i == 3 && review_unavailable);
@@ -165,6 +167,7 @@ static void retire_confirmation(void)
     s.confirm_connection_label = NULL;
     s.confirmation_blocked = false;
     s.confirmation_removing = false;
+    s.review_stale = false;
     s.actions[3] = NULL;
     s.pending_profile_name[0] = '\0';
 }
@@ -273,7 +276,11 @@ static bool dispatch_profile_command(lv_obj_t *popup, lv_obj_t *feedback, const 
 
 static void load_selected_profile_cb(lv_event_t *event)
 {
-    if (!s.profile_popup || s_dispatching || !profile_action_event(event, s.actions[1])) return;
+    if (!s.profile_popup || s.profile_editor || s.profile_confirm || s_dispatching ||
+        !profile_action_event(event, s.actions[1])) return;
+    uint32_t epoch = s_epoch;
+    if (s.sync_mesh) s.sync_mesh();
+    if (epoch != s_epoch || !profile_action_event(event, s.actions[1])) return;
     const char *name = selected_profile_name();
     if (!valid_profile_name_ui(name) || !reported_profile(name)) {
         ui_value_reveal_text(s.connection_label, "Select a reported profile. Close and reopen to refresh the list.");
@@ -288,9 +295,11 @@ static void confirmed_profile_command(lv_event_t *event, bool removing)
 {
     if (!s.profile_confirm || s_dispatching || s.confirmation_removing != removing ||
         !profile_action_event(event, s.actions[3]) || !valid_profile_name_ui(s.pending_profile_name)) return;
+    uint32_t epoch = s_epoch;
+    if (s.sync_mesh) s.sync_mesh();
+    if (epoch != s_epoch || !profile_action_event(event, s.actions[3])) return;
     const char *operation = removing ? "REMOVE" : "SAVE";
-    if ((!strcmp(operation, "REMOVE") && !reported_profile(s.pending_profile_name)) ||
-        (!strcmp(operation, "SAVE") && !s.mesh_valid)) {
+    if (s.review_stale || (removing ? !reported_profile(s.pending_profile_name) : !s.mesh_valid)) {
         ui_value_reveal_text(s.confirm_connection_label, s_review_unavailable);
         return;
     }
@@ -313,6 +322,8 @@ static void show_profile_confirmation(bool removing)
     ui_form_divide_title(s.profile_confirm);
     lv_obj_add_event_cb(s.profile_confirm, profile_popup_deleted, LV_EVENT_DELETE, NULL);
     s.confirmation_removing = removing;
+    s.reviewed_revision = s.mesh_revision;
+    s.review_stale = false;
     lv_obj_t *body=ui_form_body(s.profile_confirm);
     ui_form_text(body,"Profile name",UI_FONT_CAPTION,UI_TEXT_DIM);
     ui_form_text(body,s.pending_profile_name,UI_FONT_BODY_LARGE,UI_TEXT_BRIGHT);
@@ -472,12 +483,14 @@ void ui_bed_mesh_profiles_show_cb(lv_event_t *event)
     ui_form_finish(s.profile_popup);
 }
 
-void ui_bed_mesh_profiles_init(lv_obj_t *owner, ui_bed_mesh_profiles_command_cb_t command_cb)
+void ui_bed_mesh_profiles_init(lv_obj_t *owner, ui_bed_mesh_profiles_command_cb_t command_cb,
+                               void (*sync_mesh)(void))
 {
     ui_bed_mesh_profiles_close();
     s.owner = owner;
     s.owner_generation = moonraker_config_generation();
     s.command = command_cb;
+    s.sync_mesh = sync_mesh;
     s.selected_profile = -1;
     if (owner) lv_obj_add_event_cb(owner, owner_deleted, LV_EVENT_DELETE, NULL);
 }
@@ -485,6 +498,7 @@ void ui_bed_mesh_profiles_init(lv_obj_t *owner, ui_bed_mesh_profiles_command_cb_
 void ui_bed_mesh_profiles_update(const bed_mesh_snapshot_t *mesh)
 {
     s.mesh_valid = mesh && mesh->valid;
+    s.mesh_revision = mesh ? mesh->mesh_revision : 0;
     s.reported_count = mesh && mesh->profile_names ? mesh->profile_count : 0;
     if (s.reported_count > BED_MESH_MAX_PROFILES) s.reported_count = BED_MESH_MAX_PROFILES;
     memset(s.reported_names, 0, sizeof(s.reported_names));
@@ -492,11 +506,19 @@ void ui_bed_mesh_profiles_update(const bed_mesh_snapshot_t *mesh)
         memcpy(s.reported_names[i], mesh->profile_names[i], BED_MESH_PROFILE_NAME_MAX);
         s.reported_names[i][BED_MESH_PROFILE_NAME_MAX - 1] = '\0';
     }
+    if (s.profile_confirm &&
+        (s.confirmation_removing ? !reported_profile(s.pending_profile_name)
+         : (!s.mesh_valid || s.mesh_revision != s.reviewed_revision))) s.review_stale = true;
     if (mesh) {
         memcpy(s.active_name, mesh->profile_name, sizeof(s.active_name));
         s.active_name[sizeof(s.active_name) - 1] = '\0';
     } else s.active_name[0] = '\0';
     ui_bed_mesh_profiles_refresh_availability();
+}
+
+bool ui_bed_mesh_profiles_is_open(void)
+{
+    return s.profile_popup != NULL || s_dispatching;
 }
 
 void ui_bed_mesh_profiles_close(void)

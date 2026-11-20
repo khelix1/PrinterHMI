@@ -23,9 +23,8 @@ void ui_dashboard_set_filament(
 void ui_dashboard_set_machine_connection(
     bool online);
 
-void ui_dashboard_set_active_hotend(
-    const char *name,
-    const char *value);
+void ui_dashboard_set_hotends(
+    const moonraker_hotend_t *hotends, size_t count, bool online);
 
 void ui_dashboard_set_machine(
     const char *nozzle,

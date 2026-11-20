@@ -89,11 +89,12 @@ static lv_timer_t *s_connection_timer;
 static const char *const s_descriptions[]={"Tune and validate your printer.","Probe and visualize the bed surface.","Inspect devices and live readings.","Run available printer macros."};
 static void tools_connection_refresh(lv_timer_t *timer)
 {
-    (void)timer;if(!s_root)return;
+    if(!s_root || (timer && timer!=s_connection_timer))return;
     lighting_visibility_refresh();
     moonraker_state_t state;moonraker_state_snapshot(&state);
     for(unsigned i=0;i<4;i++) {
-        const char *reason=i<2?printer_idle_reason(&state):printer_connection_reason(&state);
+        const char *reason=!s_connection_timer?"Live status unavailable. Reopen Tools.":
+            i<2?printer_idle_reason(&state):printer_connection_reason(&state);
         ui_value_set_text(s_body_labels[i],reason[0]?reason:s_descriptions[i]);
     }
 }
@@ -254,6 +255,7 @@ static void studio_tools_create(void)
 void ui_tools_show(void)
 {
     if (s_root) {
+        if(!s_connection_timer)s_connection_timer=lv_timer_create(tools_connection_refresh,250,NULL);
         tools_connection_refresh(NULL);
         lv_obj_clear_flag(s_root, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(s_root);

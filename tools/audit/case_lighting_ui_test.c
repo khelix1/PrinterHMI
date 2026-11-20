@@ -3,7 +3,14 @@
 #include <string.h>
 #include "lvgl.h"
 #include "custom_theme.h"
+static bool reject_lighting_timer;
+static lv_timer_t *lighting_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_lighting_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create lighting_test_timer
 #include "ui_case_lighting.c"
+#undef lv_timer_create
 #include "cJSON.h"
 static uint32_t generation=1;
 static int64_t clock_us;
@@ -32,6 +39,13 @@ static void inside(lv_obj_t *child,lv_obj_t *parent){lv_area_t a,b;lv_obj_get_co
 static void run(void)
 {
  memset(&live,0,sizeof(live));live.moonraker_ok=live.live_data_ok=true;strcpy(live.printer_state,"printing");connected=send_ok=true;prepare(true);
+ unsigned initial_sends=sends;
+ reject_lighting_timer=true;ui_case_lighting_show();reject_lighting_timer=false;
+ assert(s_popup&&!s_timer&&strstr(lv_label_get_text(s_status),"Close and reopen"));
+ assert(lv_obj_has_state(s_switch,LV_STATE_DISABLED)&&lv_obj_has_state(s_slider,LV_STATE_DISABLED));
+ lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);
+ assert(sends==initial_sends);
+ ui_case_lighting_close();
  ui_case_lighting_show();lv_obj_t *popup=s_popup;assert(popup&&s_switch&&s_slider&&s_value&&s_status);ui_case_lighting_show();assert(s_popup==popup);
  lv_obj_update_layout(popup);inside(popup,lv_layer_top());inside(lv_obj_get_child(popup,2),popup);
  assert(!lv_obj_has_state(s_switch,LV_STATE_DISABLED)&&!lv_obj_has_state(s_slider,LV_STATE_DISABLED));
@@ -48,7 +62,7 @@ static void run(void)
 
  clock_us+=5000001;refresh(NULL);assert(lv_slider_get_value(s_slider)==35);assert(strstr(lv_label_get_text(s_status),"confirmation")&&!lv_obj_has_state(s_switch,LV_STATE_DISABLED));
  send_ok=false;lv_obj_remove_state(s_switch,LV_STATE_CHECKED);lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);assert(strstr(lv_label_get_text(s_status),"Could not send"));send_ok=true;
- generation++;before=sends;refresh(NULL);assert(strstr(lv_label_get_text(s_status),"Printer changed"));lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before);
+ generation++;before=sends;refresh(NULL);assert(strstr(lv_label_get_text(s_status),"Printer changed"));assert(!strcmp(lv_label_get_text(s_value),"Brightness: --")&&!lv_obj_has_state(s_switch,LV_STATE_CHECKED));lv_obj_send_event(s_switch,LV_EVENT_VALUE_CHANGED,NULL);assert(sends==before);
  lv_obj_delete(s_popup);assert(!s_popup&&!s_timer&&!s_switch&&!s_status);ui_case_lighting_close();
  prepare(false);ui_case_lighting_show();assert(lv_obj_has_state(s_slider,LV_STATE_DISABLED)&&!lv_obj_has_state(s_switch,LV_STATE_DISABLED));
  ui_case_lighting_close();prepare(true);ui_case_lighting_show();

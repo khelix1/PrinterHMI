@@ -2,7 +2,15 @@
 #include <stdio.h>
 #include <string.h>
 #include "custom_theme.h"
+#include "lvgl.h"
+static bool reject_toolhead_timer;
+static lv_timer_t *toolhead_test_timer(lv_timer_cb_t cb,uint32_t period,void *data)
+{
+ return reject_toolhead_timer ? NULL : lv_timer_create(cb,period,data);
+}
+#define lv_timer_create toolhead_test_timer
 #include "ui_printer_toolhead.c"
+#undef lv_timer_create
 #include "ui_printer_popups.c"
 bool custom_theme_color_override(uint32_t a,uint32_t b,uint32_t c,uint32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
 bool custom_theme_metric_override(int32_t a,int32_t b,int32_t c,int32_t *d){(void)a;(void)b;(void)c;(void)d;return false;}
@@ -221,6 +229,12 @@ int main(void)
     lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);lv_display_set_flush_cb(d,flush);lv_display_add_event_cb(d,invalidated,LV_EVENT_INVALIDATE_AREA,NULL);
     for(int theme=0;theme<5;theme++)for(int density=0;density<3;density++)for(int large=0;large<2;large++){
         ui_theme_set_active(theme);ui_theme_set_density(density);ui_theme_set_accessibility((ui_accessibility_t){.large_text=large});reset();unsigned baseline=timers();
+        unsigned rejected_before=sends;
+        reject_toolhead_timer=true;motion_open();reject_toolhead_timer=false;
+        assert(!s_refresh_timer&&strstr(lv_label_get_text(s_position_label),"Reopen Toolhead"));
+        assert(lv_obj_has_state(steps[0],LV_STATE_DISABLED));
+        toolhead_send("G28");assert(sends==rejected_before);
+        ui_printer_toolhead_close();assert(timers()==baseline);
         motion_open();lv_obj_t *popup=s_toolhead_popup;lv_timer_t*timer=s_refresh_timer;
         motion_open();assert(s_toolhead_popup==popup&&s_refresh_timer==timer);quiet_refresh_checks(d);
         unsigned before=sends;during_send=1;toolhead_send("G28");assert(sends==before+1);

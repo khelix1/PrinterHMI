@@ -8,6 +8,7 @@
 #include "macro_controller.h"
 
 static bool s_axis_twist_command_available;
+static bool s_shaper_calibrate_available;
 static bool s_probe_accuracy_command_available;
 static uint32_t s_command_generation;
 
@@ -38,6 +39,8 @@ bool calibration_capability_controller_merge_status(
         return false;
     }
 
+    __atomic_store_n(&s_shaper_calibrate_available,
+        cJSON_GetObjectItemCaseSensitive(commands, "SHAPER_CALIBRATE") != NULL, __ATOMIC_RELEASE);
     bool available = cJSON_HasObjectItem(
         commands,
         "AXIS_TWIST_COMPENSATION_CALIBRATE");
@@ -57,6 +60,7 @@ bool calibration_capability_controller_merge_status(
 
 void calibration_capability_controller_reset(void)
 {
+    __atomic_store_n(&s_shaper_calibrate_available, false, __ATOMIC_RELEASE);
     __atomic_store_n(&s_probe_accuracy_command_available, false, __ATOMIC_RELEASE);
     __atomic_store_n(
         &s_axis_twist_command_available,
@@ -129,6 +133,7 @@ void calibration_capability_controller_snapshot(
     macro_controller_status(&macro_status);
 
     output->discovered = device_status.discovered;
+    output->shaper_calibrate = __atomic_load_n(&s_shaper_calibrate_available, __ATOMIC_ACQUIRE);
     output->device_generation = device_status.generation;
     output->macro_generation = macro_status.generation;
     output->command_generation =
@@ -228,7 +233,7 @@ void calibration_capability_controller_snapshot(
         (output->quad_gantry_level ? 1U : 0U) +
         (output->z_tilt ? 1U : 0U) +
         (output->axis_twist ? 1U : 0U) +
-        (output->input_shaper ? 1U : 0U) +
+        (output->input_shaper || output->shaper_calibrate ? 1U : 0U) +
         (output->accelerometer ? 1U : 0U) +
         (output->hotend_pid ? 1U : 0U) +
         (output->bed_pid ? 1U : 0U) +
